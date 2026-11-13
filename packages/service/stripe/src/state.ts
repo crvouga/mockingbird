@@ -37,6 +37,11 @@ export type CustomerRecord = {
   tax_exempt: "none" | "exempt" | "reverse"
   /** The test clock this customer (and its subscriptions) runs on. */
   test_clock?: string | null
+  /**
+   * The customer-level discount (legacy `coupon` / `promotion_code`), rendered when applied: its
+   * id names the record in `discounts`, which subscription invoices without their own use.
+   */
+  discount?: Record<string, unknown> | null
 }
 
 /** Deleted customers stay retrievable as tombstones. */
@@ -200,6 +205,7 @@ export type ChargeRecord = {
   /** Rendered `payment_method_details.card` (brand, last4, funding, …), never a card number. */
   card?: Record<string, unknown> | null
   dispute?: string | null
+  receipt_email?: string | null
 }
 
 export type RefundStatus = "pending" | "requires_action" | "succeeded" | "failed" | "canceled"
@@ -219,6 +225,13 @@ export type RefundRecord = {
   balance_transaction?: string | null
 }
 
+export type DisputeEvidenceDetails = {
+  due_by: number | null
+  has_evidence: boolean
+  past_due: boolean
+  submission_count: number
+}
+
 export type DisputeRecord = {
   id: string
   amount: number
@@ -229,6 +242,13 @@ export type DisputeRecord = {
   payment_intent: string | null
   reason: string
   status: string
+  /** Staged or submitted evidence (`dispute.evidence`), by field; absent fields render `null`. */
+  evidence?: Record<string, string>
+  evidence_details?: DisputeEvidenceDetails
+  /** Ledger lines (`txn_`) for the withdrawal and any reinstatement, oldest first. */
+  balance_transactions?: string[]
+  /** `payment_method_details.card` of the disputed charge (brand), when it was a card. */
+  card_brand?: string | null
 }
 
 export type CustomerBalanceTransactionRecord = {
@@ -273,6 +293,8 @@ export type InvoiceLineRecord = {
   type: "invoiceitem" | "subscription"
   subscription?: string | null
   subscription_item?: string | null
+  /** `false` keeps invoice-level discounts off this line (Stripe's default for a credit). */
+  discountable?: boolean
 }
 
 export type InvoiceStatus = "draft" | "open" | "paid" | "uncollectible" | "void"
@@ -344,6 +366,8 @@ export type InvoiceItemRecord = {
   proration: boolean
   quantity: number
   unit_amount: number | null
+  /** Added by a subscription's `add_invoice_items`: its next invoice bills it. */
+  subscription?: string | null
 }
 
 export type SubscriptionItemRecord = {
@@ -529,6 +553,8 @@ export type CheckoutSessionRecord = {
     metadata: Metadata
     setup_future_usage: string | null
     description: string | null
+    /** `manual` authorizes only: the PaymentIntent waits in `requires_capture`. */
+    capture_method?: "automatic" | "automatic_async" | "manual"
   }
   subscription_data?: {
     metadata: Metadata
@@ -550,6 +576,11 @@ export type CheckoutSessionRecord = {
     name: string | null
     address: { country: string | null; postal_code: string | null } | null
   } | null
+  /** Current (dahlia) names; older API versions see `hosted` / `embedded` (see `shape.ts`). */
+  ui_mode?: "hosted_page" | "embedded_page"
+  /** Embedded sessions: what the page's Stripe.js mounts with, and where it returns to. */
+  client_secret?: string | null
+  return_url?: string | null
 }
 
 export type PortalFeatures = {
@@ -650,6 +681,8 @@ export type BalanceTransactionRecord = {
   source: string | null
   status: "available" | "pending"
   type: string
+  /** `fee_details[0].description` (default "Stripe processing fees"). */
+  fee_description?: string
 }
 
 export type TestClockRecord = {

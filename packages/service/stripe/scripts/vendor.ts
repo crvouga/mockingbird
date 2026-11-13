@@ -82,6 +82,7 @@ const MISSING = {
   balance_transaction: "txn_mockingbird_missing",
   configuration: "bpc_mockingbird_missing",
   portal_session: "bps_mockingbird_missing",
+  credit_note: "cn_mockingbird_missing",
 } as const
 
 /** The generator only needs a handful of currencies; the mock still knows Stripe's full list. */
@@ -109,6 +110,21 @@ const expandableId = (extra: Json = {}): Schema => ({
 /** Property-level edits applied to a component schema. `null` deletes the property. */
 type Shape = Record<string, Schema | null>
 
+/** Checkout `ui_mode` values across the versions the emulator answers (see `REQUEST_CHANGES`). */
+const CHECKOUT_UI_MODES: Schema = {
+  type: "string",
+  enum: ["custom", "elements", "embedded", "embedded_page", "hosted", "hosted_page"],
+}
+
+/**
+ * `coupon` / `promotion_code`, removed at 2025-03-31.basil in favour of `discounts` and still sent
+ * by SDKs pinned before it; the handlers refuse them from basil on (`REQUEST_CHANGES`).
+ */
+const SINGULAR_DISCOUNT: Shape = {
+  coupon: { type: "string", maxLength: 5000 },
+  promotion_code: { type: "string", maxLength: 5000 },
+}
+
 const RESPONSE_SHAPES: Record<string, Shape> = {
   customer: {
     id: identity("customer"),
@@ -125,7 +141,6 @@ const RESPONSE_SHAPES: Record<string, Shape> = {
     individual_name: null,
     invoice_credit_balance: null,
     default_source: nullableIdOnly(),
-    discount: { type: "null" },
     test_clock: nullableIdOnly(),
   },
   deleted_customer: { id: identity("customer") },
@@ -254,16 +269,15 @@ const RESPONSE_SHAPES: Record<string, Shape> = {
     created: volatile("timestamp"),
     charge: expandableId(identity("charge")),
     payment_intent: expandableId(identity("payment_intent")),
-    // Evidence, eligibility and balance-ledger surfaces the mock never models.
-    balance_transactions: null,
-    enhanced_eligibility_types: null,
-    evidence: null,
-    evidence_details: null,
-    is_charge_refundable: null,
-    payment_method_details: null,
   },
+  // Declared only so the unsupported credit-note routes have a contract; never rendered.
+  credit_note: { id: identity("credit_note"), created: volatile("timestamp") },
+  // `due_by` is derived from the (volatile) creation time.
+  dispute_evidence_details: { due_by: volatile("timestamp") },
   "checkout.session": {
     id: identity("session"),
+    // Rendered under the pre-dahlia names for requests pinned before 2026-03-25.
+    ui_mode: { ...CHECKOUT_UI_MODES, type: ["string", "null"] },
     created: volatile("timestamp"),
     expires_at: volatile("timestamp"),
     url: volatile("url"),
@@ -650,7 +664,9 @@ const BODY_SHAPES: Record<string, Shape> = {
       items: { type: "string", enum: ["card", "link"] },
     },
     application_fee_amount: unsupported("Connect application fees are not modelled"),
-    automatic_payment_methods: unsupported("the payment method type list is explicit in the mock"),
+    automatic_payment_methods: unsupported(
+      "the payment method type list is explicit in the emulator",
+    ),
     mandate: unsupported("mandates are not modelled"),
     mandate_data: unsupported("mandates are not modelled"),
     on_behalf_of: unsupported("Connect is not modelled"),
@@ -686,7 +702,7 @@ const BODY_SHAPES: Record<string, Shape> = {
     off_session: { type: "boolean" },
     setup_future_usage: { type: "string", enum: ["on_session", "off_session"] },
     capture_method: { type: "string", enum: ["automatic", "manual"] },
-    client_secret: unsupported("the mock does not verify client secrets"),
+    client_secret: unsupported("the emulator does not verify client secrets"),
     mandate: unsupported("mandates are not modelled"),
     mandate_data: unsupported("mandates are not modelled"),
     payment_method_data: unsupported("raw payment method data is not modelled"),
@@ -737,7 +753,7 @@ const BODY_SHAPES: Record<string, Shape> = {
   PostSetupIntentsIntentConfirm: {
     payment_method: { type: "string" },
     return_url: { type: "string", maxLength: 5000 },
-    client_secret: unsupported("the mock does not verify client secrets"),
+    client_secret: unsupported("the emulator does not verify client secrets"),
     mandate_data: unsupported("mandates are not modelled"),
     payment_method_data: unsupported("raw payment method data is not modelled"),
     payment_method_options: unsupported("payment method options are not modelled"),
@@ -763,6 +779,15 @@ const BODY_SHAPES: Record<string, Shape> = {
     reverse_transfer: unsupported("Connect is not modelled"),
   },
   PostRefundsRefund: { metadata: { type: "object" } },
+  PostChargesCharge: {
+    customer: ref("customer", MISSING.customer),
+    fraud_details: unsupported("Radar fraud reports are not modelled"),
+    shipping: unsupported("shipping is not modelled"),
+    transfer_group: unsupported("Connect is not modelled"),
+  },
+  PostDisputesDispute: {
+    "evidence.enhanced_evidence": unsupported("enhanced dispute evidence is not modelled"),
+  },
   PostCheckoutSessions: {
     mode: { type: "string", enum: ["payment", "setup", "subscription"] },
     customer: ref("customer", MISSING.customer),
@@ -788,7 +813,10 @@ const BODY_SHAPES: Record<string, Shape> = {
     shipping_options: unsupported("shipping is not modelled"),
     submit_type: unsupported("submit types are not modelled"),
     tax_id_collection: unsupported("tax ids are not modelled"),
-    ui_mode: unsupported("embedded checkout is not modelled"),
+    // Both names of each mode: the pre-dahlia ones (`hosted`, `embedded`, `custom`) for requests
+    // pinned before 2026-03-25 and the renamed ones after; the handler refuses whichever the
+    // request's version does not have. `custom` / `elements` answer an explicit limitation.
+    ui_mode: CHECKOUT_UI_MODES,
   },
   PostCheckoutSessionsSessionExpire: {},
   PostInvoices: {
@@ -847,7 +875,38 @@ const BODY_SHAPES: Record<string, Shape> = {
   DeleteInvoicesInvoice: {},
   PostInvoicesInvoiceFinalize: {
     auto_advance: { type: "boolean" },
-    expand: unsupported("the mock never expands this operation's response"),
+    expand: unsupported("the emulator never expands this operation's response"),
+  },
+  PostInvoicesCreatePreview: {
+    customer: ref("customer", MISSING.customer),
+    subscription: ref("subscription", MISSING.subscription),
+    // stripe-node 16 (2024-06-20) still sends the single `coupon` the pinned spec dropped.
+    coupon: { type: "string", maxLength: 5000 },
+    automatic_tax: unsupported("tax is not modelled (only enabled=false is accepted)"),
+    currency: unsupported("previews bill in the prices' own currency"),
+    customer_account: unsupported("Accounts v2 customers are not modelled"),
+    "customer_details.address": unsupported("tax is not modelled"),
+    "customer_details.shipping": unsupported("shipping is not modelled"),
+    "customer_details.tax": unsupported("tax is not modelled"),
+    "customer_details.tax_ids": unsupported("tax ids are not modelled"),
+    issuer: unsupported("invoice issuers are not modelled"),
+    on_behalf_of: unsupported("Connect is not modelled"),
+    preview_mode: unsupported("recurring estimates are not modelled (only next is accepted)"),
+    schedule: unsupported("subscription schedule previews are not modelled"),
+    schedule_details: unsupported("subscription schedule previews are not modelled"),
+    "subscription_details.billing_cycle_anchor": unsupported("preview anchors are not modelled"),
+    "subscription_details.billing_mode": unsupported("billing modes are not modelled"),
+    "subscription_details.billing_schedules": unsupported("billing schedules are not modelled"),
+    "subscription_details.cancel_at": unsupported("preview cancellations are not modelled"),
+    "subscription_details.cancel_at_period_end": unsupported(
+      "preview cancellations are not modelled",
+    ),
+    "subscription_details.cancel_now": unsupported("preview cancellations are not modelled"),
+    "subscription_details.default_tax_rates": unsupported("tax rates are not modelled"),
+    "subscription_details.metadata": unsupported("preview subscription metadata is not modelled"),
+    "subscription_details.resume_at": unsupported("preview resumes are not modelled"),
+    "subscription_details.start_date": unsupported("preview start dates are not modelled"),
+    "subscription_details.trial_end": unsupported("preview trials are not modelled"),
   },
   PostInvoicesInvoicePay: {
     payment_method: { type: "string" },
@@ -918,7 +977,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     days_until_due: unsupported("send-invoice terms are not modelled"),
     default_source: unsupported("payment sources are not modelled"),
     default_tax_rates: unsupported("tax rates are not modelled"),
-    discounts: unsupported("subscription discounts are not modelled"),
     items: { type: "array", maxItems: 4, items: { type: "object" } },
     on_behalf_of: unsupported("Connect is not modelled"),
     payment_settings: unsupported("subscription payment settings are not modelled"),
@@ -935,7 +993,6 @@ const BODY_SHAPES: Record<string, Shape> = {
     cancel_at: unsupported("scheduled cancellation is not modelled"),
     collection_method: unsupported("only charge_automatically is modelled"),
     days_until_due: unsupported("send-invoice terms are not modelled"),
-    discounts: unsupported("subscription discounts are not modelled"),
     items: { type: "array", maxItems: 4, items: { type: "object" } },
     payment_settings: unsupported("subscription payment settings are not modelled"),
     pending_invoice_item_interval: unsupported("pending items are not modelled"),
@@ -964,7 +1021,7 @@ const BODY_SHAPES: Record<string, Shape> = {
     metadata: { type: "object" },
     start_date: unsupported("schedule start dates are not modelled"),
     phases: { type: "array", maxItems: 3, items: { type: "object" } },
-    expand: unsupported("the mock never expands this operation's response"),
+    expand: unsupported("the emulator never expands this operation's response"),
   },
   PostSubscriptionSchedulesSchedule: {
     end_behavior: { type: "string", enum: ["cancel", "none", "release", "renew"] },
@@ -1002,7 +1059,7 @@ const BODY_SHAPES: Record<string, Shape> = {
     metadata: { type: "object" },
     active: { type: "boolean" },
     restrictions: { type: "object" },
-    expand: unsupported("the mock never expands this operation's response"),
+    expand: unsupported("the emulator never expands this operation's response"),
   },
   PostPromotionCodesPromotionCode: {
     active: { type: "boolean" },
@@ -1245,7 +1302,11 @@ const EXTRA_BODY_PARAMS: Record<string, Shape> = {
   PostPromotionCodes: { coupon: ref("coupon", MISSING.coupon) },
   PostSubscriptions: {
     pause_collection: unsupported("collection is paused on an existing subscription only"),
+    ...SINGULAR_DISCOUNT,
   },
+  PostSubscriptionsSubscriptionExposedId: SINGULAR_DISCOUNT,
+  PostCustomers: SINGULAR_DISCOUNT,
+  PostCustomersCustomer: SINGULAR_DISCOUNT,
   // Stripe still accepts (and returns) a default trial on a recurring price; a subscription
   // started with `trial_from_plan=true` uses it.
   PostPrices: { "recurring.trial_period_days": { type: "integer", minimum: 1 } },
@@ -1337,6 +1398,13 @@ const PATH_REF_GROUPS: readonly { prefix: string; refs: Record<string, Json> }[]
   },
   { prefix: "/v1/events", refs: { id: ref("event", MISSING.event) } },
   {
+    prefix: "/v1/credit_notes",
+    refs: {
+      id: ref("credit_note", MISSING.credit_note),
+      credit_note: ref("credit_note", MISSING.credit_note),
+    },
+  },
+  {
     prefix: "/v1/balance_transactions",
     refs: { id: ref("balance_transaction", MISSING.balance_transaction) },
   },
@@ -1378,6 +1446,7 @@ const OPERATIONS: Record<string, OperationConfig> = {
   GetCustomersCustomer: { safe: true },
   PostCustomersCustomer: { safe: true },
   DeleteCustomersCustomer: { safe: true },
+  DeleteCustomersCustomerDiscount: { safe: true },
   GetCustomersCustomerBalanceTransactions: { safe: true },
   PostCustomersCustomerBalanceTransactions: { safe: false },
   // payment methods
@@ -1411,21 +1480,31 @@ const OPERATIONS: Record<string, OperationConfig> = {
     reason: "charges are always created through PaymentIntents",
   },
   GetChargesCharge: { safe: true },
-  PostChargesCharge: {
-    safe: false,
-    supported: false,
-    reason: "charges are only read in the e2e path",
-  },
+  PostChargesCharge: { safe: false },
   GetRefunds: { safe: true },
   PostRefunds: { safe: false },
   GetRefundsRefund: { safe: true },
   PostRefundsRefund: { safe: false },
   GetDisputes: { safe: true },
   GetDisputesDispute: { safe: true },
-  PostDisputesDispute: {
-    safe: false,
+  PostDisputesDispute: { safe: false },
+  PostDisputesDisputeClose: { safe: false },
+  // credit notes: declared so the SDK's calls answer an explicit unsupported error, not a 404
+  GetCreditNotes: { safe: true, supported: false, reason: "credit notes are not modelled" },
+  PostCreditNotes: { safe: false, supported: false, reason: "credit notes are not modelled" },
+  GetCreditNotesPreview: { safe: true, supported: false, reason: "credit notes are not modelled" },
+  GetCreditNotesPreviewLines: {
+    safe: true,
     supported: false,
-    reason: "the mock never creates or mutates disputes",
+    reason: "credit notes are not modelled",
+  },
+  GetCreditNotesId: { safe: true, supported: false, reason: "credit notes are not modelled" },
+  PostCreditNotesId: { safe: false, supported: false, reason: "credit notes are not modelled" },
+  PostCreditNotesIdVoid: { safe: false, supported: false, reason: "credit notes are not modelled" },
+  GetCreditNotesCreditNoteLines: {
+    safe: true,
+    supported: false,
+    reason: "credit notes are not modelled",
   },
   GetBalanceTransactions: { safe: true },
   GetBalanceTransactionsId: { safe: true },
@@ -1452,7 +1531,14 @@ const OPERATIONS: Record<string, OperationConfig> = {
   PostInvoicesInvoiceFinalize: { safe: false },
   PostInvoicesInvoicePay: { safe: false },
   PostInvoicesInvoiceVoid: { safe: false },
+  PostInvoicesInvoiceMarkUncollectible: { safe: false },
   GetInvoicesInvoiceLines: { safe: true },
+  PostInvoicesCreatePreview: {
+    safe: true,
+    parity: false,
+    reason:
+      "previews model a subset of Stripe's preview parameters (best guess, not oracle-verified); unmodelled ones are refused",
+  },
   GetInvoicePayments: { safe: true },
   GetInvoicePaymentsInvoicePayment: { safe: true },
   GetInvoicesUpcoming: {
@@ -1460,6 +1546,12 @@ const OPERATIONS: Record<string, OperationConfig> = {
     parity: false,
     reason:
       "route is absent from the pinned upstream spec (2026-08-26.dahlia previews invoices instead); the e2e SDK still calls it",
+  },
+  GetInvoicesUpcomingLines: {
+    safe: true,
+    parity: false,
+    reason:
+      "route is absent from the pinned upstream spec (2026-08-26.dahlia previews invoices instead); stripe-node 16 still calls it",
   },
   // invoice items
   GetInvoiceitems: { safe: true },
@@ -1473,6 +1565,7 @@ const OPERATIONS: Record<string, OperationConfig> = {
   GetSubscriptionsSubscriptionExposedId: { safe: true },
   PostSubscriptionsSubscriptionExposedId: { safe: false },
   DeleteSubscriptionsSubscriptionExposedId: { safe: false },
+  DeleteSubscriptionsSubscriptionExposedIdDiscount: { safe: false },
   PostSubscriptionsSubscriptionResume: { safe: false },
   GetSubscriptionItems: { safe: true },
   PostSubscriptionItems: { safe: false },
@@ -1529,22 +1622,30 @@ const OPERATIONS: Record<string, OperationConfig> = {
   GetWebhookEndpointsWebhookEndpoint: { safe: true },
   PostWebhookEndpointsWebhookEndpoint: { safe: false },
   DeleteWebhookEndpointsWebhookEndpoint: { safe: false },
+  // customer sessions (see SYNTHETIC_OPERATIONS)
+  PostCustomerSessions: {
+    safe: false,
+    parity: false,
+    reason: "Covered by the pinned package oracle; no independent live evidence yet.",
+  },
   // browser surfaces served by the mock itself (see SYNTHETIC_OPERATIONS)
   GetCheckoutPage: {
     safe: true,
     parity: false,
-    reason: "the hosted Checkout page is HTML served by the mock in place of checkout.stripe.com",
+    reason:
+      "the hosted Checkout page is HTML served by the emulator in place of checkout.stripe.com",
   },
   PostCheckoutPage: {
     safe: false,
     parity: false,
     reason:
-      "the hosted Checkout page form post is served by the mock in place of checkout.stripe.com",
+      "the hosted Checkout page form post is served by the emulator in place of checkout.stripe.com",
   },
   GetStripeJs: {
     safe: true,
     parity: false,
-    reason: "the Stripe.js stand-in is JavaScript served by the mock in place of js.stripe.com/v3",
+    reason:
+      "the Stripe.js stand-in is JavaScript served by the emulator in place of js.stripe.com/v3",
   },
   PostThreeDSecureAuthenticate: {
     safe: false,
@@ -1554,12 +1655,13 @@ const OPERATIONS: Record<string, OperationConfig> = {
   GetPortalPage: {
     safe: true,
     parity: false,
-    reason: "the customer portal is HTML served by the mock in place of billing.stripe.com",
+    reason: "the customer portal is HTML served by the emulator in place of billing.stripe.com",
   },
   PostPortalPage: {
     safe: false,
     parity: false,
-    reason: "the customer portal form post is served by the mock in place of billing.stripe.com",
+    reason:
+      "the customer portal form post is served by the emulator in place of billing.stripe.com",
   },
 }
 
@@ -1621,6 +1723,14 @@ const EXPAND_PATHS: Record<string, readonly string[]> = {
     "data.payment_intent.invoice",
     "data.customer",
   ],
+  PostChargesCharge: [
+    "invoice",
+    "invoice.discounts.coupon",
+    "payment_intent",
+    "payment_intent.invoice",
+    "customer",
+    "payment_method",
+  ],
   GetChargesCharge: [
     "invoice",
     "invoice.discounts.coupon",
@@ -1640,7 +1750,13 @@ const EXPAND_PATHS: Record<string, readonly string[]> = {
     "data.customer",
   ],
   PostCheckoutSessions: ["payment_intent", "subscription", "setup_intent", "customer"],
-  GetCheckoutSessionsSession: ["payment_intent", "subscription", "setup_intent", "customer"],
+  GetCheckoutSessionsSession: [
+    "payment_intent",
+    "subscription",
+    "setup_intent",
+    "customer",
+    "total_details.breakdown",
+  ],
   PostCheckoutSessionsSessionExpire: ["payment_intent", "subscription", "setup_intent", "customer"],
   GetInvoicePayments: ["data.invoice", "data.payment.payment_intent"],
   GetInvoicePaymentsInvoicePayment: ["invoice", "payment.payment_intent"],
@@ -1669,6 +1785,8 @@ const EXPAND_PATHS: Record<string, readonly string[]> = {
   PostInvoicesInvoiceFinalize: ["charge", "subscription", "payment_intent"],
   PostInvoicesInvoicePay: ["charge", "subscription", "payment_intent"],
   PostGetInvoicesUpcoming: [],
+  PostInvoicesInvoiceMarkUncollectible: ["charge", "subscription", "payment_intent"],
+  PostInvoicesCreatePreview: [],
   GetInvoiceitems: ["data.customer", "data.price"],
   PostInvoiceitems: ["customer", "invoice", "price"],
   GetInvoiceitemsInvoiceitem: ["customer", "invoice", "price"],
@@ -1932,7 +2050,7 @@ const shapeExpand = (operation: Json, operationId: string) => {
   const apply = (holder: Json | undefined) => {
     if (!holder) return
     if (!paths || paths.length === 0) {
-      Object.assign(holder, unsupported("the mock never expands this operation's response"))
+      Object.assign(holder, unsupported("the emulator never expands this operation's response"))
       return
     }
     holder.items = { type: "string", enum: [...paths] }
@@ -2014,58 +2132,67 @@ const parityHeaders = (operation: Json) => {
  */
 const SYNTHETIC_OPERATIONS: readonly { path: string; method: string; operation: Json }[] = [
   {
+    // Narrowed to what embedded components send; the upstream operation's schema is replaced.
+    path: "/v1/customer_sessions",
+    method: "post",
+    operation: {
+      operationId: "PostCustomerSessions",
+      summary: "Create a customer session for embedded components",
+      requestBody: {
+        required: true,
+        content: {
+          "application/x-www-form-urlencoded": {
+            schema: {
+              type: "object",
+              required: ["customer"],
+              properties: {
+                customer: { type: "string" },
+                components: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Short-lived customer session",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "object",
+                  "client_secret",
+                  "components",
+                  "created",
+                  "customer",
+                  "expires_at",
+                  "livemode",
+                ],
+                properties: {
+                  object: { const: "customer_session" },
+                  client_secret: { type: "string", ...volatile("token") },
+                  components: { type: "object", additionalProperties: true },
+                  created: { type: "integer" },
+                  customer: { type: "string" },
+                  expires_at: { type: "integer" },
+                  livemode: { const: false },
+                },
+              },
+            },
+          },
+        },
+        "400": { description: "Missing or invalid customer" },
+      },
+    },
+  },
+  {
     path: "/v1/invoices/upcoming",
     method: "get",
     operation: {
       operationId: "GetInvoicesUpcoming",
-      parameters: [
-        {
-          name: "customer",
-          in: "query",
-          schema: { type: "string", ...ref("customer", MISSING.customer) },
-        },
-        {
-          name: "subscription",
-          in: "query",
-          schema: { type: "string", ...ref("subscription", MISSING.subscription) },
-        },
-        {
-          name: "schedule",
-          in: "query",
-          schema: { type: "string", ...unsupported("renewal scheduling is not modelled") },
-        },
-        {
-          name: "discounts[]",
-          in: "query",
-          schema: {
-            type: "array",
-            maxItems: 10,
-            items: { type: "string", ...unsupported("preview discounts are not modelled") },
-          },
-        },
-        {
-          name: "invoice_items[]",
-          in: "query",
-          schema: {
-            type: "array",
-            maxItems: 10,
-            items: { type: "string", ...unsupported("preview invoice items are not modelled") },
-          },
-        },
-        {
-          name: "subscription_details",
-          in: "query",
-          schema: {
-            type: "string",
-            ...unsupported("preview subscription details are not modelled"),
-          },
-        },
-        {
-          name: "customer_details",
-          in: "query",
-          schema: { type: "string", ...unsupported("preview customer details are not modelled") },
-        },
-      ],
+      // Filled in from POST /v1/invoices/create_preview's body (see `upcomingParameters`).
+      parameters: [],
       responses: {
         "200": {
           content: { "application/json": { schema: { $ref: "#/components/schemas/invoice" } } },
@@ -2073,7 +2200,123 @@ const SYNTHETIC_OPERATIONS: readonly { path: string; method: string; operation: 
       },
     },
   },
+  {
+    path: "/v1/invoices/upcoming/lines",
+    method: "get",
+    operation: {
+      operationId: "GetInvoicesUpcomingLines",
+      parameters: [
+        { name: "limit", in: "query", schema: { type: "integer", minimum: 1, maximum: 100 } },
+        { name: "starting_after", in: "query", schema: { type: "string", maxLength: 5000 } },
+        {
+          name: "ending_before",
+          in: "query",
+          schema: { type: "string", ...unsupported("line item cursors are not modelled") },
+        },
+      ],
+      responses: {
+        "200": {
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: ["object", "data", "has_more", "url"],
+                properties: {
+                  object: { const: "list" },
+                  data: {
+                    type: "array",
+                    items: { $ref: "#/components/schemas/line_item" },
+                  },
+                  has_more: { type: "boolean" },
+                  url: { type: "string" },
+                },
+              },
+            },
+          },
+        },
+      },
+    },
+  },
 ]
+
+/**
+ * `GET /v1/invoices/upcoming` (and `/lines`) take create_preview's parameters in the query
+ * string, plus the flat `subscription_*` forms stripe-node 16 (2024-06-20) still sends.
+ */
+const LEGACY_UPCOMING_PARAMS: Record<string, Schema> = {
+  subscription_proration_behavior: {
+    type: "string",
+    enum: ["always_invoice", "create_prorations", "none"],
+  },
+  subscription_proration_date: { type: "integer" },
+  subscription_billing_cycle_anchor: {
+    anyOf: [{ type: "integer" }, { type: "string", enum: ["now", "unchanged"] }],
+    ...unsupported("preview anchors are not modelled"),
+  },
+  subscription_cancel_at: {
+    anyOf: [{ type: "integer" }, { type: "string", enum: [""] }],
+    ...unsupported("preview cancellations are not modelled"),
+  },
+  subscription_cancel_at_period_end: {
+    type: "boolean",
+    ...unsupported("preview cancellations are not modelled"),
+  },
+  subscription_cancel_now: {
+    type: "boolean",
+    ...unsupported("preview cancellations are not modelled"),
+  },
+  subscription_default_tax_rates: {
+    anyOf: [
+      { type: "array", items: { type: "string", maxLength: 5000 } },
+      { type: "string", enum: [""] },
+    ],
+    ...unsupported("tax rates are not modelled"),
+  },
+  subscription_resume_at: {
+    type: "string",
+    enum: ["now"],
+    ...unsupported("preview resumes are not modelled"),
+  },
+  subscription_start_date: {
+    type: "integer",
+    ...unsupported("preview start dates are not modelled"),
+  },
+  subscription_trial_end: { ...TRIAL_END, ...unsupported("preview trials are not modelled") },
+  subscription_trial_from_plan: {
+    type: "boolean",
+    ...unsupported("preview trials are not modelled"),
+  },
+}
+
+const UPCOMING_OPERATIONS = ["GetInvoicesUpcoming", "GetInvoicesUpcomingLines"]
+
+const upcomingParameters = (paths: Record<string, Json>): Json[] => {
+  const preview = paths["/v1/invoices/create_preview"]?.post
+  const body = isObject(preview) && isObject(preview.requestBody) ? preview.requestBody : {}
+  const form = isObject(body.content)
+    ? (body.content as Json)["application/x-www-form-urlencoded"]
+    : undefined
+  const schema = isObject(form) && isObject(form.schema) ? form.schema : {}
+  const properties = isObject(schema.properties) ? (schema.properties as Record<string, Json>) : {}
+  const details = properties.subscription_details
+  const items =
+    isObject(details) && isObject(details.properties)
+      ? (details.properties as Record<string, Json>).items
+      : undefined
+  if (!items) throw new Error("PostInvoicesCreatePreview: subscription_details.items not found")
+  const query = (name: string, value: Json): Json => ({
+    name,
+    in: "query",
+    schema: structuredClone(value),
+  })
+  return [
+    ...Object.entries(properties)
+      .filter(([name]) => name !== "expand")
+      .map(([name, value]) => query(name, value)),
+    query("subscription_items", items),
+    ...Object.entries(LEGACY_UPCOMING_PARAMS).map(([name, value]) => query(name, value)),
+  ]
+}
 
 const htmlResponse = (description: string): Json => ({
   content: { "text/html": { schema: { type: "string", description } } },
@@ -2334,6 +2577,11 @@ const main = async () => {
     const config = OPERATIONS[synthetic.operation.operationId]
     if (!config) throw new Error(`${synthetic.operation.operationId}: missing allowlist entry`)
     const operation = clean(synthetic.operation) as Json
+    if (UPCOMING_OPERATIONS.includes(synthetic.operation.operationId as string))
+      operation.parameters = [
+        ...upcomingParameters(paths),
+        ...(Array.isArray(operation.parameters) ? (operation.parameters as Json[]) : []),
+      ]
     const parameters = Array.isArray(operation.parameters) ? (operation.parameters as Json[]) : []
     for (const parameter of parameters) {
       if (parameter.in !== "path") continue

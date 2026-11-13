@@ -109,7 +109,7 @@ const recordEvent = (
     body: stored,
     data: data as { object: RecordValue; previous_attributes?: RecordValue },
   })
-  const body = JSON.stringify(shapeForEra(payload, eraOf(version)))
+  const body = JSON.stringify(shapeForEra(payload, eraOf(version), version))
   // Delivery is best-effort: a failing publisher must never turn the API call into a 500. The
   // event is already in the ledger, so `GET /v1/events` (and a replay sweep) still sees it.
   try {
