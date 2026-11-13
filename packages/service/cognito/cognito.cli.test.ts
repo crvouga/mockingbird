@@ -76,7 +76,7 @@ for (const mode of ["inline", "file"] as const) {
         },
         body: JSON.stringify({
           AuthFlow: "USER_PASSWORD_AUTH",
-          ClientId: "fixture-client",
+          ClientId: "mockingbird-client",
           AuthParameters: { USERNAME: "cli@example.test", PASSWORD: "Synthetic1" },
         }),
       })
