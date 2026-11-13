@@ -350,3 +350,36 @@ export function setConfiguration(state: DatabaseState, name: string, value: stri
   if (!configurationSetter) throw pgError("internal", "set_config is not registered");
   return configurationSetter(state, name, value, local);
 }
+
+// --- extension parameters -------------------------------------------------------------------
+
+/** A parameter a contrib module defines when it loads (`DefineCustomRealVariable`). */
+interface ExtensionGuc {
+  readonly def: GucDef;
+  readonly loaded: (state: DatabaseState) => boolean;
+}
+
+const extensionGucs = new Map<string, ExtensionGuc>();
+const reservedPrefixes = new Map<string, (state: DatabaseState) => boolean>();
+
+/**
+ * Register a parameter that exists while its extension is installed. Its prefix is reserved
+ * (`MarkGUCPrefixReserved`): once loaded, other names under it are invalid.
+ */
+export function registerExtensionGuc(def: GucDef, loaded: (state: DatabaseState) => boolean): void {
+  extensionGucs.set(def.name.toLowerCase(), { def, loaded });
+  reservedPrefixes.set(def.name.toLowerCase().split(".")[0]!, loaded);
+}
+
+/** The definition of extension parameter `name` (lower case), while its extension is installed. */
+export function extensionGucDef(state: DatabaseState, name: string): GucDef | undefined {
+  const entry = extensionGucs.get(name);
+  return entry?.loaded(state) ? entry.def : undefined;
+}
+
+/** `name` falls under the reserved prefix of an installed extension without being one of its parameters. */
+export function isReservedGucName(state: DatabaseState, name: string): boolean {
+  const dot = name.indexOf(".");
+  if (dot < 0 || extensionGucs.has(name)) return false;
+  return reservedPrefixes.get(name.slice(0, dot))?.(state) ?? false;
+}

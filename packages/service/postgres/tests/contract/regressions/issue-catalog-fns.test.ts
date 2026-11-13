@@ -158,30 +158,14 @@ test("#536 to_regclass is soft where the literal cast raises", () => {
   expect(sqlStateOf("SELECT to_regclass('rc.missing')", rcSetup)).toBeUndefined();
 });
 
-// #533 pgvector is not modelled: every entry point fails exactly as stock PostgreSQL (which has no pgvector) does
-errorParity("#533 CREATE EXTENSION vector is not available", [], "CREATE EXTENSION vector", "unsupported");
+// #533 pgvector: modelled since #722, differential against pgvector 0.8.1 in
+// tests/contract/extensions/pgvector.test.ts; before CREATE EXTENSION the type does not exist
 errorParity(
-  "#533 CREATE EXTENSION IF NOT EXISTS vector is not available",
+  "#533 a vector cast before CREATE EXTENSION vector is 42704",
   [],
-  "CREATE EXTENSION IF NOT EXISTS vector",
-  "unsupported",
-);
-errorParity(
-  "#533 a vector(n) column does not exist as a type",
-  [],
-  "CREATE TABLE sm (id int PRIMARY KEY, embedding vector(3))",
+  "SELECT '[1,2,3]'::vector",
   "undefined_object",
 );
-errorParity("#533 a vector cast does not exist as a type", [], "SELECT '[1,2,3]'::vector", "undefined_object");
-test("#533 refusing pgvector leaves no extension, table or type behind", () => {
-  const db = new Database();
-  for (const sql of ["CREATE EXTENSION IF NOT EXISTS vector", "CREATE TABLE sm (id int, embedding vector(3))"]) {
-    expect(() => db.exec(sql)).toThrow();
-  }
-  expect(db.query("SELECT count(*)::int AS n FROM pg_extension WHERE extname = 'vector'")).toEqual([{ n: 0 }]);
-  expect(db.query("SELECT count(*)::int AS n FROM pg_available_extensions WHERE name = 'vector'")).toEqual([{ n: 0 }]);
-  expect(db.query("SELECT count(*)::int AS n FROM pg_class WHERE relname = 'sm'")).toEqual([{ n: 0 }]);
-});
 
 // #538 wishlist, item 3: sha256 (and the rest of the core SHA-2 family)
 parity("#538 sha256 of bytea", [], "SELECT encode(sha256('a'::bytea), 'hex') AS h, pg_typeof(sha256('a'::bytea)) AS t");

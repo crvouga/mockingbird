@@ -13,11 +13,20 @@ export interface ExtensionSpec {
   readonly versions: readonly string[];
   readonly comment: string;
   readonly relocatable: boolean;
+  /** false when only a superuser may install it (the control file says `trusted = false`, the default) */
+  readonly trusted?: boolean;
   /** set for an extension that is part of every database and lives in a fixed schema */
   readonly builtinSchema?: string;
 }
 
 export const AVAILABLE_EXTENSIONS: readonly ExtensionSpec[] = [
+  {
+    name: "fuzzystrmatch",
+    defaultVersion: "1.2",
+    versions: ["1.1", "1.2"],
+    comment: "determine similarities and distance between strings",
+    relocatable: true,
+  },
   {
     name: "pg_trgm",
     defaultVersion: "1.6",
@@ -39,6 +48,14 @@ export const AVAILABLE_EXTENSIONS: readonly ExtensionSpec[] = [
     comment: "PL/pgSQL procedural language",
     relocatable: false,
     builtinSchema: "pg_catalog",
+  },
+  {
+    name: "vector",
+    defaultVersion: "0.8.1",
+    versions: ["0.8.1"],
+    comment: "vector data type and ivfflat and hnsw access methods",
+    relocatable: true,
+    trusted: false,
   },
 ];
 
