@@ -86,6 +86,18 @@ import {
   type WebhookPublisher,
 } from "./state.js"
 import { userHandlers } from "./users.js"
+import { buildEmitEvents, type EmitInput } from "./wearable-webhooks.js"
+import {
+  type ConnectInput,
+  type ConnectionRecord,
+  connectionsOf,
+  connectProvider,
+  EVENT_RESOURCE,
+  SUMMARY_RESOURCES,
+  TIMESERIES_RESOURCES,
+  wearableHandlers,
+  wearableProvider,
+} from "./wearables.js"
 
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
@@ -170,6 +182,7 @@ export type {
   GeoMode,
   GetCacheEntry,
   JunctionWebhookEvent,
+  JunctionWebhookEventType,
   JunctionWebhookOptions,
   OrderRecord,
   ResultFixture,
@@ -185,6 +198,21 @@ export {
 } from "./state.js"
 export type { Divergence, VerifyOptions, VerifyReport } from "./verify.js"
 export { verifyAgainstReal } from "./verify.js"
+export type { EmitInput } from "./wearable-webhooks.js"
+export { EMITTABLE_EVENT_TYPES, EmitError } from "./wearable-webhooks.js"
+export type {
+  ConnectInput,
+  ConnectionRecord,
+  ProviderDefinition,
+  SummaryResource,
+  TimeseriesResource,
+} from "./wearables.js"
+export {
+  SUMMARY_RESOURCES,
+  TIMESERIES_RESOURCES,
+  WEARABLE_PROVIDERS,
+  WearableInputError,
+} from "./wearables.js"
 export type {
   WebhookAttempt,
   WebhookDelivery,
@@ -391,6 +419,7 @@ export class JunctionAPI implements FetchAPI {
         scheduling.get_psc_appointment_availability_v3_order_psc_appointment_availability_post,
       ),
       ...resultsHandlers(state),
+      ...wearableHandlers(state),
     })
     this.service = createService({
       document,
@@ -742,6 +771,54 @@ export class JunctionAPI implements FetchAPI {
   markUserDeleted(userId: string): void {
     this.state.users.delete(userId)
     this.state.deletedUsers.insert(userId, { user_id: userId })
+  }
+
+  /** The user's wearable provider connections, oldest first. */
+  connections(userId: string): ConnectionRecord[] {
+    return connectionsOf(this.state, userId)
+  }
+
+  /**
+   * Connect a wearable provider for a user, with days of synthetic data for the summary and
+   * timeseries reads. `undefined` for an unknown user; throws `WearableInputError` for a bad
+   * input. With `emitWebhooks`, publishes `provider.connection.created` and one
+   * `historical.data.<resource>.created` per resource the provider reports, as a real
+   * connection's backfill would.
+   */
+  connectProvider(
+    userId: string,
+    input: ConnectInput,
+    options: { now: () => number; emitWebhooks?: boolean },
+  ): ConnectionRecord | undefined {
+    const user = this.state.users.get(userId)
+    if (!user) return undefined
+    const connection = connectProvider(this.state, user, input, options.now())
+    if (options.emitWebhooks) {
+      const provider = wearableProvider(connection.provider)
+      const backfill =
+        connection.data_start === null
+          ? []
+          : [...SUMMARY_RESOURCES, ...TIMESERIES_RESOURCES]
+              .filter((resource) => provider?.resources.includes(resource))
+              .map((resource) => `historical.data.${EVENT_RESOURCE[resource]}.created`)
+      for (const eventType of ["provider.connection.created", ...backfill])
+        this.emitWebhook(
+          { event_type: eventType, user_id: userId, provider: connection.provider },
+          options,
+        )
+    }
+    return connection
+  }
+
+  /**
+   * Publish one of the events `buildEmitEvents` knows (signed and delivered like any other).
+   * Throws `EmitError` for an event it cannot send.
+   */
+  emitWebhook(input: EmitInput, options: { now: () => number }): JunctionWebhookEvent[] {
+    const now = options.now()
+    const events = buildEmitEvents(this.state, input, now)
+    for (const event of events) this.state.publishWebhook(event, now)
+    return events
   }
 
   webhookEvents(): JunctionWebhookEvent[] {
