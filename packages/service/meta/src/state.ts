@@ -30,6 +30,10 @@ export type Insight = {
   date_stop: string
   campaign_id: string
   campaign_name: string
+  adset_id?: string
+  adset_name?: string
+  ad_id?: string
+  ad_name?: string
   impressions: string
   clicks: string
   spend: string
@@ -38,6 +42,9 @@ export type Insight = {
   website_purchase_roas: Array<{ action_type: string; value: string }>
   country?: string
 }
+
+/** Graph codes whose envelope is typed `OAuthException`: tokens (190) and rate limits (4, 17, 80004). */
+export const OAUTH_CODES: ReadonlySet<number> = new Set([4, 17, 190, 80004])
 
 export type MetaSettings = { accessTokens: string[]; maxEventAgeSeconds: number }
 export const DEFAULT_SETTINGS: MetaSettings = { accessTokens: [], maxEventAgeSeconds: 604_800 }
@@ -90,6 +97,10 @@ export class MetaState {
           date_stop: date,
           campaign_id: "cmp_mockingbird",
           campaign_name: "Mockingbird launch",
+          adset_id: "set_mockingbird",
+          adset_name: "Synthetic audience",
+          ad_id: "ad_mockingbird",
+          ad_name: "Synthetic creative",
           impressions: String(day * 100),
           clicks: String(day * 10),
           spend: String(day * 12.5),

@@ -66,13 +66,31 @@ paths:
           schema: { type: string, minLength: 1, maxLength: 5000, x-mockingbird-volatile: { kind: token } }
         - name: fields
           in: query
-          schema: { type: string, maxLength: 2000 }
+          description: >-
+            Comma-separated insight fields. Any field outside the insight schema answers a
+            Graph error 100; the enum is what random walks send.
+          schema:
+            type: string
+            maxLength: 2000
+            enum:
+              - "spend,impressions,clicks"
+              - "account_id,campaign_id,campaign_name,spend,actions,action_values"
+              - "adset_id,adset_name,ad_id,ad_name,spend,website_purchase_roas"
+              - "spend,reach"
         - name: time_range
           in: query
           schema: { type: string, maxLength: 500 }
         - name: breakdowns
           in: query
           schema: { type: string, maxLength: 500 }
+        - name: level
+          in: query
+          schema: { type: string, enum: [ad, adset, campaign, account] }
+        - name: time_increment
+          in: query
+          schema:
+            type: string
+            enum: [all_days, monthly, "1", "2", "7", "30"]
         - name: limit
           in: query
           schema: { type: integer, minimum: 1, maximum: 100 }
@@ -162,13 +180,17 @@ components:
         objective: { type: string }
     insight:
       type: object
-      required: [account_id, date_start, date_stop, campaign_id, campaign_name, impressions, clicks, spend, actions, action_values, website_purchase_roas]
+      required: [date_start, date_stop]
       properties:
         account_id: { type: string }
         date_start: { type: string }
         date_stop: { type: string }
         campaign_id: { type: string }
         campaign_name: { type: string }
+        adset_id: { type: string }
+        adset_name: { type: string }
+        ad_id: { type: string }
+        ad_name: { type: string }
         impressions: { type: string }
         clicks: { type: string }
         spend: { type: string }
