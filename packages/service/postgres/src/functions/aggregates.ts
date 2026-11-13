@@ -22,10 +22,12 @@ import {
   type TypedValue,
   type TypeId,
   tv,
+  typeDisplayName,
   UNKNOWN,
   wrapJsonb,
 } from "../types/value.ts";
 import { datumToJsonb } from "./json-fns.ts";
+import { vectorAggregate } from "./pgvector.ts";
 import { rangeAgg, rangeIntersectAgg } from "./range-aggs.ts";
 import { numericAsNumber } from "./util.ts";
 
@@ -40,6 +42,7 @@ export type AggregateFactory = (ctx: EngineCtx, argTypes: TypeId[]) => Aggregate
 const INT_TYPES = new Set(["int2", "int4", "int8"]);
 
 function sumResultType(argT: TypeId): TypeId {
+  if (argT === "vector") return "vector";
   if (argT === "int8" || argT === "numeric") return "numeric";
   if (argT === "int2" || argT === "int4") return "int8";
   if (argT === "float4") return "float4";
@@ -50,6 +53,7 @@ function sumResultType(argT: TypeId): TypeId {
 }
 
 function avgResultType(argT: TypeId): TypeId {
+  if (argT === "vector") return "vector";
   if (INT_TYPES.has(argT) || argT === "numeric") return "numeric";
   if (argT === "interval") return "interval";
   return "float8";
@@ -160,7 +164,13 @@ class MinMaxAcc implements AggregateAcc {
     private readonly ctx: EngineCtx,
     private readonly isMax: boolean,
     private argT: TypeId,
-  ) {}
+  ) {
+    // bit strings have comparison operators but no min/max aggregate
+    if (argT === "bit" || argT === "varbit") {
+      const name = isMax ? "max" : "min";
+      throw pgError("undefined_function", `function ${name}(${typeDisplayName(argT)}) does not exist`, "42883");
+    }
+  }
   step(args: TypedValue[]): void {
     const a = args[0]!;
     if (a.v === null) return;
@@ -318,16 +328,37 @@ class JsonObjectAggAcc implements AggregateAcc {
 
 class BitwiseAcc implements AggregateAcc {
   private acc: bigint | null = null;
+  private bits: string | null = null;
   private resultT: TypeId = "int8";
   constructor(
     private readonly op: "and" | "or" | "xor",
     readonly argT: TypeId,
   ) {
-    this.resultT = argT === UNKNOWN ? "int8" : argT;
+    this.resultT = argT === UNKNOWN ? "int8" : argT === "varbit" ? "bit" : argT;
   }
   step(args: TypedValue[]): void {
     const a = args[0]!;
     if (a.v === null) return;
+    if (this.resultT === "bit") {
+      // bit_and/bit_or/bit_xor(bit) fold with the bit-string operators (same-length strings)
+      const s = a.v as string;
+      if (this.bits === null) {
+        this.bits = s;
+        return;
+      }
+      if (s.length !== this.bits.length) {
+        const word = this.op === "and" ? "AND" : this.op === "or" ? "OR" : "XOR";
+        throw pgError("data_exception", `cannot ${word} bit strings of different sizes`, "22026");
+      }
+      let out = "";
+      for (let i = 0; i < s.length; i++) {
+        const x = this.bits[i] === "1";
+        const y = s[i] === "1";
+        out += (this.op === "and" ? x && y : this.op === "or" ? x || y : x !== y) ? "1" : "0";
+      }
+      this.bits = out;
+      return;
+    }
     const v = typeof a.v === "bigint" ? a.v : BigInt(a.v as number);
     if (this.acc === null) {
       this.acc = v;
@@ -336,6 +367,7 @@ class BitwiseAcc implements AggregateAcc {
     this.acc = this.op === "and" ? this.acc & v : this.op === "or" ? this.acc | v : this.acc ^ v;
   }
   result(): TypedValue {
+    if (this.resultT === "bit") return tv("bit", this.bits);
     if (this.acc === null) return tv(this.resultT, null);
     if (this.resultT === "int8") return tv("int8", BigInt.asIntN(64, this.acc));
     return tv(this.resultT, Number(BigInt.asIntN(32, this.acc)));
@@ -531,8 +563,8 @@ class CorrAcc implements AggregateAcc {
 
 const FACTORIES = new Map<string, AggregateFactory>([
   ["count", (_ctx, _t) => new CountAcc()],
-  ["sum", (ctx, t) => new SumAcc(ctx, t[0] ?? "numeric")],
-  ["avg", (ctx, t) => new AvgAcc(ctx, t[0] ?? "numeric")],
+  ["sum", (ctx, t) => (t[0] === "vector" ? vectorAggregate("sum") : new SumAcc(ctx, t[0] ?? "numeric"))],
+  ["avg", (ctx, t) => (t[0] === "vector" ? vectorAggregate("avg") : new AvgAcc(ctx, t[0] ?? "numeric"))],
   ["min", (ctx, t) => new MinMaxAcc(ctx, false, t[0] ?? UNKNOWN)],
   ["max", (ctx, t) => new MinMaxAcc(ctx, true, t[0] ?? UNKNOWN)],
   ["bool_and", () => new BoolAndOrAcc(true)],
