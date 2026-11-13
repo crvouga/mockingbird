@@ -86,7 +86,9 @@ export async function checkDatabase(
 /**
  * Write, read back, overwrite conditionally and delete one probe object under the configured
  * prefix. Proves the credentials, the bucket, and that the store honours conditional writes,
- * which `strict` durability and multi-replica safety both depend on.
+ * which `strict` durability and multi-replica safety both depend on. Only this probe's own object
+ * is removed: replicas starting together probe concurrently, and deleting another replica's probe
+ * would let its conditional overwrite succeed and fail its startup.
  */
 export async function checkObjectStore(
   objects: ObjectStore,
@@ -113,7 +115,7 @@ export async function checkObjectStore(
       )
     const second = await objects.put(key, new TextEncoder().encode("overwrite"), null)
     if (second !== undefined) {
-      await objects.deletePrefix("preflight/")
+      await objects.deletePrefix(key)
       return problem(
         "object_store_no_conditional_writes",
         "The object store ignores conditional writes (If-None-Match / If-Match on PutObject)",
@@ -122,7 +124,7 @@ export async function checkObjectStore(
       )
     }
     const read = await objects.get(key)
-    await objects.deletePrefix("preflight/")
+    await objects.deletePrefix(key)
     if (read.status !== "found")
       return problem(
         "object_store_unexpected",
