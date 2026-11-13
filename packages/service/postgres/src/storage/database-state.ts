@@ -8,7 +8,7 @@ import { type ColumnType, type Datum, TYPE_OIDS, type TypeId, typeDisplayName } 
 import { type CatalogExt, EMPTY_CATALOG_EXT } from "./catalog-ext.ts";
 import type { ColumnarSlab } from "./columnar-slab.ts";
 import type { CursorData } from "../executor/cursors.ts";
-import { gucDef, gucDefaultDisplay, TRANSACTION_GUCS } from "./guc-catalog.ts";
+import { extensionGucDef, gucDef, gucDefaultDisplay, TRANSACTION_GUCS } from "./guc-catalog.ts";
 import { currentRole } from "./roles.ts";
 
 // --- table / relation metadata ---------------------------------------------
@@ -904,7 +904,7 @@ export class DatabaseState {
     if (transactionDefault !== undefined) return this.getSetting(transactionDefault);
     const value = this.settings.get(name);
     if (value !== undefined) return value;
-    const def = gucDef(name);
+    const def = gucDef(name) ?? extensionGucDef(this, name);
     return def ? gucDefaultDisplay(def) : undefined;
   }
 

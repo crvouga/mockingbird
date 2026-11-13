@@ -86,7 +86,9 @@ export function formatType(scope: RuleScope, type: TypeId, mod: ColumnType["mod"
   // `character` is how char(n) prints; without a length the type goes by its internal name
   if (!mod || mod.a === undefined) return type === "bpchar" ? "bpchar" : base;
   if (type === "numeric") return mod.b === undefined ? `${base}(${mod.a})` : `${base}(${mod.a},${mod.b})`;
-  if (type === "varchar" || type === "bpchar" || type === "bit" || type === "varbit") return `${base}(${mod.a})`;
+  if (type === "varchar" || type === "bpchar" || type === "bit" || type === "varbit" || type === "vector") {
+    return `${base}(${mod.a})`;
+  }
   if (type === "timestamp" || type === "time") return `${base.replace(" ", `(${mod.a}) `)}`;
   if (type === "timestamptz" || type === "timetz") return `${base.replace(" ", `(${mod.a}) `)}`;
   return base;

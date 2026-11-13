@@ -36,6 +36,7 @@ import {
   UTC_INPUT,
   wrapJsonb,
 } from "../types/value.ts";
+import { formatTimestamp, formatTimestampTz } from "../types/datetime.ts";
 import { argText, type ScalarFn, strict } from "./util.ts";
 
 /** Convert an engine Datum to a JsonbValue tree (to_jsonb / jsonb_build_*). */
@@ -63,6 +64,11 @@ export function datumToJsonb(ctx: EngineCtx, t: TypeId, v: Datum): JsonbValue {
     case "json": {
       return parseJsonText(v as string);
     }
+    // JSON carries date-times in ISO 8601 (XML Schema) form whatever the DateStyle
+    case "timestamp":
+      return jsonbStr(formatTimestamp(v as bigint, true));
+    case "timestamptz":
+      return jsonbStr(formatTimestampTz(v as bigint, ctx.zoneOffsetAt(v as bigint), true));
     default:
       break;
   }

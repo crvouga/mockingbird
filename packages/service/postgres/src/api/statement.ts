@@ -167,7 +167,13 @@ export class Statement {
           outer: null,
         };
         // statement_timeout applies to each statement of a script separately (PostgreSQL 13+)
-        last = withStatementTimeout(state, () => executeStatement(env, stmt));
+        try {
+          last = withStatementTimeout(state, () => executeStatement(env, stmt));
+        } finally {
+          // outside a transaction block the statement is its own transaction: what
+          // `set_config(..., true)` set lasts until the statement ends
+          if (!inBlock && !this.database.transactions.inTransaction) state.localSettings.clear();
+        }
         const blockStatement = inBlock || this.database.transactions.inTransaction;
         implicitStart = blockStatement ? undefined : (implicitStart ?? env.ctx.txNow);
         // an autocommit statement commits as it ends

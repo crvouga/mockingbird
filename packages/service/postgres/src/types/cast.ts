@@ -58,6 +58,7 @@ import { isMultirangeType, makeMultirange, multirangeRange } from "./multirange.
 import type { PgRange } from "./range.ts";
 import { isRangeType } from "./range-types.ts";
 import { oidFromInteger } from "./regnamespace.ts";
+import { checkExpectedDim, vectorCast, vectorDims } from "./vector.ts";
 
 export interface CastEnv extends OutputCtx, InputCtx {
   enumLabels(enumType: TypeId): string[] | null;
@@ -155,6 +156,10 @@ const IMPLICIT_CASTS = new Set([
   "int4->money",
   "int8->money",
   "numeric->money",
+  // pgvector: vector -> real[] is implicit
+  "vector->float4[]",
+  "bit->varbit",
+  "varbit->bit",
 ]);
 
 /** assignment casts additionally allowed when storing into a column */
@@ -189,6 +194,11 @@ const ASSIGNMENT_CASTS = new Set([
   "timestamptz->timetz",
   "timetz->time",
   "interval->time",
+  // pgvector: int[] / real[] / double precision[] / numeric[] -> vector
+  "int4[]->vector",
+  "float4[]->vector",
+  "float8[]->vector",
+  "numeric[]->vector",
 ]);
 
 export function canAssignCast(from: TypeId, to: TypeId): boolean {
@@ -322,6 +332,13 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
     return tv(target, jsonbScalarCast((v as JsonbWrap).value, target));
   }
 
+  // pgvector: arrays -> vector (assignment), vector -> real[] (implicit)
+  if (target === "vector" || from === "vector") {
+    const allowed = opts.explicit || opts.assignment || canImplicitCast(from, target);
+    const cast = allowed ? vectorCast(from, target, v, opts.mod?.a) : undefined;
+    if (cast !== undefined) return tv(target, cast);
+  }
+
   // arrays
   if (isArrayType(from) && isArrayType(target)) {
     const fromElem = arrayElemType(from);
@@ -376,8 +393,35 @@ export function castTo(env: CastEnv, value: TypedValue, target: TypeId, opts: Ca
     return tv(target, target === "int8" ? BigInt(v as number) : (v as number));
   }
 
+  const bits = castBitString(env, from, target, v, opts);
+  if (bits !== null) return bits;
+
   if (!opts.explicit && !opts.assignment) cannotCast(from, target);
   cannotCast(from, target);
+}
+
+const isBitType = (t: TypeId): boolean => t === "bit" || t === "varbit";
+
+/** bit ↔ varbit (length coercion), int4/int8 → bit(n) and bit → int4/int8; null when none applies. */
+function castBitString(env: CastEnv, from: TypeId, target: TypeId, v: Datum, opts: CastOptions): TypedValue | null {
+  if (isBitType(from) && isBitType(target)) return tv(target, applyTypmod(env, target, v, opts));
+  if ((from === "int4" || from === "int8") && target === "bit" && opts.explicit) {
+    // bitfromint4/8: the low n bits of the two's complement value, sign-extended past its width
+    const n = opts.mod?.a ?? 1;
+    const raw = typeof v === "bigint" ? v : BigInt(v as number);
+    return tv(target, n === 0 ? "" : BigInt.asUintN(n, raw).toString(2).padStart(n, "0"));
+  }
+  if (from === "bit" && (target === "int4" || target === "int8") && opts.explicit) {
+    const s = v as string;
+    const width = target === "int4" ? 32 : 64;
+    if (s.length > width) {
+      throw pgError("numeric_value_out_of_range", `${target === "int4" ? "integer" : "bigint"} out of range`, "22003");
+    }
+    const acc = s.length === 0 ? 0n : BigInt(`0b${s}`);
+    const signed = BigInt.asIntN(width, acc);
+    return tv(target, target === "int8" ? signed : Number(signed));
+  }
+  return null;
 }
 
 /**
@@ -666,8 +710,23 @@ export function applyTypmod(_env: CastEnv, t: TypeId, v: Datum, opts: CastOption
     }
     case "interval":
       return v;
-    case "bit":
-    case "varbit":
+    case "bit": {
+      // explicit casts zero-pad or truncate on the right; assignment needs the exact length
+      const s = v as string;
+      const n = mod.a;
+      if (s.length === n) return s;
+      if (opts.explicit && !opts.assignment) return s.length > n ? s.slice(0, n) : s.padEnd(n, "0");
+      throw pgError("data_exception", `bit string length ${s.length} does not match type bit(${n})`, "22026");
+    }
+    case "varbit": {
+      const s = v as string;
+      const n = mod.a;
+      if (s.length <= n) return s;
+      if (opts.explicit && !opts.assignment) return s.slice(0, n);
+      throw pgError("string_data_right_truncation", `bit string too long for type bit varying(${n})`, "22001");
+    }
+    case "vector":
+      checkExpectedDim(mod.a, vectorDims(v));
       return v;
     default:
       return v;

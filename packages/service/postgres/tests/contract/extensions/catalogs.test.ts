@@ -7,8 +7,8 @@ import { errorParity, parity, parityTyped, sequenceParity, setupBoth } from "../
 // pg_available_extensions / pg_extension consistent with CREATE / DROP EXTENSION (issue #334).
 //
 // What is comparable: the PGlite oracle is built with exactly the contrib extensions the test
-// adapter loads (pgcrypto, pg_trgm) plus the built-in plpgsql, and those three are the extensions
-// this engine implements, so the availability views are compared in full. A stock PostgreSQL
+// adapter loads (fuzzystrmatch, pgcrypto, pg_trgm and pgvector's vector) plus the built-in plpgsql,
+// and those are the extensions this engine implements, so the availability views are compared in full. A stock PostgreSQL
 // server lists every contrib control file it ships (~50 more); none of those exists here, which
 // the "unavailable extension" tests pin. Object identifiers are never compared.
 
@@ -32,9 +32,9 @@ parity(
 parity(
   "unavailable extensions are absent from every extension catalog",
   [],
-  `SELECT (SELECT count(*) FROM pg_available_extensions WHERE name IN ('hypopg', 'postgis', 'vector', 'hstore')) AS available,
-          (SELECT count(*) FROM pg_available_extension_versions WHERE name IN ('hypopg', 'postgis', 'vector')) AS versions,
-          (SELECT count(*) FROM pg_extension WHERE extname IN ('hypopg', 'postgis', 'vector')) AS installed`,
+  `SELECT (SELECT count(*) FROM pg_available_extensions WHERE name IN ('hypopg', 'postgis', 'hstore')) AS available,
+          (SELECT count(*) FROM pg_available_extension_versions WHERE name IN ('hypopg', 'postgis', 'hstore')) AS versions,
+          (SELECT count(*) FROM pg_extension WHERE extname IN ('hypopg', 'postgis', 'hstore')) AS installed`,
 );
 
 parity("pg_extension starts with the built-in plpgsql only", [], INSTALLED);

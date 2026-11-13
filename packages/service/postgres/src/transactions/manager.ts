@@ -1,5 +1,5 @@
-import { pgError } from "../errors/error.ts";
 import { flushDeferredForeignKeys } from "../constraints/enforce.ts";
+import { pgError } from "../errors/error.ts";
 import { endTransactionCursors } from "../executor/cursors.ts";
 import { releaseAdvisoryLocks } from "../functions/advisory-fns.ts";
 import { runOnCommitActions } from "../executor/on-commit.ts";
@@ -53,8 +53,11 @@ export class TransactionManager {
     // A savepoint may be restored repeatedly. Keep its catalog maps independent
     // when the live branch replaces a table after the first ROLLBACK TO.
     // The snapshot's hold is still alive here, so its objects stay copy-on-write.
+    const custom = [...this.state.settings.keys()].filter((name) => name.includes("."));
     this.state.restoreFrom(snap.state.cloneShallow(), true);
     this.state.prng.setState(snap.prngState);
+    // a custom parameter defined in the rolled-back work stays defined, as an empty placeholder
+    for (const name of custom) if (!this.state.settings.has(name)) this.state.settings.set(name, "");
   }
 
   private releaseHolds(): void {

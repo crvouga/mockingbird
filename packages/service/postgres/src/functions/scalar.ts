@@ -3,6 +3,7 @@ import type { EngineCtx } from "../expressions/context.ts";
 import type { TypedValue } from "../types/value.ts";
 import { getAdvisoryFunctions } from "./advisory-fns.ts";
 import { getArrayFunctions } from "./array-fns.ts";
+import { overloadBitStringFunctions } from "./bit-fns.ts";
 import { getCatalogFunctions } from "./catalog-fns.ts";
 import { getDatetimeFunctions } from "./datetime-registry.ts";
 import { getEnumFunctions } from "./enum-fns.ts";
@@ -51,6 +52,7 @@ export function getScalarFunctions(): Map<string, ScalarFn> {
   }
   overloadRangeAccessors(registry);
   overloadMultirangeFunctions(registry);
+  overloadBitStringFunctions(registry);
   // `length(tsvector)` overload: dispatch by arg type over the string version
   const stringLength = registry.get("length")!;
   const tsvectorLength = registry.get("tsvector_length")!;

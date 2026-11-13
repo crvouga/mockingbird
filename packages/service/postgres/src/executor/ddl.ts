@@ -36,6 +36,7 @@ import {
 import { type PostgresError, pgError, unsupported } from "../errors/error.ts";
 import { sequenceNextval } from "../functions/misc-fns.ts";
 import { assertGinTrgmIndex } from "../functions/pgtrgm.ts";
+import { assertPgvectorIndex, PGVECTOR_ACCESS_METHODS, pgvectorInstalled } from "../functions/pgvector.ts";
 import { parse } from "../parser/index.ts";
 import { quoteIdent } from "../sql/deparse.ts";
 import { parseRelationInput } from "../types/regnamespace.ts";
@@ -781,8 +782,10 @@ export function executeCreateIndex(env: ExecEnv, stmt: CreateIndexStmt): ExecRes
     "index",
   );
   assertGinTrgmIndex(state, table, stmt, (expr) => expressionTypeOf(env, table, expr));
+  assertPgvectorIndex(state, table, stmt, (expr) => expressionTypeOf(env, table, expr));
   const method = stmt.using ?? "btree";
-  if (!ACCESS_METHODS.has(method) || method === "heap") {
+  const pgvectorMethod = PGVECTOR_ACCESS_METHODS.has(method) && pgvectorInstalled(state);
+  if ((!ACCESS_METHODS.has(method) && !pgvectorMethod) || method === "heap") {
     throw pgError("undefined_object", `access method "${method}" does not exist`, "42704");
   }
   if (stmt.unique && method !== "btree") {
