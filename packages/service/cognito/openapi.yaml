@@ -11,6 +11,21 @@ paths:
   /:
     post:
       operationId: CognitoRpc
+      summary: AWS JSON 1.1 user-pool operations, dispatched by X-Amz-Target.
+      description: >-
+        Supported targets: SignUp, ConfirmSignUp, ResendConfirmationCode, InitiateAuth,
+        AdminInitiateAuth, RespondToAuthChallenge, AdminRespondToAuthChallenge,
+        GetTokensFromRefreshToken, ForgotPassword, ConfirmForgotPassword, ChangePassword, GetUser,
+        UpdateUserAttributes, VerifyUserAttribute, DeleteUser, GlobalSignOut, RevokeToken,
+        AdminCreateUser, AdminSetUserPassword, AdminResetUserPassword, AdminConfirmSignUp,
+        AdminGetUser, AdminUpdateUserAttributes, AdminDeleteUserAttributes, AdminDisableUser,
+        AdminEnableUser, AdminDeleteUser, ListUsers, AdminLinkProviderForUser, CreateGroup,
+        GetGroup, ListGroups, DeleteGroup, AdminAddUserToGroup, AdminRemoveUserFromGroup,
+        AdminListGroupsForUser, ListUsersInGroup, DescribeUserPool, DescribeUserPoolClient and
+        AdminUserGlobalSignOut; any other target answers UnknownOperationException. Auth flows
+        USER_PASSWORD_AUTH, ADMIN_USER_PASSWORD_AUTH, USER_SRP_AUTH and REFRESH_TOKEN_AUTH are
+        modelled; CUSTOM_AUTH and USER_AUTH answer an explicit InvalidParameterException.
+        Behaviour is a best guess from the Cognito API reference, not oracle-verified.
       x-mockingbird:
         supported: true
         parity: { enabled: true, safe: false }
