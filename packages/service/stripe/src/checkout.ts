@@ -194,6 +194,7 @@ export const completeSession = (
           description: data?.description ?? null,
           setupFutureUsage: data?.setup_future_usage ?? null,
           paymentMethodTypes: session.payment_method_types ?? ["card"],
+          ...(data?.capture_method === undefined ? {} : { captureMethod: data.capture_method }),
         })
         next = { ...next, payment_intent: intent.id }
         scope.account.checkoutSessions.update(session.id, next)
@@ -202,7 +203,12 @@ export const completeSession = (
           autoAuthenticate: true,
         })
         afterIntentSucceeded(scope, settled)
-        next = { ...next, payment_status: "paid" }
+        // An authorization only (`capture_method=manual`) completes the session unpaid until the
+        // PaymentIntent is captured (best guess, not oracle-verified).
+        next = {
+          ...next,
+          payment_status: settled.status === "requires_capture" ? "unpaid" : "paid",
+        }
       }
     } else if (session.mode === "subscription") {
       const attached =
@@ -215,9 +221,19 @@ export const completeSession = (
         items: priced
           .filter((entry) => entry.price?.recurring != null)
           .map(({ line }) => ({ price: line.price as string, quantity: line.quantity ?? 1 })),
-        addInvoiceItems: priced
-          .filter((entry) => entry.price?.recurring == null)
-          .map(({ line }) => ({ price: line.price as string, quantity: line.quantity ?? 1 })),
+        addInvoiceItems: priced.flatMap(({ line, price }) =>
+          price === undefined || price.recurring !== null
+            ? []
+            : [
+                {
+                  price,
+                  inline: false,
+                  quantity: line.quantity ?? 1,
+                  metadata: {},
+                  discountable: undefined,
+                },
+              ],
+        ),
         metadata: session.subscription_data?.metadata ?? {},
         description: session.subscription_data?.description ?? null,
         trialSettings: session.subscription_data?.trial_settings ?? null,

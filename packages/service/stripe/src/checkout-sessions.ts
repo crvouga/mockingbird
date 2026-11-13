@@ -1,4 +1,9 @@
-import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
+import {
+  jsonResponse,
+  type OperationContext,
+  type OperationHandler,
+  opaqueToken,
+} from "@crvouga/mockingbird-service"
 import {
   assertCompatiblePrices,
   couponValidNow,
@@ -8,6 +13,7 @@ import {
 } from "./billing.js"
 import { formatMoney } from "./checkout-page.js"
 import {
+  humanList,
   invalidRequest,
   parameterInvalidEmpty,
   parameterMissing,
@@ -17,6 +23,7 @@ import {
 import { parseUnitAmountDecimal } from "./fields.js"
 import {
   booleanOf,
+  clientSecretFor,
   intOf,
   type RequestScope,
   recordOf,
@@ -27,17 +34,53 @@ import {
   stringOf,
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
-import { bodyParams, type Params, queryParams } from "./params.js"
+import { bodyParams, type Params, queryParams, requestVersion } from "./params.js"
 import { normalizeCurrency, parseRecurring } from "./prices.js"
 import { createProduct, validateInlineProduct } from "./products.js"
-import { renderCheckoutLineItem, renderCheckoutSession } from "./render.js"
+import { renderCheckoutLineItem, renderCheckoutSession, renderDiscount } from "./render.js"
 import {
+  type AccountState,
   type CheckoutSessionLineRecord,
   type CheckoutSessionRecord,
+  type DiscountRecord,
   type Metadata,
   type PriceRecord,
   seconds,
 } from "./state.js"
+
+import { REQUEST_CHANGES, versionAtLeast } from "./version.js"
+
+/**
+ * `ui_mode` as the request's API version names it: `hosted` / `embedded` before 2026-03-25.dahlia
+ * (plus `custom` from 2025-03-31.basil), `hosted_page` / `embedded_page` / `elements` after;
+ * the other version's names are refused like any value outside the enum. Answers the current
+ * name. Checkout Elements (`custom` / `elements`) is an explicit emulator limitation.
+ */
+const uiModeOf = (
+  context: OperationContext,
+  params: Params,
+): { mode: "hosted_page" | "embedded_page"; name: string } => {
+  const version = requestVersion(context)
+  const allowed = versionAtLeast(version, REQUEST_CHANGES.checkoutUiModeRenamed)
+    ? ["elements", "embedded_page", "hosted_page"]
+    : versionAtLeast(version, REQUEST_CHANGES.singularDiscountRemoved)
+      ? ["custom", "embedded", "hosted"]
+      : ["embedded", "hosted"]
+  const requested = stringOf(params, "ui_mode")
+  if (requested === null) return { mode: "hosted_page", name: allowed.at(-1) as string }
+  if (!allowed.includes(requested))
+    throw invalidRequest(`Invalid ui_mode: must be one of ${humanList(allowed)}`, "ui_mode")
+  if (requested === "custom" || requested === "elements")
+    throw invalidRequest(
+      `\`ui_mode=${requested}\` (Checkout with Elements) is not modelled by this mock.`,
+      "ui_mode",
+    )
+  return {
+    mode:
+      requested === "embedded" || requested === "embedded_page" ? "embedded_page" : "hosted_page",
+    name: requested,
+  }
+}
 
 type RequestedLine = {
   priceId: string
@@ -236,7 +279,7 @@ const sessionLines = (
 
 /** Spread each discount over the lines it applies to, from their undiscounted amounts. */
 const discountLines = (
-  scope: RequestScope,
+  scope: Pick<RequestScope, "account">,
   base: CheckoutSessionLineRecord[],
   discounts: ReadonlyArray<{ coupon: string | null }>,
 ): CheckoutSessionLineRecord[] => {
@@ -268,6 +311,48 @@ const discountLines = (
     }
   }
   return lines
+}
+
+/**
+ * `total_details.breakdown` (only when expanded, as Stripe's includable field): each discount's
+ * share of the session total and the discount as an object; no taxes. The discount objects of a
+ * session that has not created a subscription are synthesised with stable ids derived from the
+ * session (best guess, not oracle-verified: Stripe creates them on its side).
+ */
+export const checkoutBreakdown = (
+  account: AccountState,
+  sessionId: string,
+): Record<string, unknown> | undefined => {
+  const session = account.checkoutSessions.get(sessionId)
+  if (!session) return undefined
+  const refs = session.discount_refs ?? []
+  const subscription =
+    session.subscription === null ? undefined : account.subscriptions.get(session.subscription)
+  const totalWith = (count: number) =>
+    discountLines({ account }, session.line_items, refs.slice(0, count)).reduce(
+      (sum, line) => sum + (line.amount_discount ?? 0),
+      0,
+    )
+  const discounts = refs.map((ref, index) => {
+    const existing = subscription?.discount_ids
+      .map((id) => account.discounts.get(id))
+      .find((record) => record?.coupon === ref.coupon)
+    const record: DiscountRecord = existing ?? {
+      id: `di_${opaqueToken(`${session.id}:discount:${index}`, 24)}`,
+      coupon: ref.coupon ?? "",
+      promotion_code: ref.promotion_code,
+      customer: session.customer,
+      subscription: null,
+      checkout_session: session.id,
+      start: session.created,
+      end: null,
+    }
+    return {
+      amount: totalWith(index + 1) - totalWith(index),
+      discount: renderDiscount(record, account),
+    }
+  })
+  return { discounts, taxes: [] }
 }
 
 /** Re-price an open session after a promotion code is applied or removed on the hosted page. */
@@ -414,6 +499,27 @@ export const checkoutSessionHandlers = (services: Services): Record<string, Oper
         "allow_promotion_codes",
       )
     const successUrl = stringOf(params, "success_url")
+    const uiMode = uiModeOf(context, params)
+    const returnUrl = stringOf(params, "return_url")
+    // Best guess, not oracle-verified: an embedded session redirects only to `return_url`, and a
+    // hosted one has no use for it.
+    if (uiMode.mode === "embedded_page") {
+      for (const param of ["success_url", "cancel_url"])
+        if (params[param] !== undefined)
+          throw invalidRequest(
+            `You cannot pass \`${param}\` when \`ui_mode\` is \`${uiMode.name}\`.`,
+            param,
+          )
+      if (returnUrl === null)
+        throw invalidRequest(
+          `\`return_url\` is required when \`ui_mode\` is \`${uiMode.name}\`.`,
+          "return_url",
+        )
+    } else if (returnUrl !== null)
+      throw invalidRequest(
+        `You can only pass \`return_url\` when \`ui_mode\` is \`${uiMode.name === "hosted" ? "embedded" : "embedded_page"}\`.`,
+        "return_url",
+      )
     const inline: InlineObjects = { prices: [], products: [] }
     const requested =
       mode === "setup" && params.line_items === undefined
@@ -502,6 +608,11 @@ export const checkoutSessionHandlers = (services: Services): Record<string, Oper
         setup_future_usage:
           typeof intentData?.setup_future_usage === "string" ? intentData.setup_future_usage : null,
         description: typeof intentData?.description === "string" ? intentData.description : null,
+        ...(intentData?.capture_method === "manual" ||
+        intentData?.capture_method === "automatic" ||
+        intentData?.capture_method === "automatic_async"
+          ? { capture_method: intentData.capture_method }
+          : {}),
       },
       subscription_data: {
         metadata: (subscriptionData?.metadata as Metadata | undefined) ?? {},
@@ -525,6 +636,9 @@ export const checkoutSessionHandlers = (services: Services): Record<string, Oper
       payment_method_collection: collection === "if_required" ? "if_required" : "always",
       allow_promotion_codes: allowPromotionCodes ?? false,
       customer_details: null,
+      ui_mode: uiMode.mode,
+      client_secret: uiMode.mode === "embedded_page" ? clientSecretFor(id) : null,
+      return_url: returnUrl,
     }
     scope.account.checkoutSessions.insert(id, record)
     return jsonResponse(200, renderCheckoutSession(record))

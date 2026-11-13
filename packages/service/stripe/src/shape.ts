@@ -1,4 +1,4 @@
-import type { ApiEra } from "./version.js"
+import { type ApiEra, REQUEST_CHANGES, versionAtLeast } from "./version.js"
 
 type RecordValue = Record<string, unknown>
 
@@ -61,15 +61,43 @@ const ABSENT: Record<string, Record<ApiEra, readonly string[]>> = {
 const isRecord = (value: unknown): value is RecordValue =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-/** Trim a rendered response (any depth: lists, expansions, events, error payloads) to `era`. */
-export const shapeForEra = (value: unknown, era: ApiEra): unknown => {
-  if (Array.isArray(value)) return value.map((item) => shapeForEra(item, era))
+/**
+ * Enum values Stripe renamed, keyed by `object` then field: the current name → the name a
+ * request pinned before `since` sees. Renderers use the current names.
+ */
+const RENAMED: Record<string, Record<string, { since: string; names: Record<string, string> }>> = {
+  "checkout.session": {
+    ui_mode: {
+      since: REQUEST_CHANGES.checkoutUiModeRenamed,
+      names: { hosted_page: "hosted", embedded_page: "embedded", elements: "custom" },
+    },
+  },
+}
+
+/**
+ * Trim a rendered response (any depth: lists, expansions, events, error payloads) to `era`, and
+ * with `version` give renamed enum values their names at that version.
+ */
+export const shapeForEra = (value: unknown, era: ApiEra, version?: string): unknown => {
+  if (Array.isArray(value)) return value.map((item) => shapeForEra(item, era, version))
   if (!isRecord(value)) return value
-  const absent = typeof value.object === "string" ? ABSENT[value.object]?.[era] : undefined
+  const object = typeof value.object === "string" ? value.object : undefined
+  const absent = object === undefined ? undefined : ABSENT[object]?.[era]
+  const renamed = object === undefined ? undefined : RENAMED[object]
   const out: RecordValue = {}
   for (const [key, inner] of Object.entries(value)) {
     if (absent?.includes(key)) continue
-    out[key] = shapeForEra(inner, era)
+    const rename = renamed?.[key]
+    if (
+      rename !== undefined &&
+      version !== undefined &&
+      typeof inner === "string" &&
+      !versionAtLeast(version, rename.since)
+    ) {
+      out[key] = rename.names[inner] ?? inner
+      continue
+    }
+    out[key] = shapeForEra(inner, era, version)
   }
   return out
 }
