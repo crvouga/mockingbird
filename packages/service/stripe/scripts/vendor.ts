@@ -650,7 +650,7 @@ const BODY_SHAPES: Record<string, Shape> = {
       items: { type: "string", enum: ["card", "link"] },
     },
     application_fee_amount: unsupported("Connect application fees are not modelled"),
-    automatic_payment_methods: unsupported("the payment method type list is explicit in the mock"),
+    automatic_payment_methods: unsupported("the payment method type list is explicit in the emulator"),
     mandate: unsupported("mandates are not modelled"),
     mandate_data: unsupported("mandates are not modelled"),
     on_behalf_of: unsupported("Connect is not modelled"),
@@ -686,7 +686,7 @@ const BODY_SHAPES: Record<string, Shape> = {
     off_session: { type: "boolean" },
     setup_future_usage: { type: "string", enum: ["on_session", "off_session"] },
     capture_method: { type: "string", enum: ["automatic", "manual"] },
-    client_secret: unsupported("the mock does not verify client secrets"),
+    client_secret: unsupported("the emulator does not verify client secrets"),
     mandate: unsupported("mandates are not modelled"),
     mandate_data: unsupported("mandates are not modelled"),
     payment_method_data: unsupported("raw payment method data is not modelled"),
@@ -737,7 +737,7 @@ const BODY_SHAPES: Record<string, Shape> = {
   PostSetupIntentsIntentConfirm: {
     payment_method: { type: "string" },
     return_url: { type: "string", maxLength: 5000 },
-    client_secret: unsupported("the mock does not verify client secrets"),
+    client_secret: unsupported("the emulator does not verify client secrets"),
     mandate_data: unsupported("mandates are not modelled"),
     payment_method_data: unsupported("raw payment method data is not modelled"),
     payment_method_options: unsupported("payment method options are not modelled"),
@@ -847,7 +847,7 @@ const BODY_SHAPES: Record<string, Shape> = {
   DeleteInvoicesInvoice: {},
   PostInvoicesInvoiceFinalize: {
     auto_advance: { type: "boolean" },
-    expand: unsupported("the mock never expands this operation's response"),
+    expand: unsupported("the emulator never expands this operation's response"),
   },
   PostInvoicesInvoicePay: {
     payment_method: { type: "string" },
@@ -964,7 +964,7 @@ const BODY_SHAPES: Record<string, Shape> = {
     metadata: { type: "object" },
     start_date: unsupported("schedule start dates are not modelled"),
     phases: { type: "array", maxItems: 3, items: { type: "object" } },
-    expand: unsupported("the mock never expands this operation's response"),
+    expand: unsupported("the emulator never expands this operation's response"),
   },
   PostSubscriptionSchedulesSchedule: {
     end_behavior: { type: "string", enum: ["cancel", "none", "release", "renew"] },
@@ -1002,7 +1002,7 @@ const BODY_SHAPES: Record<string, Shape> = {
     metadata: { type: "object" },
     active: { type: "boolean" },
     restrictions: { type: "object" },
-    expand: unsupported("the mock never expands this operation's response"),
+    expand: unsupported("the emulator never expands this operation's response"),
   },
   PostPromotionCodesPromotionCode: {
     active: { type: "boolean" },
@@ -1425,7 +1425,7 @@ const OPERATIONS: Record<string, OperationConfig> = {
   PostDisputesDispute: {
     safe: false,
     supported: false,
-    reason: "the mock never creates or mutates disputes",
+    reason: "the emulator never creates or mutates disputes",
   },
   GetBalanceTransactions: { safe: true },
   GetBalanceTransactionsId: { safe: true },
@@ -1529,22 +1529,28 @@ const OPERATIONS: Record<string, OperationConfig> = {
   GetWebhookEndpointsWebhookEndpoint: { safe: true },
   PostWebhookEndpointsWebhookEndpoint: { safe: false },
   DeleteWebhookEndpointsWebhookEndpoint: { safe: false },
+  // customer sessions (see SYNTHETIC_OPERATIONS)
+  PostCustomerSessions: {
+    safe: false,
+    parity: false,
+    reason: "Covered by the pinned package oracle; no independent live evidence yet.",
+  },
   // browser surfaces served by the mock itself (see SYNTHETIC_OPERATIONS)
   GetCheckoutPage: {
     safe: true,
     parity: false,
-    reason: "the hosted Checkout page is HTML served by the mock in place of checkout.stripe.com",
+    reason: "the hosted Checkout page is HTML served by the emulator in place of checkout.stripe.com",
   },
   PostCheckoutPage: {
     safe: false,
     parity: false,
     reason:
-      "the hosted Checkout page form post is served by the mock in place of checkout.stripe.com",
+      "the hosted Checkout page form post is served by the emulator in place of checkout.stripe.com",
   },
   GetStripeJs: {
     safe: true,
     parity: false,
-    reason: "the Stripe.js stand-in is JavaScript served by the mock in place of js.stripe.com/v3",
+    reason: "the Stripe.js stand-in is JavaScript served by the emulator in place of js.stripe.com/v3",
   },
   PostThreeDSecureAuthenticate: {
     safe: false,
@@ -1554,12 +1560,12 @@ const OPERATIONS: Record<string, OperationConfig> = {
   GetPortalPage: {
     safe: true,
     parity: false,
-    reason: "the customer portal is HTML served by the mock in place of billing.stripe.com",
+    reason: "the customer portal is HTML served by the emulator in place of billing.stripe.com",
   },
   PostPortalPage: {
     safe: false,
     parity: false,
-    reason: "the customer portal form post is served by the mock in place of billing.stripe.com",
+    reason: "the customer portal form post is served by the emulator in place of billing.stripe.com",
   },
 }
 
@@ -1932,7 +1938,7 @@ const shapeExpand = (operation: Json, operationId: string) => {
   const apply = (holder: Json | undefined) => {
     if (!holder) return
     if (!paths || paths.length === 0) {
-      Object.assign(holder, unsupported("the mock never expands this operation's response"))
+      Object.assign(holder, unsupported("the emulator never expands this operation's response"))
       return
     }
     holder.items = { type: "string", enum: [...paths] }
@@ -2013,6 +2019,61 @@ const parityHeaders = (operation: Json) => {
  * disables differential parity for it (the real side would answer for a different API version).
  */
 const SYNTHETIC_OPERATIONS: readonly { path: string; method: string; operation: Json }[] = [
+  {
+    // Narrowed to what embedded components send; the upstream operation's schema is replaced.
+    path: "/v1/customer_sessions",
+    method: "post",
+    operation: {
+      operationId: "PostCustomerSessions",
+      summary: "Create a customer session for embedded components",
+      requestBody: {
+        required: true,
+        content: {
+          "application/x-www-form-urlencoded": {
+            schema: {
+              type: "object",
+              required: ["customer"],
+              properties: {
+                customer: { type: "string" },
+                components: { type: "object", additionalProperties: true },
+              },
+            },
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Short-lived customer session",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
+                required: [
+                  "object",
+                  "client_secret",
+                  "components",
+                  "created",
+                  "customer",
+                  "expires_at",
+                  "livemode",
+                ],
+                properties: {
+                  object: { const: "customer_session" },
+                  client_secret: { type: "string", ...volatile("token") },
+                  components: { type: "object", additionalProperties: true },
+                  created: { type: "integer" },
+                  customer: { type: "string" },
+                  expires_at: { type: "integer" },
+                  livemode: { const: false },
+                },
+              },
+            },
+          },
+        },
+        "400": { description: "Missing or invalid customer" },
+      },
+    },
+  },
   {
     path: "/v1/invoices/upcoming",
     method: "get",

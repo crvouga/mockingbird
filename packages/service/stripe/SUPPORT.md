@@ -8,7 +8,6 @@ Generated from `openapi.yaml`; do not edit by hand.
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
-| `PostCustomerSessions` | `POST /v1/customer_sessions` | ✅ supported | ❌ disabled | Covered by the pinned package oracle; no independent live evidence yet. |
 | `PostThreeDSecureAuthenticate` | `POST /c/3ds/{intent}/authenticate` | ✅ supported | ❌ disabled | the 3-D Secure challenge the Stripe.js stand-in completes has no public API |
 | `GetCheckoutPage` | `GET /c/pay/{session}` | ✅ supported | ❌ disabled | the hosted Checkout page is HTML served by the emulator in place of checkout.stripe.com |
 | `PostCheckoutPage` | `POST /c/pay/{session}` | ✅ supported | ❌ disabled | the hosted Checkout page form post is served by the emulator in place of checkout.stripe.com |
@@ -38,6 +37,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetCouponsCoupon` | `GET /v1/coupons/{coupon}` | ✅ supported | ✅ |  |
 | `PostCouponsCoupon` | `POST /v1/coupons/{coupon}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `DeleteCouponsCoupon` | `DELETE /v1/coupons/{coupon}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `PostCustomerSessions` | `POST /v1/customer_sessions` | ✅ supported | ❌ disabled | Covered by the pinned package oracle; no independent live evidence yet. |
 | `GetCustomers` | `GET /v1/customers` | ✅ supported | ✅ |  |
 | `PostCustomers` | `POST /v1/customers` | ✅ supported | ✅ |  |
 | `GetCustomersCustomer` | `GET /v1/customers/{customer}` | ✅ supported | ✅ |  |

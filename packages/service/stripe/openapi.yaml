@@ -13,57 +13,6 @@ servers:
 security:
   - bearerAuth: []
 paths:
-  /v1/customer_sessions:
-    post:
-      operationId: PostCustomerSessions
-      summary: Create a customer session for embedded components
-      x-mockingbird:
-        supported: true
-        parity:
-          enabled: false
-          safe: false
-          reason: Covered by the pinned package oracle; no independent live evidence yet.
-      requestBody:
-        required: true
-        content:
-          application/x-www-form-urlencoded:
-            schema:
-              type: object
-              required: [customer]
-              properties:
-                customer:
-                  type: string
-                components:
-                  type: object
-                  additionalProperties: true
-      responses:
-        "200":
-          description: Short-lived customer session
-          content:
-            application/json:
-              schema:
-                type: object
-                required: [object, client_secret, components, created, customer, expires_at, livemode]
-                properties:
-                  object:
-                    const: customer_session
-                  client_secret:
-                    type: string
-                    x-mockingbird-volatile:
-                      kind: token
-                  components:
-                    type: object
-                    additionalProperties: true
-                  created:
-                    type: integer
-                  customer:
-                    type: string
-                  expires_at:
-                    type: integer
-                  livemode:
-                    const: false
-        "400":
-          description: Missing or invalid customer
   /c/3ds/{intent}/authenticate:
     post:
       operationId: PostThreeDSecureAuthenticate
@@ -7501,6 +7450,115 @@ paths:
         parity:
           enabled: true
           safe: false
+  /v1/customer_sessions:
+    post:
+      operationId: PostCustomerSessions
+      summary: Create a customer session for embedded components
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - customer
+              properties:
+                customer:
+                  type: string
+                components:
+                  type: object
+                  additionalProperties: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - object
+                  - client_secret
+                  - components
+                  - created
+                  - customer
+                  - expires_at
+                  - livemode
+                properties:
+                  object:
+                    const: customer_session
+                  client_secret:
+                    type: string
+                    x-mockingbird-volatile:
+                      kind: token
+                  components:
+                    type: object
+                    additionalProperties: true
+                  created:
+                    type: integer
+                  customer:
+                    type: string
+                  expires_at:
+                    type: integer
+                  livemode:
+                    const: false
+          headers:
+            content-type:
+              schema:
+                type: string
+                enum:
+                  - application/json
+              x-mockingbird-parity-header: true
+        "400":
+          headers:
+            content-type:
+              schema:
+                type: string
+                enum:
+                  - application/json
+              x-mockingbird-parity-header: true
+        "402":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+          headers:
+            content-type:
+              schema:
+                type: string
+                enum:
+                  - application/json
+              x-mockingbird-parity-header: true
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/error"
+          headers:
+            content-type:
+              schema:
+                type: string
+                enum:
+                  - application/json
+              x-mockingbird-parity-header: true
+        "414":
+          description: Request-URI Too Large (nginx)
+          headers:
+            content-type:
+              schema:
+                type: string
+                enum:
+                  - text/html
+              x-mockingbird-parity-header: true
+          content:
+            text/html:
+              schema:
+                type: string
+      x-mockingbird:
+        supported: true
+        reason: Covered by the pinned package oracle; no independent live evidence yet.
+        parity:
+          enabled: false
+          safe: false
+          reason: Covered by the pinned package oracle; no independent live evidence yet.
   /v1/customers:
     get:
       operationId: GetCustomers
