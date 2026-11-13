@@ -14,9 +14,10 @@
  *      could not install it),
  *   6. every workspace package is named `@crvouga/mockingbird` or
  *      `@crvouga/mockingbird-<kebab-case>` (hard rule: one npm naming convention),
- *   7. emulator services and the neutral tools (fleet, notifications) are published; a
- *      service that imports private helper packages builds with
- *      scripts/bundle-service.ts, which inlines them into its `dist`.
+ *   7. emulator services, the shared runtime and the neutral tools (fleet, notifications) are
+ *      published; a service that imports private helper packages builds with
+ *      scripts/bundle-service.ts and depends on @crvouga/mockingbird-runtime, which ships the
+ *      runtime helpers once; anything else is inlined into its `dist`.
  *      Postgres and SQLite bundle the same way from scripts/build.ts.
  *
  *   bun run check:boundaries
@@ -113,8 +114,10 @@ for (const pkg of packages.values()) {
   }
 }
 
-// 7. publish emulator services and the explicit neutral tools.
+// 7. publish emulator services, the shared runtime and the explicit neutral tools.
+const RUNTIME = "@crvouga/mockingbird-runtime"
 const PUBLISHED_TOOLS = new Set([
+  RUNTIME,
   "@crvouga/mockingbird-fleet",
   "@crvouga/mockingbird-notifications",
 ])
@@ -122,6 +125,18 @@ for (const pkg of packages.values()) {
   if (pkg.public && !SERVICE_NAME.test(pkg.name) && !PUBLISHED_TOOLS.has(pkg.name)) {
     fail(
       `${pkg.name}: only emulator services and ${[...PUBLISHED_TOOLS].join(", ")} are published — mark it "private": true`,
+    )
+  }
+  // A service that inlined the runtime would carry its own 1.5 MB copy of it (#699, #766).
+  if (
+    pkg.public &&
+    SERVICE_NAME.test(pkg.name) &&
+    pkg.build !== undefined &&
+    BUNDLE_BUILD.test(pkg.build) &&
+    !pkg.dependencies.has(RUNTIME)
+  ) {
+    fail(
+      `${pkg.name}: builds with scripts/bundle-service.ts, so it must list ${RUNTIME} in dependencies ("workspace:*") to share the runtime instead of inlining it`,
     )
   }
 }

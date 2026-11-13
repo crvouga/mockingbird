@@ -122,6 +122,7 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*"
   },
   "devDependencies": {

@@ -48,7 +48,10 @@ export function adminClientLeaks(
     .map(([file]) => file)
 }
 
-export type ServiceJsOptions = Pick<BuildOptions, "define" | "external" | "platform"> & {
+export type ServiceJsOptions = Pick<
+  BuildOptions,
+  "define" | "external" | "platform" | "plugins"
+> & {
   absWorkingDir: string
   /** Relative to `absWorkingDir`; emptied first. */
   outdir: string
@@ -81,6 +84,7 @@ export async function bundleServiceJs(options: ServiceJsOptions): Promise<Metafi
       ...(options.platform !== undefined ? { platform: options.platform } : {}),
       ...(options.define !== undefined ? { define: options.define } : {}),
       ...(options.external !== undefined ? { external: options.external } : {}),
+      ...(options.plugins !== undefined ? { plugins: options.plugins } : {}),
       logLevel: "warning",
       metafile: true,
     })

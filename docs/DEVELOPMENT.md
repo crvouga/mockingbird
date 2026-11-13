@@ -19,16 +19,17 @@ That is the whole onboarding: no secrets, no accounts, nothing self-hosted. `bun
 
 **Naming (hard rule):** every package is `@crvouga/mockingbird-<kebab-case>`; the short names below drop that prefix. `bun run check:boundaries` fails CI on any other name.
 
-**Publishing (hard rule):** only emulator services (`service-<name>`) are published. Every other package is `"private": true`; a service that uses them builds with [`scripts/bundle-service.ts`](../scripts/bundle-service.ts), which inlines them (JavaScript and `.d.ts`) so the tarball needs nothing unpublished. `bun run check:boundaries` fails CI on a public non-service package.
+**Publishing (hard rule):** only emulator services (`service-<name>`), the shared `runtime` they depend on, and the fleet and notifications tools are published. Every other package is `"private": true`. [`packages/runtime`](../packages/runtime/README.md) bundles the runtime helpers once (`core`, `service`, `sqlite`, `openapi`, `http-codec`, the admin page, …) and re-exports each as `@crvouga/mockingbird-runtime/<helper>`. A service builds with [`scripts/bundle-service.ts`](../scripts/bundle-service.ts) and lists `@crvouga/mockingbird-runtime` in `dependencies`: its imports of those helpers become imports of the runtime ([`scripts/bundle-service-runtime.ts`](../scripts/bundle-service-runtime.ts)), so emulators installed or bundled together share one runtime, and the build fails if it inlines a copy anyway. Anything else it uses is inlined (JavaScript and `.d.ts`), so the tarball needs nothing unpublished. `bun run check:boundaries` fails CI on any other public package and on a bundled service without the runtime dependency.
 
 | Layer | Packages | Published |
 | --- | --- | --- |
 | Services | `service-stripe`, `service-junction`, `service-genebygene`, `service-medplum`, `service-postgres`, `service-sqlite`, and every vendor emulator in the [catalog](https://mockingbird.chrisvouga.dev/services) | yes |
-| Core | `core` (`FetchAPI`), `service` (Hono dispatch keyed by `operationId`) | bundled |
-| Storage | `sqlite` (`SqliteClient` port, migrate runner, default `@crvouga/mockingbird-service-sqlite`) | bundled |
-| Contract | `openapi`, `openapi-metadata`, `openapi-arbitrary`, `openapi-codegen` | bundled / build tool |
+| Runtime | `runtime`: the helpers below marked "runtime", built once and shared by every service | yes |
+| Core | `core` (`FetchAPI`), `service` (Hono dispatch keyed by `operationId`) | runtime |
+| Storage | `sqlite` (`SqliteClient` port, migrate runner, default `@crvouga/mockingbird-service-sqlite`) | runtime |
+| Contract | `openapi`, `openapi-metadata` (runtime); `openapi-arbitrary`, `openapi-codegen` | runtime / build tool |
 | Parity | `commands`, `model`, `canonicalize`, `parity` (runner) | bundled / tests |
-| Adapters | `adapter-node`, `adapter-bun` | tests only |
+| Adapters | `adapter-node` (runtime, for `./server` entries), `adapter-bun` | runtime / tests only |
 | Auth | `credentials` (sandbox credentials for live parity, from the environment) | tests only |
 
 ## UI work: the Storybook catalog
