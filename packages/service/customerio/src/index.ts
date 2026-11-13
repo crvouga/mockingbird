@@ -22,6 +22,9 @@ import { document, type SupportedOperationId } from "./generated/openapi.js"
 import {
   type CdpEvent,
   type Channel,
+  CONTENT_LISTS,
+  type ContentList,
+  type CustomerExport,
   CustomerIoState,
   DEFAULT_TRANSACTIONAL_MESSAGES,
   type Delivery,
@@ -42,6 +45,8 @@ export { document, operationIds, supportedOperationIds } from "./generated/opena
 export type {
   CdpEvent,
   Channel,
+  ContentList,
+  CustomerExport,
   CustomerOptOuts,
   Delivery,
   DeliveryState,
@@ -56,6 +61,7 @@ export type {
   TransactionalMessage,
 } from "./state.js"
 export {
+  CONTENT_LISTS,
   DEFAULT_SETTINGS,
   DEFAULT_TRANSACTIONAL_MESSAGES,
   DELIVERY_STATES,
@@ -105,6 +111,10 @@ export type CustomerIoAPIOptions = APIOptions & {
   onReport?: (event: ReportingEvent) => void
   /** Wall clock used for receiver freshness checks. Defaults to `Date.now`. */
   wallClock?: () => number
+  /** Admin prefix the runtime serves (export download links point under it). Default `/__admin`. */
+  adminPrefix?: string
+  /** The namespace as clients name it (export download links carry it). Default `default`. */
+  publicNamespace?: string
 }
 
 /** The CDP write key (Basic username) or App API key (Bearer): how requests map to namespaces. */
@@ -123,6 +133,15 @@ const APP_OPERATIONS = new Set([
   "ListOptOuts",
   "GetCustomerOptOuts",
   "GetMessage",
+  "ListReportingWebhooks",
+  "ListSubscriptionTopics",
+  "ExportCustomers",
+  "GetExport",
+  "DownloadExport",
+  "ListSnippets",
+  "ListCampaigns",
+  "ListNewsletters",
+  "ListSenderIdentities",
 ])
 
 /** The CDP semantic events that maintain a person's device list. */
@@ -210,6 +229,82 @@ const mergePreferences = (
   topics: mergeBoolMap(current?.topics ?? {}, incoming.topics),
 })
 
+/** A profile's attributes as the App API reads them (stored traits, then the identifiers). */
+const profileAttributes = (profile: Profile): Record<string, unknown> => ({
+  ...profile.traits,
+  id: profile.id,
+  cio_id: profile.cioId,
+  ...(profile.email ? { email: profile.email } : {}),
+  unsubscribed: profile.unsubscribed,
+})
+
+type Filter = (attributes: Record<string, unknown>) => boolean
+const FILTER_KEYS = ["and", "or", "not", "segment", "attribute"]
+
+/**
+ * Compile an export filter node, or explain why it is refused. `segment` is an explicit emulator
+ * limitation (no segments are modelled).
+ */
+const parseFilter = (node: unknown, path: string): Filter | string => {
+  if (!isRecord(node)) return `${path}: expected an object`
+  const keys = Object.keys(node)
+  const key = keys[0]
+  if (keys.length !== 1 || key === undefined || !FILTER_KEYS.includes(key)) {
+    return `${path}: expected exactly one of ${FILTER_KEYS.join(", ")}`
+  }
+  const value = node[key]
+  if (key === "segment") return `${path}: segment filters are not supported by the emulator`
+  if (key === "and" || key === "or") {
+    if (!Array.isArray(value) || value.length === 0)
+      return `${path}.${key}: expected a non-empty array`
+    const parts: Filter[] = []
+    for (const [index, child] of value.entries()) {
+      const part = parseFilter(child, `${path}.${key}[${index}]`)
+      if (typeof part === "string") return part
+      parts.push(part)
+    }
+    return key === "and"
+      ? (attributes) => parts.every((part) => part(attributes))
+      : (attributes) => parts.some((part) => part(attributes))
+  }
+  if (key === "not") {
+    const inner = parseFilter(value, `${path}.not`)
+    return typeof inner === "string" ? inner : (attributes) => !inner(attributes)
+  }
+  if (!isRecord(value) || typeof value.field !== "string" || !value.field) {
+    return `${path}.attribute.field: is required`
+  }
+  const { field, operator, inverse } = value
+  if (operator !== "eq" && operator !== "exists") {
+    return `${path}.attribute.operator: must be eq or exists`
+  }
+  if (inverse !== undefined && typeof inverse !== "boolean") {
+    return `${path}.attribute.inverse: must be a boolean`
+  }
+  if (operator === "eq" && !["string", "number", "boolean"].includes(typeof value.value)) {
+    return `${path}.attribute.value: is required for eq`
+  }
+  const expected = String(value.value)
+  return (attributes) => {
+    const actual = attributes[field]
+    const present = actual !== undefined && actual !== null
+    const match = operator === "exists" ? present : present && String(actual) === expected
+    return inverse === true ? !match : match
+  }
+}
+
+const csvCell = (value: unknown): string => {
+  const text =
+    value === undefined || value === null
+      ? ""
+      : typeof value === "object"
+        ? JSON.stringify(value)
+        : String(value)
+  return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text
+}
+
+const publicExport = ({ csv: _csv, ...record }: CustomerExport) => record
+
 /** Every URL in the message data (string values, HTML hrefs included), in order, deduplicated. */
 const urlsIn = (value: unknown, out: string[] = []): string[] => {
   if (typeof value === "string") {
@@ -240,6 +335,8 @@ export class CustomerIoAPI implements FetchAPI {
   readonly now: () => number
   private readonly wallClock: () => number
   private readonly onReport: ((event: ReportingEvent) => void) | undefined
+  private readonly adminPrefix: string
+  private readonly publicNamespace: string
   /** Serializes handlers so concurrent identifies merge instead of dropping traits. */
   private tail: Promise<void> = Promise.resolve()
 
@@ -249,6 +346,8 @@ export class CustomerIoAPI implements FetchAPI {
     this.baseNow = options.now ?? (() => Date.now())
     this.wallClock = options.wallClock ?? Date.now
     this.onReport = options.onReport
+    this.adminPrefix = options.adminPrefix ?? "/__admin"
+    this.publicNamespace = options.publicNamespace ?? "default"
     this.state = new CustomerIoState(sqlite, namespace, {
       messages: options.messages ?? DEFAULT_TRANSACTIONAL_MESSAGES,
       settings: options.settings ?? {},
@@ -268,6 +367,15 @@ export class CustomerIoAPI implements FetchAPI {
       GetCustomerOptOuts: (context) => this.enqueue(() => this.customerOptOuts(context)),
       GetCustomerAttributes: (context) => this.enqueue(() => this.attributes(context)),
       GetMessage: (context) => this.enqueue(() => this.deliveryMessage(context)),
+      ListReportingWebhooks: () => this.listContent("reporting_webhooks"),
+      ListSubscriptionTopics: () => this.listContent("topics"),
+      ListSnippets: () => this.listContent("snippets"),
+      ListCampaigns: () => this.listContent("campaigns"),
+      ListNewsletters: (context) => this.pageContent(context, "newsletters"),
+      ListSenderIdentities: (context) => this.pageContent(context, "sender_identities"),
+      ExportCustomers: (context) => this.enqueue(() => this.exportCustomers(context)),
+      GetExport: (context) => this.enqueue(() => this.getExport(context)),
+      DownloadExport: (context) => this.enqueue(() => this.downloadExport(context)),
       ReportClick: (context) => this.enqueue(() => this.click(context, "post")),
       FollowClick: (context) => this.enqueue(() => this.click(context, "get")),
     })
@@ -787,13 +895,7 @@ export class CustomerIoAPI implements FetchAPI {
           ? this.state.profileByCioId(customerId)
           : this.state.profile(customerId)
     if (!profile) return appError(404, "not found")
-    const attributes: Record<string, unknown> = {
-      ...profile.traits,
-      id: profile.id,
-      cio_id: profile.cioId,
-      ...(profile.email ? { email: profile.email } : {}),
-      unsubscribed: profile.unsubscribed,
-    }
+    const attributes = profileAttributes(profile)
     return annotateResponse(
       jsonRes(200, {
         customer: {
@@ -842,6 +944,176 @@ export class CustomerIoAPI implements FetchAPI {
       }),
       { ids: { deliveryId: delivery.id } },
     )
+  }
+
+  // ---------------------------------------------------------------- workspace content
+
+  private listContent(list: ContentList): Response {
+    return jsonRes(200, { [list]: this.state.contentOf(list) })
+  }
+
+  /** `limit` / `sort` / opaque `start` paging (newsletters, sender identities). */
+  private pageContent(context: OperationContext, list: "newsletters" | "sender_identities") {
+    const { limit: rawLimit, sort = "asc", start, hidden } = context.query
+    const limit = rawLimit === undefined ? Number.POSITIVE_INFINITY : Number(rawLimit)
+    if (rawLimit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+      return appError(400, "limit must be a positive integer")
+    }
+    if (sort !== "asc" && sort !== "desc") return appError(400, "sort must be asc or desc")
+    let offset = 0
+    if (start !== undefined) {
+      let decoded = ""
+      try {
+        decoded = atob(String(start))
+      } catch {
+        return appError(400, "invalid start cursor")
+      }
+      const match = new RegExp(`^${list}:(\\d+)$`).exec(decoded)
+      if (!match) return appError(400, "invalid start cursor")
+      offset = Number(match[1])
+    }
+    let items = this.state.contentOf(list)
+    if (list === "sender_identities" && String(hidden) !== "true") {
+      items = items.filter((item) => item.hidden !== true)
+    }
+    if (sort === "desc") items = [...items].reverse()
+    const page = items.slice(offset, offset + limit)
+    const next =
+      offset + page.length < items.length ? btoa(`${list}:${offset + page.length}`) : null
+    return jsonRes(200, { ...(next ? { next } : {}), [list]: page })
+  }
+
+  /**
+   * Replace workspace content lists (admin). Each key of `body` that names a list replaces it;
+   * items get the vendor defaults (`id` from 1, …). Everything is validated before any write.
+   */
+  setContent(
+    body: Record<string, unknown>,
+  ): Record<ContentList, Record<string, unknown>[]> | string {
+    const next = new Map<ContentList, Record<string, unknown>[]>()
+    const at = Math.floor(this.now() / 1000)
+    for (const [key, raw] of Object.entries(body)) {
+      if (!(CONTENT_LISTS as readonly string[]).includes(key)) {
+        return `unknown list ${key}; expected ${CONTENT_LISTS.join(", ")}`
+      }
+      const list = key as ContentList
+      if (!Array.isArray(raw)) return `${list}: expected an array of objects`
+      const items: Record<string, unknown>[] = []
+      for (const [index, item] of raw.entries()) {
+        if (!isRecord(item)) return `${list}[${index}]: expected an object`
+        const id = typeof item.id === "number" ? item.id : index + 1
+        if (list === "reporting_webhooks") {
+          if (
+            typeof item.name !== "string" ||
+            typeof item.endpoint !== "string" ||
+            !Array.isArray(item.events) ||
+            !item.events.every((event) => typeof event === "string")
+          ) {
+            return `${list}[${index}]: name, endpoint and events (strings) are required`
+          }
+          items.push({
+            type: "webhook",
+            disabled: false,
+            full_resolution: true,
+            with_content: false,
+            ...item,
+            id,
+          })
+        } else if (list === "snippets") {
+          if (typeof item.name !== "string" || typeof item.value !== "string") {
+            return `${list}[${index}]: name and value (strings) are required`
+          }
+          items.push({ updated_at: at, ...item })
+        } else if (list === "topics") {
+          items.push({ identifier: `topic_${id}`, ...item, id })
+        } else {
+          items.push({ ...item, id })
+        }
+      }
+      next.set(list, items)
+    }
+    for (const [list, items] of next) this.state.setContent(list, items)
+    return this.content()
+  }
+
+  content(): Record<ContentList, Record<string, unknown>[]> {
+    return Object.fromEntries(
+      CONTENT_LISTS.map((list) => [list, this.state.contentOf(list)]),
+    ) as Record<ContentList, Record<string, unknown>[]>
+  }
+
+  // ---------------------------------------------------------------- customer exports
+
+  private exportCustomers(context: OperationContext): Response {
+    if (context.body.kind !== "json" || !isRecord(context.body.value)) {
+      return appError(400, "invalid JSON body")
+    }
+    const issue = bodyIssues(context)[0]
+    if (issue) return appError(400, `${issue.path || "body"}: ${issue.message}`)
+    const body = context.body.value
+    const filter = parseFilter(body.filters, "filters")
+    if (typeof filter === "string") return appError(400, filter)
+    const extra = Array.isArray(body.attributes) ? body.attributes.map(String) : []
+    const columns = [...new Set(["id", "cio_id", "email", ...extra])]
+    const rows = this.profiles()
+      .map((profile) => profileAttributes(profile))
+      .filter((attributes) => filter(attributes))
+    const csv = `${[columns, ...rows.map((row) => columns.map((column) => row[column]))]
+      .map((cells) => cells.map(csvCell).join(","))
+      .join("\n")}\n`
+    const id = this.state.exports.count() + 1
+    const at = Math.floor(this.now() / 1000)
+    const record: CustomerExport = {
+      id,
+      type: "customers",
+      status: "done",
+      failed: false,
+      total: rows.length,
+      downloads: 0,
+      created_at: at,
+      updated_at: at,
+      deduplicate_id: `${id}:${at}`,
+      csv,
+    }
+    this.state.exports.insert(String(id), record)
+    return jsonRes(200, { export: publicExport(record) })
+  }
+
+  private exportOf(context: OperationContext): CustomerExport | undefined {
+    const raw = String(context.params.export_id ?? "")
+    return /^\d+$/.test(raw) ? this.state.exports.get(String(Number(raw))) : undefined
+  }
+
+  private getExport(context: OperationContext): Response {
+    const record = this.exportOf(context)
+    return record ? jsonRes(200, { export: publicExport(record) }) : appError(404, "not found")
+  }
+
+  /** A link to the CSV the runtime serves under the admin prefix; each link counts a download. */
+  private downloadExport(context: OperationContext): Response {
+    const record = this.exportOf(context)
+    if (!record) return appError(404, "not found")
+    this.state.exports.update(String(record.id), { ...record, downloads: record.downloads + 1 })
+    const prefix =
+      this.publicNamespace === "default"
+        ? ""
+        : `${this.adminPrefix}/ns/${encodeURIComponent(this.publicNamespace)}`
+    return jsonRes(200, {
+      url: `${context.url.origin}${prefix}${this.adminPrefix}/exports/${record.id}/file`,
+    })
+  }
+
+  /** The export's CSV file (the admin route the download link points at). */
+  exportFile(id: string): Response | undefined {
+    const record = this.state.exports.get(id)
+    if (!record) return undefined
+    return new Response(record.csv, {
+      status: 200,
+      headers: {
+        "content-type": "text/csv; charset=utf-8",
+        "content-disposition": `attachment; filename="export-${record.id}.csv"`,
+      },
+    })
   }
 
   // ---------------------------------------------------------------- link tracking
