@@ -41,7 +41,9 @@ mandates, non-card payment methods, ML-timed Smart Retries and dunning emails, e
 proration arithmetic, per-endpoint webhook API versions, and Stripe.js features our UI does not
 call. Hosted checkout, the Stripe.js stand-in, test clocks, webhook endpoints, the balance ledger,
 `invoice.payment_failed`, `invoice.upcoming`, `refund.failed` (admin) and
-`charge.dispute.created` (admin or `tok_createDispute`) are now modelled.
+`charge.dispute.created` (admin or `tok_createDispute`), dispute evidence and close
+(`charge.dispute.updated|closed`, admin outcomes via `PUT /__admin/disputes/:id`) and charge
+updates (`charge.updated`) are now modelled.
 
 Re-sweep the consumer whenever a new Stripe call site appears.
 # Stripe CLI webhook parity

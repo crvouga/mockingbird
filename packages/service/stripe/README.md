@@ -125,6 +125,71 @@ Stripe's "deprecated" 404 at basil and later. Expansion is generic (any path thr
 holds, ancestors included); Stripe's own rules are enforced: a non-expandable first segment is
 `This property cannot be expanded (metadata).` and more than four levels is
 `property_expansion_max_depth` (verified against test mode at all three versions).
+So `expand[]=total_details.breakdown` on a Checkout Session works (each discount's `amount` and the
+discount object; `taxes: []`), while `total_details.breakdown.discounts.discount.coupon` is five levels
+and refused — at 2024-06-20 the discount already embeds its coupon. A breakdown discount of a session
+that created no subscription is synthesised with a stable `di_` id derived from the session (best
+guess, not oracle-verified).
+
+Request parameters Stripe removed are answered by version too (`REQUEST_CHANGES` in
+`src/version.ts`; the contract declares the old ones, the handler refuses them from the removal on
+with `parameter_unknown`, as for a parameter that never existed):
+
+- Before 2025-03-31.basil ([changelog](https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-singular-coupon-promotion-code)),
+  the singular `coupon` / `promotion_code` on `POST /v1/subscriptions`, `POST /v1/subscriptions/:id`,
+  `POST /v1/customers`, `POST /v1/customers/:id`, and `phases[n][coupon]` on subscription schedules,
+  apply one discount (`""` removes it). With `discounts` in the same request they are refused
+  (`You may only specify one of these parameters: coupon, discounts.`, best guess). A customer-level
+  discount renders as `customer.discount` and applies to the customer's subscription invoices that
+  carry no discount of their own. A schedule phase stores only `discounts` (the legacy
+  `phases[].coupon` response field is not rendered).
+- Before 2026-03-25.dahlia ([changelog](https://docs.stripe.com/changelog/dahlia/2026-03-25/updates-available-checkout-session-ui-modes)),
+  Checkout `ui_mode` is `hosted` / `embedded` (plus `custom` from basil), rendered back under those
+  names; from dahlia it is `hosted_page` / `embedded_page` / `elements`. The other version's names
+  are an invalid enum value. An embedded session has a `client_secret`, `url: null` and needs
+  `return_url` (`success_url` / `cancel_url` refused, and `return_url` refused on a hosted session —
+  wording a best guess); it completes through `POST /__admin/checkout/sessions/:id/complete`, since
+  `initEmbeddedCheckout` is not part of the Stripe.js stand-in. `custom` / `elements` (Checkout with
+  Elements) answers an explicit "not modelled by this mock" 400.
+
+### Invoice previews
+
+`POST /v1/invoices/create_preview` (every version), and `GET /v1/invoices/upcoming` plus
+`GET /v1/invoices/upcoming/lines` (before basil), preview the next invoice without writing anything:
+no invoice, item or discount records, no coupon redemptions, no events. They take `customer`,
+`subscription`, `subscription_details[items|proration_behavior|proration_date]` (the upcoming routes
+also take the 2024-06-20 flat `subscription_items`, `subscription_proration_behavior` and
+`subscription_proration_date`), `discounts` (or the legacy `coupon`), `invoice_items`
+(`price`/`quantity` or `amount`/`currency`, `description`) and `customer_details[tax_exempt]`.
+Following https://docs.stripe.com/api/invoices/create_preview and
+https://docs.stripe.com/billing/subscriptions/prorations:
+
+- Items without a `subscription` preview a new subscription's first period; `subscription` with
+  changed items previews "Unused time on … after DD Mon YYYY" credits and "Remaining time on …"
+  charges at `proration_date` (default now, must fall in the current period and cannot be combined
+  with `proration_behavior=none`), then the next period at the new prices. Proration lines are not
+  discountable. A `subscription` alone previews its renewal, with pending proration items.
+- Best guess, not oracle-verified: the two lines of a changed item sum to exactly what the update
+  path bills (`round((new - old) × time left)`); `always_invoice` previews only the invoice the change
+  bills at once (`billing_reason: subscription_update`); a price on a different billing period previews
+  the immediate new-period invoice less the unused time; a trial prorates nothing; subscription previews
+  report `billing_reason: upcoming` (a customer without subscriptions: `manual`, its pending items, or
+  404 `invoice_upcoming_none` on the upcoming routes when there is nothing); the id is
+  `upcoming_in_<subscription or customer id suffix>` (none at the upcoming routes); requested coupons
+  appear as `di_tmp_…` discounts; `customer_details` without `customer` previews for no customer
+  (`customer: null`), and `tax_exempt` changes nothing since tax is not modelled; error wordings for
+  the preview-only checks are the emulator's own.
+- Refused with an explicit 400 ("Previewing with `…` is not modelled by this emulator."), never
+  ignored: `automatic_tax[enabled]=true`, `currency`, `customer_account`, `customer_details` other
+  than `tax_exempt`, `issuer`, `on_behalf_of`, `preview_mode` other than `next`, `schedule`,
+  `schedule_details`, `subscription_details` other than the three above, the other flat
+  `subscription_*` parameters, item fields other than `id|price|quantity|deleted|metadata`
+  (`price_data`, `discounts`, `tax_rates`, …), invoice item fields other than those listed, and
+  `ending_before` on the lines route.
+
+`POST /v1/invoices/:id/mark_uncollectible` moves an `open` invoice to `uncollectible`
+(`invoice.marked_uncollectible`, then `invoice.updated` — the latter a best guess); any other status
+is refused with "You can only mark open invoices as uncollectible.".
 
 ### Webhooks
 
@@ -164,7 +229,8 @@ Every state change records an event in the account's log (`GET /v1/events`, filt
 
 Events emitted: `customer.*`, `payment_method.attached|detached|updated`,
 `payment_intent.created|succeeded|payment_failed|canceled|requires_action|amount_capturable_updated`,
-`charge.succeeded|failed|captured|refunded|dispute.created`, `setup_intent.created|succeeded|setup_failed|canceled|requires_action`,
+`charge.succeeded|failed|captured|refunded|updated`,
+`charge.dispute.created|updated|closed|funds_withdrawn|funds_reinstated`, `setup_intent.created|succeeded|setup_failed|canceled|requires_action`,
 `checkout.session.completed|expired|async_payment_succeeded`,
 `invoice.created|finalized|updated|paid|payment_succeeded|payment_failed|voided|deleted|upcoming`,
 `invoiceitem.created`, `customer.subscription.created|updated|deleted` (with
@@ -177,6 +243,30 @@ Events emitted: `customer.*`, `payment_method.attached|detached|updated`,
 `POST /__admin/clock {"advance": "32d"}` (or `set`) moves the emulator clock and immediately runs every
 clock-driven lifecycle, so their webhooks fire at once; the served emulator also ticks every second.
 
+- **`add_invoice_items`** on `POST /v1/subscriptions` and `POST /v1/subscriptions/:id` (`price` —
+  one-time and active — or `price_data` with a possibly negative `unit_amount`, `quantity`,
+  `metadata`, `discountable`) become real pending invoice items (`ii_…`, `invoiceitem.created`) of
+  the subscription; the next invoice it produces bills and claims them: the first invoice on
+  create, the `always_invoice` invoice on update (which is created even with nothing to prorate —
+  best guess), otherwise the next renewal. A negative item is not discountable unless asked.
+  `discounts`, `period` and `tax_rates` on an item are refused as not modelled.
+- **`proration_date`** on `POST /v1/subscriptions/:id` (and the `/v1/subscription_items` writes)
+  prorates from that time; outside the current period it is refused (`proration_date`, wording a
+  best guess).
+- **Discount events**: discounts added to or removed from a subscription or customer (`discounts`,
+  the legacy `coupon` / `promotion_code`, schedule phases, `DELETE /v1/subscriptions/:id/discount`,
+  `DELETE /v1/customers/:id/discount`) emit `customer.discount.created` / `.deleted` with the
+  discount as `data.object`; a legacy singular coupon swapping one discount for another is a single
+  `customer.discount.updated` (best guess, not oracle-verified). The `DELETE …/discount` routes
+  remove every subscription-level discount and answer the first as a deleted discount; with none
+  they 404 (best guesses). Discounts that run out at a renewal emit nothing.
+- **Schedule phase discounts**: `phases[n][discounts]` (coupon, promotion code, or an existing
+  discount by id) are checked when the schedule is written, stored on the phase, and become the
+  subscription's discounts while the phase is current (a schedule made `from_subscription` carries
+  the subscription's discounts over by id).
+- **Event order on create**: `customer.subscription.created` (the subscription as first saved) comes
+  before the `customer.subscription.updated` that collecting its first invoice causes, in the API and
+  in hosted Checkout.
 - **Renewals**: past `current_period_end` a subscription cycles — a `subscription_cycle` invoice is
   finalized and charged off-session to the default payment method, then `invoice.paid` +
   `customer.subscription.updated` (`previous_attributes.current_period_end`), or
@@ -246,7 +336,9 @@ finalize; a customer credit balance is applied at finalize; `void` works only on
   `payment_intent_data.metadata`, the Subscription with `subscription_data` — metadata,
   description, trial and `trial_settings` — or the SetupIntent), emits `checkout.session.completed`
   and 302s to `success_url` with `{CHECKOUT_SESSION_ID}` substituted raw and `%7B…%7D`-encoded;
-  Cancel 302s to `cancel_url`. The page authenticates 3-D Secure cards in place in every mode, and
+  Cancel 302s to `cancel_url`. With `payment_intent_data[capture_method]=manual` the PaymentIntent
+  is only authorized (`requires_capture`, the charge uncaptured) and the session completes with
+  `payment_status: "unpaid"` until it is captured (best guess, not oracle-verified). The page authenticates 3-D Secure cards in place in every mode, and
   checks what was typed the way the Payment Element does (expiry in the past, incomplete CVC,
   invalid email); a decline leaves the session open (in subscription and setup mode it creates no
   customer; in payment mode it records the failed PaymentIntent and charge, as Stripe does). The email and name
@@ -370,11 +462,40 @@ failure at Stripe's edge, so it is not saved: once the fault clears, a retry und
 hides objects younger than 60 s — search is consistent otherwise), `webhook_duplicate`,
 `webhook_reorder`, `webhook_drop`.
 
+### Disputes and charge updates
+
+A dispute opens through `POST /__admin/disputes`, `pm_card_createDispute` or `tok_createDispute`.
+`POST /v1/disputes/:id` merges `metadata` and `evidence[…]` (an empty string clears a field);
+evidence is submitted unless `submit=false`, and `submit=true` alone submits staged evidence:
+`needs_response` → `under_review` (`warning_needs_response` → `warning_under_review`),
+`evidence_details.submission_count` + 1, `has_evidence` set, `past_due` when submitted after
+`due_by`; emits `charge.dispute.updated`. Evidence after submission or on a closed dispute is
+refused (400). `POST /v1/disputes/:id/close` accepts it: `lost` (an inquiry: `warning_closed`),
+emitting `charge.dispute.closed`; only a `*needs_response` dispute closes.
+`PUT /__admin/disputes/:id {status}` moves to any of Stripe's eight statuses: `won`, `lost` and
+`warning_closed` emit `charge.dispute.closed`, others `charge.dispute.updated`.
+`POST /v1/charges/:id` updates `description`, `metadata`, `receipt_email` and `customer` (only on
+a charge without one) and emits `charge.updated`; `fraud_details`, `shipping` and `transfer_group`
+are refused with a 400 naming the parameter, never ignored. `data.previous_attributes` lists a
+changed hash's changed keys only (added keys as `null`).
+
+Best guesses, not oracle-verified (from [the dispute API](https://docs.stripe.com/api/disputes),
+[responding to disputes](https://docs.stripe.com/disputes/responding) and the upstream OpenAPI):
+`evidence_details.due_by` is 23:59:59 UTC on the 7th day after opening (Stripe documents a 7–21
+day network window); a chargeback withdraws the amount plus a 15.00 dispute fee as one
+`adjustment` ledger line (`reporting_category: dispute`, settled at once, `charge.dispute.funds_withdrawn`)
+and winning adds a `dispute_reversal` line for the amount only (`charge.dispute.funds_reinstated`);
+inquiries (`warning_*`) move no money; `is_charge_refundable` is `true` only for inquiries;
+`payment_method_details.card.case_type` is `inquiry` or `chargeback`, `network_reason_code` `null`;
+`enhanced_eligibility_types` is always empty and `evidence[enhanced_evidence]` is refused; the
+error wording for refused updates and closes is the emulator's own.
+
 ### Admin routes (beyond the standard contract)
 
 `GET|PUT /__admin/accounts`, `PUT /__admin/webhook-endpoints`, `PUT /__admin/refunds/:id
 {status, failure_reason}` (emits `refund.failed` / `refund.updated`), `POST /__admin/disputes
-{payment_intent|charge, reason?, amount?}` (emits `charge.dispute.created`),
+{payment_intent|charge, reason?, amount?, status?}` (emits `charge.dispute.created`), `PUT
+/__admin/disputes/:id {status}` (the network's decision; see [Disputes](#disputes-and-charge-updates)),
 `POST /__admin/checkout/sessions/:id/complete|expire|async_payment_succeeded`,
 `POST /__admin/setup_intents/:id/succeed`, `GET /__admin/charges/:id`, `POST /__admin/tick`,
 `GET /__admin/payment-holds`, `PUT|DELETE /__admin/payment-holds/:customer`,
@@ -446,7 +567,8 @@ plus `port`, `host`; resolves `{url, port, runtime, close}`), `serveTarget` (the
   not modelled; Elements render in the page rather than in an iframe. Native
   PaymentSheet cannot be redirected (member-app native keeps its fake provider).
 - **Connect** (`Stripe-Account`, application fees, transfers), tax, shipping, Radar, mandates,
-  meters, quotes, credit notes, payouts, and non-card payment methods (bank debits, wallets).
+  meters, quotes, credit notes (their routes answer the unsupported error below), payouts, and
+  non-card payment methods (bank debits, wallets).
 - **Billing cycle anchor resets** other than a price change to a different billing period through
   `POST /v1/subscriptions/:id`: an explicit `billing_cycle_anchor=now|unchanged` on update is ignored,
   and the `/v1/subscription_items` endpoints change prices without resetting the period.
@@ -461,8 +583,9 @@ plus `port`, `host`; resolves `{url, port, runtime, close}`), `serveTarget` (the
   refused with a 400; subscriptions and invoices always bill in the price's own currency.
 - **Webhook endpoint `api_version`**: payloads render at the account's version, not per endpoint.
 - **Live keys** (`sk_live_…`) are refused with Stripe's 401: the emulator is test mode only.
-- Operations marked unsupported in SUPPORT.md (charge create/update, checkout session update,
-  dispute evidence).
+- Operations marked unsupported in SUPPORT.md (charge create, checkout session update, credit
+  notes) answer 400 `invalid_request_error` with `code: "mockingbird_unsupported"` and the reason —
+  an emulator limitation, not a Stripe error.
 - Rate-limit, 5xx and permission bodies come from presets, worded as Stripe words them but not
   recorded from traffic.
 

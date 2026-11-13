@@ -1,8 +1,17 @@
 import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
+import { previousAttributes } from "./disputes.js"
+import { invalidRequest } from "./errors.js"
 import { applyExpand, type ExpandResolvers } from "./expand.js"
-import { type RequestScope, requestScope, requireCharge, type Services } from "./internal.js"
+import {
+  mergeRecordMetadata,
+  type RequestScope,
+  requestScope,
+  requireCharge,
+  requireLiveCustomer,
+  type Services,
+} from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
-import { type Params, queryParams } from "./params.js"
+import { bodyParams, type Params, queryParams } from "./params.js"
 import {
   renderCharge,
   renderCoupon,
@@ -74,6 +83,44 @@ const orderedPaths = (expand: unknown): string[] => {
   return [...paths].sort((a, b) => a.split(".").length - b.split(".").length)
 }
 
+/** `POST /v1/charges/:id` parameters the mock refuses rather than silently ignore. */
+const UNMODELLED_UPDATES: Readonly<Record<string, string>> = {
+  fraud_details: "Radar fraud reports (`fraud_details`) are not modelled by this mock.",
+  shipping: "Charge `shipping` is not modelled by this mock.",
+  transfer_group: "Connect transfer groups (`transfer_group`) are not modelled by this mock.",
+}
+
+/**
+ * Update a charge: `description`, `metadata` (merged), `receipt_email`, and `customer` (only on
+ * a charge without one). Emits `charge.updated` with what changed.
+ */
+const updateCharge = (scope: RequestScope, current: ChargeRecord, params: Params) => {
+  for (const [param, message] of Object.entries(UNMODELLED_UPDATES))
+    if (params[param] !== undefined) throw invalidRequest(message, param)
+  const next: ChargeRecord = {
+    ...current,
+    metadata: mergeRecordMetadata(current.metadata, params.metadata),
+  }
+  if (typeof params.description === "string")
+    next.description = params.description === "" ? null : params.description
+  if (typeof params.receipt_email === "string")
+    next.receipt_email = params.receipt_email === "" ? null : params.receipt_email
+  const customer = stringOf(params, "customer")
+  if (customer !== null) {
+    requireLiveCustomer(scope, customer, "customer")
+    if (current.customer !== null && current.customer !== customer)
+      throw invalidRequest(
+        "This charge already has a customer; `customer` can only be set on a charge without one.",
+        "customer",
+      )
+    next.customer = customer
+  }
+  scope.account.charges.update(current.id, next)
+  const previous = previousAttributes(renderCharge(current), renderCharge(next))
+  if (Object.keys(previous).length > 0) scope.emit("charge.updated", renderCharge(next), previous)
+  return next
+}
+
 const render = (scope: RequestScope, charge: ChargeRecord, expand: unknown) =>
   applyExpand(renderCharge(charge), orderedPaths(expand), expanders(scope))
 
@@ -99,5 +146,11 @@ export const chargeHandlers = (services: Services): Record<string, OperationHand
     const params = queryParams(context)
     const charge = requireCharge(scope, context.params.charge ?? "", "id")
     return jsonResponse(200, render(scope, charge, params.expand))
+  },
+  PostChargesCharge: async (context) => {
+    const scope = requestScope(services, context)
+    const params = bodyParams(context)
+    const charge = requireCharge(scope, context.params.charge ?? "", "id")
+    return jsonResponse(200, render(scope, updateCharge(scope, charge, params), params.expand))
   },
 })
