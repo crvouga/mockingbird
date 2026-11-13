@@ -34,7 +34,14 @@ describe("public API exports", () => {
       exports: Record<string, unknown>;
       mockingbird?: { entries?: Record<string, string> };
     };
-    expect(Object.keys(pkg.exports).sort()).toEqual([".", "./admin", "./server", "./transport", "./unstable", "./wire"]);
+    expect(Object.keys(pkg.exports).sort()).toEqual([
+      ".",
+      "./admin",
+      "./server",
+      "./transport",
+      "./unstable",
+      "./wire",
+    ]);
     // The wire server is a Node-only entry, so the main and unstable entries stay portable.
     expect(pkg.mockingbird?.entries).toEqual({
       "wire/index": "node",
