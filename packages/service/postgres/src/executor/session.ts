@@ -11,30 +11,32 @@ import type {
   ShowStmt,
   TransactionStmt,
 } from "../ast/nodes.ts";
+import { pgError, unsupported } from "../errors/error.ts";
+import { Prng } from "../runtime/prng.ts";
+import { DatabaseState } from "../storage/database-state.ts";
 import { validateStorageSetting } from "../storage/guc.ts";
 import {
   allSettings,
   assertGucSettable,
+  extensionGucDef,
   gucDef,
   gucDefaultDisplay,
+  isReservedGucName,
   normalizeGucValue,
   registerConfigurationSetter,
   TRANSACTION_GUCS,
 } from "../storage/guc-catalog.ts";
-import { pgError, unsupported } from "../errors/error.ts";
-import { Prng } from "../runtime/prng.ts";
-import { DatabaseState } from "../storage/database-state.ts";
+import { sessionUserName } from "../storage/roles.ts";
 import { TransactionManager } from "../transactions/manager.ts";
 import { beforeStatement } from "../transactions/read-only.ts";
 import { castTo } from "../types/cast.ts";
 import { resolveTypeName } from "../types/resolve.ts";
 import { type Datum, datumText, tv, UNKNOWN } from "../types/value.ts";
 import { executeInsert } from "./dml.ts";
-import { sessionUserName } from "../storage/roles.ts";
+import { isPartitioned } from "./partition.ts";
 import { commandResult, type ExecEnv, type ExecResult } from "./relation.ts";
 import { executeSetRole } from "./roles.ts";
 import { rowSecurityActive } from "./row-security.ts";
-import { isPartitioned } from "./partition.ts";
 import { plainTableScan, scanTableRows } from "./scan.ts";
 import { evalScalar, executeSelectStmt, runStatement } from "./select.ts";
 
@@ -147,7 +149,10 @@ export function applySetting(state: DatabaseState, rawName: string, value: strin
   if (!isKnownGuc(state, name)) {
     throw pgError("undefined_object", `unrecognized configuration parameter "${rawName}"`, "42704");
   }
-  const def = gucDef(name);
+  if (isReservedGucName(state, name)) {
+    throw pgError("syntax", `invalid configuration parameter name "${rawName}"`, "42602");
+  }
+  const def = gucDef(name) ?? extensionGucDef(state, name);
   const tx = txManagerFor(state);
   const sessionDefault = TRANSACTION_GUCS.get(name);
   let shown: string | undefined;
@@ -168,10 +173,11 @@ export function applySetting(state: DatabaseState, rawName: string, value: strin
     return shown;
   }
   if (local) {
-    // SET LOCAL outside a transaction is a no-op (PostgreSQL warns)
-    if (tx.inTransaction) {
-      state.localSettings.set(name, shown ?? (def ? gucDefaultDisplay(def) : ""));
-    }
+    // outside a transaction block the value lasts until the statement ends, so a
+    // SET LOCAL statement is a no-op (PostgreSQL warns) while set_config() returns it
+    state.localSettings.set(name, shown ?? (def ? gucDefaultDisplay(def) : ""));
+    // a custom parameter stays defined, as an empty placeholder, once the value is gone
+    if (!def && !state.settings.has(name)) state.settings.set(name, "");
     return state.getSetting(name) ?? "";
   }
   if (shown === undefined) state.settings.delete(name);

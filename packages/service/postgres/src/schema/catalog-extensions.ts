@@ -69,7 +69,7 @@ function pgAvailableExtensionVersions(state: DatabaseState): Relation {
         version,
         installed?.version === version,
         true,
-        true,
+        spec.trusted ?? true,
         spec.relocatable,
         spec.builtinSchema ?? null,
         null,

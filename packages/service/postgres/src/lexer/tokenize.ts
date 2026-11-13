@@ -132,14 +132,13 @@ export function tokenize(sql: string): Token[] {
     }
     if ((c === "b" || c === "B") && sql[i + 1] === "'") {
       const { value, next } = scanStandardString(sql, i + 1);
-      if (!/^[01]*$/.test(value)) syntaxError(`"${value}" is not a valid binary digit string`);
+      // digits are validated by bit input (22P02), as PostgreSQL's lexer accepts anything here
       push("bitstring", `b${value}`, i);
       i = next;
       continue;
     }
     if ((c === "x" || c === "X") && sql[i + 1] === "'") {
       const { value, next } = scanStandardString(sql, i + 1);
-      if (!/^[0-9a-fA-F]*$/.test(value)) syntaxError(`"${value}" is not a valid hexadecimal digit string`);
       push("bitstring", `x${value}`, i);
       i = next;
       continue;
