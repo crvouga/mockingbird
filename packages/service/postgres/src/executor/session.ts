@@ -61,6 +61,8 @@ export function executeTransaction(env: ExecEnv, stmt: TransactionStmt): ExecRes
     case "begin":
       if (!tx.inTransaction) {
         tx.begin();
+        // the block started with this statement: now() is its start from here to COMMIT
+        env.ctx.state.transactionStart = env.ctx.txNow;
         if (stmt.modes?.length) applyTransactionModes(env.ctx.state, stmt.modes, false);
       }
       return commandResult("BEGIN", 0);

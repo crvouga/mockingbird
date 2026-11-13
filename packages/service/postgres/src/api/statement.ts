@@ -1,7 +1,9 @@
 import type { Statement as AstStatement } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
 import { executeStatement } from "../executor/execute.ts";
+import { withStatementTimeout } from "../runtime/statement-timeout.ts";
 import { refusedInTransactionBlock } from "../executor/maintenance.ts";
+import { runOnCommitActions } from "../executor/on-commit.ts";
 import type { ExecEnv, ExecResult } from "../executor/relation.ts";
 import { EngineCtx } from "../expressions/context.ts";
 import { parse } from "../parser/index.ts";
@@ -147,26 +149,38 @@ export class Statement {
     }
     const typed: TypedValue[] = params.map((p, i) => bindValueToTyped(p, i));
     let last: ExecResult | null = null;
-    for (const stmt of this.statements) {
-      const refused = this.database.transactions.inTransaction ? refusedInTransactionBlock(stmt) : null;
-      if (refused) throw pgError("misuse", `${refused} cannot run inside a transaction block`, "25001");
-      const env: ExecEnv = {
-        ctx: new EngineCtx(this.database.engineState),
-        params: typed,
-        ctes: new Map(),
-        outer: null,
-      };
-      if (this.database.transactions.inTransaction) {
-        last = executeStatement(env, stmt);
-        continue;
+    const state = this.database.engineState;
+    // the statements of one script outside a block share one implicit transaction, and so one now()
+    let implicitStart: bigint | undefined;
+    // current_query(): the text the client sent, for every statement of it (a host function's nested query restores it)
+    const outerQuery = state.currentQuery;
+    state.currentQuery = this.sql;
+    try {
+      for (const stmt of this.statements) {
+        const inBlock = this.database.transactions.inTransaction;
+        const refused = inBlock ? refusedInTransactionBlock(stmt) : null;
+        if (refused) throw pgError("misuse", `${refused} cannot run inside a transaction block`, "25001");
+        const env: ExecEnv = {
+          ctx: new EngineCtx(state, implicitStart),
+          params: typed,
+          ctes: new Map(),
+          outer: null,
+        };
+        // statement_timeout applies to each statement of a script separately (PostgreSQL 13+)
+        try {
+          last = withStatementTimeout(state, () => executeStatement(env, stmt));
+        } finally {
+          // outside a transaction block the statement is its own transaction: what
+          // `set_config(..., true)` set lasts until the statement ends
+          if (!inBlock && !this.database.transactions.inTransaction) state.localSettings.clear();
+        }
+        const blockStatement = inBlock || this.database.transactions.inTransaction;
+        implicitStart = blockStatement ? undefined : (implicitStart ?? env.ctx.txNow);
+        // an autocommit statement commits as it ends
+        if (!this.database.transactions.inTransaction) runOnCommitActions(this.database.engineState);
       }
-      // outside a transaction block the statement is its own transaction: what
-      // `set_config(..., true)` set lasts until the statement ends
-      try {
-        last = executeStatement(env, stmt);
-      } finally {
-        if (!this.database.transactions.inTransaction) this.database.engineState.localSettings.clear();
-      }
+    } finally {
+      state.currentQuery = outerQuery;
     }
     return last!;
   }

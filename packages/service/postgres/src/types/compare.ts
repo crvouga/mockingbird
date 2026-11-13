@@ -1,5 +1,5 @@
 import { pgError } from "../errors/error.ts";
-import { type Interval, intervalCmp } from "./datetime.ts";
+import { type Interval, intervalCmp, type TimeTz, timetzCmp } from "./datetime.ts";
 import { jsonbCompare } from "./jsonb.ts";
 import { networkCompare } from "./network.ts";
 import { isNumeric, type Numeric, numericCmp, numericStripTrailingZeros, numericText } from "./numeric.ts";
@@ -62,6 +62,7 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
     case "regclass":
     case "xid":
     case "regnamespace":
+    case "regrole":
     case "date":
       return expectNumber(a, t) - expectNumber(b, t);
     case "float4":
@@ -75,6 +76,7 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
       return fa < fb ? -1 : fa > fb ? 1 : 0;
     }
     case "int8":
+    case "xid8":
     case "money":
     case "timestamp":
     case "timestamptz":
@@ -118,6 +120,8 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
       return vectorCompare(a, b);
     case "interval":
       return intervalCmp(a as Interval, b as Interval);
+    case "timetz":
+      return timetzCmp(a as unknown as TimeTz, b as unknown as TimeTz);
     case "jsonb":
       return jsonbCompare((a as JsonbWrap).value, (b as JsonbWrap).value);
     case "json":
@@ -240,6 +244,8 @@ export function datumKey(t: TypeId, v: Datum): string {
     case "int4":
     case "oid":
     case "regclass":
+    case "regnamespace":
+    case "regrole":
     case "xid":
     case "date":
       return `i${v}`;
@@ -251,6 +257,7 @@ export function datumKey(t: TypeId, v: Datum): string {
       return `f${f}`;
     }
     case "int8":
+    case "xid8":
     case "money":
     case "timestamp":
     case "timestamptz":
@@ -282,6 +289,11 @@ export function datumKey(t: TypeId, v: Datum): string {
       return `s${vectorKey(v)}`;
     case "bytea":
       return `b${byteaText(v as Uint8Array)}`;
+    case "timetz": {
+      // timetz equality needs the same instant and the same zone
+      const tz = v as unknown as TimeTz;
+      return `z${tz.micros}/${tz.offsetSec}`;
+    }
     case "interval": {
       const iv = v as Interval;
       // equal intervals (1 mon vs 30 days) compare equal in PG

@@ -3,6 +3,7 @@ import { pgError, unsupported } from "../errors/error.ts";
 import { installFuzzystrmatch, uninstallFuzzystrmatch } from "../functions/fuzzystrmatch.ts";
 import { installPgcrypto, uninstallPgcrypto } from "../functions/pgcrypto.ts";
 import { installPgTrgm, uninstallPgTrgm } from "../functions/pgtrgm.ts";
+import { installUuidOssp, uninstallUuidOssp } from "../functions/uuid-ossp.ts";
 import { installPgvector, PGVECTOR_OPCLASSES, uninstallPgvector } from "../functions/pgvector.ts";
 import { type ExtensionSpec, extensionMembers, findExtensionSpec, installedExtension } from "../schema/extensions.ts";
 import type { DatabaseState, FunctionData } from "../storage/database-state.ts";
@@ -18,6 +19,9 @@ function installMembers(state: DatabaseState, spec: ExtensionSpec, schemaName: s
     case "pg_trgm":
       installPgTrgm(state, schemaName);
       return;
+    case "uuid-ossp":
+      installUuidOssp(state, schemaName);
+      return;
     case "fuzzystrmatch":
       installFuzzystrmatch(state, schemaName);
       return;
@@ -32,6 +36,7 @@ function installMembers(state: DatabaseState, spec: ExtensionSpec, schemaName: s
 function uninstallMembers(state: DatabaseState, spec: ExtensionSpec): void {
   if (spec.name === "pgcrypto") uninstallPgcrypto(state);
   else if (spec.name === "pg_trgm") uninstallPgTrgm(state);
+  else if (spec.name === "uuid-ossp") uninstallUuidOssp(state);
   else if (spec.name === "fuzzystrmatch") uninstallFuzzystrmatch(state);
   else if (spec.name === "vector") uninstallPgvector(state);
 }
