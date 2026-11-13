@@ -61,6 +61,12 @@ export interface AlterRoleStmt {
   readonly type: "alter_role";
   /** a role name, or CURRENT_USER / SESSION_USER / CURRENT_ROLE (resolved when executed) */
   readonly name: string;
+  /** `ALTER ROLE ALL ... SET` and `ALTER DATABASE d SET`: a default for every role (pg_db_role_setting.setrole 0) */
+  readonly allRoles?: boolean;
+  /** `IN DATABASE d` / `ALTER DATABASE d`: the default applies in that database only */
+  readonly database?: string;
+  /** the command tag, when written as `ALTER DATABASE d SET / RESET` */
+  readonly tag?: "ALTER DATABASE";
   readonly action:
     | { readonly kind: "options"; readonly options: RoleOption[] }
     | { readonly kind: "rename"; readonly to: string }

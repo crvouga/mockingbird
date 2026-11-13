@@ -41,6 +41,7 @@ import { executeDo } from "./plpgsql.ts";
 import { executeCall } from "./call.ts";
 import { commandResult, type ExecEnv, type ExecResult, relationResult } from "./relation.ts";
 import { executeSelectStmt, setStatementRunner } from "./select.ts";
+import { newStatementCache } from "./subquery-plan.ts";
 import {
   executeCopy,
   executeDeallocate,
@@ -84,8 +85,15 @@ function alterTableIsSelfContained(stmt: AlterTableStmt): boolean {
   return stmt.actions.length === 1 && action !== undefined && SELF_CONTAINED_ALTER_ACTIONS.has(action.kind);
 }
 
+/** Statements whose subqueries and catalog scans share one per-statement memo (#765). */
+const MEMOIZED_STATEMENTS: ReadonlySet<Statement["type"]> = new Set(["select", "insert", "update", "delete", "merge"]);
+
 /** Execute one parsed statement against `state` (inside the event triggers it fires, if any). */
-export function executeStatement(env: ExecEnv, stmt: Statement): ExecResult {
+export function executeStatement(env0: ExecEnv, stmt: Statement): ExecResult {
+  // every statement starts a fresh memo: what an earlier statement changed is always seen
+  const env: ExecEnv = MEMOIZED_STATEMENTS.has(stmt.type)
+    ? { ...env0, stmtCache: newStatementCache() }
+    : { ...env0, stmtCache: undefined };
   if (env.ctx.state.catalogExt.eventTriggers.size > 0 && ddlCommandTag(stmt) !== null) {
     // an event trigger's error takes back the command
     return withStatementRollback(env, () => withEventTriggers(env, stmt, () => executeStatementCore(env, stmt)));

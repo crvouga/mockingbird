@@ -10,18 +10,20 @@ import {
   intervalTotalMicros,
   makeInterval,
   splitTs,
+  type TimeTz,
   TS_NEG_INF,
   TS_POS_INF,
   USECS_PER_DAY,
   USECS_PER_HOUR,
   USECS_PER_MIN,
   USECS_PER_SEC,
+  wrapTimeOfDay,
 } from "../types/datetime.ts";
 import { isNumeric, numericToNumber } from "../types/numeric.ts";
+import { TIMEZONE_NAMES } from "../types/timezone-data.ts";
 import { zoneOffsetAtUtc, zoneOffsetForNaive } from "../types/timezone.ts";
-import { datumFromText, type TypedValue, tv } from "../types/value.ts";
+import { datumFromText, type TypedValue, type TypeId, tv, typeDisplayName } from "../types/value.ts";
 import {
-  dateTruncDays,
   dateTruncInterval,
   dateTruncMicros,
   extractDatePart,
@@ -36,13 +38,50 @@ import {
 } from "./datetime-fns.ts";
 import { argFloat, argInt, argNumeric, argText, type ScalarFn, strict } from "./util.ts";
 
+const TOD_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const TOD_MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+let zoneAbbreviations: Map<string, readonly [string, string | undefined]> | null = null;
+
+/** The tz database abbreviation of `zone` at `utcMicros` (`PST` / `PDT`), or its numeric offset (`+0530`). */
+function zoneAbbreviation(zone: string, offsetSec: number, utcMicros: bigint): string {
+  zoneAbbreviations ??= new Map(TIMEZONE_NAMES.map(([name, january, july]) => [name.toLowerCase(), [january, july]]));
+  const known = zoneAbbreviations.get(zone.trim().toLowerCase());
+  if (known) {
+    const [january, july] = known;
+    if (july === undefined) return january;
+    const year = daysToCivil(splitTs(utcMicros).days).y;
+    const winter = zoneOffsetAtUtc(zone, BigInt(civilToDays(year, 1, 15)) * USECS_PER_DAY);
+    return offsetSec === winter ? january : july;
+  }
+  if (offsetSec === 0) return "UTC";
+  const abs = Math.abs(offsetSec);
+  const hh = String(Math.floor(abs / 3600)).padStart(2, "0");
+  const mm = Math.floor((abs % 3600) / 60);
+  return `${offsetSec < 0 ? "-" : "+"}${hh}${mm === 0 ? "" : String(mm).padStart(2, "0")}`;
+}
+
+/** timeofday(): `Fri Nov 13 10:15:30.123456 2026 PST` (strftime `%a %b %d %H:%M:%S.%06d %Y %Z`). */
+function timeOfDay(ctx: EngineCtx, utcMicros: bigint): string {
+  const offset = ctx.zoneOffsetAt(utcMicros);
+  const { days, tod } = splitTs(utcMicros + BigInt(offset) * USECS_PER_SEC);
+  const { y, m, d } = daysToCivil(days);
+  const two = (n: number) => String(n).padStart(2, "0");
+  const secs = Number(tod / USECS_PER_SEC);
+  const fraction = String(tod % USECS_PER_SEC).padStart(6, "0");
+  const clock = `${two(Math.floor(secs / 3600))}:${two(Math.floor(secs / 60) % 60)}:${two(secs % 60)}.${fraction}`;
+  const weekday = TOD_DAYS[dayOfWeek(days)];
+  const zone = zoneAbbreviation(ctx.timezone(), offset, utcMicros);
+  return `${weekday} ${TOD_MONTHS[m - 1]} ${two(d)} ${clock} ${y} ${zone}`;
+}
+
 export function getDatetimeFunctions(): Map<string, ScalarFn> {
   const m = new Map<string, ScalarFn>();
 
   m.set("now", (ctx) => tv("timestamptz", ctx.txNow));
   m.set("transaction_timestamp", (ctx) => tv("timestamptz", ctx.txNow));
   m.set("statement_timestamp", (ctx) => tv("timestamptz", ctx.stmtNow));
-  m.set("clock_timestamp", (ctx) => tv("timestamptz", ctx.stmtNow));
+  m.set("clock_timestamp", (ctx) => tv("timestamptz", ctx.clockNow()));
+  m.set("timeofday", (ctx) => tv("text", timeOfDay(ctx, ctx.clockNow())));
   m.set("current_timestamp", (ctx) => tv("timestamptz", ctx.txNow));
   m.set("current_date", (ctx) => {
     const offset = ctx.zoneOffsetAt(ctx.txNow);
@@ -64,17 +103,17 @@ export function getDatetimeFunctions(): Map<string, ScalarFn> {
     return tv("time", splitTs(local).tod);
   });
 
-  m.set(
-    "date_trunc",
-    strict("timestamp", (ctx, args) => {
+  m.set("date_trunc", (ctx, args) => {
+    // there is no date_trunc(text, date): a date resolves to the timestamptz form (the session zone)
+    const nullType = args[1]!.t === "date" || args[1]!.t === "unknown" ? "timestamptz" : args[1]!.t;
+    return dateTruncStrict(nullType)(ctx, args);
+  });
+  const dateTruncStrict = (nullType: TypeId) =>
+    strict(nullType, (ctx, args) => {
       const field = argText(ctx, args[0]!).toLowerCase();
       const src = args[1]!;
       if (src.t === "interval") return tv("interval", dateTruncInterval(field, src.v as Interval));
-      if (src.t === "date") {
-        const days = src.v as number;
-        return tv("timestamp", BigInt(dateTruncDays(field, days)) * USECS_PER_DAY);
-      }
-      if (src.t === "timestamptz" || (src.t === "unknown" && args.length === 2)) {
+      if (src.t === "timestamptz" || src.t === "date" || (src.t === "unknown" && args.length === 2)) {
         const cast = castTo(ctx, src, src.t === "unknown" ? "timestamptz" : "timestamptz", { explicit: true });
         const micros = cast.v as bigint;
         if (micros === TS_POS_INF || micros === TS_NEG_INF) return tv("timestamptz", micros);
@@ -89,8 +128,7 @@ export function getDatetimeFunctions(): Map<string, ScalarFn> {
       const micros = cast.v as bigint;
       if (micros === TS_POS_INF || micros === TS_NEG_INF) return tv("timestamp", micros);
       return tv("timestamp", dateTruncMicros(field, micros));
-    }),
-  );
+    });
 
   m.set(
     "date_part",
@@ -235,6 +273,8 @@ export function getDatetimeFunctions(): Map<string, ScalarFn> {
   m.set(
     "timezone",
     strict("timestamp", (ctx, args) => {
+      // timezone(x) (x AT LOCAL) converts in the session TimeZone
+      if (args.length === 1) return timezoneConvert(ctx, ctx.timezone(), args[0]!);
       const zoneArg = args[0]!;
       const src = args[1]!;
       if (zoneArg.t === "interval") {
@@ -247,12 +287,38 @@ export function getDatetimeFunctions(): Map<string, ScalarFn> {
     }),
   );
 
+  // timetz(time | timestamptz | timetz [, precision]): the cast functions behind ::timetz
+  m.set(
+    "timetz",
+    strict("timetz", (ctx, args) => {
+      const value = castTo(ctx, args[0]!, "timetz", { explicit: true });
+      if (args.length === 1) return value;
+      // only timetz(timetz, int4) takes a precision (a time arrives through its implicit cast)
+      if (args[0]!.t !== "timetz" && args[0]!.t !== "time" && args[0]!.t !== "unknown") {
+        throw pgError(
+          "undefined_function",
+          `function timetz(${typeDisplayName(args[0]!.t)}, integer) does not exist`,
+          "42883",
+        );
+      }
+      return castTo(ctx, value, "timetz", { mod: { a: argInt(ctx, args[1]!) } });
+    }),
+  );
+
   m.set(
     "date_bin",
     strict("timestamp", (ctx, args) => {
       // an untyped stride literal ('15 minutes') resolves to interval
       const stride = castTo(ctx, args[0]!, "interval", { explicit: true }).v as Interval;
-      const src = castTo(ctx, args[1]!, args[1]!.t === "timestamptz" ? "timestamptz" : "timestamp", { explicit: true });
+      // date_bin has timestamp and timestamptz forms: a date source resolves to timestamptz unless the
+      // origin is a timestamp
+      const srcT = args[1]!.t;
+      const originT = args[2]!.t;
+      const tzForm =
+        srcT === "timestamptz" ||
+        (srcT === "date" && originT !== "timestamp") ||
+        (srcT === "unknown" && (originT === "timestamptz" || originT === "date"));
+      const src = castTo(ctx, args[1]!, tzForm ? "timestamptz" : "timestamp", { explicit: true });
       const origin = castTo(ctx, args[2]!, src.t, { explicit: true });
       if (stride.months !== 0) {
         throw pgError(
@@ -280,16 +346,15 @@ export function getDatetimeFunctions(): Map<string, ScalarFn> {
       const src = args[0]!;
       const fmt = argText(ctx, args[1]!);
       if (src.t === "interval") return tv("text", toCharInterval(src.v as Interval, fmt));
-      if (src.t === "date") {
-        const days = src.v as number;
-        return tv("text", toCharTimestamp(ctx, BigInt(days) * USECS_PER_DAY, fmt, null));
-      }
-      if (src.t === "timestamptz") {
-        const micros = src.v as bigint;
+      // there is no to_char(date, text): a date resolves to the timestamptz form
+      if (src.t === "timestamptz" || src.t === "date") {
+        const micros = castTo(ctx, src, "timestamptz", {}).v as bigint;
+        if (micros === TS_POS_INF || micros === TS_NEG_INF) return tv("text", null);
         const offset = ctx.zoneOffsetAt(micros);
         return tv("text", toCharTimestamp(ctx, micros + BigInt(offset) * USECS_PER_SEC, fmt, offset));
       }
       if (src.t === "timestamp") {
+        if (src.v === TS_POS_INF || src.v === TS_NEG_INF) return tv("text", null);
         return tv("text", toCharTimestamp(ctx, src.v as bigint, fmt, null));
       }
       if (src.t === "time") {
@@ -450,7 +515,8 @@ function parseByFormat(
 
 /** timezone(zone, ts): tz→local timestamp; timestamp→timestamptz interpreting in zone. */
 function timezoneConvert(ctx: EngineCtx, zone: string, src: TypedValue): TypedValue {
-  if (src.t === "timestamptz" || src.t === "unknown") {
+  // there is no timezone(text, date): a date resolves to the timestamptz form
+  if (src.t === "timestamptz" || src.t === "unknown" || src.t === "date") {
     const cast = castTo(ctx, src, "timestamptz", { explicit: true });
     const micros = cast.v as bigint;
     if (micros === TS_POS_INF || micros === TS_NEG_INF) return tv("timestamp", micros);
@@ -463,21 +529,29 @@ function timezoneConvert(ctx: EngineCtx, zone: string, src: TypedValue): TypedVa
     const offset = zoneOffsetForNaive(zone, micros);
     return tv("timestamptz", micros - BigInt(offset) * USECS_PER_SEC);
   }
-  if (src.t === "time") {
-    // time -> timetz using zone's current offset
-    const offset = zoneOffsetAtUtc(zone, 0n);
-    return tv("timetz", { micros: src.v as bigint, offsetSec: offset } as never);
+  if (src.t === "time" || src.t === "timetz") {
+    // timetz_zone: a time is first a timetz in the session zone; a named zone's offset is taken at
+    // the transaction timestamp
+    const tz = castTo(ctx, src, "timetz", {}).v as unknown as TimeTz;
+    const offset = zoneOffsetAtUtc(zone, ctx.txNow);
+    const utc = tz.micros - BigInt(tz.offsetSec) * USECS_PER_SEC;
+    return tv("timetz", { micros: wrapTimeOfDay(utc + BigInt(offset) * USECS_PER_SEC), offsetSec: offset } as never);
   }
   throw pgError("datatype_mismatch", `function timezone(text, ${src.t}) does not exist`, "42883");
 }
 
 function timezoneConvertFixed(ctx: EngineCtx, offsetSec: number, src: TypedValue): TypedValue {
-  if (src.t === "timestamptz" || src.t === "unknown") {
+  if (src.t === "timestamptz" || src.t === "unknown" || src.t === "date") {
     const cast = castTo(ctx, src, "timestamptz", { explicit: true });
     return tv("timestamp", (cast.v as bigint) + BigInt(offsetSec) * USECS_PER_SEC);
   }
   if (src.t === "timestamp") {
     return tv("timestamptz", (src.v as bigint) - BigInt(offsetSec) * USECS_PER_SEC);
+  }
+  if (src.t === "time" || src.t === "timetz") {
+    const tz = castTo(ctx, src, "timetz", {}).v as unknown as TimeTz;
+    const utc = tz.micros - BigInt(tz.offsetSec) * USECS_PER_SEC;
+    return tv("timetz", { micros: wrapTimeOfDay(utc + BigInt(offsetSec) * USECS_PER_SEC), offsetSec } as never);
   }
   throw pgError("datatype_mismatch", `function timezone(interval, ${src.t}) does not exist`, "42883");
 }
@@ -512,6 +586,8 @@ function toCharTimestamp(ctx: EngineCtx, localMicros: bigint, fmt: string, tzOff
   const dow = dayOfWeek(days);
   const doy = days - civilToDays(y, 1, 1) + 1;
   const iso = isoWeek(days);
+  const isoDow = dow === 0 ? 7 : dow;
+  const isoDoy = (iso.week - 1) * 7 + isoDow;
 
   let out = "";
   let i = 0;
@@ -519,7 +595,7 @@ function toCharTimestamp(ctx: EngineCtx, localMicros: bigint, fmt: string, tzOff
     out += s;
     void fill;
   };
-  let fillMode = false;
+  let fmPending = false;
 
   while (i < fmt.length) {
     const rest = fmt.slice(i);
@@ -530,10 +606,15 @@ function toCharTimestamp(ctx: EngineCtx, localMicros: bigint, fmt: string, tzOff
       }
       return false;
     };
-    if (tryPat("FM")) {
-      fillMode = !fillMode;
+    // numeric keywords come in an upper- and a lower-case spelling
+    const tryCi = (pat: string): boolean => tryPat(pat) || tryPat(pat.toLowerCase());
+    // FM / fm is a prefix that suppresses padding for the one keyword after it
+    if (tryPat("FM") || tryPat("fm")) {
+      fmPending = true;
       continue;
     }
+    const fillMode = fmPending;
+    fmPending = false;
     if (tryPat('"')) {
       // literal until closing quote
       let lit = "";
@@ -546,49 +627,55 @@ function toCharTimestamp(ctx: EngineCtx, localMicros: bigint, fmt: string, tzOff
       continue;
     }
     const pad = (n: number, w: number): string => (fillMode ? String(n) : String(n).padStart(w, "0"));
-    if (tryPat("HH24")) push(pad(hour24, 2), fillMode);
-    else if (tryPat("HH12")) push(pad(hour12, 2), fillMode);
-    else if (tryPat("HH")) push(pad(hour12, 2), fillMode);
-    else if (tryPat("MI")) push(pad(minute, 2), fillMode);
-    else if (tryPat("SSSS") || tryPat("SSSSS")) push(String(hour24 * 3600 + minute * 60 + second), fillMode);
-    else if (tryPat("SS")) push(pad(second, 2), fillMode);
-    else if (tryPat("MS")) push(String(Math.trunc(micros / 1000)).padStart(3, "0"), fillMode);
-    else if (tryPat("US")) push(String(micros).padStart(6, "0"), fillMode);
+    if (tryCi("HH24")) push(pad(hour24, 2), fillMode);
+    else if (tryCi("HH12")) push(pad(hour12, 2), fillMode);
+    else if (tryCi("HH")) push(pad(hour12, 2), fillMode);
+    else if (tryCi("MI")) push(pad(minute, 2), fillMode);
+    else if (tryCi("SSSSS") || tryCi("SSSS")) push(String(hour24 * 3600 + minute * 60 + second), fillMode);
+    else if (tryCi("SS")) push(pad(second, 2), fillMode);
+    else if (tryCi("MS")) push(String(Math.trunc(micros / 1000)).padStart(3, "0"), fillMode);
+    else if (tryCi("US")) push(String(micros).padStart(6, "0"), fillMode);
     else if (tryPat("AM") || tryPat("PM")) push(hour24 < 12 ? "AM" : "PM", fillMode);
     else if (tryPat("am") || tryPat("pm")) push(hour24 < 12 ? "am" : "pm", fillMode);
     else if (tryPat("A.M.") || tryPat("P.M.")) push(hour24 < 12 ? "A.M." : "P.M.", fillMode);
-    else if (tryPat("YYYY")) push(fillMode ? String(y) : String(Math.abs(y)).padStart(4, "0"), fillMode);
-    else if (tryPat("YYY")) push(String(Math.abs(y) % 1000).padStart(3, "0"), fillMode);
-    else if (tryPat("YY")) push(String(Math.abs(y) % 100).padStart(2, "0"), fillMode);
-    else if (tryPat("Y,YYY")) push(commaYear(y), fillMode);
-    else if (tryPat("Y")) push(String(Math.abs(y) % 10), fillMode);
-    else if (tryPat("IYYY")) push(String(iso.year).padStart(4, "0"), fillMode);
-    else if (tryPat("IW")) push(pad(iso.week, 2), fillMode);
+    else if (tryCi("YYYY")) push(fillMode ? String(y) : String(Math.abs(y)).padStart(4, "0"), fillMode);
+    else if (tryCi("YYY")) push(String(Math.abs(y) % 1000).padStart(3, "0"), fillMode);
+    else if (tryCi("YY")) push(String(Math.abs(y) % 100).padStart(2, "0"), fillMode);
+    else if (tryCi("Y,YYY")) push(commaYear(y), fillMode);
+    else if (tryCi("Y")) push(String(Math.abs(y) % 10), fillMode);
+    // ISO 8601 week-numbering fields, longest first as in formatting.c's keyword table
+    else if (tryCi("IDDD")) push(fillMode ? String(isoDoy) : String(isoDoy).padStart(3, "0"), fillMode);
+    else if (tryCi("ID")) push(String(isoDow), fillMode);
+    else if (tryCi("IW")) push(pad(iso.week, 2), fillMode);
+    else if (tryCi("IYYY")) push(fillMode ? String(iso.year) : String(Math.abs(iso.year)).padStart(4, "0"), fillMode);
+    else if (tryCi("IYY")) push(isoYearDigits(iso.year, 3, fillMode), fillMode);
+    else if (tryCi("IY")) push(isoYearDigits(iso.year, 2, fillMode), fillMode);
+    else if (tryCi("I")) push(isoYearDigits(iso.year, 1, fillMode), fillMode);
     else if (tryPat("MONTH")) push(MONTHS[m - 1]!.toUpperCase().padEnd(fillMode ? 0 : 9), fillMode);
     else if (tryPat("Month")) push(fillMode ? MONTHS[m - 1]! : MONTHS[m - 1]!.padEnd(9), fillMode);
     else if (tryPat("month")) push((fillMode ? MONTHS[m - 1]! : MONTHS[m - 1]!.padEnd(9)).toLowerCase(), fillMode);
     else if (tryPat("MON")) push(MONTHS[m - 1]!.slice(0, 3).toUpperCase(), fillMode);
     else if (tryPat("Mon")) push(MONTHS[m - 1]!.slice(0, 3), fillMode);
     else if (tryPat("mon")) push(MONTHS[m - 1]!.slice(0, 3).toLowerCase(), fillMode);
-    else if (tryPat("MM")) push(pad(m, 2), fillMode);
+    else if (tryCi("MM")) push(pad(m, 2), fillMode);
     else if (tryPat("DAY")) push(DAYS[dow]!.toUpperCase().padEnd(fillMode ? 0 : 9), fillMode);
     else if (tryPat("Day")) push(fillMode ? DAYS[dow]! : DAYS[dow]!.padEnd(9), fillMode);
     else if (tryPat("day")) push((fillMode ? DAYS[dow]! : DAYS[dow]!.padEnd(9)).toLowerCase(), fillMode);
     else if (tryPat("DY")) push(DAYS[dow]!.slice(0, 3).toUpperCase(), fillMode);
     else if (tryPat("Dy")) push(DAYS[dow]!.slice(0, 3), fillMode);
     else if (tryPat("dy")) push(DAYS[dow]!.slice(0, 3).toLowerCase(), fillMode);
-    else if (tryPat("DDD")) push(fillMode ? String(doy) : String(doy).padStart(3, "0"), fillMode);
-    else if (tryPat("DD")) push(pad(d, 2), fillMode);
-    else if (tryPat("D")) push(String(dow + 1), fillMode);
-    else if (tryPat("WW")) push(pad(Math.floor((doy - 1) / 7) + 1, 2), fillMode);
-    else if (tryPat("W")) push(String(Math.floor((d - 1) / 7) + 1), fillMode);
-    else if (tryPat("Q")) push(String(Math.floor((m - 1) / 3) + 1), fillMode);
-    else if (tryPat("CC")) push(String(Math.floor((y - 1) / 100) + 1).padStart(2, "0"), fillMode);
-    else if (tryPat("J")) push(String(days + 2451545), fillMode);
+    else if (tryCi("DDD")) push(fillMode ? String(doy) : String(doy).padStart(3, "0"), fillMode);
+    else if (tryCi("DD")) push(pad(d, 2), fillMode);
+    else if (tryCi("D")) push(String(dow + 1), fillMode);
+    else if (tryCi("WW")) push(pad(Math.floor((doy - 1) / 7) + 1, 2), fillMode);
+    else if (tryCi("W")) push(String(Math.floor((d - 1) / 7) + 1), fillMode);
+    else if (tryCi("Q")) push(String(Math.floor((m - 1) / 3) + 1), fillMode);
+    else if (tryCi("CC")) push(String(Math.floor((y - 1) / 100) + 1).padStart(2, "0"), fillMode);
+    else if (tryCi("J")) push(String(days + 2451545), fillMode);
     else if (tryPat("BC") || tryPat("AD")) push(y > 0 ? "AD" : "BC", fillMode);
     else if (tryPat("bc") || tryPat("ad")) push(y > 0 ? "ad" : "bc", fillMode);
     else if (tryPat("TZ")) push(tzOffsetSec === null ? "" : formatTzAbbrev(tzOffsetSec), fillMode);
-    else if (tryPat("OF")) push(tzOffsetSec === null ? "+00" : formatTzOf(tzOffsetSec), fillMode);
+    else if (tryCi("OF")) push(tzOffsetSec === null ? "+00" : formatTzOf(tzOffsetSec), fillMode);
     else if (tryPat("TH") || tryPat("th")) {
       // ordinal suffix for the previous number
       const prev = /(\d+)$/.exec(out);
@@ -601,6 +688,12 @@ function toCharTimestamp(ctx: EngineCtx, localMicros: bigint, fmt: string, tzOff
     }
   }
   return out;
+}
+
+/** IYY / IY / I: the last digits of the ISO year (zero-padded unless FM). */
+function isoYearDigits(year: number, digits: number, fillMode: boolean): string {
+  const v = Math.abs(year) % 10 ** digits;
+  return fillMode ? String(v) : String(v).padStart(digits, "0");
 }
 
 function commaYear(y: number): string {

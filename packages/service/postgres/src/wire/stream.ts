@@ -45,6 +45,35 @@ export interface StreamSocket {
 
 const isDuplex = (stream: ClientStream): stream is DuplexLike => typeof (stream as { on?: unknown }).on === "function";
 
+/**
+ * Both ends of a TCP connection, read off a Node / Bun `net.Socket` (`localAddress`, `remotePort`,
+ * ...). Null for anything else: web streams, a Unix socket, an in-process pipe.
+ */
+export const socketAddresses = (
+  stream: ClientStream,
+): { serverAddr: string; serverPort: number; clientAddr: string; clientPort: number } | null => {
+  const tcp = stream as {
+    localAddress?: unknown;
+    localPort?: unknown;
+    remoteAddress?: unknown;
+    remotePort?: unknown;
+  };
+  if (
+    typeof tcp.localAddress !== "string" ||
+    typeof tcp.localPort !== "number" ||
+    typeof tcp.remoteAddress !== "string" ||
+    typeof tcp.remotePort !== "number"
+  ) {
+    return null;
+  }
+  return {
+    serverAddr: tcp.localAddress,
+    serverPort: tcp.localPort,
+    clientAddr: tcp.remoteAddress,
+    clientPort: tcp.remotePort,
+  };
+};
+
 /** Adapt an accepted connection to the socket a server reads and writes. */
 export const toSocket = (stream: ClientStream): StreamSocket =>
   isDuplex(stream) ? fromDuplex(stream) : fromWebStreams(stream);
