@@ -19,14 +19,15 @@ import { completeSession } from "./checkout.js"
 import { STRIPE_NAMESPACE } from "./constants.js"
 import type { Corpus } from "./corpus.js"
 import { ACME_CORPUS } from "./corpus-data.js"
+import { moveDispute } from "./disputes.js"
 import { StripeError } from "./errors.js"
 import { document } from "./generated/openapi.js"
 import { StripeAPI, type StripeAPIOptions } from "./index.js"
 import type { StripeWebhookEvent } from "./internal.js"
 import { SigningPins } from "./payment-holds.js"
-import { openDispute, paymentMethodFromCard } from "./payments.js"
+import { openDispute, paymentMethodFromCard, renderDisputeIn } from "./payments.js"
 import { moveRefund } from "./refunds.js"
-import { renderCharge, renderCheckoutSession, renderDispute, renderRefund } from "./render.js"
+import { renderCharge, renderCheckoutSession, renderRefund } from "./render.js"
 import { confirmSetup } from "./setup-intents.js"
 import { createClockTimers } from "./webhook-timers.js"
 
@@ -461,7 +462,20 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
         typeof body.amount === "number" ? body.amount : charge.amount,
         typeof body.status === "string" ? body.status : "needs_response",
       )
-      return json(201, renderDispute(dispute))
+      return json(201, renderDisputeIn(scope, dispute))
+    },
+    "PUT /disputes/:id": ({ params, body, namespace }) => {
+      if (!isRecord(body) || typeof body.status !== "string")
+        return adminError(400, 'expected {"status": "won" | "lost" | "under_review" | …}')
+      const api = runtime.instance(namespace)
+      const id = params.id as string
+      const scope = locate(api, (candidate) => candidate.account.disputes.has(id))
+      if (!scope) return adminError(404, `no dispute ${id}`)
+      return guard(() => {
+        const dispute = scope.account.disputes.get(id)
+        if (!dispute) return adminError(404, `no dispute ${id}`)
+        return json(200, renderDisputeIn(scope, moveDispute(scope, dispute, body.status as string)))
+      })
     },
     "POST /checkout/sessions/:id/complete": ({ params, body, namespace, url }) => {
       const api = runtime.instance(namespace)

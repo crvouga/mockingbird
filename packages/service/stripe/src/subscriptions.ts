@@ -1,16 +1,23 @@
+import type { OperationContext } from "@crvouga/mockingbird-service"
 import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
 import {
   addInterval,
+  addSubscriptionInvoiceItems,
   applyDiscountRequests,
   assertCompatiblePrices,
   billProration,
   cancelSubscription,
   createSubscription,
   cycleSubscription,
+  type DiscountRequest,
+  discountsRemoved,
+  discountsReplaced,
   INACTIVE_PRICE,
   invoiceBillingCycleReset,
+  parseAddInvoiceItems,
   parseDiscounts,
   recurringOf,
+  renderDeletedDiscount,
   resolveDiscountSource,
   resumeSubscription,
   sameBillingPeriod,
@@ -37,7 +44,7 @@ import {
   stringOf,
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
-import { bodyParams, deleteParams, type Params, queryParams } from "./params.js"
+import { bodyParams, deleteParams, type Params, queryParams, removedParam } from "./params.js"
 import {
   renderDeletedSubscriptionItem,
   renderSubscription,
@@ -49,6 +56,49 @@ import type {
   SubscriptionRecord,
   TrialEndBehavior,
 } from "./state.js"
+import { REQUEST_CHANGES } from "./version.js"
+
+/**
+ * The singular `coupon` / `promotion_code` (customers and subscriptions, before 2025-03-31.basil):
+ * one discount in place of `discounts`, `""` removing it. Refused with `parameter_unknown` from
+ * basil on. Validated here so a bad one names the parameter the caller sent.
+ */
+export const singularDiscount = (
+  scope: RequestScope,
+  context: OperationContext,
+  params: Params,
+): DiscountRequest[] | "clear" | undefined => {
+  const removedAt = REQUEST_CHANGES.singularDiscountRemoved
+  const coupon = removedParam(context, params.coupon, "coupon", removedAt)
+  const promotion = removedParam(context, params.promotion_code, "promotion_code", removedAt)
+  if (coupon === undefined && promotion === undefined) return undefined
+  const param = coupon === undefined ? "promotion_code" : "coupon"
+  if (params.discounts !== undefined)
+    throw invalidRequest(
+      `You may only specify one of these parameters: ${param}, discounts.`,
+      param,
+    )
+  if (coupon !== undefined && promotion !== undefined && coupon !== "" && promotion !== "")
+    throw invalidRequest(
+      "You may only specify one of these parameters: coupon, promotion_code.",
+      "coupon",
+    )
+  const request: DiscountRequest | undefined =
+    typeof promotion === "string" && promotion !== ""
+      ? { promotion_code: promotion }
+      : typeof coupon === "string" && coupon !== ""
+        ? { coupon }
+        : undefined
+  if (request === undefined) return "clear"
+  const named = request.promotion_code === undefined ? "coupon" : "promotion_code"
+  try {
+    resolveDiscountSource(scope, request, "singular")
+  } catch (error) {
+    if (error instanceof StripeError) throw new StripeError({ ...error.init, param: named })
+    throw error
+  }
+  return [request]
+}
 
 const listOf = (params: Params, key: string): string[] => {
   const value = params[key]
@@ -89,6 +139,22 @@ const requireSubscriptionRecord = (scope: RequestScope, id: string) => {
 }
 
 const FUTURE_TIMESTAMP = "Invalid timestamp: must be an integer Unix timestamp in the future."
+
+/**
+ * `proration_date`: the time a change is prorated from, which must fall within the current
+ * billing period (Stripe documents that; the wording of the refusal is a best guess, not
+ * oracle-verified).
+ */
+const prorationDateOf = (params: Params, subscription: SubscriptionRecord): number | undefined => {
+  const at = intOf(params.proration_date)
+  if (at === undefined) return undefined
+  if (at < subscription.current_period_start || at > subscription.current_period_end)
+    throw invalidRequest(
+      "The `proration_date` must be within the subscription's current billing period.",
+      "proration_date",
+    )
+  return at
+}
 
 /** `trial_settings[end_behavior][missing_payment_method]`. */
 const trialSettingsOf = (raw: unknown): SubscriptionRecord["trial_settings"] | undefined => {
@@ -132,13 +198,15 @@ const changeItems = (
   subscription: SubscriptionRecord,
   requests: ItemRequest[],
   proration: string,
+  /** `proration_date`: prorate as of this time instead of now. */
+  prorateAt?: number,
 ): { itemIds: string[]; prorationAmount: number } => {
   const existing = subscriptionItems(scope, subscription)
   const itemIds = [...subscription.item_ids]
   let prorationAmount = 0
   const now = customerNow(scope, subscription.customer)
   const span = Math.max(1, subscription.current_period_end - subscription.current_period_start)
-  const left = Math.max(0, subscription.current_period_end - now) / span
+  const left = Math.max(0, subscription.current_period_end - (prorateAt ?? now)) / span
   const amountOf = (priceId: string, quantity: number) =>
     Math.round(Number(requirePrice(scope, priceId).unit_amount_decimal) * quantity)
   const writes: Array<() => void> = []
@@ -224,6 +292,8 @@ export const updateSubscription = (
   scope: RequestScope,
   current: SubscriptionRecord,
   params: Params,
+  /** The legacy singular `coupon` / `promotion_code`, read by `singularDiscount`. */
+  singular?: DiscountRequest[] | "clear",
 ): SubscriptionRecord => {
   if (current.status === "canceled" || current.status === "incomplete_expired") {
     const onlyMetadata = Object.keys(params).every((key) =>
@@ -243,7 +313,8 @@ export const updateSubscription = (
   if (trialEndAt !== undefined && trialEndAt <= now)
     throw invalidRequest(FUTURE_TIMESTAMP, "trial_end")
   const pauseCollection = pauseCollectionOf(params.pause_collection, now)
-  const discounts = parseDiscounts(params.discounts)
+  const discounts = singular ?? parseDiscounts(params.discounts)
+  const addInvoiceItems = parseAddInvoiceItems(scope, params.add_invoice_items, current.currency)
   // Refuse bad discounts before any item changes; applying them happens after.
   if (discounts !== undefined && discounts !== "clear")
     discounts.forEach((request, index) => {
@@ -255,6 +326,7 @@ export const updateSubscription = (
   const previousItems = { items: renderSubscription(current, scope.account).items }
   const proration = stringOf(params, "proration_behavior") ?? "create_prorations"
   const itemRequests = requestedItems(params)
+  const prorateAt = prorationDateOf(params, current)
   const previousBilling = {
     items: subscriptionItems(scope, current),
     recurring: recurringOf(scope, current),
@@ -263,7 +335,7 @@ export const updateSubscription = (
   const changed =
     itemRequests.length === 0
       ? { itemIds: current.item_ids, prorationAmount: 0 }
-      : changeItems(scope, current, itemRequests, proration)
+      : changeItems(scope, current, itemRequests, proration, prorateAt)
   const itemIds = changed.itemIds
   // A trial is free: changing plans during one prorates nothing.
   const prorationAmount = current.status === "trialing" ? 0 : changed.prorationAmount
@@ -278,6 +350,8 @@ export const updateSubscription = (
             discounts,
             { customer: current.customer, subscription: current.id },
             current.discount_ids,
+            "discounts",
+            false,
           )
   const details = cancellationDetailsOf(params.cancellation_details)
   const trialSettings = trialSettingsOf(params.trial_settings)
@@ -348,10 +422,13 @@ export const updateSubscription = (
       current_period_end: addInterval(now, nextRecurring.interval, nextRecurring.interval_count),
     }
   saveSubscription(scope, current, next, previousItems)
+  discountsReplaced(scope, current.discount_ids, discountIds, singular !== undefined)
+  // Pending until the next invoice this subscription produces, which may be the one below.
+  addSubscriptionInvoiceItems(scope, next, addInvoiceItems)
   if (resetsAnchor) invoiceBillingCycleReset(scope, next, previousBilling, proration !== "none")
   else
     billProration(scope, next, prorationAmount, proration, {
-      period: { start: now, end: current.current_period_end },
+      period: { start: prorateAt ?? now, end: current.current_period_end },
       description:
         proration === "always_invoice"
           ? "Remaining time on the new price (prorated)"
@@ -424,16 +501,13 @@ export const subscriptionHandlers = (services: Services): Record<string, Operati
         throw invalidRequest(`No such customer: '${customer}'`, "customer", "resource_missing")
       const items = requestedItems(params)
       if (items.length === 0) throw parameterMissing("items")
-      const discounts = parseDiscounts(params.discounts)
-      const addInvoiceItems = Array.isArray(params.add_invoice_items)
-        ? params.add_invoice_items
-            .map((entry) => recordOf(entry))
-            .filter((entry): entry is Record<string, unknown> => typeof entry?.price === "string")
-            .map((entry) => ({
-              price: entry.price as string,
-              quantity: intOf(entry.quantity) ?? 1,
-            }))
-        : []
+      const discounts = singularDiscount(scope, context, params) ?? parseDiscounts(params.discounts)
+      const firstPrice = items[0]?.price
+      const addInvoiceItems = parseAddInvoiceItems(
+        scope,
+        params.add_invoice_items,
+        (firstPrice ? scope.account.prices.get(firstPrice)?.currency : undefined) ?? null,
+      )
       const defaultMethod = stringOf(params, "default_payment_method")
       if (defaultMethod !== null && !scope.account.paymentMethods.get(defaultMethod))
         throw resourceMissing("PaymentMethod", defaultMethod, "default_payment_method")
@@ -499,7 +573,27 @@ export const subscriptionHandlers = (services: Services): Record<string, Operati
       const scope = requestScope(services, context)
       const params = bodyParams(context)
       const current = requireSubscriptionRecord(scope, context.params.subscription_exposed_id ?? "")
-      return jsonResponse(200, render(scope, updateSubscription(scope, current, params)))
+      const singular = singularDiscount(scope, context, params)
+      return jsonResponse(200, render(scope, updateSubscription(scope, current, params, singular)))
+    },
+    DeleteSubscriptionsSubscriptionExposedIdDiscount: async (context) => {
+      const scope = requestScope(services, context)
+      deleteParams(context)
+      const id = context.params.subscription_exposed_id ?? ""
+      const current = requireSubscriptionRecord(scope, id)
+      const [first] = current.discount_ids
+      // Best guess, not oracle-verified: with stackable discounts every subscription-level one
+      // goes, and the answer is the first of them; none at all is a 404.
+      if (first === undefined)
+        throw new StripeError({
+          status: 404,
+          code: "resource_missing",
+          message: `No active discount for subscription: '${id}'`,
+          param: "subscription_exposed_id",
+        })
+      saveSubscription(scope, current, { ...current, discount_ids: [] })
+      discountsRemoved(scope, current.discount_ids, [])
+      return jsonResponse(200, renderDeletedDiscount(scope, first))
     },
     DeleteSubscriptionsSubscriptionExposedId: async (context) => {
       const scope = requestScope(services, context)
@@ -600,6 +694,7 @@ export const subscriptionHandlers = (services: Services): Record<string, Operati
           },
         ],
         stringOf(params, "proration_behavior") ?? "create_prorations",
+        prorationDateOf(params, current),
       )
       const previousItems = { items: renderSubscription(current, scope.account).items }
       saveSubscription(scope, current, { ...current, item_ids: itemIds }, previousItems)
@@ -632,6 +727,7 @@ export const subscriptionHandlers = (services: Services): Record<string, Operati
           },
         ],
         stringOf(params, "proration_behavior") ?? "create_prorations",
+        prorationDateOf(params, current),
       )
       saveSubscription(scope, current, { ...current }, previousItems)
       const updated = scope.account.subscriptionItems.get(id) ?? item
@@ -655,6 +751,7 @@ export const subscriptionHandlers = (services: Services): Record<string, Operati
         current,
         [{ id, price: null, quantity: undefined, deleted: true, metadata: undefined }],
         stringOf(params, "proration_behavior") ?? "create_prorations",
+        prorationDateOf(params, current),
       )
       saveSubscription(scope, current, { ...current, item_ids: itemIds }, previousItems)
       return jsonResponse(200, renderDeletedSubscriptionItem(id))

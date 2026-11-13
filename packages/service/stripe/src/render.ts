@@ -56,7 +56,7 @@ export const renderCustomer = (customer: CustomerRecord): RecordValue => ({
   default_source: null,
   delinquent: false,
   description: customer.description,
-  discount: null,
+  discount: customer.discount ?? null,
   email: customer.email,
   invoice_prefix: customer.invoice_prefix,
   invoice_settings: {
@@ -264,6 +264,7 @@ export const renderCharge = (charge: ChargeRecord): RecordValue => ({
           },
           type: "card",
         },
+  receipt_email: charge.receipt_email ?? null,
   receipt_url: `https://pay.stripe.com/receipts/payment/${charge.id}`,
   refunded: charge.refunded,
   status: charge.status,
@@ -283,16 +284,84 @@ export const renderRefund = (refund: RefundRecord): RecordValue => ({
   status: refund.status,
 })
 
-export const renderDispute = (dispute: DisputeRecord): RecordValue => ({
-  ...base(dispute.id, "dispute", dispute.created),
-  amount: dispute.amount,
-  charge: dispute.charge,
-  currency: dispute.currency,
-  metadata: dispute.metadata,
-  payment_intent: dispute.payment_intent,
-  reason: dispute.reason,
-  status: dispute.status,
-})
+/** The `dispute.evidence` fields (`POST /v1/disputes/:id` `evidence[…]`), besides `enhanced_evidence`. */
+export const DISPUTE_EVIDENCE_FIELDS = [
+  "access_activity_log",
+  "billing_address",
+  "cancellation_policy",
+  "cancellation_policy_disclosure",
+  "cancellation_rebuttal",
+  "customer_communication",
+  "customer_email_address",
+  "customer_name",
+  "customer_purchase_ip",
+  "customer_signature",
+  "duplicate_charge_documentation",
+  "duplicate_charge_explanation",
+  "duplicate_charge_id",
+  "product_description",
+  "receipt",
+  "refund_policy",
+  "refund_policy_disclosure",
+  "refund_refusal_explanation",
+  "service_date",
+  "service_documentation",
+  "shipping_address",
+  "shipping_carrier",
+  "shipping_date",
+  "shipping_documentation",
+  "shipping_tracking_number",
+  "uncategorized_file",
+  "uncategorized_text",
+] as const
+
+/**
+ * A dispute; `balanceTransactions` are its ledger lines already rendered (Stripe embeds them as
+ * objects, never ids). Inquiries (`warning_*`) are the only disputes whose charge stays refundable.
+ */
+export const renderDispute = (
+  dispute: DisputeRecord,
+  balanceTransactions: readonly RecordValue[] = [],
+): RecordValue => {
+  const evidence: Record<string, unknown> = { enhanced_evidence: {} }
+  for (const field of DISPUTE_EVIDENCE_FIELDS) evidence[field] = dispute.evidence?.[field] ?? null
+  const details = dispute.evidence_details
+  const inquiry = dispute.status.startsWith("warning_")
+  return {
+    ...base(dispute.id, "dispute", dispute.created),
+    amount: dispute.amount,
+    balance_transactions: [...balanceTransactions],
+    charge: dispute.charge,
+    currency: dispute.currency,
+    enhanced_eligibility_types: [],
+    evidence,
+    evidence_details: {
+      due_by: details?.due_by ?? null,
+      enhanced_eligibility: {},
+      has_evidence: details?.has_evidence ?? false,
+      past_due: details?.past_due ?? false,
+      submission_count: details?.submission_count ?? 0,
+    },
+    is_charge_refundable: inquiry,
+    metadata: dispute.metadata,
+    payment_intent: dispute.payment_intent,
+    ...(dispute.card_brand === undefined || dispute.card_brand === null
+      ? {}
+      : {
+          payment_method_details: {
+            card: {
+              brand: dispute.card_brand,
+              case_type: inquiry ? "inquiry" : "chargeback",
+              network: dispute.card_brand,
+              network_reason_code: null,
+            },
+            type: "card",
+          },
+        }),
+    reason: dispute.reason,
+    status: dispute.status,
+  }
+}
 
 export const renderCustomerBalanceTransaction = (
   transaction: CustomerBalanceTransactionRecord,
@@ -332,7 +401,7 @@ export const renderBalanceTransaction = (
             amount: transaction.fee,
             application: null,
             currency: transaction.currency,
-            description: "Stripe processing fees",
+            description: transaction.fee_description ?? "Stripe processing fees",
             type: "stripe_fee",
           },
         ],
@@ -507,12 +576,15 @@ export const renderCheckoutSession = (session: CheckoutSessionRecord): RecordVal
   status: session.status,
   subscription: session.subscription,
   success_url: session.success_url,
+  ui_mode: session.ui_mode ?? "hosted_page",
+  client_secret: session.client_secret ?? null,
+  return_url: session.return_url ?? null,
   total_details: {
     amount_discount: session.amount_discount ?? 0,
     amount_shipping: 0,
     amount_tax: 0,
   },
-  url: session.status === "open" ? session.url : null,
+  url: session.status === "open" && session.ui_mode !== "embedded_page" ? session.url : null,
 })
 
 const renderInvoiceLine = (
@@ -528,7 +600,7 @@ const renderInvoiceLine = (
     currency: line.currency,
     description: line.description,
     discount_amounts: line.discount_amounts,
-    discountable: true,
+    discountable: line.discountable ?? true,
     discounts: [],
     invoice: invoice.id,
     invoice_item: line.invoice_item,
