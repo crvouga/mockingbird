@@ -1,8 +1,10 @@
 import type { TypeName } from "../ast/nodes.ts";
 import { pgError, unsupported } from "../errors/error.ts";
+import { extensionMembers } from "../schema/extensions.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
 import type { ColumnType, TypeId, TypeMod } from "./value.ts";
 import { arrayTypeOf, normalizeTypeName } from "./value.ts";
+import { vectorTypmodIn } from "./vector.ts";
 
 export interface ResolvedType {
   readonly column: ColumnType;
@@ -22,7 +24,11 @@ const SERIALS: Record<string, "int2" | "int4" | "int8"> = {
 };
 
 function modOf(t: TypeId, mods: number[]): TypeMod | null {
-  if (mods.length === 0) return null;
+  // a bare `bit` is bit(1), as in PostgreSQL's grammar
+  if (mods.length === 0) return t === "bit" ? { a: 1 } : null;
+  if ((t === "bit" || t === "varbit") && mods[0]! < 1) {
+    throw pgError("invalid_parameter_value", `length for type ${t} must be at least 1`, "22023");
+  }
   if (t === "numeric") return { a: mods[0], b: mods[1] ?? 0 };
   return { a: mods[0] };
 }
@@ -57,6 +63,25 @@ function findCompositeType(state: DatabaseState, parts: string[]): { schema: str
   return null;
 }
 
+/** The types pgvector defines; only `vector` is modelled. */
+const PGVECTOR_TYPES: ReadonlySet<string> = new Set(["vector", "halfvec", "sparsevec"]);
+
+/** pgvector's `vector(n)`, visible along the search path once `CREATE EXTENSION vector` installed it. */
+function pgvectorType(state: DatabaseState, tn: TypeName): ColumnType | null {
+  const name = tn.parts[tn.parts.length - 1]!;
+  if (!PGVECTOR_TYPES.has(name) || tn.parts.length > 2) return null;
+  const schema = extensionMembers(state, "vector")[0]?.schema;
+  if (schema === undefined) return null;
+  const visible = tn.parts.length === 1 ? state.effectiveSearchPath().includes(schema) : tn.parts[0] === schema;
+  if (!visible) return null;
+  if (name !== "vector") throw unsupported(`pgvector type "${name}"`);
+  vectorTypmodIn(tn.mods);
+  return {
+    id: tn.arrayDims > 0 ? arrayTypeOf("vector") : "vector",
+    mod: tn.mods.length > 0 ? { a: tn.mods[0] } : null,
+  };
+}
+
 /**
  * Resolve a parsed type name against the catalog: builtin alias, enum, or
  * domain (searched along search_path). Throws 42704 when nothing matches.
@@ -77,6 +102,9 @@ export function resolveTypeName(state: DatabaseState, tn: TypeName): ResolvedTyp
       return { column: { id, mod: modOf(builtin, tn.mods) }, domain: null, serial: null };
     }
   }
+
+  const extensionType = pgvectorType(state, tn);
+  if (extensionType) return { column: extensionType, domain: null, serial: null };
 
   const enumData = state.findEnum(tn.parts);
   if (enumData) {
