@@ -1,10 +1,16 @@
 import { jsonResponse, type OperationHandler, opaqueToken } from "@crvouga/mockingbird-service"
-import { cancelSubscription } from "./billing.js"
+import {
+  applyDiscountRequests,
+  cancelSubscription,
+  discountsReplaced,
+  renderDeletedDiscount,
+} from "./billing.js"
 import {
   invalidRequest,
   parameterInvalidEmpty,
   parameterMissing,
   resourceMissing,
+  StripeError,
 } from "./errors.js"
 import { applyExpand, type ExpandResolvers } from "./expand.js"
 import { mergeMetadata, optionalString, strippedString, validateEmail } from "./fields.js"
@@ -16,11 +22,12 @@ import {
   type Services,
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
-import { bodyParams, type Params, queryParams } from "./params.js"
+import { bodyParams, deleteParams, type Params, queryParams } from "./params.js"
 import {
   renderCustomer,
   renderCustomerBalanceTransaction,
   renderDeletedCustomer,
+  renderDiscount,
   renderPaymentMethod,
 } from "./render.js"
 import { searchRecords } from "./search.js"
@@ -31,6 +38,7 @@ import {
   type Metadata,
   seconds,
 } from "./state.js"
+import { singularDiscount } from "./subscriptions.js"
 
 const ADDRESS_KEYS = ["city", "country", "line1", "line2", "postal_code", "state"] as const
 
@@ -134,6 +142,32 @@ const expanders = (scope: RequestScope): ExpandResolvers => {
 /** Stripe refuses a malformed `preferred_locales` before it looks at `invoice_settings` (observed). */
 const CUSTOMER_PARAM_ORDER = ["preferred_locales"]
 
+/**
+ * Apply the legacy customer-level `coupon` / `promotion_code` (requests before 2025-03-31.basil):
+ * one discount on the customer, which its subscription invoices without discounts of their own
+ * use. Reports `customer.discount.created|updated|deleted`.
+ */
+const applyCustomerDiscount = (
+  scope: RequestScope,
+  customer: CustomerRecord,
+  requests: ReturnType<typeof singularDiscount>,
+): CustomerRecord => {
+  if (requests === undefined) return customer
+  const before = typeof customer.discount?.id === "string" ? [customer.discount.id] : []
+  const after =
+    requests === "clear"
+      ? []
+      : applyDiscountRequests(scope, requests, { customer: customer.id }, before, "coupon", false)
+  const record = after[0] === undefined ? undefined : scope.account.discounts.get(after[0])
+  const next = {
+    ...customer,
+    discount: record === undefined ? null : renderDiscount(record, scope.account),
+  }
+  scope.account.customers.update(customer.id, { kind: "live", customer: next })
+  discountsReplaced(scope, before, after, true)
+  return next
+}
+
 export const customerHandlers = (services: Services): Record<string, OperationHandler> => {
   const render = (scope: RequestScope, customer: CustomerRecord, params: Params) =>
     applyExpand(renderCustomer(customer), params.expand, expanders(scope))
@@ -169,6 +203,7 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
         typeof params.test_clock === "string" && params.test_clock !== "" ? params.test_clock : null
       if (clock !== null && !scope.account.testClocks.get(clock))
         throw resourceMissing("test_clock", clock, "test_clock")
+      const discount = singularDiscount(scope, context, params)
       const customer = { ...apply(base, params), test_clock: clock }
       if (customer.invoice_settings.default_payment_method !== null)
         throw invalidRequest(
@@ -177,7 +212,8 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
         )
       scope.account.customers.insert(id, { kind: "live", customer })
       scope.emit("customer.created", renderCustomer(customer))
-      return jsonResponse(200, render(scope, customer, params))
+      const discounted = applyCustomerDiscount(scope, customer, discount)
+      return jsonResponse(200, render(scope, discounted, params))
     },
 
     GetCustomers: async (context) => {
@@ -240,6 +276,7 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
       const entry = scope.account.customers.get(id)
       if (!entry || entry.kind === "deleted")
         throw resourceMissing("customer", id, "id", entry?.kind === "deleted" ? 400 : 404)
+      const discount = singularDiscount(scope, context, params)
       const customer = apply(entry.customer, params)
       const defaultMethod = customer.invoice_settings.default_payment_method
       if (
@@ -252,8 +289,27 @@ export const customerHandlers = (services: Services): Record<string, OperationHa
           "invoice_settings[default_payment_method]",
         )
       scope.account.customers.update(id, { kind: "live", customer })
-      scope.emit("customer.updated", renderCustomer(customer))
-      return jsonResponse(200, render(scope, customer, params))
+      const discounted = applyCustomerDiscount(scope, customer, discount)
+      scope.emit("customer.updated", renderCustomer(discounted))
+      return jsonResponse(200, render(scope, discounted, params))
+    },
+
+    DeleteCustomersCustomerDiscount: async (context) => {
+      const scope = requestScope(services, context)
+      deleteParams(context)
+      const id = context.params.customer ?? ""
+      const customer = requireLiveCustomer(scope, id, "customer")
+      const discountId = customer.discount?.id
+      // Best guess, not oracle-verified: a customer without a discount is a 404.
+      if (typeof discountId !== "string")
+        throw new StripeError({
+          status: 404,
+          code: "resource_missing",
+          message: `No active discount for customer: '${id}'`,
+          param: "customer",
+        })
+      applyCustomerDiscount(scope, customer, "clear")
+      return jsonResponse(200, renderDeletedDiscount(scope, discountId))
     },
 
     DeleteCustomersCustomer: async (context) => {

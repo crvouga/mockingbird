@@ -1,11 +1,17 @@
-import { jsonResponse, type OperationHandler } from "@crvouga/mockingbird-service"
+import {
+  jsonResponse,
+  type OperationContext,
+  type OperationHandler,
+} from "@crvouga/mockingbird-service"
 import {
   advanceSchedule,
   applyPhase,
   cancelSubscription,
   createSubscription,
   phaseBounds,
+  phaseDiscountRequests,
   releaseSchedule,
+  resolveDiscountSource,
   saveSubscription,
   subscriptionItems,
 } from "./billing.js"
@@ -21,9 +27,10 @@ import {
   stringOf,
 } from "./internal.js"
 import { matchesCreated, paginate } from "./list.js"
-import { bodyParams, queryParams } from "./params.js"
+import { bodyParams, queryParams, removedParam } from "./params.js"
 import { renderSubscriptionSchedule } from "./render.js"
 import type { SubscriptionScheduleRecord } from "./state.js"
+import { REQUEST_CHANGES } from "./version.js"
 
 type RecordValue = Record<string, unknown>
 
@@ -48,11 +55,72 @@ const numeric = (value: unknown): number | undefined => {
   return undefined
 }
 
+type PhaseDiscount = {
+  coupon: string | null
+  discount: string | null
+  promotion_code: string | null
+}
+
+/**
+ * `phases[n][discounts]` (or, before 2025-03-31.basil, the singular `phases[n][coupon]`) as
+ * Stripe stores them on the phase: each coupon, promotion code or existing discount checked
+ * now, applied to the subscription while the phase is current. Without `context` (a phase
+ * built from an existing subscription) nothing is checked.
+ */
+const phaseDiscounts = (
+  scope: RequestScope,
+  context: OperationContext | undefined,
+  phase: RecordValue,
+  index: number,
+  existing: readonly string[],
+): PhaseDiscount[] => {
+  const coupon =
+    context === undefined
+      ? undefined
+      : removedParam(
+          context,
+          phase.coupon,
+          `phases[${index}][coupon]`,
+          REQUEST_CHANGES.singularDiscountRemoved,
+        )
+  if (coupon !== undefined && phase.discounts !== undefined)
+    throw invalidRequest(
+      "You may only specify one of these parameters: coupon, discounts.",
+      `phases[${index}][coupon]`,
+    )
+  const raw =
+    typeof coupon === "string" && coupon !== ""
+      ? [{ coupon }]
+      : Array.isArray(phase.discounts)
+        ? phase.discounts
+        : []
+  return phaseDiscountRequests({ discounts: raw }).map((request, position) => {
+    const param =
+      coupon === undefined ? `phases[${index}][discounts][${position}]` : `phases[${index}]`
+    if (request.discount !== undefined) {
+      if (!existing.includes(request.discount))
+        throw resourceMissing("discount", request.discount, `${param}[discount]`)
+    } else if (context !== undefined) resolveDiscountSource(scope, request, param)
+    return {
+      coupon: request.coupon ?? null,
+      discount: request.discount ?? null,
+      promotion_code: request.promotion_code ?? null,
+    }
+  })
+}
+
 /**
  * Normalise requested phases: `start_date` (a timestamp or `now`), `end_date`, and items as
  * `{price, quantity}`; consecutive phases start where the previous one ends.
  */
-const normalisePhases = (raw: unknown, now: number, firstStart: number): RecordValue[] => {
+const normalisePhases = (
+  scope: RequestScope,
+  context: OperationContext | undefined,
+  raw: unknown,
+  now: number,
+  firstStart: number,
+  existingDiscounts: readonly string[] = [],
+): RecordValue[] => {
   const phases = Array.isArray(raw) ? raw.map((entry) => recordOf(entry) ?? {}) : []
   let cursor = firstStart
   return phases.map((phase, index) => {
@@ -82,7 +150,7 @@ const normalisePhases = (raw: unknown, now: number, firstStart: number): RecordV
       currency: "usd",
       default_payment_method: null,
       description: null,
-      discounts: [],
+      discounts: phaseDiscounts(scope, context, phase, index, existingDiscounts),
       end_date: end,
       invoice_settings: null,
       items,
@@ -124,6 +192,8 @@ export const subscriptionScheduleHandlers = (
         phases: [
           {
             ...normalisePhases(
+              scope,
+              undefined,
               [
                 {
                   start_date: subscription.current_period_start,
@@ -132,10 +202,13 @@ export const subscriptionScheduleHandlers = (
                     price: item.price,
                     quantity: item.quantity,
                   })),
+                  // The subscription's discounts carry over, by id.
+                  discounts: subscription.discount_ids.map((discount) => ({ discount })),
                 },
               ],
               subscription.current_period_start,
               subscription.current_period_start,
+              subscription.discount_ids,
             )[0],
             current: true,
           },
@@ -159,7 +232,7 @@ export const subscriptionScheduleHandlers = (
         customer: customerId,
         end_behavior: stringOf(params, "end_behavior") ?? "release",
         metadata: mergeRecordMetadata({}, params.metadata),
-        phases: normalisePhases(params.phases, now, start),
+        phases: normalisePhases(scope, context, params.phases, now, start),
         released_at: null,
         released_subscription: null,
         status: "not_started",
@@ -182,6 +255,7 @@ export const subscriptionScheduleHandlers = (
           paymentBehavior: "allow_incomplete",
           trialEnd: null,
           schedule: id,
+          discounts: phaseDiscountRequests(first),
         })
         record = {
           ...record,
@@ -251,7 +325,16 @@ export const subscriptionScheduleHandlers = (
     const phases =
       params.phases === undefined
         ? current.phases
-        : normalisePhases(params.phases, now, firstStart).map((phase) => {
+        : normalisePhases(
+            scope,
+            context,
+            params.phases,
+            now,
+            firstStart,
+            current.subscription === null
+              ? []
+              : (scope.account.subscriptions.get(current.subscription)?.discount_ids ?? []),
+          ).map((phase) => {
             const bounds = phaseBounds(phase)
             return {
               ...phase,

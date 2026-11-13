@@ -1,26 +1,39 @@
 import { DEFAULT_PAYMENT_RETRIES, type PaymentRetryPolicy } from "./accounts.js"
-import { invalidRequest, resourceMissing, StripeError, stateError } from "./errors.js"
+import {
+  invalidRequest,
+  parameterMissing,
+  resourceMissing,
+  StripeError,
+  stateError,
+} from "./errors.js"
+import { parseUnitAmountDecimal } from "./fields.js"
 import {
   applyBalanceTransaction,
   changedFields,
   clientSecretFor,
   customerNow,
   findCustomer,
+  intOf,
   priceAmount,
   type RequestScope,
+  recordOf,
   requireCoupon,
   requirePrice,
 } from "./internal.js"
 import { confirmIntent, defaultPaymentMethodOf, resolvePaymentMethod } from "./payments.js"
+import { normalizeCurrency } from "./prices.js"
 import {
   renderCheckoutSession,
+  renderDiscount,
   renderInvoice,
+  renderInvoiceItem,
   renderPaymentIntent,
   renderSubscription,
 } from "./render.js"
 import {
   type CouponRecord,
   type DiscountRecord,
+  type InvoiceItemRecord,
   type InvoiceLineRecord,
   type InvoiceRecord,
   type Metadata,
@@ -184,6 +197,8 @@ export const applyDiscountRequests = (
   },
   existing: readonly string[] = [],
   param = "discounts",
+  /** `false` when the caller reports the change itself (`discountsReplaced`). */
+  announce = true,
 ): string[] => {
   const ids: string[] = []
   requests.forEach((request, index) => {
@@ -213,9 +228,77 @@ export const applyDiscountRequests = (
     }
     scope.account.discounts.insert(id, record)
     redeem(scope, source.coupon, source.promotion_code)
+    // Discounts on a subscription or a customer announce themselves; invoice and Checkout
+    // discounts do not.
+    if (announce && record.invoice === null && record.checkout_session === null)
+      emitDiscount(scope, "created", id)
     ids.push(id)
   })
   return ids
+}
+
+/** `customer.discount.created|updated|deleted`, with the discount as `data.object`. */
+export const emitDiscount = (
+  scope: RequestScope,
+  change: "created" | "updated" | "deleted",
+  id: string,
+  previous?: RecordValue,
+) => {
+  const record = scope.account.discounts.get(id)
+  if (record)
+    scope.emit(`customer.discount.${change}`, renderDiscount(record, scope.account), previous)
+}
+
+/**
+ * Discounts that left a subscription or customer: `customer.discount.deleted` for each one no
+ * longer in `kept`. The records stay, since invoices that used them still name them.
+ */
+export const discountsRemoved = (
+  scope: RequestScope,
+  before: readonly string[],
+  kept: readonly string[],
+) => {
+  for (const id of before) if (!kept.includes(id)) emitDiscount(scope, "deleted", id)
+}
+
+/** `DELETE …/discount`: the removed discount, marked deleted (no `end`, as Stripe answers). */
+export const renderDeletedDiscount = (scope: RequestScope, id: string): RecordValue => {
+  const record = scope.account.discounts.get(id)
+  if (!record) return { id, object: "discount", deleted: true }
+  const { end: _end, ...rest } = renderDiscount(record, scope.account)
+  return { ...rest, deleted: true }
+}
+
+/**
+ * Report a subscription's or customer's discounts changing from `before` to `after` (created with
+ * `announce=false`): `customer.discount.deleted` for each removed one, `.created` for each new one.
+ * The legacy singular `coupon` / `promotion_code` swapping one discount for another is one
+ * `customer.discount.updated` instead (best guess, not oracle-verified).
+ */
+export const discountsReplaced = (
+  scope: RequestScope,
+  before: readonly string[],
+  after: readonly string[],
+  singular = false,
+) => {
+  const removed = before.filter((id) => !after.includes(id))
+  const added = after.filter((id) => !before.includes(id))
+  const [old] = removed
+  const [fresh] = added
+  if (singular && removed.length === 1 && added.length === 1 && old && fresh) {
+    const previous = scope.account.discounts.get(old)
+    emitDiscount(
+      scope,
+      "updated",
+      fresh,
+      previous === undefined
+        ? undefined
+        : { coupon: renderDiscount(previous, scope.account).coupon, id: previous.id },
+    )
+    return
+  }
+  discountsRemoved(scope, before, after)
+  for (const id of added) emitDiscount(scope, "created", id)
 }
 
 /** Does a coupon's `applies_to` restriction allow this line? */
@@ -233,7 +316,12 @@ const couponApplies = (scope: RequestScope, coupon: CouponRecord, priceId: strin
 export const discountLines = (
   scope: RequestScope,
   discountIds: readonly string[],
-  lines: ReadonlyArray<{ amount: number; price: string | null; currency: string }>,
+  lines: ReadonlyArray<{
+    amount: number
+    price: string | null
+    currency: string
+    discountable?: boolean
+  }>,
 ): {
   perLine: Array<Array<{ amount: number; discount: string }>>
   totals: Array<{ discount: string; amount: number }>
@@ -251,7 +339,7 @@ export const discountLines = (
         ? Number.POSITIVE_INFINITY
         : (coupon.currency_options[lines[0]?.currency ?? "usd"]?.amount_off ?? coupon.amount_off)
     lines.forEach((line, index) => {
-      if (!couponApplies(scope, coupon, line.price)) return
+      if (line.discountable === false || !couponApplies(scope, coupon, line.price)) return
       const left = remaining[index] ?? 0
       const take =
         coupon.percent_off !== null
@@ -308,6 +396,18 @@ export type InvoiceInput = {
   subscriptionMetadata?: Metadata | null
 }
 
+/**
+ * A subscription invoice without discounts of its own uses the customer's discount (the legacy
+ * customer-level `coupon` / `promotion_code`), while that discount lasts.
+ */
+const invoiceDiscounts = (scope: RequestScope, input: InvoiceInput, at: number): string[] => {
+  if (input.discountIds !== undefined && input.discountIds.length > 0) return input.discountIds
+  if (input.subscription === null) return input.discountIds ?? []
+  const id = findCustomer(scope, input.customer)?.discount?.id
+  const discount = typeof id === "string" ? scope.account.discounts.get(id) : undefined
+  return discount !== undefined && (discount.end === null || discount.end > at) ? [discount.id] : []
+}
+
 /** A draft invoice; emits `invoice.created`. */
 export const createDraftInvoice = (scope: RequestScope, input: InvoiceInput): InvoiceRecord => {
   const id = scope.ids.next("in_", 24)
@@ -334,7 +434,7 @@ export const createDraftInvoice = (scope: RequestScope, input: InvoiceInput): In
     customer_email: customer?.email ?? null,
     customer_name: customer?.name ?? null,
     description: input.description ?? null,
-    discount_ids: input.discountIds ?? [],
+    discount_ids: invoiceDiscounts(scope, input, created),
     due_date: null,
     ending_balance: null,
     hosted_invoice_url: null,
@@ -381,6 +481,7 @@ const newIntentRecord = (
     description?: string | null
     setupFutureUsage?: string | null
     paymentMethodTypes?: string[]
+    captureMethod?: PaymentIntentRecord["capture_method"]
   },
 ): PaymentIntentRecord => {
   const id = scope.ids.next("pi_", 24)
@@ -389,7 +490,7 @@ const newIntentRecord = (
     amount: input.amount,
     amount_capturable: 0,
     amount_received: 0,
-    capture_method: "automatic_async",
+    capture_method: input.captureMethod ?? "automatic_async",
     charge_ids: [],
     client_secret: clientSecretFor(id),
     confirmation_method: "automatic",
@@ -750,6 +851,200 @@ export const lineFromPrice = (
   }
 }
 
+// --- add_invoice_items --------------------------------------------------------------------------
+
+/** One validated `add_invoice_items[n]` entry; an inline price is stored once it is used. */
+export type AddInvoiceItem = {
+  price: PriceRecord
+  inline: boolean
+  quantity: number
+  metadata: Metadata
+  discountable: boolean | undefined
+}
+
+/** Sub-parameters of `add_invoice_items[n]` the emulator does not model: refused, never ignored. */
+const UNMODELLED_ADD_INVOICE_ITEM = ["discounts", "period", "tax_rates"] as const
+
+const RECURRING_INVOICE_ITEM =
+  "The price specified is set to `type=recurring` but this field only accepts prices with `type=one_time`."
+
+/**
+ * `add_invoice_items[n]`: a one-time `price` or inline `price_data` (an inactive one-time Price,
+ * as Stripe generates), `quantity`, `metadata` and `discountable`. Validated in full before the
+ * caller writes anything.
+ */
+export const parseAddInvoiceItems = (
+  scope: RequestScope,
+  raw: unknown,
+  currency: string | null,
+  param = "add_invoice_items",
+): AddInvoiceItem[] => {
+  if (raw === undefined || raw === "") return []
+  if (!Array.isArray(raw)) throw invalidRequest("Invalid array", param)
+  return raw.map((value, index) => {
+    const at = `${param}[${index}]`
+    const entry = recordOf(value) ?? {}
+    for (const key of UNMODELLED_ADD_INVOICE_ITEM)
+      if (entry[key] !== undefined)
+        throw invalidRequest(
+          `\`${key}\` on add_invoice_items is not modelled by this mock.`,
+          `${at}[${key}]`,
+        )
+    const priceId = typeof entry.price === "string" && entry.price !== "" ? entry.price : null
+    const data = recordOf(entry.price_data)
+    if (priceId !== null && data !== undefined)
+      throw invalidRequest(
+        "You may only specify one of these parameters: price, price_data.",
+        `${at}[price]`,
+      )
+    let price: PriceRecord
+    if (priceId !== null) {
+      price = requirePrice(scope, priceId, `${at}[price]`)
+      if (price.recurring !== null) throw invalidRequest(RECURRING_INVOICE_ITEM, `${at}[price]`)
+      if (!price.active) throw invalidRequest(INACTIVE_PRICE, `${at}[price]`)
+    } else {
+      if (data === undefined) throw parameterMissing(`${at}[price]`)
+      price = inlineInvoiceItemPrice(scope, data, `${at}[price_data]`)
+    }
+    if (currency !== null && price.currency !== currency)
+      throw invalidRequest(
+        `The currency of ${at} (\`${price.currency}\`) must match the subscription's currency (\`${currency}\`).`,
+        `${at}[price]`,
+      )
+    const quantity = intOf(entry.quantity) ?? 1
+    if (quantity < 0)
+      throw invalidRequest("This value must be greater than or equal to 0.", `${at}[quantity]`)
+    const discountable = entry.discountable
+    return {
+      price,
+      inline: priceId === null,
+      quantity,
+      metadata: (recordOf(entry.metadata) as Metadata | undefined) ?? {},
+      discountable:
+        discountable === undefined ? undefined : discountable === true || discountable === "true",
+    }
+  })
+}
+
+/** `price_data` on an invoice item: product, currency and a (possibly negative) unit amount. */
+const inlineInvoiceItemPrice = (
+  scope: RequestScope,
+  data: RecordValue,
+  param: string,
+): PriceRecord => {
+  const product = typeof data.product === "string" ? data.product : ""
+  if (product === "") throw parameterMissing(`${param}[product]`)
+  if (!scope.account.products.get(product))
+    throw resourceMissing("product", product, `${param}[product]`)
+  if (data.currency === undefined) throw parameterMissing(`${param}[currency]`)
+  const hasAmount = data.unit_amount !== undefined
+  const hasDecimal = data.unit_amount_decimal !== undefined
+  if (hasAmount && hasDecimal)
+    throw invalidRequest(
+      "You may only specify one of these parameters: unit_amount, unit_amount_decimal.",
+      `${param}[unit_amount]`,
+    )
+  if (!hasAmount && !hasDecimal) throw parameterMissing(`${param}[unit_amount]`)
+  const taxBehavior = data.tax_behavior
+  return {
+    id: scope.ids.next("price_", 24),
+    active: false,
+    created: seconds(scope.now),
+    currency: normalizeCurrency(String(data.currency), `${param}[currency]`),
+    lookup_key: null,
+    metadata: {},
+    nickname: null,
+    product,
+    recurring: null,
+    tax_behavior:
+      taxBehavior === "exclusive" || taxBehavior === "inclusive" ? taxBehavior : "unspecified",
+    unit_amount_decimal: hasDecimal
+      ? parseUnitAmountDecimal(String(data.unit_amount_decimal), `${param}[unit_amount_decimal]`)
+      : String(intOf(data.unit_amount) ?? 0),
+  }
+}
+
+/**
+ * Store `add_invoice_items` as pending invoice items of the subscription (Stripe creates real
+ * `ii_` objects): the next invoice the subscription produces bills them, claiming them. A negative
+ * item is not discountable unless asked, as Stripe defaults.
+ */
+export const addSubscriptionInvoiceItems = (
+  scope: RequestScope,
+  subscription: { id: string; customer: string },
+  entries: readonly AddInvoiceItem[],
+): InvoiceItemRecord[] => {
+  const now = customerNow(scope, subscription.customer)
+  return entries.map((entry) => {
+    if (entry.inline) scope.account.prices.insert(entry.price.id, entry.price)
+    const unit = Math.round(Number(entry.price.unit_amount_decimal))
+    const amount = Math.round(Number(entry.price.unit_amount_decimal) * entry.quantity)
+    const product = scope.account.products.get(entry.price.product)
+    const id = scope.ids.next("ii_", 24)
+    const item: InvoiceItemRecord = {
+      id,
+      amount,
+      created: seconds(scope.now),
+      currency: entry.price.currency,
+      customer: subscription.customer,
+      date: now,
+      description: product?.name ?? null,
+      discountable: entry.discountable ?? amount >= 0,
+      invoice: null,
+      metadata: entry.metadata,
+      period: { start: now, end: now },
+      price: entry.price.id,
+      proration: false,
+      quantity: entry.quantity,
+      unit_amount: unit,
+      subscription: subscription.id,
+    }
+    scope.account.invoiceItems.insert(id, item)
+    scope.emit("invoiceitem.created", renderInvoiceItem(item))
+    return item
+  })
+}
+
+/** An invoice line billing a pending invoice item. */
+const invoiceItemLine = (
+  scope: RequestScope,
+  item: InvoiceItemRecord,
+  subscription: string,
+): InvoiceLineRecord => ({
+  id: scope.ids.next("il_", 24),
+  amount: item.amount,
+  currency: item.currency,
+  description: item.description,
+  discount_amounts: [],
+  invoice_item: item.id,
+  metadata: item.metadata,
+  period: item.period,
+  price: item.price,
+  quantity: item.quantity,
+  proration: item.proration,
+  subtotal: item.amount,
+  type: "invoiceitem",
+  subscription,
+  // Proration lines keep sharing the subscription's discounts, as they always have here.
+  ...(item.proration ? {} : { discountable: item.discountable }),
+})
+
+/** A subscription's pending invoice items: its prorations and its `add_invoice_items`. */
+const pendingItems = (
+  scope: RequestScope,
+  subscription: SubscriptionRecord,
+  which: "all" | "added" = "all",
+) =>
+  scope.account.invoiceItems
+    .list({
+      order: "oldest",
+      where: (item) =>
+        item.customer === subscription.customer &&
+        item.invoice === null &&
+        (item.subscription === subscription.id || (which === "all" && item.proration)),
+    })
+    .map((entry) => entry.value)
+
 // --- subscriptions ------------------------------------------------------------------------------
 
 const ACTIVE_STATES = ["active", "trialing", "past_due", "unpaid"]
@@ -783,7 +1078,8 @@ export type CreateSubscriptionInput = {
   billingCycleAnchor?: number | undefined
   prorationBehavior?: string | null
   discounts?: DiscountRequest[]
-  addInvoiceItems?: Array<{ price: string; quantity: number }>
+  /** Validated by `parseAddInvoiceItems`: billed once, on the first invoice. */
+  addInvoiceItems?: readonly AddInvoiceItem[]
   paymentSettings?: RecordValue | null
   collectionMethod?: "charge_automatically" | "send_invoice"
   daysUntilDue?: number | null
@@ -837,9 +1133,24 @@ export const assertCompatiblePrices = (prices: readonly PriceRecord[], param = "
  * (`allow_incomplete`) charges the default payment method and returns `incomplete` on a decline.
  */
 export const createSubscription = (
-  scope: RequestScope,
+  outer: RequestScope,
   input: CreateSubscriptionInput,
 ): { subscription: SubscriptionRecord; invoice: InvoiceRecord } => {
+  // Collecting the first invoice can activate the subscription (`customer.subscription.updated`)
+  // before it is reported created; those updates are held and sent after
+  // `customer.subscription.created`, which shows the subscription as it was before them.
+  const held: Array<{ object: RecordValue; previous: RecordValue | undefined }> = []
+  let holding: string | null = null
+  const scope: RequestScope = {
+    ...outer,
+    emit: (type, object, previous) => {
+      if (type === "customer.subscription.updated" && holding !== null && object.id === holding) {
+        held.push({ object, previous })
+        return ""
+      }
+      return outer.emit(type, object, previous)
+    },
+  }
   const priced = input.items.map((item, index) => {
     const price = requirePrice(scope, item.price, `items[${index}][price]`)
     if (price.recurring === null) throw invalidRequest(ONE_TIME_ONLY, `items[${index}][price]`)
@@ -878,6 +1189,7 @@ export const createSubscription = (
     }
   }
   const id = scope.ids.next("sub_", 24)
+  holding = id
   const itemIds: string[] = []
   for (const entry of priced) {
     const itemId = scope.ids.next("si_", 14)
@@ -952,13 +1264,8 @@ export const createSubscription = (
         : {}),
     }),
   )
-  for (const extra of input.addInvoiceItems ?? []) {
-    const price = requirePrice(scope, extra.price, "add_invoice_items[0][price]")
-    lines.push({
-      ...lineFromPrice(scope, price, extra.quantity, { start: now, end: now }),
-      type: "invoiceitem",
-    })
-  }
+  for (const item of addSubscriptionInvoiceItems(scope, subscription, input.addInvoiceItems ?? []))
+    lines.push(invoiceItemLine(scope, item, id))
   const withDiscounts: SubscriptionRecord = { ...subscription, discount_ids: discountIds }
   scope.account.subscriptions.update(id, withDiscounts)
   let invoice = createDraftInvoice(scope, {
@@ -973,6 +1280,8 @@ export const createSubscription = (
     defaultPaymentMethod: null,
     subscriptionMetadata: input.metadata,
   })
+  claimInvoiceItems(scope, invoice)
+  scope.account.subscriptions.update(id, { ...withDiscounts, latest_invoice: invoice.id })
   invoice = finalizeInvoice(scope, invoice)
   let status: SubscriptionRecord["status"] = trialing ? "trialing" : "incomplete"
   const behavior = input.paymentBehavior ?? "allow_incomplete"
@@ -1014,7 +1323,15 @@ export const createSubscription = (
   }
   scope.account.subscriptions.update(id, created)
   const final = scope.account.subscriptions.get(id) ?? created
-  scope.emit("customer.subscription.created", renderSubscription(final, scope.account))
+  const [firstUpdate] = held
+  outer.emit(
+    "customer.subscription.created",
+    firstUpdate === undefined
+      ? renderSubscription(final, scope.account)
+      : { ...firstUpdate.object, ...firstUpdate.previous },
+  )
+  for (const update of held)
+    outer.emit("customer.subscription.updated", update.object, update.previous)
   return { subscription: final, invoice }
 }
 
@@ -1063,30 +1380,8 @@ export const cycleLines = (
       subscriptionItem: item.id,
     }),
   )
-  const pending = scope.account.invoiceItems.list({
-    order: "oldest",
-    where: (item) =>
-      item.customer === subscription.customer && item.invoice === null && item.proration,
-  })
-  for (const entry of pending) {
-    const item = entry.value
-    lines.push({
-      id: scope.ids.next("il_", 24),
-      amount: item.amount,
-      currency: item.currency,
-      description: item.description,
-      discount_amounts: [],
-      invoice_item: item.id,
-      metadata: item.metadata,
-      period: item.period,
-      price: item.price,
-      quantity: item.quantity,
-      proration: true,
-      subtotal: item.amount,
-      type: "invoiceitem",
-      subscription: subscription.id,
-    })
-  }
+  for (const item of pendingItems(scope, subscription))
+    lines.push(invoiceItemLine(scope, item, subscription.id))
   return lines
 }
 
@@ -1324,31 +1619,38 @@ export const billProration = (
     failOnDecline?: boolean
   },
 ): InvoiceRecord | undefined => {
-  if (amount === 0 || behavior === "none") return undefined
+  // `always_invoice` also bills the subscription's pending `add_invoice_items` at once, even
+  // with nothing to prorate (best guess, not oracle-verified).
+  const added = behavior === "always_invoice" ? pendingItems(scope, subscription, "added") : []
+  if ((amount === 0 || behavior === "none") && added.length === 0) return undefined
   const now = customerNow(scope, subscription.customer)
   if (behavior === "always_invoice") {
     const firstItem = scope.account.subscriptionItems.get(subscription.item_ids[0] ?? "")
     const price = requirePrice(scope, firstItem?.price ?? "")
-    const line = {
-      ...lineFromPrice(scope, price, 1, options.period, {
-        subscription: subscription.id,
-        subscriptionItem: firstItem?.id ?? null,
-        amount,
-        description: options.description,
-      }),
-      proration: true,
-    }
-    const invoice = finalizeInvoice(
-      scope,
-      createDraftInvoice(scope, {
-        customer: subscription.customer,
-        subscription: subscription.id,
-        lines: [line],
-        billingReason: "subscription_update",
-        period: options.period,
-        subscriptionMetadata: subscription.metadata,
-      }),
-    )
+    const prorations =
+      amount === 0
+        ? []
+        : [
+            {
+              ...lineFromPrice(scope, price, 1, options.period, {
+                subscription: subscription.id,
+                subscriptionItem: firstItem?.id ?? null,
+                amount,
+                description: options.description,
+              }),
+              proration: true,
+            },
+          ]
+    const draft = createDraftInvoice(scope, {
+      customer: subscription.customer,
+      subscription: subscription.id,
+      lines: [...prorations, ...added.map((item) => invoiceItemLine(scope, item, subscription.id))],
+      billingReason: "subscription_update",
+      period: options.period,
+      subscriptionMetadata: subscription.metadata,
+    })
+    claimInvoiceItems(scope, draft)
+    const invoice = finalizeInvoice(scope, draft)
     creditNegativeInvoice(scope, invoice)
     let settled = invoice
     if (invoice.status === "open" && invoice.collection_method === "charge_automatically") {
@@ -1618,28 +1920,9 @@ const invoicePendingItems = (
   subscription: SubscriptionRecord,
   now: number,
 ) => {
-  const pending = scope.account.invoiceItems.list({
-    order: "oldest",
-    where: (item) =>
-      item.customer === subscription.customer && item.invoice === null && item.proration,
-  })
+  const pending = pendingItems(scope, subscription)
   if (pending.length === 0) return
-  const lines: InvoiceLineRecord[] = pending.map(({ value: item }) => ({
-    id: scope.ids.next("il_", 24),
-    amount: item.amount,
-    currency: item.currency,
-    description: item.description,
-    discount_amounts: [],
-    invoice_item: item.id,
-    metadata: item.metadata,
-    period: item.period,
-    price: item.price,
-    quantity: item.quantity,
-    proration: true,
-    subtotal: item.amount,
-    type: "invoiceitem",
-    subscription: subscription.id,
-  }))
+  const lines = pending.map((item) => invoiceItemLine(scope, item, subscription.id))
   const draft = createDraftInvoice(scope, {
     customer: subscription.customer,
     subscription: subscription.id,
@@ -1740,6 +2023,59 @@ export const upcomingInvoice = (
 
 // --- subscription schedules ---------------------------------------------------------------------
 
+/** A stored schedule phase's `discounts`: an existing discount by id, else a coupon or code. */
+export const phaseDiscountRequests = (phase: RecordValue): DiscountRequest[] =>
+  (Array.isArray(phase.discounts) ? phase.discounts : []).flatMap((value): DiscountRequest[] => {
+    const entry = recordOf(value)
+    if (entry === undefined) return []
+    if (typeof entry.discount === "string") return [{ discount: entry.discount }]
+    if (typeof entry.promotion_code === "string") return [{ promotion_code: entry.promotion_code }]
+    if (typeof entry.coupon === "string") return [{ coupon: entry.coupon }]
+    return []
+  })
+
+/** What a discount was made from, to tell whether a phase asks for the discounts already on. */
+const discountSourceKey = (scope: RequestScope, request: DiscountRequest | string): string => {
+  if (typeof request === "string") {
+    const record = scope.account.discounts.get(request)
+    return record?.promotion_code ? `promo:${record.promotion_code}` : `coupon:${record?.coupon}`
+  }
+  if (request.discount !== undefined) return discountSourceKey(scope, request.discount)
+  if (request.promotion_code !== undefined) return `promo:${request.promotion_code}`
+  return `coupon:${request.coupon}`
+}
+
+/**
+ * The subscription's discounts while `phase` is current: the phase's own (Stripe stores them per
+ * phase and applies the current one's). Unchanged sources keep their discount records.
+ */
+const phaseDiscountIds = (
+  scope: RequestScope,
+  subscription: SubscriptionRecord,
+  phase: RecordValue,
+): string[] => {
+  const requests = phaseDiscountRequests(phase)
+  const wanted = requests.map((request) => discountSourceKey(scope, request)).join("|")
+  const current = subscription.discount_ids.map((id) => discountSourceKey(scope, id)).join("|")
+  if (wanted === current) return subscription.discount_ids
+  try {
+    const ids = applyDiscountRequests(
+      scope,
+      requests,
+      { customer: subscription.customer, subscription: subscription.id },
+      subscription.discount_ids,
+      "phases",
+      false,
+    )
+    discountsReplaced(scope, subscription.discount_ids, ids)
+    return ids
+  } catch (error) {
+    // A coupon that lapsed since the phase was scheduled leaves the discounts as they are.
+    if (error instanceof StripeError) return subscription.discount_ids
+    throw error
+  }
+}
+
 /** Apply a schedule phase's items to its subscription (no proration, as our callers ask). */
 export const applyPhase = (
   scope: RequestScope,
@@ -1760,7 +2096,12 @@ export const applyPhase = (
     if (existing)
       scope.account.subscriptionItems.update(existing.id, { ...existing, price: priceId, quantity })
   })
-  const after = renderSubscription(subscription, scope.account)
+  const discounted = {
+    ...subscription,
+    discount_ids: phaseDiscountIds(scope, subscription, phase),
+  }
+  scope.account.subscriptions.update(subscription.id, discounted)
+  const after = renderSubscription(discounted, scope.account)
   const changed = changedFields(before, after)
   if (changed !== undefined) scope.emit("customer.subscription.updated", after, changed)
 }

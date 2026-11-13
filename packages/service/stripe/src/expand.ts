@@ -1,4 +1,5 @@
 import type { OpenAPIDocument, Operation } from "@crvouga/mockingbird-openapi"
+import { checkoutBreakdown } from "./checkout-sessions.js"
 import { StripeError } from "./errors.js"
 import { renderInvoicePayments } from "./invoice-payments.js"
 import {
@@ -404,7 +405,13 @@ const resolve = (account: AccountState, now: number, kind: string, id: string): 
     }
     case "dispute": {
       const record = account.disputes.get(id)
-      return record && renderDispute(record)
+      if (!record) return undefined
+      const lines: Record<string, unknown>[] = []
+      for (const line of record.balance_transactions ?? []) {
+        const entry = account.ledger.get(line)
+        if (entry) lines.push(renderBalanceTransaction(entry, now))
+      }
+      return renderDispute(record, lines)
     }
     case "balance_transaction": {
       const record = account.ledger.get(id)
@@ -483,6 +490,18 @@ const expandAt = (
   if ((node.object === "list" || node.object === "search_result") && head === "data") {
     node.data = expandAt(account, now, node.data, rest)
     return node
+  }
+  // `total_details.breakdown` is includable on a field that is not an object of its own.
+  if (
+    node.object === "checkout.session" &&
+    head === "total_details" &&
+    rest[0] === "breakdown" &&
+    typeof node.id === "string" &&
+    isRecord(node.total_details) &&
+    node.total_details.breakdown === undefined
+  ) {
+    const breakdown = checkoutBreakdown(account, node.id)
+    if (breakdown !== undefined) node.total_details = { ...node.total_details, breakdown }
   }
   let value: unknown = node[head]
   if (value === undefined) {
