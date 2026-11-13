@@ -115,6 +115,8 @@ The current emulator returns deterministic structured synthetic markers. It does
 
 Every event has `event_type`, `data`, `team_id`, `user_id`, and `client_user_id`. Lab order events include `labtest.order.created` and `labtest.order.updated`; appointment lifecycle changes emit `labtest.appointment.updated` with the appointment payload.
 
+`POST /__admin/webhooks/emit` sends the rest on demand: `labtest.appointment.created`, `provider.connection.created` / `.error`, and `daily.data.<resource>.created|updated` / `historical.data.<resource>.created` for the modelled wearables resources. Summary events carry the summary as `data`; timeseries events carry `{ data: [samples], source, source_id, user_id }`; historical events are data-less `{ user_id, start_date, end_date, provider, is_final }`. These payloads are a best guess from Junction's webhook docs and the `@tryvital/vital-node` types, not oracle-verified.
+
 Webhook delivery is at-least-once. Consumers must deduplicate and tolerate retries and out-of-order messages. A webhook is a notification that data changed; the API remains the source of truth.
 
 Junction's documented retry schedule is eight attempts: immediate, 5 seconds, 5 minutes, 30 minutes, 2 hours, 5 hours, 10 hours, and another 10 hours. A 2xx response within roughly 15 seconds acknowledges delivery; non-2xx responses, redirects, and timeouts fail the attempt.

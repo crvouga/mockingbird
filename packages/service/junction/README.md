@@ -4,10 +4,11 @@
 
 Stateful emulator of the [Junction (formerly Vital) API](https://docs.junction.com/): users
 (`/v2/user`), the lab-testing catalog, lab orders (create, cancel, simulate, results,
-requisitions), at-home phlebotomy and patient-service-center (PSC) scheduling, and the
-`labtest.order.*` / `labtest.appointment.updated` webhooks. All 40 operations in the vendored
-OpenAPI subset are served, and behaviour is checked by differential property tests against the
-Junction sandbox.
+requisitions), at-home phlebotomy and patient-service-center (PSC) scheduling, the
+`labtest.order.*` / `labtest.appointment.updated` webhooks, and a [wearables](#wearables) surface
+(Link tokens, providers, connections, daily summaries, grouped timeseries and their webhooks). All
+55 operations in the vendored OpenAPI subset are served; the lab-testing side is checked by
+differential property tests against the Junction sandbox.
 
 Use it to take Junction off your suite's critical path: no sandbox key, no shared 50-user sandbox
 cap (the emulator enforces no sandbox limit unless a test [asks for one](#sandbox-limits)), no
@@ -793,6 +794,64 @@ const accept = async (request: Request) => {
 console.log(typeof accept, junction.webhooks?.deliveries().length) // "function" 0
 ```
 
+## Wearables
+
+The device-data surface (#757) is a **best guess, not oracle-verified**: a sandbox user has no
+connected devices, so there is nothing to compare against. Shapes follow Junction's API reference
+and the `@tryvital/vital-node` types; every value is synthetic.
+
+- `POST /v2/link/token` → `{ link_token, link_web_url }` (`https://link.tryvital.io/?token=…&env=sandbox&region=us`).
+  There is no Link widget: connect a provider with the admin route below.
+- `GET /v2/providers` — a fixed catalog of nine providers (`oura`, `fitbit`, `garmin`, `whoop_v2`,
+  `withings`, `polar`, `freestyle_libre`, `dexcom_v3`, `apple_health_kit`), each with the resources
+  it reports.
+- `GET /v2/user/providers/{user_id}` → `{ providers: [...] }`; `POST /v2/user/refresh/{user_id}`
+  answers `<provider>/<summary resource>` strings (400 `user has no connected sources` with none);
+  `DELETE /v2/user/{user_id}/{provider}` → `{ success: true }` (404 when not connected — no 404 is
+  documented — and 422 for an unknown slug). `connected_sources` on the user follows.
+- `GET /v2/summary/{activity,sleep,sleep_cycle,body,meal}/{user_id}` and `/v2/summary/{sleep,body}/{user_id}/raw`
+  — one record per seeded day (three meals a day) inside `start_date`..`end_date`, filtered by `provider`.
+- `GET /v2/timeseries/{user_id}/{steps,distance,calories_active,body_weight,body_fat,heartrate,hrv,glucose}/grouped`
+  → `{ groups: { <provider>: [{ source, data }] }, next: null, next_cursor: null }`; one page, no
+  cursor. Another documented timeseries resource is an explicit `501` (the emulator does not
+  model it), never an empty answer.
+
+Readings derive from (user, provider, day), so identical setups read identical numbers.
+
+```bash
+# Connect Oura for a user with seven days of data ending today (the mock clock's day)
+curl -X POST localhost:8787/__admin/users/$USER_ID/connections \
+  -H 'content-type: application/json' -d '{"provider":"oura","days":7,"emitWebhooks":true}'
+```
+
+`POST /__admin/users/{id}/connections` takes `provider`, then `days` (default 7, `0` for none) or
+`start_date`/`end_date`, `status` (`connected` or `error`) and `emitWebhooks`; it replaces an
+existing connection to that provider. With `emitWebhooks` it publishes `provider.connection.created`
+and one `historical.data.<resource>.created` per resource. `GET /__admin/users/{id}/connections`
+lists them. In code: `api.connectProvider(userId, input, { now, emitWebhooks })`.
+
+### Emitting webhook events
+
+`POST /__admin/webhooks/emit` sends one event for a user, signed and delivered like any other (#758):
+
+| `event_type` | Needs | `data` |
+| --- | --- | --- |
+| `labtest.order.created` / `.updated` | `order_id` | the order |
+| `labtest.appointment.created` / `.updated` | `order_id` with a booked appointment | the appointment, as booking's own `labtest.appointment.updated` carries it |
+| `provider.connection.created` | `user_id`, `provider`* | `{ user_id, source, provider, external_user_id, resource_availability }` |
+| `provider.connection.error` | `user_id`, `provider`*, `error_type`? | `{ provider, user_id, message, error_type, error_details }`; marks the connection errored |
+| `daily.data.<r>.created` / `.updated` | `user_id`, `provider`*, `calendar_date`? | a summary (`activity`, `sleep`, `sleep_cycle`, `body`, one event per `meal`), or `{ data: [samples], source, source_id, user_id }` for `steps`, `distance`, `calories_active`, `weight`, `fat`, `heartrate`, `hrv`, `glucose` |
+| `historical.data.<r>.created` | `user_id`, `provider`* | `{ user_id, start_date, end_date, provider, is_final: true }` |
+
+\* optional when the user has exactly one connection that fits. The answer is `{ events: [...] }`.
+
+Junction does not document a payload for `labtest.appointment.created`; the emulator's is a best
+guess, and booking still publishes `labtest.appointment.updated` as before. A documented event the
+emulator does not model (`lab_report.parsing_job.*`, `provider.device.*`, `labtest.result.critical`,
+other `daily.data.*` resources) is refused with `501`. `lab_report.redraw_separate_pdf*` and
+`provider.wellness_visit` appear in neither Junction's event catalog nor the `@tryvital/vital-node`
+SDK, so there is no payload to model: they are refused with `400`.
+
 ## Verify
 
 `verify` is the fidelity guarantee: it runs the same requests against real Junction and the emulator
@@ -847,6 +906,9 @@ An emulator that is silent about its gaps is how a green suite starts lying. Spe
   - Phlebotomy availability breadth: the sandbox serves it only for `85004`; the emulator generates slots
     for any covered ZIP.
   - Webhook retry jitter across a snapshot restore (the jitter stream is not part of a snapshot).
+  - Wearable data beyond the [modelled resources](#wearables): workouts, devices, profile,
+    electrocardiogram, menstrual cycle and the other timeseries; timeseries pagination; the Link
+    widget and its OAuth redirects; real provider backfill timing.
   - Operations outside the vendored OpenAPI subset: they return 404 and are counted as
     `unmatched` in `/__admin/metrics`.
 
@@ -900,6 +962,9 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `FAULT_PRESETS` | Named Junction faults (`sandbox_user_quota`, `rate_limited`, `server_error`, `bad_gateway`, `unavailable`). |
 | `createWebhookDispatcher` | `(endpoint: WebhookEndpoint) => WebhookDispatcher` — signed delivery with retries, standalone. |
 | `signSvix` / `verifySvix` | Produce / check a standard Svix `svix-signature`. |
+| `WEARABLE_PROVIDERS` / `SUMMARY_RESOURCES` / `TIMESERIES_RESOURCES` | The modelled [wearables](#wearables) provider catalog, summary and timeseries resources. |
+| `WearableInputError` | Thrown by `JunctionAPI.connectProvider` for a bad connection input (unknown provider, bad dates). |
+| `EMITTABLE_EVENT_TYPES` / `EmitError` | Event types `JunctionAPI.emitWebhook` / `POST /__admin/webhooks/emit` sends, and its refusal (`status`: 400, 404, 409 or 501). |
 | `observationCacheKey` | `(url, method = "GET", body?) => string` — the `"<METHOD> <path>?<sorted query> <json>"` key corpora use. |
 | `prefetchCoverageObservations` | Parity helper: records coverage-ZIP reads from the sandbox into an observation cache before `seedFrom`. |
 | `reshapeCoverageGeoCommand` | Parity-walk hook that pins geo/availability parameters onto the coverage corpus. |
@@ -979,7 +1044,8 @@ type ResultFixture = { name; results?: unknown[]; missing_results?: unknown[] | 
 type FaultRule = { id; operationId?; method?; pathPrefix?; status; body?; headers?; count?; rate?; delayMs? }
 type JunctionWebhookOptions = { seed?: number; jitterRatio?: number /* 0..1, default 0.1 */; timeoutMs?: number }
 type JunctionWebhookEvent = {
-  event_type: "labtest.order.created" | "labtest.order.updated" | "labtest.appointment.updated"
+  event_type: JunctionWebhookEventType // labtest.order.*, labtest.appointment.*, provider.connection.*,
+                                       // daily.data.<r>.created|updated, historical.data.<r>.created
   data: Record<string, unknown>; team_id: string; user_id: string; client_user_id: string
 }
 type SealedCorpus = { version: 1 | 2; recordedAt; source; teamId?; fingerprint?; observations; catalog: { labTests; labs; expectedResults }; labAccounts }
