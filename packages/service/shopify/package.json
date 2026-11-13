@@ -1,0 +1,128 @@
+{
+  "name": "@crvouga/mockingbird-service-shopify",
+  "version": "0.0.0-development",
+  "description": "Stateful emulator of the Shopify Admin GraphQL API: orderCreate, draft orders, order fulfillment status and tracking, product variants, metafieldsSet, webhook subscriptions, HMAC-signed order and fulfillment webhooks, userErrors and THROTTLED responses.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md",
+    "DISCOVERY.md",
+    "SUPPORT.md",
+    "openapi.yaml"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/server.d.ts",
+      "default": "./dist/server.js"
+    }
+  },
+  "bin": {
+    "mockingbird-shopify": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/service/shopify"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/shopify#readme",
+  "keywords": [
+    "mockingbird",
+    "service",
+    "shopify",
+    "graphql",
+    "ecommerce"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "server": "node",
+      "cli": "node"
+    },
+    "layer": "service",
+    "category": "commerce",
+    "displayName": "Shopify",
+    "status": "wip",
+    "vendor": {
+      "website": "https://www.shopify.com",
+      "docs": "https://shopify.dev/docs/api/admin-graphql",
+      "description": "Commerce platform whose Admin API manages a store's orders, products and webhooks."
+    },
+    "parity": "Admin GraphQL orders, metafields, and webhook subscriptions",
+    "parityTier": "cold",
+    "playground": {
+      "headers": {
+        "x-shopify-access-token": "shpat_mockingbird_test"
+      },
+      "operation": "AdminGraphql"
+    },
+    "discovery": {
+      "guide": "DISCOVERY.md",
+      "behavior": "README.md",
+      "capabilities": "SUPPORT.md",
+      "contract": "openapi.yaml",
+      "types": "dist/index.d.ts",
+      "oracle": {
+        "kind": "Live vendor API or sandbox",
+        "command": "bun run parity:service -- shopify",
+        "note": "Run from a Mockingbird checkout; credentials come only from .env.local or GitHub Actions secrets. Missing credentials exit 2."
+      },
+      "introspection": [
+        "GET /__admin/health",
+        "GET /__admin",
+        "GET /__admin/controls",
+        "GET /__admin/state",
+        "GET /__admin/requests",
+        "GET /__admin/metrics",
+        "GET /__admin/faults/presets",
+        "GET /__admin/ui"
+      ],
+      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+    }
+  },
+  "scripts": {
+    "generate": "bun ../../openapi/codegen/dist/cli.js",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "parity": "bun scripts/parity.ts",
+    "portability": "bun ../../../scripts/portability.ts",
+    "pack:check": "bun ../../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "graphql": "16.11.0",
+    "hono": "4.13.11"
+  },
+  "devDependencies": {
+    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-credentials": "workspace:*",
+    "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@shopify/admin-api-client": "2.0.1"
+  }
+}

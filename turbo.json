@@ -113,6 +113,7 @@
         "PRISM_*",
         "RESEND_*",
         "RXVORTEX_*",
+        "SHOPIFY_*",
         "SLACK_*",
         "STRIPE_*",
         "TWILIO_*",

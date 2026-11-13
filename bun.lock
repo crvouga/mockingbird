@@ -994,6 +994,7 @@
         "@crvouga/mockingbird-service-scheduler": "workspace:*",
         "@crvouga/mockingbird-service-sentry": "workspace:*",
         "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-shopify": "workspace:*",
         "@crvouga/mockingbird-service-slack": "workspace:*",
         "@crvouga/mockingbird-service-sns": "workspace:*",
         "@crvouga/mockingbird-service-sqs": "workspace:*",
@@ -3038,6 +3039,34 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/service/shopify": {
+      "name": "@crvouga/mockingbird-service-shopify",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-shopify": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "graphql": "16.11.0",
+        "hono": "4.13.11",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "@shopify/admin-api-client": "2.0.1",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/slack": {
       "name": "@crvouga/mockingbird-service-slack",
       "version": "0.0.0-development",
@@ -3835,6 +3864,7 @@
         "@crvouga/mockingbird-service-scheduler": "workspace:*",
         "@crvouga/mockingbird-service-sentry": "workspace:*",
         "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-shopify": "workspace:*",
         "@crvouga/mockingbird-service-slack": "workspace:*",
         "@crvouga/mockingbird-service-sns": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
@@ -3858,6 +3888,7 @@
         "@crvouga/mockingbird-service-wholescripts": "workspace:*",
         "@crvouga/mockingbird-service-whoop": "workspace:*",
         "@crvouga/mockingbird-service-workos": "workspace:*",
+        "@crvouga/mockingbird-storybook": "workspace:*",
         "@playwright/test": "1.65.0",
         "@types/node": "22.20.1",
         "typescript": "5.9.3",
@@ -3966,6 +3997,7 @@
         "@crvouga/mockingbird-service-scheduler": "workspace:*",
         "@crvouga/mockingbird-service-sentry": "workspace:*",
         "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-shopify": "workspace:*",
         "@crvouga/mockingbird-service-slack": "workspace:*",
         "@crvouga/mockingbird-service-sns": "workspace:*",
         "@crvouga/mockingbird-service-sqs": "workspace:*",
@@ -4719,6 +4751,8 @@
 
     "@crvouga/mockingbird-service-ses": ["@crvouga/mockingbird-service-ses@workspace:packages/service/ses"],
 
+    "@crvouga/mockingbird-service-shopify": ["@crvouga/mockingbird-service-shopify@workspace:packages/service/shopify"],
+
     "@crvouga/mockingbird-service-slack": ["@crvouga/mockingbird-service-slack@workspace:packages/service/slack"],
 
     "@crvouga/mockingbird-service-sns": ["@crvouga/mockingbird-service-sns@workspace:packages/service/sns"],
@@ -5448,6 +5482,10 @@
     "@shikijs/types": ["@shikijs/types@4.4.3", "", { "dependencies": { "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.5" } }, "sha512-UEJxmRR++MAGR6hugn0vgVS2W/6lWAts84FFSrnlH9sP0LNol7E5+NQ792pH8liWUhyMyjhTgSUH3k7iD7tc5g=="],
 
     "@shikijs/vscode-textmate": ["@shikijs/vscode-textmate@10.0.2", "", {}, "sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg=="],
+
+    "@shopify/admin-api-client": ["@shopify/admin-api-client@2.0.1", "", { "dependencies": { "@shopify/graphql-client": "^2.0.1" } }, "sha512-s9Ysgq5we9QI5XYFkOxLX2Sj6F1I/S+f/PDC7WolaELzDhyjvFgR5d68JQDpgrGc8a8uvwzS/OuiXvybUU6sXw=="],
+
+    "@shopify/graphql-client": ["@shopify/graphql-client@2.0.1", "", {}, "sha512-rMWnql45haEQdVnz62azY6yKt67W2jNgyuYLb6cJc6GuQzEp3LNgIUuQRuroGrF0rklt/ZxqPWS2g013ci3lWQ=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.27.12", "", {}, "sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g=="],
 
@@ -7548,6 +7586,8 @@
     "@crvouga/mockingbird-service-postgres/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
     "@crvouga/mockingbird-service-postgres/fast-check": ["fast-check@4.10.2", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw=="],
+
+    "@crvouga/mockingbird-service-shopify/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
 
     "@crvouga/mockingbird-service-slack/@slack/web-api": ["@slack/web-api@7.9.3", "", { "dependencies": { "@slack/logger": "^4.0.0", "@slack/types": "^2.9.0", "@types/node": ">=18.0.0", "@types/retry": "0.12.0", "axios": "^1.8.3", "eventemitter3": "^5.0.1", "form-data": "^4.0.0", "is-electron": "2.2.2", "is-stream": "^2", "p-queue": "^6", "p-retry": "^4", "retry": "^0.13.1" } }, "sha512-xjnoldVJyoUe61Ltqjr2UVYBolcsTpp5ottqzSI3l41UCaJgHSHIOpGuYps+nhLFvDfGGpDGUeQ7BWiq3+ypqA=="],
 
