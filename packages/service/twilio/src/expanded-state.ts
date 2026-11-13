@@ -3,7 +3,9 @@ import type { MessageRecord, TwilioState } from "./state.js"
 
 export function syncToExpanded(state: TwilioState, expansion: ProviderExpansion): void {
   const messages = getTwilioStore(expansion.store).messages
-  for (const { value: message } of state.messages.list()) {
+  // Oldest first: the expansion lists by its own row id, newest (highest) first, so rows must
+  // be inserted in creation order for both surfaces to page in the same order (#762).
+  for (const { value: message } of state.messages.list({ order: "oldest" })) {
     const existing = messages.findOneBy("sid", message.sid)
     const value = {
       sid: message.sid,

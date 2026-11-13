@@ -13,7 +13,7 @@ import {
   SetQueueAttributesCommand,
   SQSClient,
 } from "@aws-sdk/client-sqs"
-import { createClock } from "@crvouga/mockingbird-service"
+import { awsMd5, createClock } from "@crvouga/mockingbird-service"
 import { createServer } from "./src/server.js"
 
 const clientFor = (endpoint: string) =>
@@ -277,6 +277,100 @@ describe("unknown X-Amz-Target actions", () => {
       })
       expect(String(answer.body.__type)).toContain("NonExistentQueue")
     } finally {
+      await server.close()
+    }
+  })
+})
+
+describe("dead-letter and deduplication message details", () => {
+  test("a message redriven to a DLQ carries DeadLetterQueueSourceArn from its source queue", async () => {
+    const server = await createServer()
+    const client = clientFor(server.url)
+    try {
+      const { QueueUrl: dlqUrl } = await client.send(new CreateQueueCommand({ QueueName: "dead" }))
+      const dlqArn = (
+        await client.send(
+          new GetQueueAttributesCommand({ QueueUrl: dlqUrl, AttributeNames: ["QueueArn"] }),
+        )
+      ).Attributes?.QueueArn
+      const { QueueUrl } = await client.send(
+        new CreateQueueCommand({
+          QueueName: "source",
+          Attributes: {
+            VisibilityTimeout: "0",
+            RedrivePolicy: JSON.stringify({ deadLetterTargetArn: dlqArn, maxReceiveCount: "1" }),
+          },
+        }),
+      )
+      const sourceArn = (
+        await client.send(new GetQueueAttributesCommand({ QueueUrl, AttributeNames: ["QueueArn"] }))
+      ).Attributes?.QueueArn
+      await client.send(new SendMessageCommand({ QueueUrl, MessageBody: "poison" }))
+      const first = await client.send(
+        new ReceiveMessageCommand({ QueueUrl, MessageSystemAttributeNames: ["All"] }),
+      )
+      // Still on its source queue: no dead-letter source yet.
+      expect(first.Messages?.[0]?.Attributes?.DeadLetterQueueSourceArn).toBeUndefined()
+      expect((await client.send(new ReceiveMessageCommand({ QueueUrl }))).Messages).toBeUndefined()
+      for (const request of [
+        { MessageSystemAttributeNames: ["All" as const] },
+        { AttributeNames: ["All" as const] },
+        { MessageSystemAttributeNames: ["DeadLetterQueueSourceArn" as const] },
+      ]) {
+        const moved = await client.send(
+          new ReceiveMessageCommand({ QueueUrl: dlqUrl, VisibilityTimeout: 0, ...request }),
+        )
+        expect(moved.Messages?.[0]?.Body).toBe("poison")
+        expect(moved.Messages?.[0]?.Attributes?.DeadLetterQueueSourceArn).toBe(sourceArn)
+      }
+      const named = await client.send(
+        new ReceiveMessageCommand({
+          QueueUrl: dlqUrl,
+          MessageSystemAttributeNames: ["SentTimestamp"],
+        }),
+      )
+      expect(Object.keys(named.Messages?.[0]?.Attributes ?? {})).toEqual(["SentTimestamp"])
+    } finally {
+      client.destroy()
+      await server.close()
+    }
+  })
+
+  test("a deduplicated FIFO send keeps the original MessageId but answers the MD5 of the body sent", async () => {
+    const server = await createServer()
+    const client = clientFor(server.url)
+    try {
+      const { QueueUrl } = await client.send(
+        new CreateQueueCommand({ QueueName: "events.fifo", Attributes: { FifoQueue: "true" } }),
+      )
+      const original = await client.send(
+        new SendMessageCommand({
+          QueueUrl,
+          MessageBody: "first body",
+          MessageGroupId: "g",
+          MessageDeduplicationId: "same",
+        }),
+      )
+      // The SDK checks MD5OfMessageBody against the body it sent and throws InvalidChecksumError
+      // on a mismatch, so this send only resolves when the emulator hashes the submitted body.
+      const duplicate = await client.send(
+        new SendMessageCommand({
+          QueueUrl,
+          MessageBody: "second body",
+          MessageGroupId: "g",
+          MessageDeduplicationId: "same",
+        }),
+      )
+      expect(duplicate.MessageId).toBe(original.MessageId)
+      expect(duplicate.SequenceNumber).toBe(original.SequenceNumber)
+      expect(duplicate.MD5OfMessageBody).toBe(awsMd5("second body"))
+      const received = await client.send(
+        new ReceiveMessageCommand({ QueueUrl, MaxNumberOfMessages: 10 }),
+      )
+      expect(received.Messages?.map((message) => message.Body)).toEqual(["first body"])
+      expect(received.Messages?.[0]?.MD5OfBody).toBe(awsMd5("first body"))
+    } finally {
+      client.destroy()
       await server.close()
     }
   })
