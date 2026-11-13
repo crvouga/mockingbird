@@ -39,6 +39,7 @@ import {
   type OutboxRecord,
   type PartRecord,
   type Settings,
+  type TagRecord,
 } from "./state.js"
 
 export type { FetchAPI } from "@crvouga/mockingbird-core"
@@ -49,13 +50,18 @@ export type { Query } from "./query.js"
 export { decodeCursor, encodeCursor, toHtml, toPlaintext } from "./query.js"
 export type {
   AdminRecord,
+  AppliedTag,
   AttachmentRecord,
   Author,
+  CallRecord,
   ContactRecord,
   ConversationRecord,
+  MacroRecord,
   OutboxRecord,
   PartRecord,
   Settings,
+  TagRecord,
+  TeamRecord,
 } from "./state.js"
 export { DEFAULT_ADMINS, DEFAULT_SETTINGS } from "./state.js"
 
@@ -68,6 +74,7 @@ export const INTERCOM_TOPICS = [
   "conversation.admin.opened",
   "conversation.admin.snoozed",
   "conversation.admin.assigned",
+  "conversation.admin.open.assigned",
   "conversation.admin.single.created",
   "conversation.user.created",
   "conversation.user.replied",
@@ -213,6 +220,54 @@ export class IntercomAPI implements FetchAPI {
           ),
         ),
       SearchConversations: (context) => this.searchConversations(context),
+      ListTags: () =>
+        jsonRes(200, {
+          type: "list",
+          data: this.state.tags.list({ order: "oldest" }).map((row) => row.value),
+        }),
+      CreateTag: (context) => this.createTag(context),
+      AttachTagToConversation: (context) => this.attachTag(context),
+      DetachTagFromConversation: (context) => this.detachTag(context),
+      ListTeams: () =>
+        jsonRes(200, {
+          type: "team.list",
+          teams: this.state.teams.list({ order: "oldest" }).map((row) => row.value),
+        }),
+      CreateMessage: (context) => this.createMessage(context),
+      ListMacros: (context) => {
+        const found = this.state.macros.list({ order: "oldest" }).map((row) => row.value)
+        const page = paginate(found, Object.fromEntries(context.url.searchParams), 50)
+        const { next } = page.pages
+        return jsonRes(200, {
+          type: "list",
+          data: page.items,
+          pages: {
+            type: "pages",
+            per_page: page.pages.per_page,
+            ...(next ? { next: { starting_after: next.starting_after } } : {}),
+          },
+        })
+      },
+      GetMacro: (context) => {
+        const macro = this.state.macros.get(context.params.id ?? "")
+        return macro ? jsonRes(200, macro) : this.error(404, "not_found", "Macro Not Found")
+      },
+      SearchCalls: (context) => {
+        const ids = new Set((this.json(context).conversation_ids as string[]).map(String))
+        return jsonRes(200, {
+          type: "list",
+          data: this.state.calls
+            .list({ order: "oldest" })
+            .map((row) => row.value)
+            .filter((call) => call.conversation_id !== null && ids.has(call.conversation_id)),
+        })
+      },
+      GetCallRecording: (context) => {
+        const call = this.state.calls.get(context.params.id ?? "")
+        if (!call) return this.error(404, "not_found", "Call Not Found")
+        if (!call.recording_url) return this.error(404, "not_found", "Recording Not Found")
+        return new Response(null, { status: 302, headers: { location: call.recording_url } })
+      },
       ListAdmins: () =>
         jsonRes(200, {
           type: "admin.list",
@@ -262,7 +317,7 @@ export class IntercomAPI implements FetchAPI {
           return this.error(401, "unauthorized", "Access Token Invalid")
         }
         const version = context.request.headers.get("intercom-version")
-        if (version !== null && !/^(\d+\.\d+|Unstable)$/.test(version.trim())) {
+        if (version !== null && !/^(\d+\.\d+|Unstable|Preview)$/.test(version.trim())) {
           return this.error(
             400,
             "intercom_version_invalid",
@@ -551,7 +606,13 @@ export class IntercomAPI implements FetchAPI {
       priority: "not_priority",
       admin_assignee_id: conversation.admin_assignee_id,
       team_assignee_id: null,
-      tags: { type: "tag.list", tags: [] },
+      tags: {
+        type: "tag.list",
+        tags: (conversation.tags ?? []).flatMap((applied) => {
+          const tag = this.state.tags.get(applied.id)
+          return tag ? [this.appliedTagBody(tag, applied.applied_at, applied.applied_by)] : []
+        }),
+      },
       conversation_rating: null,
       source: { ...conversation.source, body: render(conversation.source.body) },
       contacts: {
@@ -586,6 +647,81 @@ export class IntercomAPI implements FetchAPI {
           }
         : {}),
     }
+  }
+
+  // ─── Tags, messages ─────────────────────────────────────────────────────────────────────
+
+  private appliedTagBody(tag: TagRecord, appliedAt: number, adminId: string) {
+    return { ...tag, applied_at: appliedAt, applied_by: { type: "admin", id: adminId } }
+  }
+
+  private createTag(context: OperationContext): Response {
+    const name = String(this.json(context).name)
+    const existing = this.state.tags.list({ order: "oldest", where: (tag) => tag.name === name })
+    const found = existing.at(0)?.value
+    if (found) return jsonRes(200, found)
+    const tag: TagRecord = { type: "tag", id: this.state.nextTagId(), name }
+    this.state.tags.insert(tag.id, tag)
+    return jsonRes(200, tag)
+  }
+
+  private attachTag(context: OperationContext): Response | Promise<Response> {
+    return this.withConversation(context, (conversation) => {
+      const body = this.json(context)
+      const tag = this.state.tags.get(String(body.id))
+      if (!tag) return this.error(404, "not_found", "Tag Not Found")
+      const admin = this.adminAuthor(body.admin_id)
+      const now = this.seconds()
+      const applied = (conversation.tags ?? []).filter((each) => each.id !== tag.id)
+      this.state.conversations.update(conversation.id, {
+        ...conversation,
+        tags: [...applied, { id: tag.id, applied_at: now, applied_by: admin.id }],
+      })
+      return jsonRes(200, this.appliedTagBody(tag, now, admin.id))
+    })
+  }
+
+  private detachTag(context: OperationContext): Response | Promise<Response> {
+    return this.withConversation(context, (conversation) => {
+      const body = this.json(context)
+      const tag = this.state.tags.get(context.params.tag_id ?? "")
+      if (!tag) return this.error(404, "not_found", "Tag Not Found")
+      const admin = this.adminAuthor(body.admin_id)
+      this.state.conversations.update(conversation.id, {
+        ...conversation,
+        tags: (conversation.tags ?? []).filter((each) => each.id !== tag.id),
+      })
+      return jsonRes(200, this.appliedTagBody(tag, this.seconds(), admin.id))
+    })
+  }
+
+  /** `POST /messages`: an admin-initiated in-app or email message to a contact. */
+  private createMessage(context: OperationContext): Response {
+    const body = this.json(context)
+    const from = body.from as { id: string }
+    const to = body.to as { id: string }
+    const subject = str(body.subject)
+    if (body.message_type === "email" && subject === undefined) {
+      return this.error(400, "parameter_not_found", "subject is required")
+    }
+    const conversation = this.startAdminConversation({
+      contactId: to.id,
+      adminId: from.id,
+      body: String(body.body),
+      ...(subject !== undefined ? { subject } : {}),
+    })
+    return annotateResponse(
+      jsonRes(200, {
+        type: "admin_message",
+        id: conversation.source.id,
+        created_at: conversation.created_at,
+        ...(body.message_type === "email" ? { subject } : {}),
+        body: conversation.source.body,
+        message_type: body.message_type,
+        conversation_id: conversation.id,
+      }),
+      { ids: { contactId: to.id, conversationId: conversation.id } },
+    )
   }
 
   private authorOf(contact: ContactRecord): Author {
@@ -998,6 +1134,9 @@ export class IntercomAPI implements FetchAPI {
       assignment: "conversation.admin.assigned",
     }[input.action] as IntercomTopic
     this.notify(topic, next, [part])
+    if (input.action === "assignment" && next.state === "open") {
+      this.notify("conversation.admin.open.assigned", next, [part])
+    }
     return next
   }
 
@@ -1006,6 +1145,7 @@ export class IntercomAPI implements FetchAPI {
     contactId: string
     adminId: string
     body: string
+    subject?: string
   }): ConversationRecord {
     const contact = this.state.contacts.get(input.contactId)
     if (!contact) throw new IntercomError(404, "not_found", "User Not Found")
@@ -1028,7 +1168,7 @@ export class IntercomAPI implements FetchAPI {
         type: "conversation",
         id: this.state.nextMessageId(),
         delivered_as: "admin_initiated",
-        subject: "",
+        subject: input.subject ?? "",
         body: toHtml(input.body),
         author,
         attachments: [],
