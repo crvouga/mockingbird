@@ -156,7 +156,17 @@ export class Statement {
         ctes: new Map(),
         outer: null,
       };
-      last = executeStatement(env, stmt);
+      if (this.database.transactions.inTransaction) {
+        last = executeStatement(env, stmt);
+        continue;
+      }
+      // outside a transaction block the statement is its own transaction: what
+      // `set_config(..., true)` set lasts until the statement ends
+      try {
+        last = executeStatement(env, stmt);
+      } finally {
+        if (!this.database.transactions.inTransaction) this.database.engineState.localSettings.clear();
+      }
     }
     return last!;
   }

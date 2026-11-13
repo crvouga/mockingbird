@@ -19,6 +19,7 @@ import {
   type TypeId,
   tidCompare,
 } from "./value.ts";
+import { vectorCompare, vectorKey } from "./vector.ts";
 
 /**
  * Total order for non-null datums of the same type. Text uses C-locale
@@ -113,6 +114,8 @@ export function datumCompare(t: TypeId, a: Datum, b: Datum, ctx: CompareCtx = DE
       }
       return ba.length - bb.length;
     }
+    case "vector":
+      return vectorCompare(a, b);
     case "interval":
       return intervalCmp(a as Interval, b as Interval);
     case "jsonb":
@@ -275,6 +278,8 @@ export function datumKey(t: TypeId, v: Datum): string {
     case "macaddr":
     case "tid":
       return `s${v}`;
+    case "vector":
+      return `s${vectorKey(v)}`;
     case "bytea":
       return `b${byteaText(v as Uint8Array)}`;
     case "interval": {
