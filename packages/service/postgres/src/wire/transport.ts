@@ -25,7 +25,7 @@ import { Cluster, type Session } from "./cluster.ts";
 import { Connection, type ServerFaults, type ServerLog } from "./connection.ts";
 import { Durability, type DurableOptions, type DurableStorage, openImage } from "./durable.ts";
 import { ScramCredentialStore } from "./scram.ts";
-import { type ClientStream, toSocket } from "./stream.ts";
+import { type ClientStream, socketAddresses, toSocket } from "./stream.ts";
 
 export type WireServerOptions = {
   /**
@@ -164,6 +164,8 @@ export const createWireServer = async (options: WireServerOptions = {}): Promise
 
   return {
     accept(stream) {
+      // read before the socket can close: a closed Node socket forgets its addresses
+      const addresses = socketAddresses(stream);
       const socket = toSocket(stream);
       if (closed) {
         socket.destroy();
@@ -179,6 +181,7 @@ export const createWireServer = async (options: WireServerOptions = {}): Promise
           : {}),
         ...(options.onLog ? { onLog: options.onLog } : {}),
         ...(options.logParams ? { logParams: true } : {}),
+        addresses,
       });
       connections.add(connection);
       return socket.closed.then(() => {

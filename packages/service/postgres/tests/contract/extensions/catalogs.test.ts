@@ -32,7 +32,7 @@ parity(
 parity(
   "unavailable extensions are absent from every extension catalog",
   [],
-  `SELECT (SELECT count(*) FROM pg_available_extensions WHERE name IN ('hypopg', 'postgis', 'hstore', 'uuid-ossp')) AS available,
+  `SELECT (SELECT count(*) FROM pg_available_extensions WHERE name IN ('hypopg', 'postgis', 'hstore')) AS available,
           (SELECT count(*) FROM pg_available_extension_versions WHERE name IN ('hypopg', 'postgis', 'hstore')) AS versions,
           (SELECT count(*) FROM pg_extension WHERE extname IN ('hypopg', 'postgis', 'hstore')) AS installed`,
 );

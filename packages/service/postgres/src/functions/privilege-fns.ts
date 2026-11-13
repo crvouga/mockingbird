@@ -8,6 +8,10 @@ import { type TypedValue, tv } from "../types/value.ts";
 import { quoteIdentifier } from "../sql/keywords.ts";
 import { deparseRuleExpr } from "../sql/ruleutils.ts";
 import { tableRewriteInfo } from "../executor/event-trigger-context.ts";
+import { databaseCatalogContext } from "../runtime/database-context.ts";
+import { builtinProcs, findFunctionByOid, typeIdOid } from "../schema/reg-types.ts";
+import { parseRelationInput } from "../types/regnamespace.ts";
+import { hasScalarFunction } from "./scalar.ts";
 import type { ScalarFn } from "./util.ts";
 
 /**
@@ -53,9 +57,10 @@ function privilegeLetters(
   arg: TypedValue,
   table: Record<string, string>,
 ): Array<{ letter: string; grant: boolean }> {
-  const text = (castTo(ctx, arg, "text", { explicit: true }).v as string).toLowerCase();
+  const text = castTo(ctx, arg, "text", { explicit: true }).v as string;
   return text.split(",").map((part) => {
-    const words = part.trim().replace(/\s+/g, " ");
+    // the error names the privilege as written
+    const words = part.trim().replace(/\s+/g, " ").toLowerCase();
     const grant = words.endsWith(" with grant option");
     const name = grant ? words.slice(0, -" with grant option".length) : words;
     const letter = table[name];
@@ -137,6 +142,124 @@ const hasSchemaPrivilege: ScalarFn = (ctx, args) => {
   );
 };
 
+const DATABASE_PRIVILEGES: Record<string, string> = { create: "C", connect: "c", temporary: "T", temp: "T" };
+
+/**
+ * has_database_privilege([user,] database, privilege). Database ACLs are not recorded (GRANT ON
+ * DATABASE is accepted only), so every database has PostgreSQL's default ACL: its owner (the
+ * bootstrap superuser) holds everything, PUBLIC holds CONNECT and TEMPORARY.
+ */
+const hasDatabasePrivilege: ScalarFn = (ctx, args) => {
+  if (args.some((a) => a.v === null)) return tv("bool", null);
+  const explicitUser = args.length === 3;
+  const role = explicitUser ? roleArg(ctx, args[0]!) : currentRole(ctx.state);
+  const rest = explicitUser ? args.slice(1) : args;
+  const context = databaseCatalogContext(ctx.state);
+  const target = rest[0]!;
+  if (target.t === "oid" || target.t === "int4" || target.t === "int8") {
+    // an oid no database has is NULL, as for the other has_*_privilege functions
+    const index = Number(target.v) - 5;
+    if (index < 0 || index >= context.names().length) return tv("bool", null);
+  } else {
+    const name = castTo(ctx, target, "text", { explicit: true }).v as string;
+    if (!context.names().includes(name)) {
+      throw pgError("undefined_object", `database "${name}" does not exist`, "3D000");
+    }
+  }
+  const privileges = privilegeLetters(ctx, rest[1]!, DATABASE_PRIVILEGES);
+  const owner = role.superuser || (role.oid !== 0 && hasPrivsOfRole(ctx.state.catalogExt, role, 10));
+  return tv(
+    "bool",
+    privileges.some((p) => owner || (!p.grant && (p.letter === "c" || p.letter === "T"))),
+  );
+};
+
+const FUNCTION_PRIVILEGES: Record<string, string> = { execute: "X" };
+
+/** Split regprocedure input `name(type, ...)` into the (possibly qualified) name and the argument types. */
+function splitSignature(text: string): { parts: string[]; args: string[] | null } {
+  const open = text.indexOf("(");
+  const namePart = (open === -1 ? text : text.slice(0, open)).trim();
+  const parsed = parseRelationInput(namePart);
+  const parts = "oid" in parsed ? [String(parsed.oid)] : parsed.parts;
+  if (open === -1) return { parts, args: null };
+  const close = text.lastIndexOf(")");
+  const inner = text.slice(open + 1, close === -1 ? undefined : close).trim();
+  if (inner === "") return { parts, args: [] };
+  const args: string[] = [];
+  let depth = 0;
+  let start = 0;
+  for (let i = 0; i < inner.length; i++) {
+    const c = inner[i];
+    if (c === "(") depth++;
+    else if (c === ")") depth--;
+    else if (c === "," && depth === 0) {
+      args.push(inner.slice(start, i).trim());
+      start = i + 1;
+    }
+  }
+  args.push(inner.slice(start).trim());
+  return { parts, args };
+}
+
+/**
+ * The function a has_function_privilege argument names: a user function's oid, `builtin` for one
+ * of the engine's own (PUBLIC may execute those), or null for an oid no function has.
+ */
+function functionArg(ctx: EngineCtx, arg: TypedValue): number | "builtin" | null {
+  if (arg.t === "oid" || arg.t === "int4" || arg.t === "int8" || arg.t === "regproc") {
+    const oid = arg.t === "regproc" ? (ctx.regOid("regproc", arg.v as string) ?? 0) : Number(arg.v);
+    if (findFunctionByOid(ctx.state, oid)) return oid;
+    return builtinProcs().some((p) => p.oid === oid) ? "builtin" : null;
+  }
+  const text = castTo(ctx, arg, "text", { explicit: true }).v as string;
+  const { parts, args } = splitSignature(text);
+  const wanted = args?.map((a) => castTo(ctx, tv("unknown", a), "regtype", { explicit: true }).v as string);
+  const wantedOids = wanted?.map((name) => ctx.regOid("regtype", name));
+  const user = ctx.state
+    .findFunctions(parts)
+    .find(
+      (f) =>
+        wantedOids === undefined ||
+        (f.argTypes.length === wantedOids.length &&
+          f.argTypes.every((t, i) => typeIdOid(ctx.state, t) === wantedOids[i])),
+    );
+  if (user) return user.oid;
+  const name = parts.at(-1)!;
+  if (
+    (parts.length === 1 || parts[0] === "pg_catalog") &&
+    (builtinProcs().some((p) => p.name === name) || hasScalarFunction(name))
+  ) {
+    return "builtin";
+  }
+  throw pgError("undefined_function", `function "${text}" does not exist`, "42883");
+}
+
+/**
+ * has_function_privilege([user,] function, privilege). A function nobody has granted or revoked
+ * anything on has PostgreSQL's default ACL: PUBLIC may EXECUTE it; afterwards the recorded grants decide.
+ */
+const hasFunctionPrivilege: ScalarFn = (ctx, args) => {
+  if (args.some((a) => a.v === null)) return tv("bool", null);
+  const explicitUser = args.length === 3;
+  const role = explicitUser ? roleArg(ctx, args[0]!) : currentRole(ctx.state);
+  const rest = explicitUser ? args.slice(1) : args;
+  const fn = functionArg(ctx, rest[0]!);
+  const privileges = privilegeLetters(ctx, rest[1]!, FUNCTION_PRIVILEGES);
+  if (fn === null) return tv("bool", null);
+  const owner = role.superuser || (role.oid !== 0 && hasPrivsOfRole(ctx.state.catalogExt, role, 10));
+  if (fn === "builtin")
+    return tv(
+      "bool",
+      privileges.some((p) => owner || !p.grant),
+    );
+  const recorded = ctx.state.catalogExt.grants.some((g) => g.objectOid === fn && g.column === undefined);
+  return tv(
+    "bool",
+    privileges.some((p) => (recorded ? holdsPrivilege(ctx.state, role, fn, 10, p.letter, p.grant) : owner || !p.grant)),
+  );
+};
+
 const pgHasRole: ScalarFn = (ctx, args) => {
   if (args.some((a) => a.v === null)) return tv("bool", null);
   const explicitUser = args.length === 3;
@@ -189,6 +312,8 @@ export function registerPrivilegeFunctions(m: Map<string, ScalarFn>): void {
   m.set("has_sequence_privilege", relationPrivilege(false));
   m.set("has_column_privilege", relationPrivilege(true));
   m.set("has_schema_privilege", hasSchemaPrivilege);
+  m.set("has_database_privilege", hasDatabasePrivilege);
+  m.set("has_function_privilege", hasFunctionPrivilege);
   m.set("pg_has_role", pgHasRole);
   m.set("pg_get_userbyid", pgGetUserById);
 }

@@ -112,8 +112,22 @@ export interface EventTriggerData {
   readonly owner: number;
 }
 
+/**
+ * `ALTER ROLE ... IN DATABASE d SET`, `ALTER ROLE ALL [IN DATABASE d] SET` and `ALTER DATABASE d SET`:
+ * a pg_db_role_setting row other than a role's own defaults (those are {@link RoleData.settings}).
+ */
+export interface DbRoleSetting {
+  /** the database name; null for every database */
+  readonly database: string | null;
+  /** the role oid; 0 for every role */
+  readonly role: number;
+  readonly settings: Readonly<Record<string, string>>;
+}
+
 export interface CatalogExt {
   readonly roles: ReadonlyMap<string, RoleData>;
+  /** pg_db_role_setting rows beyond each role's own defaults; absent when there are none */
+  readonly dbRoleSettings?: readonly DbRoleSetting[];
   readonly memberships: readonly RoleMembership[];
   readonly grants: readonly GrantData[];
   /** keyed `schema.name` */

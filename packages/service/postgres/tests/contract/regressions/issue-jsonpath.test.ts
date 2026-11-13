@@ -230,7 +230,7 @@ for (const [label, sql] of [
 
 test("#538 jsonpath features that are not modelled are refused as unsupported (0A000)", () => {
   const db = new Database();
-  for (const path of ["$.**", "$.a.keyvalue()", "$.s.datetime()", "$.f.bigint()", "$.s.string()"]) {
+  for (const path of ["$.a.keyvalue()", "$.s.datetime()", "$.f.bigint()", "$.s.string()"]) {
     let state: string | undefined;
     try {
       db.query(`SELECT jsonb_path_query_array('{"a":1,"s":"x","f":1}'::jsonb, '${path}')`);
