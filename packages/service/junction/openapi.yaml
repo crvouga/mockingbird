@@ -35,6 +35,13 @@ info:
     Test markers: https://docs.junction.com/api-reference/lab-testing/tests/get-markers-for-lab-test
     Order-set markers: https://docs.junction.com/api-reference/lab-testing/results/get-order-set-markers
     Latest user info: https://docs.junction.com/api-reference/user/get-latest-user-info
+    Link token: https://docs.junction.com/api-reference/link/generate-link-token
+    Providers: https://docs.junction.com/api-reference/providers
+    Connected providers: https://docs.junction.com/api-reference/user/get-users-connected-providers
+    Refresh user data: https://docs.junction.com/api-reference/user/refresh-user-data
+    Deregister provider: https://docs.junction.com/api-reference/user/deregister-a-provider
+    Sleep summary: https://docs.junction.com/api-reference/data/sleep/get-summary
+    Steps timeseries: https://docs.junction.com/api-reference/data/timeseries/steps
   version: "0.4.758"
   x-mockingbird-upstream:
     docs: https://docs.junction.com/
@@ -1887,6 +1894,607 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HTTPValidationError"
+  /v2/link/token:
+    post:
+      operationId: generate_link_token_v2_link_token_post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LinkTokenExchange"
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LinkTokenExchangeResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/providers:
+    get:
+      operationId: get_providers_v2_providers_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ClientFacingProviderDetailed"
+  /v2/user/providers/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_connected_providers_v2_user_providers__user_id__get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectedProvidersResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/user/refresh/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    post:
+      operationId: refresh_user_id_v2_user_refresh__user_id__post
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRefreshSuccessResponse"
+        "400":
+          description: The user has no connected sources
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserRefreshErrorResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/user/{user_id}/{provider}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+      - name: provider
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: deregister_provider_v2_user__user_id___provider__delete
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserSuccessResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/activity/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_activity_summary_v2_summary_activity__user_id__get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientActivityResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/sleep/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_sleep_summary_v2_summary_sleep__user_id__get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSleepResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/sleep/{user_id}/raw:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_sleep_raw_v2_summary_sleep__user_id__raw_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RawSleep"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/sleep_cycle/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_sleep_cycle_v2_summary_sleep_cycle__user_id__get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientSleepCycleResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/body/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_body_summary_v2_summary_body__user_id__get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientBodyResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/body/{user_id}/raw:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_body_raw_v2_summary_body__user_id__raw_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RawBody"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/summary/meal/{user_id}:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+    get:
+      operationId: get_meal_summary_v2_summary_meal__user_id__get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ClientFacingMealResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+  /v2/timeseries/{user_id}/{resource}/grouped:
+    parameters:
+      - name: user_id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+          x-mockingbird-resource-ref:
+            type: user
+            missing: "00000000-0000-4000-8000-000000000000"
+      - name: resource
+        in: path
+        required: true
+        schema:
+          type: string
+          examples: [steps, distance, calories_active, body_weight, body_fat, heartrate, hrv, glucose]
+    get:
+      operationId: get_grouped_timeseries_v2_timeseries__user_id___resource__grouped_get
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: false
+          reason: "wearable data is synthetic: a sandbox user has no connected devices, so the emulator serves days seeded with POST /__admin/users/{id}/connections. Shapes follow the API reference and @tryvital/vital-node; best guess, not oracle-verified (#757)."
+      parameters:
+        - name: start_date
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: end_date
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: provider
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: next_cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Successful Response
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GroupedTimeseriesResponse"
+        "404":
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "422":
+          description: Validation Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
+        "501":
+          description: Not modelled by the emulator
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HTTPValidationError"
 components:
   securitySchemes:
     apiKeyAuth:
@@ -1894,6 +2502,210 @@ components:
       in: header
       name: x-vital-api-key
   schemas:
+    LinkTokenExchange:
+      type: object
+      required: [user_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        provider:
+          type: ["string", "null"]
+        redirect_url:
+          type: ["string", "null"]
+        filter_on_providers:
+          type: ["array", "null"]
+          items:
+            type: string
+        on_error:
+          type: ["string", "null"]
+        on_close:
+          type: ["string", "null"]
+    LinkTokenExchangeResponse:
+      type: object
+      required: [link_token, link_web_url]
+      properties:
+        link_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+        link_web_url:
+          type: string
+    ClientFacingProviderDetailed:
+      type: object
+      required: [name, slug, description, logo]
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        description:
+          type: string
+        logo:
+          type: string
+        auth_type:
+          type: string
+          enum: [oauth, team_oauth, sdk, password, email, app, ""]
+        supported_resources:
+          type: array
+          items:
+            type: string
+    ConnectedProvidersResponse:
+      type: object
+      required: [providers]
+      properties:
+        providers:
+          type: array
+          items:
+            type: object
+            required: [name, slug, logo, created_on, status, resource_availability]
+            properties:
+              name:
+                type: string
+              slug:
+                type: string
+              logo:
+                type: string
+              created_on:
+                type: string
+                format: date-time
+              status:
+                type: string
+                enum: [connected, error]
+              external_user_id:
+                type: ["string", "null"]
+              error_details:
+                type: ["object", "null"]
+                additionalProperties: true
+              resource_availability:
+                type: object
+                additionalProperties:
+                  type: object
+                  required: [status]
+                  properties:
+                    status:
+                      type: string
+                      enum: [available, unavailable]
+                    scope_requirements:
+                      type: ["object", "null"]
+                      additionalProperties: true
+    UserRefreshSuccessResponse:
+      type: object
+      required: [success, user_id, refreshed_sources, in_progress_sources, failed_sources]
+      properties:
+        success:
+          type: boolean
+        user_id:
+          type: string
+        refreshed_sources:
+          type: array
+          items:
+            type: string
+        in_progress_sources:
+          type: array
+          items:
+            type: string
+        failed_sources:
+          type: array
+          items:
+            type: string
+    UserRefreshErrorResponse:
+      type: object
+      required: [success, user_id, error]
+      properties:
+        success:
+          type: boolean
+        user_id:
+          type: string
+        error:
+          type: string
+        failed_sources:
+          type: array
+          items:
+            type: string
+    WearableSummary:
+      type: object
+      additionalProperties: true
+    ClientActivityResponse:
+      type: object
+      required: [activity]
+      properties:
+        activity:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    ClientSleepResponse:
+      type: object
+      required: [sleep]
+      properties:
+        sleep:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    RawSleep:
+      type: object
+      required: [sleep]
+      properties:
+        sleep:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    ClientSleepCycleResponse:
+      type: object
+      required: [sleep_cycle]
+      properties:
+        sleep_cycle:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    ClientBodyResponse:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    RawBody:
+      type: object
+      required: [body]
+      properties:
+        body:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    ClientFacingMealResponse:
+      type: object
+      required: [meals]
+      properties:
+        meals:
+          type: array
+          items:
+            $ref: "#/components/schemas/WearableSummary"
+    GroupedTimeseriesResponse:
+      type: object
+      required: [groups]
+      properties:
+        groups:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: object
+              required: [source, data]
+              properties:
+                source:
+                  type: object
+                  additionalProperties: true
+                data:
+                  type: array
+                  items:
+                    type: object
+                    additionalProperties: true
+        next:
+          type: ["string", "null"]
+        next_cursor:
+          type: ["string", "null"]
     UserCreateBody:
       type: object
       required: [client_user_id]
