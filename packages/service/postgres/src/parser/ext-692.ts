@@ -252,17 +252,32 @@ export function parseAlterRole(p: ParserApi): Statement {
       grantedBy: null,
     } satisfies GrantRoleStmt;
   }
-  if (p.eatKw("all")) {
-    // ALTER ROLE ALL [IN DATABASE d] SET / RESET: per-role defaults, not modelled beyond acceptance
-    while (!p.atStatementEnd()) p.next();
-    return { type: "role_utility", what: "ALTER DEFAULT PRIVILEGES", roles: [] } satisfies RoleUtilityStmt;
-  }
-  const name = roleSpec(p);
+  // ALTER ROLE ALL [IN DATABASE d] SET / RESET: a default for every role
+  const allRoles = p.eatKw("all");
+  const name = allRoles ? "all" : roleSpec(p);
+  let database: string | undefined;
   if (p.atKw("in") && p.atKw("database", 1)) {
     p.pos += 2;
-    p.ident(true);
+    database = p.ident(true);
   }
+  return parseAlterRoleAction(p, name, {
+    ...(allRoles ? { allRoles } : {}),
+    ...(database !== undefined ? { database } : {}),
+  });
+}
+
+/** `ALTER DATABASE d SET / RESET ...`: the database's defaults, as ALTER ROLE ALL IN DATABASE d sets them. */
+export function parseAlterDatabaseSet(p: ParserApi, database: string): AlterRoleStmt {
+  return parseAlterRoleAction(p, "all", { allRoles: true, database, tag: "ALTER DATABASE" });
+}
+
+function parseAlterRoleAction(
+  p: ParserApi,
+  name: string,
+  scope: Pick<AlterRoleStmt, "allRoles" | "database" | "tag">,
+): AlterRoleStmt {
   let action: AlterRoleStmt["action"];
+  if (scope.allRoles && !p.atKw("set") && !p.atKw("reset")) p.errorAt(p.peek(), "expected SET or RESET");
   if (p.eatKw("rename")) {
     p.expectKw("to");
     action = { kind: "rename", to: roleSpec(p) };
@@ -285,7 +300,7 @@ export function parseAlterRole(p: ParserApi): Statement {
   } else {
     action = { kind: "options", options: roleOptions(p, false) };
   }
-  return { type: "alter_role", name, action } satisfies AlterRoleStmt;
+  return { type: "alter_role", name, action, ...scope } satisfies AlterRoleStmt;
 }
 
 export function parseDropRole(p: ParserApi): DropRoleStmt {

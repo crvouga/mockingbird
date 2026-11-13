@@ -1,7 +1,13 @@
 import { Database } from "../api/database.ts";
 import type { Snapshot } from "../api/snapshot.ts";
 import { PostgresError } from "../errors/error.ts";
-import { type DatabaseCatalogContext, setDatabaseCatalogContext } from "../runtime/database-context.ts";
+import { type AdvisoryMode, advisoryKey, advisoryKeyText } from "../functions/advisory-fns.ts";
+import {
+  type AdvisoryLockEntry,
+  type DatabaseCatalogContext,
+  setDatabaseCatalogContext,
+} from "../runtime/database-context.ts";
+import type { AdvisoryLockKey } from "../storage/database-state.ts";
 import type { Durability } from "./durable.ts";
 
 /**
@@ -11,8 +17,9 @@ import type { Durability } from "./durable.ts";
  * - The **turn** serializes individual synchronous engine calls. Explicit transactions use
  *   per-session copy-on-write workspaces in the connection, so the turn is released after every
  *   statement and unrelated sessions keep progressing.
- * - **Advisory locks** per session, with waiters woken in order, and deadlock detection
- *   between a lock and the turn (`40P01`).
+ * - **Locks** (advisory and row locks) per session, in exclusive or share mode (share is
+ *   compatible with share), counted per session- and transaction-level hold, with waiters woken
+ *   when what blocked them is released, and deadlock detection between a lock and the turn (`40P01`).
  * - **LISTEN / NOTIFY** fan-out, delivered when a listening connection is idle.
  * - Which session's statement is executing, so the SQL functions registered on the engine
  *   (`pg_backend_pid`, `pg_advisory_lock`, `pg_notify`, …) know whom they serve.
@@ -20,8 +27,11 @@ import type { Durability } from "./durable.ts";
 export class Cluster {
   turnHolder: Session | null = null;
   private readonly turnQueue: Waiter[] = [];
-  readonly locks = new Map<string, { holder: Session; count: number; xact: boolean }>();
+  /** Every held lock by key: one hold per session and mode. */
+  readonly locks = new Map<string, LockHold[]>();
   private readonly lockQueues = new Map<string, Waiter[]>();
+  /** The mode of the lock request a session last found blocked (the one it then waits for). */
+  private readonly requestedMode = new WeakMap<Session, AdvisoryMode>();
   readonly listeners = new Map<string, Set<Session>>();
   readonly sessions = new Map<number, Session>();
   current: Session | null = null;
@@ -159,12 +169,15 @@ export class Cluster {
           applicationName: session.applicationName?.() ?? "",
           state: session.activityState?.() ?? "idle",
           waiting: session.waitingForLock !== null,
+          ...clientEnd(session),
         })),
       blockingPids: (pid) => {
-        const key = this.sessions.get(pid)?.waitingForLock;
-        const holder = key == null ? undefined : this.locks.get(key)?.holder;
-        return holder && holder.pid !== pid ? [holder.pid] : [];
+        const session = this.sessions.get(pid);
+        const key = session?.waitingForLock;
+        if (!session || key == null) return [];
+        return this.blockers(key, session).map((holder) => holder.pid);
       },
+      advisoryLocks: () => this.advisoryLocks(),
       signalBackend: (pid, signal) => {
         const target = this.sessions.get(pid);
         if (!target) return false;
@@ -197,7 +210,7 @@ export class Cluster {
     }
     // The holder is waiting for a lock this session holds: neither can proceed.
     const holder = this.turnHolder;
-    if (holder.waitingForLock !== null && this.locks.get(holder.waitingForLock)?.holder === session) {
+    if (holder.waitingForLock !== null && this.blockers(holder.waitingForLock, holder).includes(session)) {
       return Promise.reject(deadlock());
     }
     return new Promise<void>((resolve, reject) => {
@@ -218,22 +231,51 @@ export class Cluster {
     }
   }
 
-  /** Take `key` for `session` now, or report that another session holds it. */
-  tryLock(session: Session, key: string, xact: boolean): boolean {
-    const held = this.locks.get(key);
-    if (held && held.holder !== session) return false;
-    if (held) held.count++;
-    else this.locks.set(key, { holder: session, count: 1, xact });
+  /** The sessions holding `key` in a mode that conflicts with `session`'s request (share is compatible with share). */
+  blockers(
+    key: string,
+    session: Session,
+    mode: AdvisoryMode = this.requestedMode.get(session) ?? "exclusive",
+  ): Session[] {
+    const out: Session[] = [];
+    for (const hold of this.locks.get(key) ?? []) {
+      if (hold.session === session || (mode === "share" && hold.mode === "share")) continue;
+      if (!out.includes(hold.session)) out.push(hold.session);
+    }
+    return out;
+  }
+
+  /** Take `key` for `session` now, or report that another session holds it in a conflicting mode. */
+  tryLock(session: Session, key: string, xact: boolean, mode: AdvisoryMode = "exclusive"): boolean {
+    if (this.blockers(key, session, mode).length > 0) {
+      this.requestedMode.set(session, mode);
+      return false;
+    }
+    const holds = this.locks.get(key) ?? [];
+    let hold = holds.find((h) => h.session === session && h.mode === mode);
+    if (!hold) {
+      hold = { session, mode, count: 0, xactCount: 0 };
+      holds.push(hold);
+      this.locks.set(key, holds);
+    }
+    if (xact) hold.xactCount++;
+    else hold.count++;
     return true;
   }
 
   /** Wait until `key` is free for `session`; rejects with `40P01` when that can never happen. */
   waitLock(session: Session, key: string): Promise<void> {
-    const holder = this.locks.get(key)?.holder;
-    if (!holder) return Promise.resolve();
-    // The lock's holder waits for the turn this session holds inside its transaction block.
-    if (this.turnHolder === session && holder.waitingForTurn !== null) return Promise.reject(deadlock());
-    if (holder.waitingForLock !== null && this.locks.get(holder.waitingForLock)?.holder === session) {
+    const blockers = this.blockers(key, session);
+    if (blockers.length === 0) return Promise.resolve();
+    // A holder of the lock waits for the turn this session holds inside its transaction block.
+    if (this.turnHolder === session && blockers.some((holder) => holder.waitingForTurn !== null)) {
+      return Promise.reject(deadlock());
+    }
+    if (
+      blockers.some(
+        (holder) => holder.waitingForLock !== null && this.blockers(holder.waitingForLock, holder).includes(session),
+      )
+    ) {
       return Promise.reject(deadlock());
     }
     return new Promise<void>((resolve, reject) => {
@@ -245,27 +287,59 @@ export class Cluster {
     });
   }
 
-  unlock(session: Session, key: string): boolean {
-    const held = this.locks.get(key);
-    if (!held || held.holder !== session) return false;
-    held.count--;
-    if (held.count > 0) return true;
-    this.locks.delete(key);
-    const next = this.lockQueues.get(key)?.shift();
-    if (next) {
-      next.session.waitingForLock = null;
-      next.resolve();
-    }
+  /** Release one session-level hold of `key` in `mode`; false when `session` holds none. */
+  unlock(session: Session, key: string, mode: AdvisoryMode = "exclusive"): boolean {
+    const hold = this.locks.get(key)?.find((h) => h.session === session && h.mode === mode);
+    if (!hold || hold.count === 0) return false;
+    hold.count--;
+    this.settle(key);
     return true;
   }
 
   /** Release every lock `session` holds, or only its transaction-scoped ones. */
   unlockAll(session: Session, xactOnly = false): void {
-    for (const [key, held] of [...this.locks]) {
-      if (held.holder !== session || (xactOnly && !held.xact)) continue;
-      held.count = 1;
-      this.unlock(session, key);
+    for (const [key, holds] of [...this.locks]) {
+      let changed = false;
+      for (const hold of holds) {
+        if (hold.session !== session) continue;
+        if (hold.xactCount > 0 || (!xactOnly && hold.count > 0)) changed = true;
+        hold.xactCount = 0;
+        if (!xactOnly) hold.count = 0;
+      }
+      if (changed) this.settle(key);
     }
+  }
+
+  /** Drop holds that reached zero, and wake the waiters for `key` that no longer conflict. */
+  settle(key: string): void {
+    const holds = (this.locks.get(key) ?? []).filter((h) => h.count + h.xactCount > 0);
+    if (holds.length > 0) this.locks.set(key, holds);
+    else this.locks.delete(key);
+    const queue = this.lockQueues.get(key);
+    if (!queue) return;
+    const ready = queue.filter((waiter) => this.blockers(key, waiter.session).length === 0);
+    const waiting = queue.filter((waiter) => !ready.includes(waiter));
+    if (waiting.length > 0) this.lockQueues.set(key, waiting);
+    else this.lockQueues.delete(key);
+    for (const waiter of ready) {
+      waiter.session.waitingForLock = null;
+      waiter.resolve();
+    }
+  }
+
+  /** pg_locks: the advisory locks held, one row per session and mode, and the requests waiting. */
+  private advisoryLocks(): AdvisoryLockEntry[] {
+    const out: AdvisoryLockEntry[] = [];
+    const entry = (key: string, session: Session, mode: AdvisoryMode, granted: boolean) => {
+      const tag = parseAdvisoryKey(key);
+      if (tag) out.push({ pid: session.pid, databaseName: tag.databaseName, key: tag.key, mode, granted });
+    };
+    for (const [key, holds] of this.locks) for (const hold of holds) entry(key, hold.session, hold.mode, true);
+    for (const [key, queue] of this.lockQueues) {
+      for (const waiter of queue)
+        entry(key, waiter.session, this.requestedMode.get(waiter.session) ?? "exclusive", false);
+    }
+    return out;
   }
 
   /** Forget a session: its transaction, turn, locks, waits and subscriptions. */
@@ -308,6 +382,28 @@ export class Cluster {
 
 type Waiter = { session: Session; resolve: () => void; reject: (error: Error) => void };
 
+/** One session's hold of a lock in one mode: its session-level and transaction-level counts. */
+type LockHold = { session: Session; mode: AdvisoryMode; count: number; xactCount: number };
+
+/** Advisory lock keys are per database, like PostgreSQL's lock tag. */
+const advisoryLockKey = (databaseName: string, key: AdvisoryLockKey): string =>
+  `advisory:${JSON.stringify([databaseName, advisoryKeyText(key)])}`;
+
+const parseAdvisoryKey = (text: string): { databaseName: string; key: AdvisoryLockKey } | null => {
+  if (!text.startsWith("advisory:")) return null;
+  const [databaseName, tag] = JSON.parse(text.slice("advisory:".length)) as [string, string];
+  const [objsubid, classid, objid] = tag.split(":").map(Number) as [number, number, number];
+  return { databaseName, key: { classid, objid, objsubid: objsubid === 2 ? 2 : 1 } };
+};
+
+const clientEnd = (session: Session): { clientAddr?: string; clientPort?: number } => {
+  const addresses = session.socketAddresses?.();
+  return addresses ? { clientAddr: addresses.clientAddr, clientPort: addresses.clientPort } : {};
+};
+
+/** The two ends of a connection's TCP socket (inet_server_addr() and friends). */
+export type SocketAddresses = { serverAddr: string; serverPort: number; clientAddr: string; clientPort: number };
+
 const deadlock = () =>
   new PostgresError(
     "internal",
@@ -340,9 +436,9 @@ export interface Session {
   cancel?(): void;
   /** pg_terminate_backend: the connection ends with FATAL 57P01 */
   terminate?(): void;
+  /** Both ends of its TCP socket; null for a connection without one (web streams, like a Unix socket). */
+  socketAddresses?(): SocketAddresses | null;
 }
-
-const lockKey = (args: unknown[]): string => args.map((a) => String(a)).join(":");
 
 /**
  * The session-aware SQL functions, replacing the engine's single-session stubs. They live in
@@ -354,31 +450,82 @@ const registerSessionFunctions = (cluster: Cluster, db: Database): void => {
     return cluster.current;
   };
   db.registerFunction({ name: "pg_catalog.pg_backend_pid", args: [], returns: "int4", fn: () => me().pid });
+  // the host calling its own engine handle has no socket either
+  const address =
+    <K extends keyof SocketAddresses>(field: K) =>
+    () =>
+      cluster.current?.socketAddresses?.()?.[field] ?? null;
+  db.registerFunction({
+    name: "pg_catalog.inet_server_addr",
+    args: [],
+    returns: "inet",
+    strict: false,
+    fn: address("serverAddr"),
+  });
+  db.registerFunction({
+    name: "pg_catalog.inet_server_port",
+    args: [],
+    returns: "int4",
+    strict: false,
+    fn: address("serverPort"),
+  });
+  db.registerFunction({
+    name: "pg_catalog.inet_client_addr",
+    args: [],
+    returns: "inet",
+    strict: false,
+    fn: address("clientAddr"),
+  });
+  db.registerFunction({
+    name: "pg_catalog.inet_client_port",
+    args: [],
+    returns: "int4",
+    strict: false,
+    fn: address("clientPort"),
+  });
+  const keyOf = (args: unknown[]): string => advisoryLockKey(me().databaseName, advisoryKey(args)!);
   const lock =
-    (xact: boolean) =>
+    (mode: AdvisoryMode, xact: boolean) =>
     (...args: unknown[]) => {
-      const key = lockKey(args);
-      if (!cluster.tryLock(me(), key, xact)) throw new LockWait(key);
+      const key = keyOf(args);
+      if (!cluster.tryLock(me(), key, xact, mode)) throw new LockWait(key);
       return null;
     };
   const tryLock =
-    (xact: boolean) =>
+    (mode: AdvisoryMode, xact: boolean) =>
     (...args: unknown[]) =>
-      cluster.tryLock(me(), lockKey(args), xact);
-  const unlock = (...args: unknown[]) => cluster.unlock(me(), lockKey(args));
+      cluster.tryLock(me(), keyOf(args), xact, mode);
+  // PostgreSQL also warns "you don't own a lock of type ..." when this returns false
+  const unlock =
+    (mode: AdvisoryMode) =>
+    (...args: unknown[]) =>
+      cluster.unlock(me(), keyOf(args), mode);
   for (const args of [["int8"], ["int4", "int4"]]) {
-    db.registerFunction({ name: "pg_catalog.pg_advisory_lock", args, returns: "void", fn: lock(false) });
-    db.registerFunction({ name: "pg_catalog.pg_advisory_xact_lock", args, returns: "void", fn: lock(true) });
-    db.registerFunction({ name: "pg_catalog.pg_try_advisory_lock", args, returns: "bool", fn: tryLock(false) });
-    db.registerFunction({ name: "pg_catalog.pg_try_advisory_xact_lock", args, returns: "bool", fn: tryLock(true) });
-    db.registerFunction({ name: "pg_catalog.pg_advisory_unlock", args, returns: "bool", fn: unlock });
+    for (const [suffix, mode] of [
+      ["", "exclusive"],
+      ["_shared", "share"],
+    ] as const) {
+      const fn = (name: string, returns: string, impl: Parameters<Database["registerFunction"]>[0]["fn"]) =>
+        db.registerFunction({ name: `pg_catalog.${name}${suffix}`, args, returns, fn: impl });
+      fn("pg_advisory_lock", "void", lock(mode, false));
+      fn("pg_advisory_xact_lock", "void", lock(mode, true));
+      fn("pg_try_advisory_lock", "bool", tryLock(mode, false));
+      fn("pg_try_advisory_xact_lock", "bool", tryLock(mode, true));
+      fn("pg_advisory_unlock", "bool", unlock(mode));
+    }
   }
   db.registerFunction({
     name: "pg_catalog.pg_advisory_unlock_all",
     args: [],
     returns: "void",
     fn: () => {
-      cluster.unlockAll(me());
+      // session-level advisory locks only: row locks and transaction-level locks stay
+      const session = me();
+      for (const [key, holds] of [...cluster.locks]) {
+        if (!key.startsWith("advisory:")) continue;
+        for (const hold of holds) if (hold.session === session) hold.count = 0;
+        cluster.settle(key);
+      }
       return null;
     },
   });

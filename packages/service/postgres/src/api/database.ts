@@ -8,6 +8,7 @@ import {
   type Clock,
   type DatabaseOptions,
   DEFAULT_DATABASE_SEED,
+  delegatingClock,
   fixedClock,
   type Int8Mode,
   OsEntropy,
@@ -130,7 +131,7 @@ export class Database {
       this.now = options.now;
       this.engineState = options.state;
       this.engineState.prng = this.prng;
-      this.engineState.clock = () => this.now();
+      this.engineState.clock = delegatingClock(() => this.now);
       this.transactions = txManagerFor(this.engineState);
     } else {
       this.seed = options.seed ?? DEFAULT_DATABASE_SEED;
@@ -139,7 +140,10 @@ export class Database {
       this.int8Mode = options.int8 ?? "bigint";
       this.prng = this.randomMode === "os" ? new OsEntropy() : new Prng(this.seed);
       this.now = resolveClock(options.now);
-      this.engineState = new DatabaseState(this.prng, () => this.now());
+      this.engineState = new DatabaseState(
+        this.prng,
+        delegatingClock(() => this.now),
+      );
       this.transactions = txManagerFor(this.engineState);
     }
     this.state = this.engineState;

@@ -1,4 +1,5 @@
 import { isMultirangeType, multirangeRange, type PgMultirange } from "../types/multirange.ts";
+import { checkStatementTimeout } from "../runtime/statement-timeout.ts";
 import { ddlCommandsRelation, droppedObjectsRelation } from "../executor/event-trigger-context.ts";
 import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
@@ -98,6 +99,7 @@ SRFS.set("generate_series", (ctx, args, alias) => {
         const cur = BigInt(civilToDays(y, mo, d) + step.days * i) * USECS_PER_DAY + tod + step.micros * BigInt(i);
         if (step.months > 0 || step.days > 0 || step.micros > 0n ? cur > stop : cur < stop) break;
         rows.push([cur]);
+        checkStatementTimeout(ctx.state);
         i++;
         if (i > 10_000_000) throw pgError("program_limit_exceeded", "generate_series result set too large", "54000");
       }
@@ -106,9 +108,15 @@ SRFS.set("generate_series", (ctx, args, alias) => {
     const stepMicros = intervalTotalMicros(step);
     if (stepMicros === 0n) throw pgError("invalid_parameter_value", "step size cannot equal zero", "22023");
     if (stepMicros > 0n) {
-      for (let cur = start; cur <= stop; cur += stepMicros) rows.push([cur]);
+      for (let cur = start; cur <= stop; cur += stepMicros) {
+        rows.push([cur]);
+        checkStatementTimeout(ctx.state);
+      }
     } else {
-      for (let cur = start; cur >= stop; cur += stepMicros) rows.push([cur]);
+      for (let cur = start; cur >= stop; cur += stepMicros) {
+        rows.push([cur]);
+        checkStatementTimeout(ctx.state);
+      }
     }
     return { columns: [{ name: alias, type: t }], rows };
   }
@@ -125,6 +133,7 @@ SRFS.set("generate_series", (ctx, args, alias) => {
     const ascending = numericSign(step) > 0;
     while (ascending ? numericCmp(cur, stop) <= 0 : numericCmp(cur, stop) >= 0) {
       rows.push([cur]);
+      checkStatementTimeout(ctx.state);
       cur = numericAdd(cur, step);
       if (rows.length > 10_000_000)
         throw pgError("program_limit_exceeded", "generate_series result set too large", "54000");
@@ -141,12 +150,14 @@ SRFS.set("generate_series", (ctx, args, alias) => {
   if (step > 0n) {
     for (let cur = start; cur <= stop; cur += step) {
       rows.push([useBig ? cur : Number(cur)]);
+      checkStatementTimeout(ctx.state);
       if (rows.length > 10_000_000)
         throw pgError("program_limit_exceeded", "generate_series result set too large", "54000");
     }
   } else {
     for (let cur = start; cur >= stop; cur += step) {
       rows.push([useBig ? cur : Number(cur)]);
+      checkStatementTimeout(ctx.state);
       if (rows.length > 10_000_000)
         throw pgError("program_limit_exceeded", "generate_series result set too large", "54000");
     }
@@ -340,7 +351,7 @@ SRFS.set("jsonb_object_keys", jsonKeysSrf());
  * element, and everything else goes through the type's text input (a JSON string is its text,
  * a number or boolean its JSON text, so `1.5` into an `int` column is an input error).
  */
-function jsonToColumn(ctx: EngineCtx, value: JsonbValue, column: ColumnType): Datum {
+export function jsonToColumn(ctx: EngineCtx, value: JsonbValue, column: ColumnType): Datum {
   if (value.j === "null") return null;
   const { id } = column;
   if (id === "jsonb") return wrapJsonb(value);
