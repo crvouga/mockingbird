@@ -263,6 +263,18 @@ export class StripeAPI implements FetchAPI {
       namespace,
       now: this.now,
       notFound: (request) => this.errorResponse({ status: 404, message: unrecognizedUrl(request) }),
+      // Declared-but-unmodelled operations (SUPPORT.md) answer an explicit, deterministic error
+      // rather than Stripe's 404, so a caller can tell an emulator gap from a wrong URL.
+      unsupported: (request, operation) => {
+        const meta = operation.operation["x-mockingbird"] as { reason?: string } | undefined
+        const route = `${request.method} ${new URL(request.url).pathname}`
+        return this.errorResponse({
+          status: 400,
+          code: "mockingbird_unsupported",
+          noDocUrl: true,
+          message: `${route} (${operation.operationId}) is not supported by the Mockingbird Stripe emulator: ${meta?.reason ?? "not modelled"}. This is an emulator limitation, not a Stripe error.`,
+        })
+      },
       onError: (error) => {
         if (!(error instanceof StripeError)) throw error
         const response = this.errorResponse(error.init)
@@ -497,7 +509,7 @@ export class StripeAPI implements FetchAPI {
       response.status === 200 && paths.length > 0
         ? expandResponse(partition, Math.floor(this.now() / 1000), body, paths)
         : body
-    return new Response(JSON.stringify(shapeForEra(expanded, era)), {
+    return new Response(JSON.stringify(shapeForEra(expanded, era, requestInfo(request).version)), {
       status: response.status,
       headers: response.headers,
     })
@@ -576,7 +588,7 @@ export class StripeAPI implements FetchAPI {
           id: entry.value.id,
           type: entry.value.type,
           account: entry.value.account,
-          body: JSON.stringify(shapeForEra(JSON.parse(entry.value.body), eraOf(version))),
+          body: JSON.stringify(shapeForEra(JSON.parse(entry.value.body), eraOf(version), version)),
         }
       }),
     )

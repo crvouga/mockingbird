@@ -3,10 +3,10 @@ import {
   applyDiscountRequests,
   createDraftInvoice,
   finalizeInvoice,
+  markInvoiceUncollectible,
   parseDiscounts,
   payInvoice,
   recomputeInvoice,
-  upcomingInvoice,
   voidInvoice,
 } from "./billing.js"
 import { invalidRequest, parameterMissing, resourceMissing, StripeError } from "./errors.js"
@@ -21,12 +21,23 @@ import {
   type Services,
   stringOf,
 } from "./internal.js"
+import { parsePreviewRequest, previewInvoice, previewLines } from "./invoice-preview.js"
 import { matchesCreated, paginate } from "./list.js"
 import { bodyParams, queryParams } from "./params.js"
 import { renderDeletedInvoice, renderInvoice } from "./render.js"
 import type { InvoiceLineRecord, InvoiceRecord } from "./state.js"
 
 type RecordValue = Record<string, unknown>
+
+/** 2025-03-31.basil removed the upcoming endpoints in favour of POST /v1/invoices/create_preview. */
+const refuseRemovedUpcoming = (scope: RequestScope) => {
+  if (scope.era === "basil")
+    throw new StripeError({
+      status: 404,
+      message:
+        "This API method has been deprecated. Please use the Create Preview Invoice API instead: https://docs.stripe.com/api/invoices/create_preview.",
+    })
+}
 
 const NOT_DRAFT =
   "This invoice is not a draft; you can only update draft invoices' discounts and line items."
@@ -244,46 +255,39 @@ export const invoiceHandlers = (services: Services): Record<string, OperationHan
         url: `/v1/invoices/${invoice.id}/lines`,
       })
     },
+    PostInvoicesInvoiceMarkUncollectible: async (context) => {
+      const scope = requestScope(services, context)
+      bodyParams(context)
+      const current = requireInvoice(scope, context.params.invoice ?? "")
+      const marked = markInvoiceUncollectible(scope, current)
+      // Best guess, not oracle-verified: Stripe announces the status change as an update too.
+      scope.emit("invoice.updated", render(scope, marked), { status: current.status })
+      return jsonResponse(200, render(scope, marked))
+    },
+    PostInvoicesCreatePreview: async (context) => {
+      const scope = requestScope(services, context)
+      const request = parsePreviewRequest(bodyParams(context), "create_preview")
+      return jsonResponse(200, previewInvoice(scope, request))
+    },
     GetInvoicesUpcoming: async (context) => {
       const scope = requestScope(services, context)
-      // 2025-03-31.basil removed the endpoint in favour of POST /v1/invoices/create_preview.
-      if (scope.era === "basil")
-        throw new StripeError({
-          status: 404,
-          message:
-            "This API method has been deprecated. Please use the Create Preview Invoice API instead: https://docs.stripe.com/api/invoices/create_preview.",
-        })
-      const params = queryParams(context)
-      const subscriptionId = stringOf(params, "subscription")
-      const customerId = stringOf(params, "customer")
-      if (subscriptionId === null && customerId === null) throw parameterMissing("customer")
-      if (customerId !== null) {
-        const entry = scope.account.customers.get(customerId)
-        if (!entry || entry.kind === "deleted")
-          throw resourceMissing("customer", customerId, "customer")
-      }
-      const subscription =
-        subscriptionId !== null
-          ? requireSubscription(scope, subscriptionId, "subscription")
-          : scope.account.subscriptions
-              .list({ order: "oldest" })
-              .map((entry) => entry.value)
-              .find(
-                (record) =>
-                  record.customer === customerId &&
-                  ["active", "trialing", "past_due"].includes(record.status),
-              )
-      if (
-        subscription === undefined ||
-        ["canceled", "incomplete_expired"].includes(subscription.status) ||
-        subscription.cancel_at_period_end
+      refuseRemovedUpcoming(scope)
+      const request = parsePreviewRequest(queryParams(context), "upcoming")
+      return jsonResponse(200, previewInvoice(scope, request))
+    },
+    GetInvoicesUpcomingLines: async (context) => {
+      const scope = requestScope(services, context)
+      refuseRemovedUpcoming(scope)
+      const { limit, starting_after, ending_before, ...params } = queryParams(context)
+      const request = parsePreviewRequest(params, "upcoming")
+      return jsonResponse(
+        200,
+        previewLines(scope, request, {
+          limit: Math.min(100, Math.max(1, intOf(limit) ?? 10)),
+          startingAfter: typeof starting_after === "string" ? starting_after : null,
+          endingBefore: typeof ending_before === "string" ? ending_before : null,
+        }),
       )
-        throw new StripeError({
-          status: 404,
-          code: "invoice_upcoming_none",
-          message: `No upcoming invoices for customer: ${customerId ?? subscription?.customer ?? ""}`,
-        })
-      return jsonResponse(200, upcomingInvoice(scope, subscription))
     },
   }
 }

@@ -1,9 +1,16 @@
 import { opaqueToken } from "@crvouga/mockingbird-service"
 import { cardError, invalidRequest, resourceMissing, stateError } from "./errors.js"
 import { type RequestScope, requireLiveCustomer } from "./internal.js"
-import { renderCharge, renderDispute, renderPaymentIntent, renderPaymentMethod } from "./render.js"
+import {
+  renderBalanceTransaction,
+  renderCharge,
+  renderDispute,
+  renderPaymentIntent,
+  renderPaymentMethod,
+} from "./render.js"
 import {
   type ChargeRecord,
+  type DisputeRecord,
   type Metadata,
   type PaymentIntentRecord,
   type PaymentMethodRecord,
@@ -266,7 +273,65 @@ export const createCharge = (
   return record
 }
 
-/** Open a dispute on a charge (`POST /__admin/disputes`, or the `tok_createDispute` card). */
+/**
+ * When evidence is due: the end (23:59:59 UTC) of the 7th day after the dispute opened. Stripe
+ * documents a 7–21 day window set by the card network; this is a best guess, not oracle-verified.
+ */
+const DISPUTE_RESPONSE_DAYS = 7
+/** Stripe's US dispute fee (15.00), charged on the withdrawal; best guess for other currencies. */
+export const DISPUTE_FEE = 1_500
+
+const disputeDueBy = (created: number) =>
+  Math.floor(created / 86_400) * 86_400 + (DISPUTE_RESPONSE_DAYS + 1) * 86_400 - 1
+
+/**
+ * A dispute's ledger line: the withdrawal (`-amount`, plus the dispute fee) when a chargeback
+ * opens, or the reinstatement (`+amount`) when it is won. Both settle immediately.
+ */
+export const recordDisputeTransaction = (
+  scope: RequestScope,
+  dispute: DisputeRecord,
+  kind: "withdrawal" | "reinstatement",
+): string => {
+  const id = scope.ids.next("txn_", 24)
+  const created = seconds(scope.now)
+  const withdrawal = kind === "withdrawal"
+  const amount = withdrawal ? -dispute.amount : dispute.amount
+  const fee = withdrawal ? DISPUTE_FEE : 0
+  scope.account.ledger.insert(id, {
+    id,
+    amount,
+    available_on: created,
+    created,
+    currency: dispute.currency,
+    description: `${withdrawal ? "Chargeback withdrawal" : "Chargeback reversal"} for ${dispute.charge}`,
+    fee,
+    net: amount - fee,
+    reporting_category: withdrawal ? "dispute" : "dispute_reversal",
+    source: dispute.id,
+    status: "available",
+    type: "adjustment",
+    fee_description: "Dispute fee",
+  })
+  return id
+}
+
+/** A dispute as the API returns it, with its ledger lines embedded. */
+export const renderDisputeIn = (scope: RequestScope, dispute: DisputeRecord): RecordValue => {
+  const now = seconds(scope.now)
+  const lines: RecordValue[] = []
+  for (const id of dispute.balance_transactions ?? []) {
+    const line = scope.account.ledger.get(id)
+    if (line) lines.push(renderBalanceTransaction(line, now))
+  }
+  return renderDispute(dispute, lines)
+}
+
+/**
+ * Open a dispute on a charge (`POST /__admin/disputes`, or the `tok_createDispute` card). A
+ * chargeback withdraws the amount and the dispute fee (`charge.dispute.funds_withdrawn`); an
+ * inquiry (`warning_needs_response`) moves no money.
+ */
 export const openDispute = (
   scope: RequestScope,
   charge: ChargeRecord,
@@ -275,20 +340,35 @@ export const openDispute = (
   status = "needs_response",
 ) => {
   const id = scope.ids.next("dp_", 24)
-  const dispute = {
+  const created = seconds(scope.now)
+  const brand = charge.card?.brand
+  const dispute: DisputeRecord = {
     id,
     amount,
     charge: charge.id,
-    created: seconds(scope.now),
+    created,
     currency: charge.currency,
     metadata: {},
     payment_intent: charge.payment_intent,
     reason,
     status,
+    evidence: {},
+    evidence_details: {
+      due_by: disputeDueBy(created),
+      has_evidence: false,
+      past_due: false,
+      submission_count: 0,
+    },
+    balance_transactions: [],
+    card_brand: typeof brand === "string" ? brand : null,
   }
+  const withdraws = !status.startsWith("warning_")
+  if (withdraws)
+    dispute.balance_transactions = [recordDisputeTransaction(scope, dispute, "withdrawal")]
   scope.account.disputes.insert(id, dispute)
   scope.account.charges.update(charge.id, { ...charge, disputed: true, dispute: id })
-  scope.emit("charge.dispute.created", renderDispute(dispute))
+  scope.emit("charge.dispute.created", renderDisputeIn(scope, dispute))
+  if (withdraws) scope.emit("charge.dispute.funds_withdrawn", renderDisputeIn(scope, dispute))
   return dispute
 }
 
