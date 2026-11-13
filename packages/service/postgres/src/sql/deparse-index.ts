@@ -1,5 +1,6 @@
 import type { Expr } from "../ast/nodes.ts";
 import type { EngineCtx } from "../expressions/context.ts";
+import { pgvectorDefaultOpclass } from "../functions/pgvector.ts";
 import { indexMethod } from "../schema/index-catalog.ts";
 import type { IndexMeta, TableData } from "../storage/database-state.ts";
 import { isArrayType, isEnumType, type TypeId } from "../types/value.ts";
@@ -30,8 +31,9 @@ function keyText(scope: RuleScope, column: IndexColumn, pretty: boolean): string
 }
 
 /** The opclass PostgreSQL picks for a column type when none is named, which it does not print. */
-function defaultOpclass(type: TypeId | null): string | null {
+function defaultOpclass(type: TypeId | null, method: string): string | null {
   if (type === null) return null;
+  if (type === "vector") return pgvectorDefaultOpclass(method);
   if (isArrayType(type)) return "array_ops";
   if (isEnumType(type)) return "enum_ops";
   return type === "varchar" ? "text_ops" : `${type}_ops`;
@@ -50,7 +52,7 @@ function keyDefinition(scope: RuleScope, index: IndexMeta, column: IndexColumn, 
     out += ` COLLATE ${quoteIdentifier(key.collation)}`;
   }
   const opclass = column.opclass;
-  if (opclass && opclass[opclass.length - 1] !== defaultOpclass(columnType(scope.table, column))) {
+  if (opclass && opclass[opclass.length - 1] !== defaultOpclass(columnType(scope.table, column), indexMethod(index))) {
     out += ` ${quoteIdentifier(opclass[opclass.length - 1]!)}`;
   }
   // only an ordered access method has a sort direction to report

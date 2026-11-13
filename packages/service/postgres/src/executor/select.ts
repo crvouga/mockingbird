@@ -20,8 +20,10 @@ import { pgError } from "../errors/error.ts";
 import type { EvalScope } from "../expressions/eval.ts";
 import { checkBoolExprType, evalAsPredicate, evalExpr } from "../expressions/eval.ts";
 import { createAggregate, isAggregateName, isOrderedSetAggregate, unifyAggType } from "../functions/aggregates.ts";
+import { evalFuzzystrmatchFunction } from "../functions/fuzzystrmatch.ts";
 import { evalPgcryptoFunction } from "../functions/pgcrypto.ts";
 import { evalPgTrgmFunction } from "../functions/pgtrgm.ts";
+import { evalPgvectorFunction } from "../functions/pgvector.ts";
 import { getSrfFunctions, isSrfName, type SrfColumnDefs } from "../functions/srf.ts";
 import {
   conjunctions,
@@ -375,6 +377,8 @@ function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedVa
   }
   if (fn.language === "internal") {
     if (fn.rawBody === "pg_trgm") return evalPgTrgmFunction(env.ctx, fn, args);
+    if (fn.rawBody === "fuzzystrmatch") return evalFuzzystrmatchFunction(env.ctx, fn, args);
+    if (fn.rawBody === "vector") return evalPgvectorFunction(env.ctx, fn, args);
     return evalPgcryptoFunction(env.ctx, fn, args);
   }
   if (fn.language === "js") {
@@ -1409,6 +1413,43 @@ interface GroupExprDef {
   expr: Expr;
   /** resolved source column index for plain column references */
   colIdx: number | null;
+  /** a column functionally dependent on a grouped primary key, not itself a GROUP BY item */
+  dependent?: boolean;
+}
+
+/**
+ * Source columns functionally dependent on the GROUP BY: every column of a table whose whole
+ * primary key is grouped on in every grouping set. Only a base table's primary key counts, not a
+ * unique constraint, a view or a subquery, as in PostgreSQL.
+ */
+function primaryKeyDependentColumns(
+  env: ExecEnv,
+  from: readonly FromItem[],
+  columns: Relation["columns"],
+  sets: readonly Expr[][],
+): number[] {
+  const out: number[] = [];
+  const grouped = (idx: number) =>
+    sets.every((set) => set.some((e) => e.type === "colref" && resolveColIdx(columns, e.parts) === idx));
+  const visit = (item: FromItem): void => {
+    if (item.type === "from_join") {
+      visit(item.left);
+      visit(item.right);
+      return;
+    }
+    if (item.type !== "from_table" || item.colAliases?.length) return;
+    if (item.name.length === 1 && env.ctes.has(item.name[0]!)) return;
+    const pk = env.ctx.state.findTable(item.name)?.constraints.find((c) => c.kind === "primary_key");
+    if (!pk) return;
+    const alias = item.alias ?? item.name[item.name.length - 1]!;
+    const keyIdx = pk.columns.map((name) => columns.findIndex((c) => c.table === alias && c.name === name));
+    if (!keyIdx.every((idx) => idx !== -1 && grouped(idx))) return;
+    columns.forEach((c, idx) => {
+      if (c.table === alias && !c.system) out.push(idx);
+    });
+  };
+  for (const item of from) visit(item);
+  return out;
 }
 
 function resolveColIdx(columns: Relation["columns"], parts: string[]): number | null {
@@ -1617,7 +1658,7 @@ function validateGroupedTargets(
       if (t.expr.table) {
         const label = t.expr.table[t.expr.table.length - 1]!;
         for (const c of columns) {
-          if (c.table === label) {
+          if (c.table === label && !c.hidden) {
             const parts: string[] = c.table ? [c.table, c.name] : [c.name];
             validateGroupedExpr({ type: "colref", parts }, groupDefs, columns, false);
           }
@@ -2338,10 +2379,15 @@ export function executeCore(
       expr: d.expr,
       colIdx: d.expr.type === "colref" ? resolveColIdx(srcCols, d.expr.parts) : null,
     }));
+    for (const idx of primaryKeyDependentColumns(env, core.from, srcCols, sets)) {
+      if (groupDefs.some((d) => d.colIdx === idx)) continue;
+      const c = srcCols[idx]!;
+      groupDefs.push({ expr: { type: "colref", parts: [c.table!, c.name] }, colIdx: idx, dependent: true });
+    }
 
     ctxs = [];
     for (const set of sets) {
-      const activeSet = groupDefs.map((d) => set.some((e) => exprEq(d.expr, e)));
+      const activeSet = groupDefs.map((d) => d.dependent === true || set.some((e) => exprEq(d.expr, e)));
       // group rows by key over this set
       const groups = new Map<string, Datum[][]>();
       if (set.length === 0) {
@@ -2410,7 +2456,7 @@ export function executeCore(
           const g = e as Extract<Expr, { type: "grouping_func" }>;
           let mask = 0;
           for (const arg of g.args) {
-            const di = groupDefs.findIndex((d) => groupDefMatches(d, arg, srcCols));
+            const di = groupDefs.findIndex((d) => !d.dependent && groupDefMatches(d, arg, srcCols));
             if (di === -1) {
               throw pgError(
                 "grouping_error",

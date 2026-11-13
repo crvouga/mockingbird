@@ -180,8 +180,8 @@
     {
       "id": "extension-catalog-subset",
       "scope": "catalog",
-      "predicate": "pg_available_extensions, pg_available_extension_versions and pg_extension list only the extensions the engine can install (pgcrypto, pg_trgm) plus the built-in plpgsql; DROP EXTENSION plpgsql is refused with 0A000",
-      "specifiedBehavior": "A stock PostgreSQL server lists every contrib module it ships; here an extension that is not implemented is absent from the views (zero rows) and CREATE EXTENSION fails with 0A000, as it does on a server without that control file. The PGlite oracle is built with exactly the same three extensions, so the views are compared in full. plpgsql cannot be dropped because the language is part of the engine; PostgreSQL allows dropping and recreating it.",
+      "predicate": "pg_available_extensions, pg_available_extension_versions and pg_extension list only the extensions the engine can install (fuzzystrmatch, pgcrypto, pg_trgm, vector) plus the built-in plpgsql; DROP EXTENSION plpgsql is refused with 0A000",
+      "specifiedBehavior": "A stock PostgreSQL server lists every contrib module it ships; here an extension that is not implemented is absent from the views (zero rows) and CREATE EXTENSION fails with 0A000, as it does on a server without that control file. The PGlite oracle is built with exactly the same extensions, so the views are compared in full. plpgsql cannot be dropped because the language is part of the engine; PostgreSQL allows dropping and recreating it.",
       "pinnedBy": ["tests/contract/extensions/catalogs.test.ts"]
     },
     {

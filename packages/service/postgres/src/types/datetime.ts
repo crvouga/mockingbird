@@ -261,18 +261,19 @@ export function splitTs(micros: bigint): { days: number; tod: bigint } {
   return { days: Number(days), tod };
 }
 
-export function formatTimestamp(micros: bigint): string {
+/** `xsd`: the XML Schema form JSON uses (`T` between date and time, `+00:00` offsets). */
+export function formatTimestamp(micros: bigint, xsd = false): string {
   if (micros === TS_POS_INF) return "infinity";
   if (micros === TS_NEG_INF) return "-infinity";
   const { days, tod } = splitTs(micros);
   const { y, m, d } = daysToCivil(days);
   const datePart = y <= 0 ? `${pad4(1 - y)}-${pad2(m)}-${pad2(d)}` : `${pad4(y)}-${pad2(m)}-${pad2(d)}`;
   const bc = y <= 0 ? " BC" : "";
-  return `${datePart} ${formatTimeOfDay(tod)}${bc}`;
+  return `${datePart}${xsd ? "T" : " "}${formatTimeOfDay(tod)}${bc}`;
 }
 
 /** Format a UTC timestamptz in a fixed zone offset (seconds east of UTC). */
-export function formatTimestampTz(micros: bigint, offsetSec: number): string {
+export function formatTimestampTz(micros: bigint, offsetSec: number, xsd = false): string {
   if (micros === TS_POS_INF) return "infinity";
   if (micros === TS_NEG_INF) return "-infinity";
   const local = micros + BigInt(offsetSec) * USECS_PER_SEC;
@@ -283,11 +284,11 @@ export function formatTimestampTz(micros: bigint, offsetSec: number): string {
   const om = Math.floor((abs % 3600) / 60);
   const os = abs % 60;
   let zone = `${offsetSec < 0 ? "-" : "+"}${pad2(oh)}`;
-  if (om !== 0 || os !== 0) zone += `:${pad2(om)}`;
+  if (xsd || om !== 0 || os !== 0) zone += `:${pad2(om)}`;
   if (os !== 0) zone += `:${pad2(os)}`;
   const datePart = y <= 0 ? `${pad4(1 - y)}-${pad2(m)}-${pad2(d)}` : `${pad4(y)}-${pad2(m)}-${pad2(d)}`;
   const bc = y <= 0 ? " BC" : "";
-  return `${datePart} ${formatTimeOfDay(tod)}${zone}${bc}`;
+  return `${datePart}${xsd ? "T" : " "}${formatTimeOfDay(tod)}${zone}${bc}`;
 }
 
 // --- interval ------------------------------------------------------------

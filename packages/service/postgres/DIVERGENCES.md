@@ -2,7 +2,7 @@
 
 > Auto-generated from [`compat/divergences.json`](compat/divergences.json). Do not edit by hand — run `bun run divergences`.
 
-Generated: 2026-11-12 · 21 entries
+Generated: 2026-11-13 · 21 entries
 
 | ID | Scope | Predicate | Pinned by |
 | --- | --- | --- | --- |
@@ -22,7 +22,7 @@ Generated: 2026-11-12 · 21 entries
 | `no-aborted-transaction-state` | sql | After a failed statement inside BEGIN, subsequent statements keep executing; PostgreSQL rejects them with 25P02 until ROLLBACK | `TXN-abort-01` |
 | `version-banner` | catalog | version() returns 'PostgreSQL 18.3 (postgres-mem) on TypeScript, in-memory engine' instead of the real build banner | `CAT-ver-01` |
 | `storage-persistence-catalog-only` | sql | Column storage modes (STORAGE / SET STORAGE, pg_attribute.attstorage) and relation persistence (UNLOGGED, SET LOGGED / UNLOGGED, pg_class.relpersistence) are catalog metadata only: there is no TOAST and no write-ahead log | `tests/contract/alter-table/set-storage.test.ts`, `tests/contract/alter-table/set-logged.test.ts` |
-| `extension-catalog-subset` | catalog | pg_available_extensions, pg_available_extension_versions and pg_extension list only the extensions the engine can install (pgcrypto, pg_trgm) plus the built-in plpgsql; DROP EXTENSION plpgsql is refused with 0A000 | `tests/contract/extensions/catalogs.test.ts` |
+| `extension-catalog-subset` | catalog | pg_available_extensions, pg_available_extension_versions and pg_extension list only the extensions the engine can install (fuzzystrmatch, pgcrypto, pg_trgm, vector) plus the built-in plpgsql; DROP EXTENSION plpgsql is refused with 0A000 | `tests/contract/extensions/catalogs.test.ts` |
 | `concurrent-index-build-fault` | engine | Database.fault({ concurrentIndexBuild: sqlstate }) and, on the wire server, server.fault({ failConcurrentIndexBuild: sqlstate }) make the next CREATE INDEX CONCURRENTLY or REINDEX ... CONCURRENTLY fail with that SQLSTATE and leave the index it was building in the catalog with indisvalid = false, indisready = false, indislive = true | `CAT-index-valid-07`, `tests/contract/catalogs/index-validity.test.ts`, `tests/wire/index-catalog.test.ts` |
 | `pg-stat-counters-immediate` | catalog | pg_stat_user_tables.n_live_tup is the exact current row count, current as soon as a statement finishes; seq_scan, seq_tup_read, idx_tup_fetch, n_tup_ins / n_tup_upd / n_tup_del, n_tup_hot_upd, n_dead_tup, n_mod_since_analyze and the vacuum columns are not tracked and read zero or NULL; idx_scan (also in pg_stat_user_indexes) counts only the unique-key equality lookups the engine performs for SELECT; VACUUM, including VACUUM ANALYZE, is a no-op and does not count | `CAT-table-stat-04`, `tests/contract/catalogs/table-statistics.test.ts` |
 | `pg-index-catalog-subset` | catalog | pg_index exposes indexrelid, indrelid, indnatts, indnkeyatts and the boolean flags; indexprs and indpred are the deparsed text that pg_get_expr() returns rather than pg_node_tree, and indkey, indcollation, indclass and indoption are absent. Index access methods other than btree are recorded and rendered (USING hash / gin / gist / spgist / brin) but every index is maintained the same way | `tests/contract/catalogs/index-definitions.test.ts` |
@@ -96,7 +96,7 @@ The SQL and catalog contract matches PostgreSQL, including its errors for invali
 
 ### `extension-catalog-subset`
 
-A stock PostgreSQL server lists every contrib module it ships; here an extension that is not implemented is absent from the views (zero rows) and CREATE EXTENSION fails with 0A000, as it does on a server without that control file. The PGlite oracle is built with exactly the same three extensions, so the views are compared in full. plpgsql cannot be dropped because the language is part of the engine; PostgreSQL allows dropping and recreating it.
+A stock PostgreSQL server lists every contrib module it ships; here an extension that is not implemented is absent from the views (zero rows) and CREATE EXTENSION fails with 0A000, as it does on a server without that control file. The PGlite oracle is built with exactly the same extensions, so the views are compared in full. plpgsql cannot be dropped because the language is part of the engine; PostgreSQL allows dropping and recreating it.
 
 ### `concurrent-index-build-fault`
 
