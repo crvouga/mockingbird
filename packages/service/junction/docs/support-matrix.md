@@ -38,8 +38,12 @@ Status meanings:
 | Webhook envelope | Modeled | `src/state.ts` | Standard top-level fields are preserved. |
 | Webhook persistence | Modeled | `src/state.ts` | Events are retained in SQLite order. |
 | Webhook retries and delivery attempts | Modeled | `src/state.ts` | Seeded schedule with optional jitter. |
-| Webhook signatures/Svix headers | Out of scope | — | Delivery transport is callback-based in this package. |
+| Webhook signatures/Svix headers | Modeled | `src/webhooks.ts` | Standard Svix signing when `webhooks` is configured. |
+| Webhook emit (`POST /__admin/webhooks/emit`) | Synthetic | `src/wearable-webhooks.ts` | `labtest.*`, `provider.connection.*`, `daily.data.*`, `historical.data.*` for modelled resources; best guess, not oracle-verified (#758). Undocumented `lab_report.redraw_separate_pdf*` / `provider.wellness_visit` answer 400. |
 | Rate limiting and 429/503 fault injection | Planned | — | Useful for parity but not part of the baseline emulator. |
-| Wearables, Sense, Connect, Management API, ETL | Out of scope | — | See the Junction documentation index for those products. |
+| Wearables: Link token, providers, connections, refresh, deregister | Synthetic | `src/wearables.ts` | Best guess, not oracle-verified (#757); connections come from `POST /__admin/users/{id}/connections`. |
+| Wearables: activity/sleep/sleep_cycle/body/meal summaries, sleep/body raw | Synthetic | `src/wearables.ts` | Deterministic per user, provider and day. |
+| Wearables: grouped timeseries (steps, distance, calories_active, body_weight, body_fat, heartrate, hrv, glucose) | Synthetic | `src/wearables.ts` | One page; other documented resources answer 501. |
+| Other wearables data (workouts, devices, profile, ECG, …), Sense, Connect, Management API, ETL | Out of scope | — | See the Junction documentation index for those products. |
 
 The matrix is deliberately explicit: unsupported behavior should fail clearly or remain absent rather than return a misleading successful response.

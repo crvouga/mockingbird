@@ -33,6 +33,8 @@ import {
 import { sandboxUserQuotaBody } from "./limits.js"
 import { quirksFrom } from "./quirks.js"
 import type { GeoMode, ResultFixture } from "./state.js"
+import { EmitError, type EmitInput } from "./wearable-webhooks.js"
+import { type ConnectInput, WearableInputError } from "./wearables.js"
 import type { WebhookDispatcher } from "./webhooks.js"
 
 /**
@@ -558,6 +560,46 @@ export const junctionAdminRoutes =
           if (mode !== undefined) api(request).geoMode = mode as GeoMode
           return jsonRes(200, { geo: api(request).geoMode, overlays: api(request).zipOverlays })
         })
+      },
+
+      "GET /users/:id/connections": (request) =>
+        jsonRes(200, { connections: api(request).connections(request.params.id as string) }),
+      "POST /users/:id/connections": (request) => {
+        if (!isRecord(request.body))
+          return adminError(
+            400,
+            'expected { "provider": "<slug>", "days"?: 7, "start_date"?, "end_date"?, "status"?, "emitWebhooks"? }',
+          )
+        const { emitWebhooks, ...input } = request.body
+        try {
+          const connection = api(request).connectProvider(
+            request.params.id as string,
+            input as ConnectInput,
+            {
+              now: runtime.namespaceClock(request.namespace).now,
+              emitWebhooks: emitWebhooks === true,
+            },
+          )
+          return connection
+            ? jsonRes(201, connection)
+            : adminError(404, `no user ${request.params.id} in ${request.namespace}`)
+        } catch (error) {
+          if (error instanceof WearableInputError) return adminError(400, error.message)
+          throw error
+        }
+      },
+      "POST /webhooks/emit": (request) => {
+        if (!isRecord(request.body))
+          return adminError(400, 'expected { "event_type": "...", "user_id"?, "order_id"?, ... }')
+        try {
+          const events = api(request).emitWebhook(request.body as EmitInput, {
+            now: runtime.namespaceClock(request.namespace).now,
+          })
+          return jsonRes(200, { events })
+        } catch (error) {
+          if (error instanceof EmitError) return adminError(error.status, error.message)
+          throw error
+        }
       },
 
       "GET /webhooks/events": (request) => jsonRes(200, { events: api(request).webhookEvents() }),
