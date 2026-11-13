@@ -1,6 +1,7 @@
 import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import type { TypedValue } from "../types/value.ts";
+import { getAdvisoryFunctions } from "./advisory-fns.ts";
 import { getArrayFunctions } from "./array-fns.ts";
 import { getCatalogFunctions } from "./catalog-fns.ts";
 import { getDatetimeFunctions } from "./datetime-registry.ts";
@@ -13,6 +14,7 @@ import { getMiscFunctions } from "./misc-fns.ts";
 import { getNetworkFunctions } from "./network-fns.ts";
 import { overloadMultirangeFunctions } from "./multirange-fns.ts";
 import { getRangeFunctions, overloadRangeAccessors } from "./range-fns.ts";
+import { getSessionFunctions } from "./session-fns.ts";
 import { getStringFunctions } from "./string-fns.ts";
 import { getTsearchFunctions } from "./tsearch-fns.ts";
 import type { ScalarFn } from "./util.ts";
@@ -34,6 +36,8 @@ export function getScalarFunctions(): Map<string, ScalarFn> {
     getArrayFunctions(),
     getTsearchFunctions(),
     getMiscFunctions(),
+    getAdvisoryFunctions(),
+    getSessionFunctions(),
     getHashFunctions(),
     getEnumFunctions(),
     getNetworkFunctions(),

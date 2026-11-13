@@ -255,8 +255,8 @@ copy-on-write workspaces that rebase each statement on the latest committed stat
 `READ COMMITTED` visibility without holding an engine-wide transaction turn. Successful writes
 are applied atomically at commit; rollback discards the workspace. Across connections the server
 adds row locks for `SELECT … FOR UPDATE` (including blocking, `NOWAIT`, `SKIP LOCKED`, and
-deadlock SQLSTATE `40P01`) and per-session advisory locks (`pg_advisory_lock` /
-`pg_try_advisory_lock` / `_xact_` / `_unlock`) with in-order waiters and deadlock detection
+deadlock SQLSTATE `40P01`) and per-database advisory locks (`pg_advisory_lock` /
+`pg_try_advisory_lock` / `_xact_` / `_shared` / `_unlock`, shown in `pg_locks`) with in-order waiters and deadlock detection
 (`40P01`), `LISTEN`/`NOTIFY` delivered to idle listeners, `CancelRequest` (a blocked statement ends
 `57014` and the session stays usable), and per-connection aborted-transaction state (a failed
 statement in a block is `25P02` until `ROLLBACK`, with `ReadyForQuery` reporting `I`/`T`/`E`).
@@ -546,7 +546,7 @@ The engine is deterministic by default:
 | Source | Default | Override / notes |
 | --- | --- | --- |
 | `random()` / `gen_random_uuid()` | Seeded xorshift64* (`seed: 1`) | `new Database({ seed })`, or `{ random: "os" }` for CSPRNG (not rolled back / not restored) |
-| `now()` / `current_timestamp` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) \| "system" })`; `"system"` is wall clock and is **not** frozen by `open()` |
+| `now()` / `current_timestamp` / friends | Fixed `2000-01-01T00:00:00.000Z` | `new Database({ now: Date \| (() => Date) \| "system" })`; `"system"` is wall clock and is **not** frozen by `open()`. With a clock other than a fixed `Date`, `now()` and friends are frozen at transaction start (statement start outside a block), `statement_timestamp()` at statement start, and `clock_timestamp()` / `timeofday()` read it on every call (microseconds with `"system"`). `pg_sleep*` block for real only with `"system"` |
 | `setseed()` / `random()` | Deterministic stream | Matches the engine PRNG, repeatable |
 | Table scans | Insertion order | Same order after snapshot/restore |
 | Snapshots | Sorted schema/rows + PRNG state + clock | Restored into PRNG and `now` |
@@ -571,7 +571,7 @@ Intentional differences: custom `PGMM` snapshots; seeded `random()` / fixed `now
 - The in-process API does **not** poison a transaction after a failed statement (no `25P02`); the wire-protocol server does, per connection
 - Triggers fire in **creation order** (PostgreSQL: name order); `UPDATE OF` column lists are ignored; `INSTEAD OF` is unsupported
 - `COMMENT ON` is stored for tables, views, materialized views, columns, indexes, sequences, functions, constraints, triggers, types and domains (`pg_description`, `obj_description`, `col_description`); comments on schemas and the remaining object kinds (extensions, roles, databases, ...) parse but are not stored
-- Every PostgreSQL 18 run-time parameter is listed in `pg_settings` and accepted by `SET` / `SHOW` / `current_setting` / `set_config` with PostgreSQL's checks (contexts, units, ranges, enum values); most are kept with no effect on the engine. Those with behaviour: `transaction_read_only` / `default_transaction_read_only` (`BEGIN READ ONLY` refuses writes with `25006`), and `session_replication_role = replica`, which stops triggers and foreign-key checks (every trigger is an origin trigger: there is no `ALTER TABLE ... ENABLE REPLICA / ALWAYS TRIGGER`)
+- Every PostgreSQL 18 run-time parameter is listed in `pg_settings` and accepted by `SET` / `SHOW` / `current_setting` / `set_config` with PostgreSQL's checks (contexts, units, ranges, enum values); most are kept with no effect on the engine. Those with behaviour: `statement_timeout` (a statement running longer is cancelled with `57014`, measured in real time whatever the clock, checked inside scans, per-row work, sorts and `pg_sleep`; in-process the statement is undone, over the wire the transaction is aborted — so a test that sets it is not byte-for-byte deterministic; `lock_timeout` and the idle / transaction timeouts stay without effect), `transaction_read_only` / `default_transaction_read_only` (`BEGIN READ ONLY` refuses writes with `25006`), and `session_replication_role = replica`, which stops triggers and foreign-key checks (every trigger is an origin trigger: there is no `ALTER TABLE ... ENABLE REPLICA / ALWAYS TRIGGER`)
 - `pg_proc` has no signatures for the engine's built-in functions (`pronargs` -1, `prorettype` 0), and `pg_get_functiondef` of a built-in is `0A000`; user functions are complete. `pg_trigger` lists user triggers only (foreign keys are not enforced by internal RI triggers)
 - `pg_get_viewdef` / `pg_views.definition` follow PostgreSQL's layout for targets, joins, `WHERE` / `GROUP BY` / `HAVING` / `ORDER BY` / `LIMIT`, `DISTINCT`, set operations and `CASE`; a sublink (`IN (SELECT ...)`) in a view prints in the engine's own form
 - `pg_current_wal_lsn()` returns `text` (there is no `pg_lsn` type); it moves forward with every writing transaction
@@ -591,7 +591,7 @@ Intentional differences: custom `PGMM` snapshots; seeded `random()` / fixed `now
 - System columns `xmin`, `xmax`, `ctid` and `tableoid` resolve by name. `xmax` is `0` for every scanned row and the writing transaction in the `RETURNING` of an `ON CONFLICT DO UPDATE` that updated (so `RETURNING (xmax = 0) AS inserted` works); `ctid` is `(0,n)` for the row's position, so unlike PostgreSQL it does not move on `UPDATE` and shifts after a `DELETE`
 - Declarative partitioning (`PARTITION BY RANGE / LIST / HASH`, `PARTITION OF`, `DEFAULT`, routing, row movement, `ATTACH` / `DETACH PARTITION`), composite types (`CREATE TYPE ... AS (...)`, field access, I/O, composite columns), row-level security (`CREATE POLICY`, `ENABLE / FORCE ROW LEVEL SECURITY`) under `SET ROLE`, roles (`CREATE / ALTER / DROP ROLE`, membership, `SET ROLE`, `pg_roles` / `pg_authid`), SQL cursors (`DECLARE` / `FETCH` / `MOVE` / `CLOSE`, `WITH HOLD`), `VIRTUAL` generated columns, `ON DELETE SET NULL (cols)`, `TABLESAMPLE`, `JSON_TABLE` and event triggers are supported (issue #692; details in [COMPATIBILITY.md](COMPATIBILITY.md))
 - `GRANT` / `REVOKE` of object privileges are recorded (`relacl`, `has_table_privilege`, `information_schema.table_privileges`) but **not enforced**: a role without `SELECT` can still read a table (a best guess at what tests need; PostgreSQL raises `42501`)
-- SQL/JSON path covers `lax` / `strict`, filters, variables, arithmetic and the `type` / `size` / `double` / `ceiling` / `floor` / `abs` methods; `.**`, `.keyvalue()`, datetime methods and the `.bigint()` / `.string()` conversions fail with `0A000`
+- SQL/JSON path covers `lax` / `strict`, filters, variables, arithmetic and the `type` / `size` / `double` / `ceiling` / `floor` / `abs` methods; `.**` (with level forms) works; `.keyvalue()`, datetime methods and the `.bigint()` / `.string()` conversions fail with `0A000`
 - `pg_depend`, `pg_locks` and the other catalogs tools probe list only what the engine models; `pg_stat_activity` / `pg_stat_database` list the engine's one backend, or every session of the wire server, whose `pg_blocking_pids`, `pg_cancel_backend` and `pg_terminate_backend` act on its sessions
 - `RowDescription` carries the type modifier (`varchar(32)`, `numeric(10,2)`) of table columns and typed casts; set operations, `VALUES` and `RETURNING` report `-1`
 

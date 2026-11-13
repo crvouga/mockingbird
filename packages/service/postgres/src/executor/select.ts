@@ -1,3 +1,4 @@
+import { checkStatementTimeout } from "../runtime/statement-timeout.ts";
 import { bindValueToTyped, datumToJs } from "../api/bind.ts";
 import type {
   ColumnRef,
@@ -60,7 +61,20 @@ import {
 } from "./relation.ts";
 import { materializeJsonTable } from "./json-table.ts";
 import { plainTableScan, scanTableRows } from "./scan.ts";
+import { executeSearchCycleCte } from "./search-cycle.ts";
 import { systemColumns, withSystemValues } from "./system-columns.ts";
+import {
+  activeStatementCache,
+  catalogCacheKey,
+  hashableEquality,
+  keyColumnRefs,
+  mayBeVolatile,
+  OuterAccessTracker,
+  noteUserFunctionCall,
+  plansFor,
+  type SemiJoinPlan,
+  type StatementCache,
+} from "./subquery-plan.ts";
 import { computeWindowValues } from "./window.ts";
 
 // ---------------------------------------------------------------------------
@@ -133,7 +147,7 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
       return p;
     },
     execScalarSubquery(q, width = 1) {
-      const rel = executeSelectStmt(childEnv(env, scope), q);
+      const rel = subqueryRelation(env, scope, q);
       if (width > 1) {
         checkRowSubqueryWidth(rel, width);
         if (rel.rows.length > 1) {
@@ -160,11 +174,10 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
       return tv(t === UNKNOWN ? "text" : t, rel.rows[0]?.[0] ?? null);
     },
     execExistsSubquery(q) {
-      const rel = executeSelectStmt(childEnv(env, scope), q);
-      return rel.rows.length > 0;
+      return subqueryExists(env, scope, q);
     },
     execColumnSubquery(q, width = 1) {
-      const rel = executeSelectStmt(childEnv(env, scope), q);
+      const rel = subqueryRelation(env, scope, q);
       if (width > 1) {
         checkRowSubqueryWidth(rel, width);
         return { type: "record", values: rel.rows.map((row) => rowSubqueryRecord(rel, row)) };
@@ -199,6 +212,315 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
     },
     callStatefulFunction: undefined,
   };
+}
+
+// ---------------------------------------------------------------------------
+// subquery memo, hash semi / anti join, catalog memo (#765)
+// ---------------------------------------------------------------------------
+
+/**
+ * The rows of a subquery for one outer row. Within one statement, a subquery that did not read the
+ * outer row (and calls nothing volatile) is run once and its relation reused for every later row.
+ */
+function subqueryRelation(env: ExecEnv, scope: RowScope | null, q: SelectStmt): Relation {
+  const cache = activeStatementCache(env.ctx.state, env.stmtCache);
+  if (!cache) return executeSelectStmt(childEnv(env, scope), q);
+  const plans = plansFor(cache, env.ctes);
+  const plan = plans.get(q);
+  if (plan) return plan.kind === "constant" ? plan.rel : executeSelectStmt(childEnv(env, scope), q);
+  if (mayBeVolatile(env.ctx.state, q)) {
+    plans.set(q, { kind: "uncached" });
+    return executeSelectStmt(childEnv(env, scope), q);
+  }
+  const tracker = new OuterAccessTracker(scope);
+  const rel = executeSelectStmt(childEnv(env, tracker), q);
+  plans.set(q, tracker.touched ? { kind: "correlated" } : { kind: "constant", rel });
+  return rel;
+}
+
+/** EXISTS (q) for one outer row: a hash probe when q is an equality-correlated semi join, else q's rows. */
+function subqueryExists(env: ExecEnv, scope: RowScope | null, q: SelectStmt): boolean {
+  const cache = activeStatementCache(env.ctx.state, env.stmtCache);
+  if (cache) {
+    const plans = plansFor(cache, env.ctes);
+    let plan = plans.get(q);
+    if (plan === undefined) {
+      if (mayBeVolatile(env.ctx.state, q)) {
+        plan = { kind: "uncached" };
+        plans.set(q, plan);
+      } else {
+        const semi = buildSemiJoin(env, scope, q);
+        if (semi) {
+          plan = semi;
+          plans.set(q, semi);
+        }
+      }
+    }
+    if (plan?.kind === "semi") {
+      const hit = probeSemiJoin(env, scope, q, plan);
+      if (hit !== undefined) return hit;
+      return executeSelectStmt(childEnv(env, scope), q).rows.length > 0;
+    }
+  }
+  return subqueryRelation(env, scope, q).rows.length > 0;
+}
+
+/** EXISTS only asks whether a row comes out: a target list that cannot fail or multiply rows is ignored. */
+function inertExistsTarget(e: Expr, resolvesInner: (parts: string[]) => boolean, rangeVars: Set<string>): boolean {
+  switch (e.type) {
+    case "number_lit":
+    case "string_lit":
+    case "null_lit":
+    case "bool_lit":
+      return true;
+    case "colref":
+      return resolvesInner(e.parts);
+    case "star":
+      return !e.table || rangeVars.has(e.table[e.table.length - 1]!);
+    default:
+      return false;
+  }
+}
+
+/**
+ * Decorrelate `EXISTS (SELECT … FROM f WHERE inner = outer AND rest)`: run the subquery once without
+ * the correlating equalities and keep the inner key of each row that passes `rest`. Only when nothing
+ * but those equalities reads the outer row (checked by running with an access tracker), and the shape
+ * cannot change the answer (no LIMIT / GROUP BY / aggregates / SRF targets). Any error → null, and
+ * the subquery runs per row as before, raising whatever it raises.
+ */
+function buildSemiJoin(env: ExecEnv, scope: RowScope | null, q: SelectStmt): SemiJoinPlan | null {
+  if (q.with || q.limit || q.offset || q.limitWithTies || q.orderBy.length > 0) return null;
+  const core = q.body;
+  if (core.type !== "select_core" || !core.where || core.groupBy || core.having || core.windows.length > 0) return null;
+  if (core.distinct?.on) return null;
+  const conj = conjunctions(core.where);
+  const eqs = conj.filter((c) => c.type === "binop" && c.op === "=");
+  if (eqs.length === 0) return null;
+  const tracker = new OuterAccessTracker(scope);
+  const benv = childEnv(env, tracker);
+  try {
+    const others = conj.filter((c) => !eqs.includes(c));
+    const joinHint = others.reduce<Expr | null>(
+      (acc, c) => (acc === null ? c : { type: "binop", op: "and", left: acc, right: c }),
+      null,
+    );
+    const source = buildFrom(benv, core.from, joinHint);
+    if (tracker.touched) return null;
+    const { columns, rows } = source.rel;
+    const rangeVars = source.rangeVars;
+    const probe = new RowScope(
+      columns,
+      columns.map(() => null),
+      null,
+      rangeVars,
+    );
+    const resolvesInner = (parts: string[]) => probe.lookup(parts) !== undefined;
+    if (!core.targets.every((t) => inertExistsTarget(t.expr, resolvesInner, rangeVars))) return null;
+    const innerExprs: Expr[] = [];
+    const outerExprs: Expr[] = [];
+    const correlating = new Set<Expr>();
+    for (const c of eqs) {
+      if (c.type !== "binop") continue;
+      const l = keyColumnRefs(c.left);
+      const r = keyColumnRefs(c.right);
+      if (!l || !r || l.length === 0 || r.length === 0) continue;
+      const lInner = l.map(resolvesInner);
+      const rInner = r.map(resolvesInner);
+      if (lInner.every(Boolean) && !rInner.some(Boolean)) {
+        innerExprs.push(c.left);
+        outerExprs.push(c.right);
+        correlating.add(c);
+      } else if (rInner.every(Boolean) && !lInner.some(Boolean)) {
+        innerExprs.push(c.right);
+        outerExprs.push(c.left);
+        correlating.add(c);
+      }
+    }
+    if (correlating.size === 0) return null;
+    const rest = conj.filter((c) => !correlating.has(c));
+    const keys: TypedValue[][] = [];
+    const innerTypes: Array<TypeId | null> = innerExprs.map(() => null);
+    for (const row of rows) {
+      const rowScope = new RowScope(columns, row, tracker, rangeVars);
+      if (!rest.every((c) => evalPredicate(benv, rowScope, c))) continue;
+      const tuple = innerExprs.map((e) => evalScalar(benv, rowScope, e));
+      for (let i = 0; i < tuple.length; i++) {
+        const seen = innerTypes[i];
+        if (seen === null) innerTypes[i] = tuple[i]!.t;
+        else if (seen !== tuple[i]!.t) return null;
+      }
+      if (tuple.some((v) => v.v === null)) continue;
+      keys.push(tuple);
+    }
+    if (tracker.touched) return null;
+    if (innerTypes.some((t) => t === UNKNOWN)) return null;
+    return {
+      kind: "semi",
+      outerExprs,
+      keys,
+      innerTypes: innerTypes.map((t) => t ?? UNKNOWN),
+      columns,
+      rangeVars,
+      sigs: new Map(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+function semiKey(env: ExecEnv, types: TypeId[], values: TypedValue[]): string {
+  let key = "";
+  for (let i = 0; i < values.length; i++) {
+    const t = types[i]!;
+    key += `${datumKey(t, castTo(env.ctx, values[i]!, t, {}).v)}\u0001`;
+  }
+  return key;
+}
+
+/** EXISTS for one outer row from a semi join plan; undefined = run the subquery for this row instead. */
+function probeSemiJoin(env: ExecEnv, scope: RowScope | null, q: SelectStmt, plan: SemiJoinPlan): boolean | undefined {
+  let values: TypedValue[];
+  try {
+    values = plan.outerExprs.map((e) => evalScalar(env, scope, e));
+  } catch {
+    return undefined;
+  }
+  const sig = values.map((v) => v.t).join("\u0001");
+  let hashed = plan.sigs.get(sig);
+  if (hashed === undefined) {
+    hashed = hashSemiKeys(env, scope, q, plan, values);
+    plan.sigs.set(sig, hashed);
+  }
+  if (hashed === null) return undefined;
+  if (plan.keys.length === 0 || values.some((v) => v.v === null)) return false;
+  try {
+    return hashed.set.has(semiKey(env, hashed.types, values));
+  } catch {
+    return undefined;
+  }
+}
+
+function hashSemiKeys(
+  env: ExecEnv,
+  scope: RowScope | null,
+  q: SelectStmt,
+  plan: SemiJoinPlan,
+  values: TypedValue[],
+): { types: TypeId[]; set: Set<string> } | null {
+  try {
+    // the plan-time WHERE check the subquery makes on every run, for these outer types
+    checkPredicateType(childEnv(env, scope), plan.columns, plan.rangeVars, (q.body as SelectCore).where!, "WHERE");
+    if (plan.keys.length === 0) return { types: [], set: new Set() };
+    const types: TypeId[] = [];
+    for (let i = 0; i < values.length; i++) {
+      const inner = plan.innerTypes[i]!;
+      const outer = values[i]!.t;
+      const unified = hashableEquality(inner, outer) ? unifyTypes(inner, outer) : null;
+      if (unified === null) return null;
+      types.push(unified);
+    }
+    const set = new Set<string>();
+    for (const k of plan.keys) set.add(semiKey(env, types, k));
+    return { types, set };
+  } catch {
+    return null;
+  }
+}
+
+/** A pg_catalog / information_schema relation, built once per statement for the role and search_path in effect. */
+function statementCatalogRelation(env: ExecEnv, schema: string, name: string): Relation | null {
+  const cache = activeStatementCache(env.ctx.state, env.stmtCache);
+  const key = cache ? catalogCacheKey(schema, name) : null;
+  if (cache && key !== null) {
+    const hit = cache.catalogs.get(key);
+    if (hit) return hit;
+  }
+  const rel = catalogRelation(env.ctx, schema, name);
+  if (rel && cache && key !== null) {
+    cache.catalogs.set(key, rel);
+    cache.catalogRows.add(rel.rows);
+  }
+  return rel;
+}
+
+/**
+ * Rows of a memoized catalog scan that can satisfy `WHERE … AND col = v AND …`, where `v` does not
+ * read the catalog row (a constant, parameter or outer column): a hash lookup on `col`, built once
+ * per statement. The caller still applies the whole WHERE to them. Null = scan every row.
+ */
+function catalogKeyCandidates(
+  env: ExecEnv,
+  where: Expr,
+  columns: Relation["columns"],
+  rangeVars: Set<string>,
+  rows: Datum[][],
+): Datum[][] | null {
+  const cache = activeStatementCache(env.ctx.state, env.stmtCache);
+  if (!cache?.catalogRows.has(rows)) return null;
+  const probe = new RowScope(
+    columns,
+    columns.map(() => null),
+    null,
+    rangeVars,
+  );
+  for (const c of conjunctions(where)) {
+    if (c.type !== "binop" || c.op !== "=") continue;
+    for (const [col, other] of [
+      [c.left, c.right],
+      [c.right, c.left],
+    ] as const) {
+      if (col.type !== "colref") continue;
+      const colIdx = resolveColIdx(columns, col.parts);
+      if (colIdx === null) continue;
+      try {
+        const refs = keyColumnRefs(other);
+        if (!refs || refs.some((parts) => probe.lookup(parts) !== undefined)) continue;
+        if (mayBeVolatile(env.ctx.state, other)) continue;
+        const colType = columns[colIdx]!.type;
+        let value = evalScalar(env, env.outer, other);
+        if (value.t === UNKNOWN) value = castTo(env.ctx, value, colType, {});
+        if (!hashableEquality(colType, value.t)) continue;
+        if (value.v === null) return [];
+        const type = unifyTypes(colType, value.t);
+        if (type === null) continue;
+        const index = catalogKeyIndex(env, cache, rows, colIdx, colType, type);
+        const positions = index.get(datumKey(type, castTo(env.ctx, value, type, {}).v)) ?? [];
+        return positions.map((p) => rows[p]!);
+      } catch {}
+    }
+  }
+  return null;
+}
+
+function catalogKeyIndex(
+  env: ExecEnv,
+  cache: StatementCache,
+  rows: Datum[][],
+  colIdx: number,
+  colType: TypeId,
+  type: TypeId,
+): Map<string, number[]> {
+  let byColumn = cache.keyIndexes.get(rows);
+  if (!byColumn) {
+    byColumn = new Map();
+    cache.keyIndexes.set(rows, byColumn);
+  }
+  const id = `${colIdx}:${type}`;
+  let index = byColumn.get(id);
+  if (!index) {
+    index = new Map();
+    for (let i = 0; i < rows.length; i++) {
+      const v = rows[i]![colIdx] ?? null;
+      if (v === null) continue;
+      const key = datumKey(type, castTo(env.ctx, tv(colType, v), type, {}).v);
+      const list = index.get(key);
+      if (list) list.push(i);
+      else index.set(key, [i]);
+    }
+    byColumn.set(id, index);
+  }
+  return index;
 }
 
 /** a row subquery (`(a, b) IN (SELECT x, y ...)`) must project exactly as many columns as the row has fields */
@@ -361,6 +683,7 @@ export function withFunctionSettings<T>(env: ExecEnv, fn: FunctionData, run: () 
 }
 
 export function callSqlFunctionScalar(env: ExecEnv, fn: FunctionData, args: TypedValue[]): TypedValue {
+  noteUserFunctionCall(env.stmtCache, fn.volatility);
   return atomicFunctionContext(() => withFunctionSettings(env, fn, () => callSqlFunctionScalarBody(env, fn, args)));
 }
 
@@ -401,6 +724,7 @@ function callSqlFunctionScalarBody(env: ExecEnv, fn: FunctionData, args: TypedVa
 }
 
 export function callSqlFunctionSet(env: ExecEnv, fn: FunctionData, args: TypedValue[]): Relation {
+  noteUserFunctionCall(env.stmtCache, fn.volatility);
   return atomicFunctionContext(() => withFunctionSettings(env, fn, () => callSqlFunctionSetBody(env, fn, args)));
 }
 
@@ -474,6 +798,7 @@ export function applyWith(env: ExecEnv, w: WithClause | null): ExecEnv {
       ctes,
       outer: env.outer,
       allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+      stmtCache: env.stmtCache,
     };
     let rel: Relation;
     if (
@@ -483,7 +808,15 @@ export function applyWith(env: ExecEnv, w: WithClause | null): ExecEnv {
       cte.query.body.op === "union" &&
       referencesRelation(cte.query.body.right, cte.name)
     ) {
-      rel = executeRecursiveCte(scopedEnv, cte, cte.query);
+      rel =
+        cte.search || cte.cycle
+          ? executeSearchCycleCte(scopedEnv, cte, cte.query, {
+              executeBody,
+              evalConst: (e, expr) => evalScalar(e, null, expr),
+            })
+          : executeRecursiveCte(scopedEnv, cte, cte.query);
+    } else if (cte.search || cte.cycle) {
+      throw pgError("syntax", "WITH query is not recursive", "42601");
     } else if (cte.query.type === "select") {
       rel = executeSelectStmt(scopedEnv, cte.query);
     } else {
@@ -502,6 +835,7 @@ export function applyWith(env: ExecEnv, w: WithClause | null): ExecEnv {
     ctes,
     outer: env.outer,
     allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+    stmtCache: env.stmtCache,
   };
 }
 
@@ -545,6 +879,7 @@ function executeRecursiveCte(env: ExecEnv, cte: CommonTableExpr, query: SelectSt
       ctes: iterCtes,
       outer: env.outer,
       allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+      stmtCache: env.stmtCache,
     };
     const step = executeBody(iterEnv, body.right);
     if (step.columns.length !== columns.length) {
@@ -631,7 +966,10 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
           rows: shapeOnly
             ? []
             : scanTableRows(env, table, label, item, () =>
-                table.serializationRows().map((row, i) => withSystemValues(table, row, i)),
+                table.serializationRows().map((row, i) => {
+                  checkStatementTimeout(state);
+                  return withSystemValues(table, row, i);
+                }),
               ),
         };
         return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
@@ -667,6 +1005,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
             ctes: new Map(),
             outer: null,
             allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+            stmtCache: env.stmtCache,
           };
           rel = executeSelectStmt(viewEnv, view.query);
           rel = {
@@ -682,7 +1021,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
       }
       const resolved = state.resolveRelationSchema(item.name);
       if (resolved) {
-        const cat = catalogRelation(env.ctx, resolved.schema, resolved.name);
+        const cat = statementCatalogRelation(env, resolved.schema, resolved.name);
         if (cat) {
           return { rel: renameWithAliases(cat, label, item.colAliases, label), rangeVars: new Set([label]) };
         }
@@ -1791,6 +2130,7 @@ export function sortRows(env: ExecEnv, rel: Relation, specs: SortSpec[]): void {
   const ctx = env.ctx;
   const indexed = rel.rows.map((row, i) => ({ row, i }));
   indexed.sort((a, b) => {
+    checkStatementTimeout(ctx.state);
     for (const s of specs) {
       const av = a.row[s.colIdx] ?? null;
       const bv = b.row[s.colIdx] ?? null;
@@ -2260,7 +2600,10 @@ export function executeCore(
   const srcCols = source.rel.columns;
   const rangeVars = source.rangeVars;
 
-  const rowScope = (row: Datum[]) => new RowScope(srcCols, row, env.outer, rangeVars);
+  const rowScope = (row: Datum[]) => {
+    checkStatementTimeout(env.ctx.state);
+    return new RowScope(srcCols, row, env.outer, rangeVars);
+  };
 
   // 2. WHERE
   let srcRows = source.rel.rows;
@@ -2283,7 +2626,8 @@ export function executeCore(
         srcRows = indexed;
       } else {
         const where = core.where;
-        srcRows = srcRows.filter((row) => evalPredicate(env, rowScope(row), where));
+        const candidates = catalogKeyCandidates(env, where, srcCols, rangeVars, srcRows);
+        srcRows = (candidates ?? srcRows).filter((row) => evalPredicate(env, rowScope(row), where));
       }
     } else {
       const where = core.where;

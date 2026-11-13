@@ -31,6 +31,8 @@ export interface ReturningRow {
 export interface ReturningSource {
   readonly columns: RelColumn[];
   readonly rangeVars: ReadonlySet<string>;
+  /** a bare `*` lists these after the target's columns (UPDATE ... FROM, DELETE ... USING); MERGE puts them first */
+  readonly afterTarget?: boolean;
 }
 
 const isMergeAction = (node: { type?: unknown; name?: unknown; args?: unknown }): boolean =>
@@ -145,11 +147,12 @@ export function evalReturning(
       else if (qualifier !== null && qualifier !== label) {
         throw pgError("undefined_table", `missing FROM-clause entry for table "${qualifier}"`, "42P01");
       }
-      // a bare * in MERGE covers the source columns too, ahead of the target's (the join's FROM order)
-      if (qualifier === null) pushSource(null);
+      // a bare * covers the source columns too, in the join's FROM order: ahead of the target's in MERGE
+      if (qualifier === null && !source?.afterTarget) pushSource(null);
       for (let i = 0; i < width; i++) {
         items.push({ name: table.columns[i]!.name, expr: null, offset: base + i, type: table.columns[i]!.type.id });
       }
+      if (qualifier === null && source?.afterTarget) pushSource(null);
       continue;
     }
     items.push({ name: t.alias ?? inferColumnName(t.expr), expr: t.expr, offset: -1, type: UNKNOWN });

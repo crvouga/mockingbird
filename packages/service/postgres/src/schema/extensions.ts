@@ -33,6 +33,13 @@ export const AVAILABLE_EXTENSIONS: readonly ExtensionSpec[] = [
     relocatable: true,
   },
   {
+    name: "uuid-ossp",
+    defaultVersion: "1.1",
+    versions: ["1.1"],
+    comment: "generate universally unique identifiers (UUIDs)",
+    relocatable: true,
+  },
+  {
     name: "plpgsql",
     defaultVersion: "1.0",
     versions: ["1.0"],

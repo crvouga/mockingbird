@@ -1,6 +1,7 @@
 import { pgError, unsupported } from "../errors/error.ts";
 import { parseTsqueryText, parseTsvector, tsqueryText } from "../tsearch/tsearch.ts";
 import {
+  type DatetimeNow,
   formatDate,
   formatInterval,
   formatTimeOfDay,
@@ -9,8 +10,11 @@ import {
   type Interval,
   parseDate,
   parseInterval,
+  parseSpecialDatetime,
   parseTime,
   parseTimestamp,
+  parseTimeTz,
+  todayAt,
   parseTimestampTz,
 } from "./datetime.ts";
 import { type JsonbValue, jsonbText, parseJsonText, validateJsonText } from "./jsonb.ts";
@@ -171,7 +175,9 @@ const TYPE_ALIASES: Record<string, TypeId> = {
   regtype: "regtype",
   regproc: "regproc",
   regnamespace: "regnamespace",
+  regrole: "regrole",
   xid: "xid",
+  xid8: "xid8",
   oid: "oid",
   void: "void",
   record: "record",
@@ -294,6 +300,8 @@ export const TYPE_OIDS: Record<string, number> = {
   regclass: 2205,
   regtype: 2206,
   regnamespace: 4089,
+  regrole: 4096,
+  xid8: 5069,
   record: 2249,
   uuid: 2950,
   cidr: 650,
@@ -339,6 +347,8 @@ export const ARRAY_OIDS: Record<string, number> = {
   inet: 1041,
   jsonb: 3807,
   tid: 1010,
+  regrole: 4097,
+  xid8: 271,
   ...RANGE_ARRAY_OIDS,
   ...MULTIRANGE_ARRAY_OIDS,
 };
@@ -644,6 +654,8 @@ function quoteArrayElem(s: string): string {
 export interface OutputCtx {
   /** unquoted schema name for an oid, or null when no schema has it */
   namespaceName?(oid: number): string | null;
+  /** unquoted role name for an oid, or null when no role has it */
+  roleName?(oid: number): string | null;
   relationName?(oid: number): string | null;
   /** offset seconds east of UTC for rendering timestamptz at given UTC micros */
   zoneOffsetAt(utcMicros: bigint): number;
@@ -699,6 +711,8 @@ export function recordText(rec: PgRecord, ctx: OutputCtx): string {
 export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
   if (t === "regclass") return v === 0 ? "-" : (ctx.relationName?.(v as number) ?? String(v));
   if (t === "regnamespace") return namespaceText(v as number, ctx.namespaceName?.(v as number));
+  // regroleout: the role's name (quoted as needed), its oid when no role has it, `-` for 0
+  if (t === "regrole") return namespaceText(v as number, ctx.roleName?.(v as number));
   if (v === null) throw pgError("internal", "datumText called with null");
   if (isArrayType(t)) return arrayText(v as PgArray, ctx);
   if (isEnumType(t)) return v as string;
@@ -713,6 +727,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
     case "xid":
       return String(v);
     case "int8":
+    case "xid8":
       return String(v);
     case "float4":
       return float4Text(v as number);
@@ -783,9 +798,13 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
 export interface InputCtx {
   /** oid of the schema with exactly this name; raises 3F000 when there is none */
   namespaceOid?(name: string): number;
+  /** oid of the role with exactly this name; raises 42704 when there is none */
+  roleOid?(name: string): number;
   relationOid?(parts: string[]): number;
   /** session zone offset lookup for naive timestamptz input */
   zoneOffsetForNaive(naiveMicros: bigint): number;
+  /** the transaction timestamp and session zone offset, for 'now' / 'today' / 'tomorrow' / 'yesterday' input */
+  datetimeNow?(): DatetimeNow;
   /** enum label validation: returns true when label is valid for the enum type */
   enumHasLabel?(enumType: TypeId, label: string): boolean;
   /** regtypein / regprocin: the name the value keeps, as regtypeout / regprocout print it */
@@ -816,6 +835,13 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     if (!ctx.namespaceOid) throw unsupported("regnamespace input without a catalog");
     return ctx.namespaceOid(parsed.name);
   }
+  // regrolein: an oid, `-`, or exactly one role name (split as regnamespacein splits a schema name)
+  if (t === "regrole") {
+    const parsed = parseNamespaceInput(text);
+    if ("oid" in parsed) return parsed.oid;
+    if (!ctx.roleOid) throw unsupported("regrole input without a catalog");
+    return ctx.roleOid(parsed.name);
+  }
   if (isArrayType(t)) return parseArrayText(t, text, ctx);
   if (isEnumType(t)) {
     if (ctx.enumHasLabel && !ctx.enumHasLabel(t, text)) {
@@ -829,6 +855,15 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
     const attrs = ctx.compositeAttributes?.(t);
     if (!attrs) throw pgError("undefined_object", `type "${compositeTypeName(t)}" does not exist`, "42704");
     return parseRecordText(text, attrs.names, attrs.types, ctx);
+  }
+  if (ctx.datetimeNow && (t === "date" || t === "time" || t === "timetz" || t === "timestamp" || t === "timestamptz")) {
+    const special = parseSpecialDatetime(
+      t,
+      text,
+      () => ctx.datetimeNow!(),
+      (naive) => ctx.zoneOffsetForNaive(naive),
+    );
+    if (special !== null) return special as Datum;
   }
   switch (t) {
     case "bool":
@@ -848,6 +883,14 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
       return parseNumeric(text);
     case "money":
       return parseMoneyText(text);
+    case "xid8": {
+      // xid8in: an unsigned 64-bit full transaction id
+      const trimmed = text.trim();
+      if (!/^\d+$/.test(trimmed) || BigInt(trimmed) > 0xffffffffffffffffn) {
+        throw pgError("invalid_text_representation", `invalid input syntax for type xid8: "${text}"`);
+      }
+      return BigInt(trimmed);
+    }
     case "text":
     case "varchar":
     case "bpchar":
@@ -868,6 +911,8 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
       return parseDate(text);
     case "time":
       return parseTime(text);
+    case "timetz":
+      return parseTimeTz(text, (tod) => ctx.zoneOffsetForNaive(todayAt(ctx.datetimeNow?.(), tod))) as unknown as Datum;
     case "timestamp":
       return parseTimestamp(text);
     case "timestamptz":

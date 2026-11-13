@@ -1,6 +1,7 @@
 import { PGlite } from "@electric-sql/pglite";
 import { pgcrypto } from "@electric-sql/pglite/contrib/pgcrypto";
 import { pg_trgm } from "@electric-sql/pglite/contrib/pg_trgm";
+import { uuid_ossp } from "@electric-sql/pglite/contrib/uuid_ossp";
 import { categoryFromSqlstate } from "../harness/classify.ts";
 import { normalizeErrorMessage } from "../harness/normalize.ts";
 import { applyTxnSql, failResult, okResult } from "../harness/session.ts";
@@ -34,8 +35,8 @@ async function getShared(): Promise<{ db: PGlite; parsers: Record<number, (x: st
   }
   if (!shared) {
     shared = (async () => {
-      // pgcrypto and pg_trgm are available but not installed; tests that need them run CREATE EXTENSION.
-      const db = new PGlite({ extensions: { pgcrypto, pg_trgm } });
+      // pgcrypto, pg_trgm and uuid-ossp are available but not installed; tests that need them run CREATE EXTENSION.
+      const db = new PGlite({ extensions: { pgcrypto, pg_trgm, uuid_ossp } });
       await db.waitReady;
       // PGlite's WASM boot leaks process.exitCode = 99 (electric-sql/pglite#975);
       // clear it so a green `bun test` run exits 0. Bun ignores `= undefined`.
@@ -59,6 +60,8 @@ async function resetOracle(db: PGlite): Promise<void> {
   await db.exec(`
     RESET ROLE;
     CLOSE ALL;
+    -- temporary objects live in pg_temp, which the schema sweep below skips
+    DISCARD TEMP;
     DO $$
     DECLARE e text;
     BEGIN

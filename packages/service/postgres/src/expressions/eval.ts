@@ -1,3 +1,4 @@
+import { checkStatementTimeout } from "../runtime/statement-timeout.ts";
 import type {
   ArrayCtor,
   BetweenExpr,
@@ -43,6 +44,7 @@ import {
 import type { EngineCtx } from "./context.ts";
 import { evalBinary, evalUnary } from "./operators.ts";
 import { likeToRegex, similarToRegex } from "./pattern.ts";
+import { evalIsJson, evalSqlJsonFunction } from "./sqljson.ts";
 
 /**
  * Environment the executor provides for expression evaluation: column
@@ -76,6 +78,7 @@ export interface EvalScope {
 }
 
 export function evalExpr(ctx: EngineCtx, scope: EvalScope, e: Expr): TypedValue {
+  checkStatementTimeout(ctx.state);
   if (scope.exprOverride) {
     const o = scope.exprOverride(e);
     if (o !== undefined) return o;
@@ -915,6 +918,11 @@ function evalFuncCall(ctx: EngineCtx, scope: EvalScope, e: FuncCall): TypedValue
   // parser-desugared `(s1, e1) OVERLAPS (s2, e2)`
   if (bare === "__overlaps") {
     return evalOverlaps(ctx, scope, e.args);
+  }
+  // parser-desugared SQL/JSON: `x IS JSON ...`, JSON_VALUE / JSON_QUERY / JSON_EXISTS
+  if (bare === "__is_json") return evalIsJson(e.args, (x) => evalExpr(ctx, scope, x));
+  if (bare === "__json_value" || bare === "__json_query" || bare === "__json_exists") {
+    return evalSqlJsonFunction(ctx, e.args, (x) => evalExpr(ctx, scope, x));
   }
 
   let args = e.args.map((a) => evalExpr(ctx, scope, a));

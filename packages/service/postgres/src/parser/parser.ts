@@ -40,6 +40,7 @@ import type {
 import { pgError, unsupported } from "../errors/error.ts";
 import type { ParserApi } from "./api.ts";
 import * as ext from "./ext-692.ts";
+import { parseIsJson, parseSqlJsonFunction } from "./sqljson.ts";
 import { type Token, tokenize } from "../lexer/tokenize.ts";
 
 /** Fully reserved words: cannot be a bare identifier / alias. */
@@ -815,10 +816,46 @@ export class Parser {
       this.expectPunct("(");
       const query = this.parseWithableStatement();
       this.expectPunct(")");
-      if (this.atKw("search") || this.atKw("cycle")) throw unsupported("WITH ... SEARCH/CYCLE");
-      ctes.push({ name, columns, query, materialized });
+      const search = this.parseCteSearchClause();
+      const cycle = this.parseCteCycleClause();
+      ctes.push({ name, columns, query, materialized, ...(search ? { search } : {}), ...(cycle ? { cycle } : {}) });
     } while (this.eatPunct(","));
     return { recursive, ctes };
+  }
+
+  /** `SEARCH { DEPTH | BREADTH } FIRST BY col [, ...] SET seqcol` after a CTE's query. */
+  private parseCteSearchClause(): CommonTableExpr["search"] {
+    if (!(this.atKw("search") && (this.atKw("depth", 1) || this.atKw("breadth", 1)))) return undefined;
+    this.pos++;
+    const breadth = this.next().value === "breadth";
+    this.expectKw("first");
+    this.expectKw("by");
+    const columns: string[] = [];
+    do {
+      columns.push(this.ident());
+    } while (this.eatPunct(","));
+    this.expectKw("set");
+    return { breadth, columns, set: this.ident() };
+  }
+
+  /** `CYCLE col [, ...] SET markcol [TO value DEFAULT default] USING pathcol` after a CTE's query. */
+  private parseCteCycleClause(): CommonTableExpr["cycle"] {
+    if (!this.eatKw("cycle")) return undefined;
+    const columns: string[] = [];
+    do {
+      columns.push(this.ident());
+    } while (this.eatPunct(","));
+    this.expectKw("set");
+    const mark = this.ident();
+    let value: Expr | null = null;
+    let fallback: Expr | null = null;
+    if (this.eatKw("to")) {
+      value = this.parseExpr();
+      this.expectKw("default");
+      fallback = this.parseExpr();
+    }
+    this.expectKw("using");
+    return { columns, mark, value, default: fallback, path: this.ident() };
   }
 
   // --- SELECT ------------------------------------------------------------------
@@ -1913,30 +1950,10 @@ export class Parser {
     const ifNotExists = this.parseIfNotExists();
     const name = this.qualifiedName();
     if (this.atKw("partition") && this.atKw("of", 1)) return this.parsePartitionOf(name, ifNotExists, temp, unlogged);
-    // CREATE TABLE AS
-    if (this.atKw("as") || (this.atPunct("(") === false && this.atKw("as"))) {
-      this.pos++;
-      const query = this.parseSelectStmt();
-      let withData = true;
-      if (this.eatKw("with")) {
-        if (this.eatKw("no")) withData = false;
-        this.expectKw("data");
-      }
-      return {
-        type: "create_table_as",
-        name,
-        ifNotExists,
-        temp,
-        unlogged,
-        columns: null,
-        query,
-        withData,
-        materialized: false,
-      };
-    }
-    let ctasColumns: string[] | null = null;
+    // CREATE TABLE AS: [ (col, ...) ] [ USING m ] [ WITH (...) ] [ ON COMMIT ... ] [ TABLESPACE t ] AS query
+    if (this.atCtasTail()) return this.parseCtasRest(name, ifNotExists, temp, unlogged, null);
     if (this.atPunct("(")) {
-      // could be column defs or CTAS column list — look ahead for ") AS"
+      // could be column defs or CTAS column list — look ahead for ") AS" (or a storage clause then AS)
       const save = this.pos;
       this.pos++;
       const cols: string[] = [];
@@ -1954,27 +1971,7 @@ export class Parser {
         simpleList = false;
         break;
       }
-      if (simpleList && this.atKw("as")) {
-        ctasColumns = cols;
-        this.pos++;
-        const query = this.parseSelectStmt();
-        let withData = true;
-        if (this.eatKw("with")) {
-          if (this.eatKw("no")) withData = false;
-          this.expectKw("data");
-        }
-        return {
-          type: "create_table_as",
-          name,
-          ifNotExists,
-          temp,
-          unlogged,
-          columns: ctasColumns,
-          query,
-          withData,
-          materialized: false,
-        };
-      }
+      if (simpleList && this.atCtasTail()) return this.parseCtasRest(name, ifNotExists, temp, unlogged, cols);
       this.pos = save;
     }
     this.expectPunct("(");
@@ -2007,7 +2004,7 @@ export class Parser {
     // storage/partition options
     if (this.eatKw("inherits")) throw unsupported("table inheritance");
     const partitionBy = this.parsePartitionByClause();
-    this.parseTableStorageTail();
+    const tail = this.parseTableStorageTail();
     return {
       type: "create_table",
       name,
@@ -2018,7 +2015,37 @@ export class Parser {
       constraints,
       likeClauses,
       ...(partitionBy ? { partitionBy } : {}),
+      ...(tail.onCommit ? { onCommit: tail.onCommit } : {}),
     };
+  }
+
+  /**
+   * `( [namespace.]name [= value] [, ...] )`, a reloptions list. Names fold like identifiers; a value
+   * keeps its text as written (a keyword lowercased), and is null when the `= value` is left out.
+   */
+  private parseRelOptionList(): Array<{ name: string; value: string | null; namespace?: string }> {
+    this.expectPunct("(");
+    const options: Array<{ name: string; value: string | null; namespace?: string }> = [];
+    do {
+      let name = this.ident(true);
+      let namespace: string | undefined;
+      if (this.eatPunct(".")) {
+        namespace = name;
+        name = this.ident(true);
+      }
+      let value: string | null = null;
+      if (this.eatOp("=")) {
+        const sign = this.atOp("-") || this.atOp("+") ? this.next().value : "";
+        const token = this.next();
+        if (token.type === "eof" || token.type === "punct" || token.type === "op" || token.type === "param") {
+          this.errorAt(token, "syntax error");
+        }
+        value = (sign === "-" ? "-" : "") + token.value;
+      }
+      options.push({ name, value, ...(namespace !== undefined ? { namespace } : {}) });
+    } while (this.eatPunct(","));
+    this.expectPunct(")");
+    return options;
   }
 
   private parsePartitionByClause() {
@@ -2070,7 +2097,7 @@ export class Parser {
   }
 
   /** WITH (...), ON COMMIT, TABLESPACE after a CREATE TABLE's column list */
-  private parseTableStorageTail(): void {
+  private parseTableStorageTail(): { onCommit: "drop" | "delete_rows" | "preserve_rows" | null } {
     if (this.eatKw("using")) this.ident(true);
     if (this.eatKw("with")) {
       this.expectPunct("(");
@@ -2080,13 +2107,70 @@ export class Parser {
         if (this.atPunct(")")) depth--;
         this.pos++;
       }
-    }
+    } else if (this.atKw("without") && this.atKw("oids", 1)) this.pos += 2;
+    let onCommit: "drop" | "delete_rows" | "preserve_rows" | null = null;
     if (this.eatKw("on")) {
       this.expectKw("commit");
-      this.ident(true); // preserve / delete / drop → rows behavior: accept, treat as preserve
-      if (this.peek(-1)!.value === "delete") this.expectKw("rows");
+      if (this.eatKw("drop")) onCommit = "drop";
+      else if (this.eatKw("delete")) {
+        this.expectKw("rows");
+        onCommit = "delete_rows";
+      } else {
+        this.expectKw("preserve");
+        this.expectKw("rows");
+        onCommit = "preserve_rows";
+      }
     }
     if (this.eatKw("tablespace")) this.ident(true);
+    return { onCommit };
+  }
+
+  /** At the clauses that may sit between a CREATE TABLE AS's name (or column list) and its AS. */
+  private atCtasTail(): boolean {
+    if (this.atKw("as")) return true;
+    // `WITH (` storage options or `ON COMMIT`, `TABLESPACE x`, `USING am`: then AS must follow
+    if (
+      !(this.atKw("with") || this.atKw("without") || this.atKw("on") || this.atKw("tablespace") || this.atKw("using"))
+    )
+      return false;
+    const save = this.pos;
+    try {
+      this.parseTableStorageTail();
+      return this.atKw("as");
+    } catch {
+      return false;
+    } finally {
+      this.pos = save;
+    }
+  }
+
+  private parseCtasRest(
+    name: string[],
+    ifNotExists: boolean,
+    temp: boolean,
+    unlogged: boolean,
+    columns: string[] | null,
+  ): Statement {
+    const { onCommit } = this.parseTableStorageTail();
+    this.expectKw("as");
+    const query = this.parseSelectStmt();
+    let withData = true;
+    if (this.eatKw("with")) {
+      if (this.eatKw("no")) withData = false;
+      this.expectKw("data");
+    }
+    return {
+      type: "create_table_as",
+      name,
+      ifNotExists,
+      temp,
+      unlogged,
+      columns,
+      query,
+      withData,
+      materialized: false,
+      ...(onCommit ? { onCommit } : {}),
+    };
   }
 
   private tryParseTableConstraint(): TableConstraint | null {
@@ -2590,13 +2674,9 @@ export class Parser {
     }
     const options: Array<{ name: string; value: string }> = [];
     if (this.eatKw("with")) {
-      this.expectPunct("(");
-      do {
-        const option = this.ident(true);
-        // a bare parameter is boolean true, as in WITH (fastupdate)
-        options.push({ name: option, value: this.eatOp("=") ? this.next().value : "true" });
-      } while (this.eatPunct(","));
-      this.expectPunct(")");
+      // a bare parameter is boolean true, as in WITH (fastupdate)
+      for (const option of this.parseRelOptionList())
+        options.push({ name: option.name, value: option.value ?? "true" });
     }
     if (this.eatKw("tablespace")) this.ident(true);
     const where = this.eatKw("where") ? this.parseExpr() : null;
@@ -3052,6 +3132,20 @@ export class Parser {
         this.expectKw("to");
         return { type: "alter_index", name, ifExists, action: { kind: "rename_table", to: this.ident() } };
       }
+      // SET ( storage_parameter [= value] [, ...] ) / RESET ( storage_parameter [, ...] )
+      if ((this.atKw("set") || this.atKw("reset")) && this.atPunct("(", 1)) {
+        const reset = this.next().value === "reset";
+        const options = this.parseRelOptionList();
+        if (reset && options.some((o) => o.value !== null)) {
+          throw pgError("syntax", "RESET must not include values for parameters", "42601");
+        }
+        return {
+          type: "alter_index",
+          name,
+          ifExists,
+          action: { kind: reset ? "reset_options" : "set_options", options },
+        };
+      }
       throw unsupported("this ALTER INDEX form");
     }
     if (this.eatKw("schema")) {
@@ -3117,6 +3211,11 @@ export class Parser {
     if (this.atKw("event") && this.atKw("trigger", 1)) return ext.parseAlterEventTrigger(this.ext());
     if (this.atKw("default") && this.atKw("privileges", 1)) {
       return ext.parseRoleUtility(this.ext(), "ALTER DEFAULT PRIVILEGES");
+    }
+    // ALTER DATABASE d SET / RESET: the database's defaults (pg_db_role_setting)
+    if (this.atKw("database") && (this.atKw("set", 2) || this.atKw("reset", 2))) {
+      this.next();
+      return ext.parseAlterDatabaseSet(this.ext(), this.ident(true));
     }
     if (this.eatKw("database") || this.eatKw("system") || this.eatKw("default")) {
       this.skipToStatementEnd();
@@ -3404,10 +3503,11 @@ export class Parser {
     for (;;) {
       if (this.eatKw("isolation")) {
         this.expectKw("level");
-        let mode = "isolation level " + this.ident(true);
-        if (this.atKw("read") || this.atKw("committed") || this.atKw("uncommitted")) {
-          mode += " " + this.ident(true);
-        }
+        const level = this.ident(true);
+        let mode = "isolation level " + level;
+        // two-word levels only: READ COMMITTED, READ UNCOMMITTED, REPEATABLE READ (modes need no commas)
+        if (level === "read" && (this.atKw("committed") || this.atKw("uncommitted"))) mode += " " + this.ident(true);
+        else if (level === "repeatable" && this.atKw("read")) mode += " " + this.ident(true);
         modes.push(mode);
       } else if (this.eatKw("read")) {
         if (this.eatKw("only")) modes.push("read only");
@@ -3803,7 +3903,8 @@ export class Parser {
           continue;
         }
         if (this.eatKw("json")) {
-          throw unsupported("IS JSON");
+          left = parseIsJson(this.ext(), left, not);
+          continue;
         }
         if (this.eatKw("document")) throw unsupported("IS DOCUMENT");
         this.errorAt(this.peek(), "expected NULL/TRUE/FALSE/UNKNOWN/DISTINCT after IS");
@@ -3949,7 +4050,8 @@ export class Parser {
           continue;
         }
         if (this.eatKw("local")) {
-          left = { type: "at_time_zone", expr: left, zone: { type: "func", name: ["__session_timezone"], args: [] } };
+          // PG 17+: x AT LOCAL is timezone(x), the one-argument form that reads the session TimeZone
+          left = { type: "func", name: ["pg_catalog", "timezone"], args: [left] };
           continue;
         }
         this.pos = save;
@@ -4429,6 +4531,11 @@ export class Parser {
           throw unsupported("XML functions");
         case "json_table":
           throw unsupported("JSON_TABLE");
+        case "json_value":
+        case "json_query":
+        case "json_exists":
+          if (!this.atPunct("(", 1)) break;
+          return parseSqlJsonFunction(this.ext(), t.value);
         default:
           break;
       }

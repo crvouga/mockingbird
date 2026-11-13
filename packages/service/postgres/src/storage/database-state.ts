@@ -9,6 +9,7 @@ import { type CatalogExt, EMPTY_CATALOG_EXT } from "./catalog-ext.ts";
 import type { ColumnarSlab } from "./columnar-slab.ts";
 import type { CursorData } from "../executor/cursors.ts";
 import { gucDef, gucDefaultDisplay, TRANSACTION_GUCS } from "./guc-catalog.ts";
+import { currentRole } from "./roles.ts";
 
 // --- table / relation metadata ---------------------------------------------
 
@@ -159,6 +160,7 @@ export class TableData {
     copy.constraints = this.constraints;
     copy.triggers = this.triggers;
     copy.unlogged = this.unlogged;
+    copy.onCommit = this.onCommit;
     copy.comment = this.comment;
     return copy;
   }
@@ -208,6 +210,8 @@ export class TableData {
   temp: boolean;
   /** UNLOGGED table (`pg_class.relpersistence = 'u'`); catalog metadata only, there is no WAL to skip */
   unlogged = false;
+  /** a temporary table's `ON COMMIT DROP` / `ON COMMIT DELETE ROWS`, run when a transaction commits */
+  onCommit: "drop" | "delete_rows" | null = null;
   /** COMMENT ON TABLE (pg_description, obj_description) */
   comment: string | undefined;
   /** monotonically increasing oid-like id for catalog output */
@@ -315,6 +319,7 @@ export class TableData {
       this.temp,
     );
     t.unlogged = this.unlogged;
+    t.onCommit = this.onCommit;
     t.comment = this.comment;
     t.durableChanges = this.durableChanges?.fork() ?? null;
     t.durableIds = this.durableIds;
@@ -708,6 +713,20 @@ export class SchemaData {
   }
 }
 
+/** One advisory lock key held by the session: its tag and its session- and transaction-level counts per mode. */
+export interface AdvisoryLockHold {
+  readonly key: AdvisoryLockKey;
+  exclusive: { session: number; xact: number };
+  share: { session: number; xact: number };
+}
+
+/** pg_locks' tag of an advisory lock: a bigint key splits into classid / objid with objsubid 1; (int4, int4) is objsubid 2. */
+export interface AdvisoryLockKey {
+  readonly classid: number;
+  readonly objid: number;
+  readonly objsubid: 1 | 2;
+}
+
 /** ANALYZE bookkeeping for pg_stat_user_tables, keyed by table oid in {@link DatabaseState.tableStats}. */
 export interface TableStats {
   analyzeCount: number;
@@ -755,6 +774,23 @@ export class DatabaseState {
   /** Local monotonic xid allocator; 2 denotes a row from a legacy snapshot without metadata. */
   xidCounter = 3;
   transactionXid: number | null = null;
+  /** The client's statement text being executed (current_query()); not cloned, encoded or rolled back. */
+  currentQuery: string | null = null;
+  /**
+   * The session's advisory locks (pg_advisory_lock and friends) on the engine on its own; the wire
+   * server keeps them in its cluster instead. Like PostgreSQL's lock table, they are not rolled back:
+   * {@link restoreFrom} leaves them alone, and transaction-level ones are released at COMMIT / ROLLBACK.
+   */
+  advisoryLocks: Map<string, AdvisoryLockHold> = new Map();
+  /** Start of the open transaction block (now() / transaction_timestamp()): PG-epoch UTC micros; set by its first statement. */
+  transactionStart: bigint | null = null;
+  /**
+   * The running top-level statement's statement_timeout deadline (`performance.now()` ms), null when
+   * none applies. Checked cooperatively by {@link checkStatementTimeout}.
+   */
+  statementDeadline: number | null = null;
+  /** Counts {@link checkStatementTimeout} calls between clock reads. */
+  deadlineTicks = 0;
 
   allocateXid(): number {
     if (this.xidCounter > 4294967295)
@@ -762,6 +798,11 @@ export class DatabaseState {
     return this.xidCounter++;
   }
   inTransaction = false;
+  /**
+   * Whether a temporary table `ON COMMIT DROP` / `DELETE ROWS` may exist: only then does a commit look
+   * for one. Set when such a table is created and never cleared, so it can only err towards looking.
+   */
+  mayHaveOnCommitActions = false;
   /** Transaction-only events: included in rollback clones, never in exported snapshots. */
   pendingTriggers: Array<{
     schema: string;
@@ -854,6 +895,8 @@ export class DatabaseState {
   }
 
   getSetting(name: string): string | undefined {
+    // is_superuser is derived from the current role (it follows SET ROLE); PostgreSQL keeps it out of SHOW ALL
+    if (name === "is_superuser") return currentRole(this).superuser ? "on" : "off";
     const local = this.localSettings.get(name);
     if (local !== undefined) return local;
     // transaction_read_only and the like: outside a transaction block, each statement's own transaction
@@ -1057,6 +1100,7 @@ export class DatabaseState {
     s.prepared = new Map(this.prepared);
     s.changes = this.changes;
     s.inTransaction = this.inTransaction;
+    s.mayHaveOnCommitActions = this.mayHaveOnCommitActions;
     s.pendingTriggers = this.pendingTriggers.slice();
     s.constraintModes = new Map(this.constraintModes);
     s.pendingForeignKeys = this.pendingForeignKeys.slice();
@@ -1067,6 +1111,7 @@ export class DatabaseState {
     s.oidCounter = this.oidCounter;
     s.xidCounter = this.xidCounter;
     s.transactionXid = this.transactionXid;
+    s.transactionStart = this.transactionStart;
     for (const [name, overloads] of this.systemFunctions) s.systemFunctions.set(name, overloads.slice());
     return s;
   }
@@ -1092,6 +1137,7 @@ export class DatabaseState {
     s.prepared = (this.prepared = forkable(this.prepared)).fork();
     s.changes = this.changes;
     s.inTransaction = this.inTransaction;
+    s.mayHaveOnCommitActions = this.mayHaveOnCommitActions;
     s.pendingTriggers = this.pendingTriggers.slice();
     s.constraintModes = new Map(this.constraintModes);
     s.pendingForeignKeys = this.pendingForeignKeys.slice();
@@ -1102,6 +1148,7 @@ export class DatabaseState {
     s.oidCounter = this.oidCounter;
     s.xidCounter = this.xidCounter;
     s.transactionXid = this.transactionXid;
+    s.transactionStart = this.transactionStart;
     // overload lists are replaced, never changed in place, so the clone shares them
     s.systemFunctions = (this.systemFunctions = forkable(this.systemFunctions)).fork();
     s.cowFloor = s.cowEpoch = nextEpoch();
@@ -1222,6 +1269,7 @@ export class DatabaseState {
     this.oidCounter = other.oidCounter;
     this.xidCounter = Math.max(this.xidCounter, other.xidCounter);
     this.transactionXid = other.transactionXid;
+    this.transactionStart = other.transactionStart;
   }
 
   /** @internal Snapshot codec access to the oid allocator. */

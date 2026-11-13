@@ -1,6 +1,8 @@
 import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import { castTo, unifyTypes } from "../types/cast.ts";
+import { type Interval, intervalAdd, intervalNeg } from "../types/datetime.ts";
+import { intervalScale } from "../expressions/operators.ts";
 import { datumCompare } from "../types/compare.ts";
 import { JSONB_NULL, type JsonbValue, jsonbArr, jsonbCompactText, jsonbObj } from "../types/jsonb.ts";
 import {
@@ -16,9 +18,12 @@ import {
   selectDivScale,
 } from "../types/numeric.ts";
 import {
+  arrayElemType,
   arrayTypeOf,
   type Datum,
+  isArrayType,
   makeArray,
+  type PgArray,
   type TypedValue,
   type TypeId,
   tv,
@@ -258,11 +263,42 @@ class ArrayAggAcc implements AggregateAcc {
     this.any = true;
     if (this.argT === UNKNOWN && a.t !== UNKNOWN) this.argT = a.t;
     const t = this.argT === UNKNOWN ? "text" : this.argT;
+    if (isArrayType(t)) {
+      this.stepArray(a.v === null ? null : (castTo(this.ctx, a, t, {}).v as PgArray));
+      return;
+    }
     this.items.push(a.v === null ? null : castTo(this.ctx, a, t, {}).v);
   }
+  /** array_agg(anyarray): each input becomes one slice of an array with one more dimension (accumArrayResultArr). */
+  private inner: { dims: number[]; lbs: number[] } | null = null;
+  private stepArray(arr: PgArray | null): void {
+    if (arr === null) throw pgError("null_value_not_allowed", "cannot accumulate null arrays", "22004");
+    if (arr.dims.length === 0) throw pgError("array_subscript_error", "cannot accumulate empty arrays", "2202E");
+    if (this.inner === null) this.inner = { dims: [...arr.dims], lbs: [...arr.lbs] };
+    else if (
+      this.inner.dims.length !== arr.dims.length ||
+      this.inner.dims.some((d, i) => d !== arr.dims[i] || this.inner!.lbs[i] !== arr.lbs[i])
+    ) {
+      throw pgError("array_subscript_error", "cannot accumulate arrays of different dimensionality", "2202E");
+    }
+    if (this.inner.dims.length >= 6) {
+      throw pgError(
+        "program_limit_exceeded",
+        `number of array dimensions (${this.inner.dims.length + 1}) exceeds the maximum allowed (6)`,
+        "54000",
+      );
+    }
+    this.items.push(...arr.items);
+    this.slices++;
+  }
+  private slices = 0;
   result(): TypedValue {
     const t = this.argT === UNKNOWN ? "text" : this.argT;
     if (!this.any) return tv(arrayTypeOf(t), null);
+    if (isArrayType(t)) {
+      const inner = this.inner!;
+      return tv(t, makeArray(arrayElemType(t), this.items, [this.slices, ...inner.dims], [1, ...inner.lbs]));
+    }
     return tv(arrayTypeOf(t), makeArray(t, this.items));
   }
 }
@@ -403,17 +439,23 @@ class StatAcc implements AggregateAcc {
 /** ordered-set aggregate: percentile_cont / percentile_disc / mode */
 class PercentileAcc implements AggregateAcc {
   private values: TypedValue[] = [];
-  private fraction: number | null = null;
+  /** the direct argument: one fraction, or the float8[] of fractions (the *_multi_final forms) */
+  private fraction: Datum = null;
+  private readonly multi: boolean;
   constructor(
     private readonly ctx: EngineCtx,
     private readonly kind: "cont" | "disc" | "mode",
     private argT: TypeId,
-  ) {}
+    fractionT: TypeId = UNKNOWN,
+  ) {
+    this.multi = kind !== "mode" && isArrayType(fractionT);
+  }
   step(args: TypedValue[]): void {
     // args[0] = direct arg (fraction), args[1] = within-group value
     if (this.kind !== "mode") {
-      if (args[0]!.v !== null)
-        this.fraction = numericAsNumber(castTo(this.ctx, args[0]!, "float8", { explicit: true }).v);
+      const f = args[0]!;
+      this.fraction =
+        f.v === null ? null : castTo(this.ctx, f, this.multi ? "float8[]" : "float8", { explicit: true }).v;
       const v = args[1]!;
       if (v.v === null) return;
       if (this.argT === UNKNOWN && v.t !== UNKNOWN) this.argT = v.t;
@@ -425,9 +467,16 @@ class PercentileAcc implements AggregateAcc {
     if (this.argT === UNKNOWN && v.t !== UNKNOWN) this.argT = v.t;
     this.values.push(v);
   }
+  /** percentile_cont interpolates float8 or interval; every other sort type is read as float8 */
+  private resultElemType(t: TypeId): TypeId {
+    if (this.kind === "cont") return t === "interval" ? "interval" : "float8";
+    return t;
+  }
   result(): TypedValue {
     const t = this.argT === UNKNOWN ? "float8" : this.argT;
-    if (this.values.length === 0 || (this.kind !== "mode" && this.fraction === null)) return tv(t, null);
+    const elemT = this.resultElemType(t);
+    const outT = this.multi ? arrayTypeOf(elemT) : elemT;
+    if (this.values.length === 0 || (this.kind !== "mode" && this.fraction === null)) return tv(outT, null);
     const sorted = [...this.values].sort((a, b) => datumCompare(t, a.v, b.v, this.ctx));
     if (this.kind === "mode") {
       let best = sorted[0]!;
@@ -444,26 +493,51 @@ class PercentileAcc implements AggregateAcc {
       }
       return best;
     }
-    const frac = this.fraction!;
+    if (this.multi) {
+      const fractions = this.fraction as PgArray;
+      const items = fractions.items.map((f) => (f === null ? null : this.pick(sorted, t, f as number)));
+      return tv(outT, makeArray(elemT, items, [...fractions.dims], [...fractions.lbs]));
+    }
+    return tv(outT, this.pick(sorted, t, numericAsNumber(this.fraction)));
+  }
+  private pick(sorted: TypedValue[], t: TypeId, frac: number): Datum {
     if (frac < 0 || frac > 1 || Number.isNaN(frac)) {
-      throw pgError("invalid_parameter_value", "percentile value must be between 0 and 1", "22023");
+      throw pgError("numeric_value_out_of_range", `percentile value ${formatG(frac)} is not between 0 and 1`, "22003");
     }
     if (this.kind === "disc") {
       const idx = Math.max(Math.ceil(frac * sorted.length) - 1, 0);
-      return sorted[idx]!;
+      return castTo(this.ctx, sorted[idx]!, t, {}).v;
     }
-    // continuous
+    // continuous: lerp between the two rows around frac * (n - 1)
     const pos = frac * (sorted.length - 1);
     const lo = Math.floor(pos);
     const hi = Math.ceil(pos);
-    const loV = castTo(this.ctx, sorted[lo]!, "float8", { explicit: true }).v as number;
-    if (lo === hi) {
-      if (t === "interval" || INT_TYPES.has(t) || t === "numeric") return tv("float8", loV);
-      return tv("float8", loV);
+    if (t === "interval") {
+      const loV = sorted[lo]!.v as Interval;
+      if (lo === hi) return loV;
+      const hiV = sorted[hi]!.v as Interval;
+      return intervalAdd(loV, intervalScale(intervalAdd(hiV, intervalNeg(loV)), pos - lo));
     }
+    const loV = castTo(this.ctx, sorted[lo]!, "float8", { explicit: true }).v as number;
+    if (lo === hi) return loV;
     const hiV = castTo(this.ctx, sorted[hi]!, "float8", { explicit: true }).v as number;
-    return tv("float8", loV + (hiV - loV) * (pos - lo));
+    return loV + (hiV - loV) * (pos - lo);
   }
+}
+
+/** C's printf("%g"): six significant digits, trailing zeros dropped. */
+function formatG(n: number): string {
+  if (Number.isNaN(n)) return "nan";
+  if (!Number.isFinite(n)) return n > 0 ? "inf" : "-inf";
+  const exp = n === 0 ? 0 : Math.floor(Math.log10(Math.abs(n)));
+  if (exp < -4 || exp >= 6) {
+    const [mant, e] = n.toExponential(5).split("e");
+    const m = mant!.includes(".") ? mant!.replace(/\.?0+$/, "") : mant!;
+    const ev = Number(e);
+    return `${m}e${ev < 0 ? "-" : "+"}${String(Math.abs(ev)).padStart(2, "0")}`;
+  }
+  const fixed = n.toPrecision(6);
+  return fixed.includes(".") ? fixed.replace(/\.?0+$/, "") : fixed;
 }
 
 class CorrAcc implements AggregateAcc {
@@ -553,8 +627,8 @@ const FACTORIES = new Map<string, AggregateFactory>([
   ["stddev", (ctx, t) => new StatAcc(ctx, t[0] ?? "numeric", "stddev_samp")],
   ["stddev_samp", (ctx, t) => new StatAcc(ctx, t[0] ?? "numeric", "stddev_samp")],
   ["stddev_pop", (ctx, t) => new StatAcc(ctx, t[0] ?? "numeric", "stddev_pop")],
-  ["percentile_cont", (ctx, t) => new PercentileAcc(ctx, "cont", t[1] ?? UNKNOWN)],
-  ["percentile_disc", (ctx, t) => new PercentileAcc(ctx, "disc", t[1] ?? UNKNOWN)],
+  ["percentile_cont", (ctx, t) => new PercentileAcc(ctx, "cont", t[1] ?? UNKNOWN, t[0])],
+  ["percentile_disc", (ctx, t) => new PercentileAcc(ctx, "disc", t[1] ?? UNKNOWN, t[0])],
   ["mode", (ctx, t) => new PercentileAcc(ctx, "mode", t[0] ?? UNKNOWN)],
   ["corr", () => new CorrAcc("corr")],
   ["covar_pop", () => new CorrAcc("covar_pop")],
