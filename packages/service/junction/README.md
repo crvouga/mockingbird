@@ -962,6 +962,9 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `FAULT_PRESETS` | Named Junction faults (`sandbox_user_quota`, `rate_limited`, `server_error`, `bad_gateway`, `unavailable`). |
 | `createWebhookDispatcher` | `(endpoint: WebhookEndpoint) => WebhookDispatcher` — signed delivery with retries, standalone. |
 | `signSvix` / `verifySvix` | Produce / check a standard Svix `svix-signature`. |
+| `WEARABLE_PROVIDERS` / `SUMMARY_RESOURCES` / `TIMESERIES_RESOURCES` | The modelled [wearables](#wearables) provider catalog, summary and timeseries resources. |
+| `WearableInputError` | Thrown by `JunctionAPI.connectProvider` for a bad connection input (unknown provider, bad dates). |
+| `EMITTABLE_EVENT_TYPES` / `EmitError` | Event types `JunctionAPI.emitWebhook` / `POST /__admin/webhooks/emit` sends, and its refusal (`status`: 400, 404, 409 or 501). |
 | `observationCacheKey` | `(url, method = "GET", body?) => string` — the `"<METHOD> <path>?<sorted query> <json>"` key corpora use. |
 | `prefetchCoverageObservations` | Parity helper: records coverage-ZIP reads from the sandbox into an observation cache before `seedFrom`. |
 | `reshapeCoverageGeoCommand` | Parity-walk hook that pins geo/availability parameters onto the coverage corpus. |
