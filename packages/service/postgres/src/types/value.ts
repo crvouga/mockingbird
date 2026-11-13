@@ -29,6 +29,7 @@ import {
 } from "./range-types.ts";
 import { isMultirangeType, multirangeText, type PgMultirange, parseMultirangeText } from "./multirange.ts";
 import { namespaceText, parseNamespaceInput, parseOidText, parseRelationInput } from "./regnamespace.ts";
+import { parseVectorText } from "./vector.ts";
 
 /**
  * Canonical type ids are lowercase PG internal names: "int4", "text",
@@ -250,6 +251,8 @@ export function typeDisplayName(t: TypeId): string {
       return "character varying";
     case "bpchar":
       return "character";
+    case "varbit":
+      return "bit varying";
     case "timestamp":
       return "timestamp without time zone";
     case "timestamptz":
@@ -343,9 +346,17 @@ export const ARRAY_OIDS: Record<string, number> = {
   ...MULTIRANGE_ARRAY_OIDS,
 };
 
+/**
+ * Types an extension adds (pgvector's `vector`), with fixed pseudo-oids below the first user
+ * oid: PostgreSQL assigns them at CREATE EXTENSION time. Kept out of TYPE_OIDS because they
+ * exist (in pg_type, for type names) only while the extension is installed.
+ */
+export const EXTENSION_TYPE_OIDS: Readonly<Record<string, number>> = { vector: 13600 };
+export const EXTENSION_ARRAY_OIDS: Readonly<Record<string, number>> = { vector: 13601 };
+
 export function typeOid(t: TypeId): number {
-  if (isArrayType(t)) return ARRAY_OIDS[arrayElemType(t)] ?? 2277;
-  return TYPE_OIDS[t] ?? 705;
+  if (isArrayType(t)) return ARRAY_OIDS[arrayElemType(t)] ?? EXTENSION_ARRAY_OIDS[arrayElemType(t)] ?? 2277;
+  return TYPE_OIDS[t] ?? EXTENSION_TYPE_OIDS[t] ?? 705;
 }
 
 // --- float rendering (PG shortest round-trip format) ----------------------
@@ -736,6 +747,7 @@ export function datumText(t: TypeId, v: Datum, ctx: OutputCtx): string {
     case "tsquery":
     case "bit":
     case "varbit":
+    case "vector":
       return v as string;
     case "bytea":
       return byteaText(v as Uint8Array);
@@ -890,14 +902,11 @@ export function datumFromText(t: TypeId, text: string, ctx: InputCtx): Datum {
       const node = parseTsqueryText(text);
       return tsqueryText(node);
     }
+    case "vector":
+      return parseVectorText(text);
     case "bit":
-    case "varbit": {
-      if (!/^[01]*$/.test(text)) {
-        const bad = [...text].find((c) => c !== "0" && c !== "1")!;
-        throw pgError("invalid_text_representation", `"${bad}" is not a valid binary digit`);
-      }
-      return text;
-    }
+    case "varbit":
+      return parseBitString(text);
     default:
       throw unsupported(`input of type ${t}`);
   }
@@ -1064,4 +1073,26 @@ function parseArrayText(t: TypeId, text: string, ctx: InputCtx): PgArray {
   };
   flatten(nested, 0);
   return makeArray(elem, items, dims, lbs ?? dims.map(() => 1));
+}
+
+/**
+ * bit_in: a leading b/B reads binary digits, x/X reads hex digits (four bits each), anything else is
+ * binary. The datum is the string of '0'/'1' characters.
+ */
+export function parseBitString(text: string): string {
+  const first = text[0];
+  if (first === "x" || first === "X") {
+    let bits = "";
+    for (const c of text.slice(1)) {
+      const n = /^[0-9a-fA-F]$/.test(c) ? Number.parseInt(c, 16) : Number.NaN;
+      if (Number.isNaN(n)) throw pgError("invalid_text_representation", `"${c}" is not a valid hexadecimal digit`);
+      bits += n.toString(2).padStart(4, "0");
+    }
+    return bits;
+  }
+  const digits = first === "b" || first === "B" ? text.slice(1) : text;
+  for (const c of digits) {
+    if (c !== "0" && c !== "1") throw pgError("invalid_text_representation", `"${c}" is not a valid binary digit`);
+  }
+  return digits;
 }
