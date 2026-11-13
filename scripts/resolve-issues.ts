@@ -358,7 +358,7 @@ async function dispatch(args: string[]) {
   }
   const list = issues.map((n) => `#${n}`).join(" ")
   console.log(
-    `${dryRun ? "Dry run for" : "Resolve"} ${list} on ${repo}: one Claude Code coordinator (${model}), workflow from ${ref}, one shared worktree, branch and draft PR for the entire batch; native subagents handle independent issues. The PR is taken to ready-to-merge (never merged).`,
+    `${dryRun ? "Dry run for" : "Resolve"} ${list} on ${repo}: one Claude Code coordinator (${model}), workflow from ${ref}, one shared worktree, branch and draft PR for the entire batch; native subagents handle independent issues. The PR is taken to green with auto-merge enabled, so it lands itself.`,
   )
   confirm("Proceed?", yes)
 

@@ -97,8 +97,9 @@ starts one Claude Code coordinator for the complete `agent-reported` issue batch
 draft PR on one branch in one checkout, runs [`/resolve-issues`](../.agents/commands/resolve-issues.md)
 with every selected issue, and prioritizes native subagents for independent issue groups in that
 same worktree. The coordinator integrates their changes and runs `/pr-ready` until the combined
-PR is green and ready to merge. It reports precise blockers on affected issues while continuing
-independent work. It never merges.
+PR is green; auto-merge (enabled by `/pr-ready` with the run's token, so the push workflows on
+`main` still run) then lands it. It reports precise blockers on affected issues while continuing
+independent work.
 
 ```bash
 bun github:resolve-issues setup           # once, by the repo owner (below)

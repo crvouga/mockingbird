@@ -207,7 +207,11 @@ canonical file; `bun run agents:sync` creates missing links and `bun run check:a
 
 `/pr-ready` takes the current branch to a merge-ready PR: commit, push, merge `origin/main`,
 resolve conflicts, open the PR, and fix every failing check (CI and third-party checks).
-It never merges; a human lands the PR once `bun run pr:ready ready` reports it green.
+Auto-merge is the default: `bun run pr:ready pr` (and `advance`) enables it with a merge commit on
+every open, non-draft PR, so the PR lands itself once the required checks pass; `ready` only
+verifies. It is enabled by the agent's own `gh` credentials, never by a workflow with
+`GITHUB_TOKEN`: a merge made through `GITHUB_TOKEN` does not trigger the push workflows on `main`
+(CI, Publish image), so nothing would release.
 For a clean, committed branch, `bun run pr:ready advance` performs the mechanical steps in one call
 and returns JSON for the next blocker. `bun run pr:ready comments` lists review threads and recent
 comments when you want to read them.
@@ -225,7 +229,7 @@ the [Resolve issues](../.github/workflows/resolve-issues.yml) workflow with a Gi
 the run, which expires within 8 hours and reaches only this repository, plus your Claude
 subscription token. No repo secret is involved. One coordinator opens a single draft PR for the
 batch, delegates independent issue groups to native subagents in its shared checkout, and carries
-the combined PR to ready-to-merge. Blocked issues are reported individually while independent
+the combined PR to green with auto-merge enabled. Blocked issues are reported individually while independent
 work continues. With no issue named, it takes the queue in the command's order. The
 repo owner runs `bun github:resolve-issues setup` once first.
 [SECRETS.md](SECRETS.md#resolving-issues-on-github) lists the safeguards.
