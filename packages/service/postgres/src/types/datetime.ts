@@ -1,4 +1,4 @@
-import { pgError } from "../errors/error.ts";
+import { pgError, unsupported } from "../errors/error.ts";
 
 /**
  * Internal representations (mirroring PostgreSQL):
@@ -218,6 +218,164 @@ export function parseTimestampTz(text: string, zoneOffsetForNaive: (naiveMicros:
   return naive - BigInt(off) * USECS_PER_SEC;
 }
 
+/** time with time zone: local time of day plus the zone's offset in seconds east of UTC. */
+export interface TimeTz {
+  micros: bigint;
+  offsetSec: number;
+}
+
+/** timetz_cmp: by the UTC instant, then by zone (the zone further west sorts higher). */
+export function timetzCmp(a: TimeTz, b: TimeTz): number {
+  const ua = a.micros - BigInt(a.offsetSec) * USECS_PER_SEC;
+  const ub = b.micros - BigInt(b.offsetSec) * USECS_PER_SEC;
+  if (ua !== ub) return ua < ub ? -1 : 1;
+  return a.offsetSec === b.offsetSec ? 0 : a.offsetSec > b.offsetSec ? -1 : 1;
+}
+
+/** Wrap micros into one day, as timetz arithmetic and AT TIME ZONE do. */
+export function wrapTimeOfDay(micros: bigint): bigint {
+  let m = micros % USECS_PER_DAY;
+  if (m < 0n) m += USECS_PER_DAY;
+  return m;
+}
+
+/** The naive local timestamp of `tod` on the current date (the PG epoch date without a clock). */
+export function todayAt(now: DatetimeNow | undefined, tod: bigint): bigint {
+  if (!now) return tod;
+  const day = splitTs(now.utc + BigInt(now.offsetSec) * USECS_PER_SEC).days;
+  return BigInt(day) * USECS_PER_DAY + tod;
+}
+
+const TIMETZ_RE =
+  /^(\d{1,2}):(\d{1,2})(?::(\d{1,2})(\.\d*)?)?\s*(?:(z|utc|gmt)|([+-])(\d{1,2})(?::?(\d{2}))?(?::(\d{2}))?|([a-z][a-z0-9_/+-]*))?$/i;
+
+/**
+ * Parse timetz input: a time of day and an optional zone (numeric offset, Z / UTC / GMT). Without a
+ * zone the session TimeZone's offset applies, taken on the current date as PG does; `zoneOffsetToday`
+ * resolves it for a time of day.
+ */
+export function parseTimeTz(text: string, zoneOffsetToday: (todMicros: bigint) => number): TimeTz {
+  const t = text.trim();
+  const m = TIMETZ_RE.exec(t);
+  if (!m)
+    throw pgError(
+      "invalid_text_representation",
+      `invalid input syntax for type time with time zone: "${text}"`,
+      "22007",
+    );
+  if (m[10] !== undefined) {
+    // a full zone name needs a date; abbreviations (EST, CEST, ...) are not modelled
+    if (m[10].includes("/")) {
+      throw pgError(
+        "invalid_text_representation",
+        `invalid input syntax for type time with time zone: "${text}"`,
+        "22007",
+      );
+    }
+    throw unsupported(`time zone abbreviation "${m[10]}" in time with time zone input`);
+  }
+  const hh = Number(m[1]);
+  const mi = Number(m[2]);
+  const ss = Number(m[3] ?? 0);
+  const frac = m[4] && m[4] !== "." ? Math.round(Number(`0${m[4]}`) * 1_000_000) : 0;
+  const range = (): never => {
+    throw pgError("invalid_datetime", `date/time field value out of range: "${text}"`, "22008");
+  };
+  if (hh > 24 || mi > 59 || ss > 60) range();
+  const micros = BigInt(hh) * USECS_PER_HOUR + BigInt(mi) * USECS_PER_MIN + BigInt(ss) * USECS_PER_SEC + BigInt(frac);
+  if (micros > USECS_PER_DAY) range();
+  let offsetSec: number;
+  if (m[5] !== undefined) offsetSec = 0;
+  else if (m[6] !== undefined) {
+    const oh = Number(m[7]);
+    const om = Number(m[8] ?? 0);
+    const os = Number(m[9] ?? 0);
+    if (om > 59 || os > 59) range();
+    if (oh > 15) {
+      throw pgError("invalid_datetime", `time zone displacement out of range: "${text}"`, "22009");
+    }
+    offsetSec = (m[6] === "-" ? -1 : 1) * (oh * 3600 + om * 60 + os);
+  } else offsetSec = zoneOffsetToday(micros);
+  return { micros, offsetSec };
+}
+
+/** The transaction timestamp and the session zone's offset at it: what 'now' / 'today' input reads. */
+export interface DatetimeNow {
+  utc: bigint;
+  offsetSec: number;
+}
+
+export type SpecialDatetimeType = "date" | "time" | "timetz" | "timestamp" | "timestamptz";
+
+const DAY_WORDS: Record<string, number> = { today: 0, tomorrow: 1, yesterday: -1 };
+const SPECIAL_REST_RE = /^(?:(\d{1,2}):(\d{1,2})(?::(\d{1,2})(\.\d+)?)?)?\s*(z|utc|gmt|[+-]\d{1,2}(?::?\d{2})?)?$/;
+
+/**
+ * The special datetime input words of datetktbl that depend on the clock — `now`, `today`,
+ * `tomorrow`, `yesterday` (optionally followed by a time and/or numeric zone, as in
+ * `'today 10:00'` or `'today +02'`) — plus `allballs` (midnight UTC) for time. `epoch` and
+ * `±infinity` are clock-independent and handled by the regular parsers. Returns null when `text`
+ * is not one of these words; the caller then parses it normally.
+ */
+export function parseSpecialDatetime(
+  type: SpecialDatetimeType,
+  text: string,
+  now: () => DatetimeNow,
+  zoneOffsetForNaive: (naiveMicros: bigint) => number,
+): bigint | number | { micros: bigint; offsetSec: number } | null {
+  const lower = text.trim().toLowerCase();
+  if (lower === "allballs") {
+    if (type === "time") return 0n;
+    if (type === "timetz") return { micros: 0n, offsetSec: 0 };
+    return null;
+  }
+  if (lower === "now") {
+    const { utc, offsetSec } = now();
+    const local = utc + BigInt(offsetSec) * USECS_PER_SEC;
+    switch (type) {
+      case "timestamptz":
+        return utc;
+      case "timestamp":
+        return local;
+      case "date":
+        return splitTs(local).days;
+      case "time":
+        return splitTs(local).tod;
+      case "timetz":
+        return { micros: splitTs(local).tod, offsetSec };
+    }
+  }
+  const word = /^[a-z]+/.exec(lower)?.[0];
+  if (word === undefined || !(word in DAY_WORDS)) return null;
+  const rest = SPECIAL_REST_RE.exec(lower.slice(word.length).trim());
+  // PG rejects the day words for the time types
+  if (!rest || type === "time" || type === "timetz") return null;
+  const { utc, offsetSec } = now();
+  const day = splitTs(utc + BigInt(offsetSec) * USECS_PER_SEC).days + DAY_WORDS[word]!;
+  if (type === "date") return day;
+  const hh = Number(rest[1] ?? 0);
+  const mi = Number(rest[2] ?? 0);
+  const ss = Number(rest[3] ?? 0);
+  if (hh > 24 || mi > 59 || ss > 60) return null;
+  const frac = rest[4] ? Math.round(Number(rest[4]) * 1_000_000) : 0;
+  const naive =
+    BigInt(day) * USECS_PER_DAY +
+    BigInt(hh) * USECS_PER_HOUR +
+    BigInt(mi) * USECS_PER_MIN +
+    BigInt(ss) * USECS_PER_SEC +
+    BigInt(frac);
+  if (type === "timestamp") return naive;
+  const zone = rest[5];
+  let off: number;
+  if (zone === undefined) off = zoneOffsetForNaive(naive);
+  else if (zone === "z" || zone === "utc" || zone === "gmt") off = 0;
+  else {
+    const zm = /^([+-])(\d{1,2})(?::?(\d{2}))?$/.exec(zone)!;
+    off = (zm[1] === "-" ? -1 : 1) * (Number(zm[2]) * 3600 + Number(zm[3] ?? 0) * 60);
+  }
+  return naive - BigInt(off) * USECS_PER_SEC;
+}
+
 // --- formatting ----------------------------------------------------------
 
 function pad2(n: number): string {
@@ -293,51 +451,190 @@ export function formatTimestampTz(micros: bigint, offsetSec: number, xsd = false
 
 // --- interval ------------------------------------------------------------
 
-const INTERVAL_UNIT: Record<string, { months?: number; days?: number; micros?: bigint }> = {
-  microsecond: { micros: 1n },
-  microseconds: { micros: 1n },
-  us: { micros: 1n },
-  millisecond: { micros: 1000n },
-  milliseconds: { micros: 1000n },
-  ms: { micros: 1000n },
-  second: { micros: USECS_PER_SEC },
-  seconds: { micros: USECS_PER_SEC },
-  sec: { micros: USECS_PER_SEC },
-  secs: { micros: USECS_PER_SEC },
-  s: { micros: USECS_PER_SEC },
-  minute: { micros: USECS_PER_MIN },
-  minutes: { micros: USECS_PER_MIN },
-  min: { micros: USECS_PER_MIN },
-  mins: { micros: USECS_PER_MIN },
-  m: { micros: USECS_PER_MIN },
-  hour: { micros: USECS_PER_HOUR },
-  hours: { micros: USECS_PER_HOUR },
-  h: { micros: USECS_PER_HOUR },
-  hr: { micros: USECS_PER_HOUR },
-  hrs: { micros: USECS_PER_HOUR },
-  day: { days: 1 },
-  days: { days: 1 },
-  d: { days: 1 },
-  week: { days: 7 },
-  weeks: { days: 7 },
-  w: { days: 7 },
-  month: { months: 1 },
-  months: { months: 1 },
-  mon: { months: 1 },
-  mons: { months: 1 },
-  year: { months: 12 },
-  years: { months: 12 },
-  y: { months: 12 },
-  yr: { months: 12 },
-  yrs: { months: 12 },
-  decade: { months: 120 },
-  decades: { months: 120 },
-  century: { months: 1200 },
-  centuries: { months: 1200 },
-  millennium: { months: 12000 },
-  millenniums: { months: 12000 },
-  millennia: { months: 12000 },
+type DeltaUnit = "us" | "ms" | "s" | "min" | "h" | "d" | "w" | "mon" | "y" | "dec" | "c" | "mil";
+
+/**
+ * PostgreSQL's deltatktbl (src/backend/utils/adt/datetime.c): the unit words interval input accepts.
+ * Lookups truncate the word to TOKMAXLEN (10) characters, as PG does, so "milliseconds" finds
+ * "millisecon". `quarter` / `qtr` and `timezone*` are in the table but rejected by DecodeInterval.
+ */
+const DELTA_UNITS: Record<string, DeltaUnit | "ago" | "ignore"> = {
+  "@": "ignore",
+  ago: "ago",
+  c: "c",
+  cent: "c",
+  centuries: "c",
+  century: "c",
+  d: "d",
+  day: "d",
+  days: "d",
+  dec: "dec",
+  decade: "dec",
+  decades: "dec",
+  decs: "dec",
+  h: "h",
+  hour: "h",
+  hours: "h",
+  hr: "h",
+  hrs: "h",
+  m: "min",
+  microsecon: "us",
+  mil: "mil",
+  millennia: "mil",
+  millennium: "mil",
+  millisecon: "ms",
+  mils: "mil",
+  min: "min",
+  mins: "min",
+  minute: "min",
+  minutes: "min",
+  mon: "mon",
+  mons: "mon",
+  month: "mon",
+  months: "mon",
+  ms: "ms",
+  msec: "ms",
+  mseconds: "ms",
+  msecs: "ms",
+  s: "s",
+  sec: "s",
+  second: "s",
+  seconds: "s",
+  secs: "s",
+  us: "us",
+  usec: "us",
+  useconds: "us",
+  usecs: "us",
+  w: "w",
+  week: "w",
+  weeks: "w",
+  y: "y",
+  year: "y",
+  years: "y",
+  yr: "y",
+  yrs: "y",
+  // datetktbl words DecodeInterval skips
+  at: "ignore",
+  on: "ignore",
 };
+
+/**
+ * The core datetktbl words (datetime.c). ParseDateTime keeps a word glued to the digits after it
+ * ("w2d") as one date field unless the word is one of these, which is why "1h30m" splits but
+ * "3w2d" is rejected.
+ */
+const DATE_WORDS = new Set(
+  (
+    "-infinity ad allballs am apr april at aug august bc d dec december dow doy dst epoch feb february fri friday h " +
+    "infinity isodow isoyear j jan january jd jul julian july jun june m mar march may mm mon monday nov november now " +
+    "oct october on pm s sat saturday sep sept september sun sunday t thu thur thurs thursday today tomorrow tue tues " +
+    "tuesday wed wednesday weds y yesterday"
+  ).split(" "),
+);
+
+type IntervalField = { kind: "number" | "time" | "date" | "string" | "tz"; text: string };
+
+/** ParseDateTime's field splitter, restricted to what interval input needs. */
+function intervalFields(text: string): IntervalField[] | null {
+  const fields: IntervalField[] = [];
+  const isDigit = (c: string | undefined) => c !== undefined && c >= "0" && c <= "9";
+  const isAlpha = (c: string | undefined) => c !== undefined && /^[A-Za-z]$/.test(c);
+  let i = 0;
+  while (i < text.length) {
+    const c = text[i]!;
+    if (/\s/.test(c)) {
+      i++;
+      continue;
+    }
+    const start = i;
+    if (isDigit(c)) {
+      while (isDigit(text[i])) i++;
+      if (text[i] === ":") {
+        i++;
+        while (isDigit(text[i]) || text[i] === ":" || text[i] === ".") i++;
+        fields.push({ kind: "time", text: text.slice(start, i) });
+        continue;
+      }
+      if (text[i] === "-" || text[i] === "/" || text[i] === ".") {
+        const delim = text[i]!;
+        i++;
+        if (isDigit(text[i])) {
+          let kind: IntervalField["kind"] = delim === "." ? "number" : "date";
+          while (isDigit(text[i])) i++;
+          if (text[i] === delim) {
+            kind = "date";
+            i++;
+            while (isDigit(text[i]) || text[i] === delim) i++;
+          }
+          fields.push({ kind, text: text.slice(start, i) });
+        } else {
+          while (i < text.length && (/[A-Za-z0-9]/.test(text[i]!) || text[i] === delim)) i++;
+          fields.push({ kind: "date", text: text.slice(start, i).toLowerCase() });
+        }
+        continue;
+      }
+      fields.push({ kind: "number", text: text.slice(start, i) });
+      continue;
+    }
+    if (c === ".") {
+      i++;
+      while (isDigit(text[i])) i++;
+      fields.push({ kind: "number", text: text.slice(start, i) });
+      continue;
+    }
+    if (isAlpha(c)) {
+      while (isAlpha(text[i])) i++;
+      const word = text.slice(start, i).toLowerCase();
+      const next = text[i];
+      const isDate =
+        next === "-" || next === "/" || next === "." || ((next === "+" || isDigit(next)) && !DATE_WORDS.has(word));
+      if (isDate) {
+        while (i < text.length && /[A-Za-z0-9+\-/.]/.test(text[i]!)) i++;
+        fields.push({ kind: "date", text: text.slice(start, i).toLowerCase() });
+      } else fields.push({ kind: "string", text: word });
+      continue;
+    }
+    if (c === "+" || c === "-") {
+      i++;
+      while (i < text.length && /\s/.test(text[i]!)) i++;
+      if (isDigit(text[i])) {
+        const body = i;
+        while (isDigit(text[i]) || text[i] === ":" || text[i] === "." || text[i] === "-") i++;
+        fields.push({ kind: "tz", text: c + text.slice(body, i) });
+      } else if (isAlpha(text[i])) {
+        const body = i;
+        while (isAlpha(text[i])) i++;
+        fields.push({ kind: "string", text: c + text.slice(body, i).toLowerCase() });
+      } else return null;
+      continue;
+    }
+    if (/[!-/:-@[-`{-~]/.test(c)) {
+      i++;
+      continue;
+    }
+    return null;
+  }
+  return fields;
+}
+
+const MASK: Record<DeltaUnit | "ym" | "time", number> = {
+  us: 1,
+  ms: 2,
+  s: 4,
+  min: 8,
+  h: 16,
+  d: 32,
+  w: 64,
+  mon: 128,
+  y: 256,
+  dec: 512,
+  c: 1024,
+  mil: 2048,
+  ym: 128 | 256,
+  time: 1 | 2 | 4 | 8 | 16,
+};
+
+const INT32_MAX = 2_147_483_647;
 
 export function parseInterval(text: string): Interval {
   const t = text.trim();
@@ -361,82 +658,151 @@ export function parseInterval(text: string): Interval {
     if (iso[7]) micros += BigInt(Math.round(Number(iso[7]) * 1_000_000));
     return makeInterval(months, days, micros);
   }
+  const fields = intervalFields(t);
+  if (!fields || fields.length === 0) bad("interval", text);
+  const overflow = (): never => {
+    throw pgError("invalid_datetime", `interval field value out of range: "${text}"`, "22015");
+  };
   let months = 0;
   let days = 0;
   let micros = 0n;
-  let matchedAny = false;
-  let rest = t;
-  // "ago" suffix negates everything
+  let fmask = 0;
+  // null: no unit yet (a bare number is seconds); "none": right after "ago", where a bare number is rejected
+  let type: DeltaUnit | "none" | null = null;
+  let parsingUnit = false;
   let ago = false;
-  if (/\s+ago$/i.test(rest)) {
-    ago = true;
-    rest = rest.replace(/\s+ago$/i, "");
+  const addMicros = (val: number, frac: number, scale: number): void => {
+    micros += BigInt(val) * BigInt(scale) + BigInt(Math.round(frac * scale));
+  };
+  const addFractDays = (frac: number, scale: number): void => {
+    if (frac === 0) return;
+    const f = frac * scale;
+    const extra = Math.trunc(f);
+    days += extra;
+    micros += BigInt(Math.round((f - extra) * 86_400_000_000));
+  };
+  const addYears = (val: number, frac: number, scale: number): void => {
+    months += val * scale * 12 + Math.round(frac * scale * 12);
+  };
+  // DecodeInterval reads the fields right to left so a unit word applies to the number before it
+  for (let i = fields.length - 1; i >= 0; i--) {
+    const field = fields[i]!;
+    let tmask = 0;
+    let numberText: string | null = null;
+    if (field.kind === "time" || (field.kind === "tz" && field.text.includes(":"))) {
+      const negative = field.text.startsWith("-");
+      const body = field.kind === "tz" ? field.text.slice(1) : field.text;
+      const tm = /^(\d+):(\d+)(?::(\d+))?(\.\d*)?$/.exec(body);
+      if (!tm) bad("interval", text);
+      let hh = Number(tm[1]);
+      let mi = Number(tm[2]);
+      let ss = Number(tm[3] ?? 0);
+      // mm:ss.fff is MINUTE TO SECOND
+      if (tm[3] === undefined && tm[4] !== undefined) {
+        ss = mi;
+        mi = hh;
+        hh = 0;
+      }
+      const fracUs = tm[4] ? Math.round(Number(`0${tm[4]}`) * 1_000_000) : 0;
+      if (mi > 59 || ss > 60 || fracUs > 1_000_000) overflow();
+      const total =
+        BigInt(hh) * USECS_PER_HOUR + BigInt(mi) * USECS_PER_MIN + BigInt(ss) * USECS_PER_SEC + BigInt(fracUs);
+      micros += negative ? -total : total;
+      tmask = MASK.time;
+      type = "d";
+    } else if (field.kind === "number" || field.kind === "date" || field.kind === "tz") {
+      numberText = field.text;
+    } else {
+      if (parsingUnit) bad("interval", text);
+      const unit = DELTA_UNITS[field.text.slice(0, 10)];
+      if (unit === "ignore") continue;
+      if (unit === undefined) {
+        if (field.text === "infinity" || field.text === "-infinity" || field.text === "+infinity") {
+          throw unsupported("interval infinity");
+        }
+        bad("interval", text);
+      }
+      if (unit === "ago") {
+        if (i !== fields.length - 1) bad("interval", text);
+        ago = true;
+        type = "none";
+      } else {
+        type = unit;
+        parsingUnit = true;
+      }
+    }
+    if (numberText !== null) {
+      if (type === "none") bad("interval", text);
+      const unit: DeltaUnit = type ?? "s";
+      const nm = /^([+-]?)(\d*)(?:(-)(\d+)|(\.\d*))?$/.exec(numberText);
+      if (!nm || (nm[2] === "" && nm[5] === undefined)) bad("interval", text);
+      const negative = nm[1] === "-";
+      let val = Number(nm[2] || "0");
+      let frac = nm[5] !== undefined && nm[5] !== "." ? Number(`0${nm[5]}`) : 0;
+      if (!Number.isSafeInteger(val) || val > INT32_MAX * 1000) overflow();
+      let effective: DeltaUnit = unit;
+      if (nm[3] !== undefined) {
+        // SQL "years-months"
+        const m2 = Number(nm[4]);
+        val = val * 12 + m2;
+        frac = 0;
+        effective = "mon";
+        tmask = MASK.ym;
+      }
+      if (negative) {
+        val = -val;
+        frac = -frac;
+      }
+      switch (effective) {
+        case "us":
+          addMicros(val, frac, 1);
+          break;
+        case "ms":
+          addMicros(val, frac, 1000);
+          break;
+        case "s":
+          addMicros(val, frac, 1_000_000);
+          break;
+        case "min":
+          addMicros(val, frac, 60_000_000);
+          break;
+        case "h":
+          addMicros(val, frac, 3_600_000_000);
+          break;
+        case "d":
+          days += val;
+          micros += BigInt(Math.round(frac * 86_400_000_000));
+          break;
+        case "w":
+          days += val * 7;
+          addFractDays(frac, 7);
+          break;
+        case "mon":
+          months += val;
+          addFractDays(frac, 30);
+          break;
+        case "y":
+          addYears(val, frac, 1);
+          break;
+        case "dec":
+          addYears(val, frac, 10);
+          break;
+        case "c":
+          addYears(val, frac, 100);
+          break;
+        case "mil":
+          addYears(val, frac, 1000);
+          break;
+      }
+      if (tmask === 0) tmask = effective === "s" && frac !== 0 ? MASK.s | MASK.ms | MASK.us : MASK[effective];
+      type = null;
+      parsingUnit = false;
+    }
+    if (tmask & fmask) bad("interval", text);
+    fmask |= tmask;
   }
-  // consume leading sign applied to an HH:MM[:SS] chunk or quantity-unit pairs
-  const tokens = rest.split(/\s+/);
-  let i = 0;
-  while (i < tokens.length) {
-    const tok = tokens[i]!;
-    // time-of-day chunk [+-]HH:MM[:SS[.f]]
-    const tm = /^([+-]?)(\d+):(\d{1,2})(?::(\d{1,2})(\.\d+)?)?$/.exec(tok);
-    if (tm) {
-      const sign = tm[1] === "-" ? -1n : 1n;
-      const hh = BigInt(tm[2]!);
-      const mi = BigInt(tm[3]!);
-      const ss = BigInt(tm[4] ?? "0");
-      const frac = tm[5] ? BigInt(Math.round(Number(tm[5]) * 1_000_000)) : 0n;
-      micros += sign * (hh * USECS_PER_HOUR + mi * USECS_PER_MIN + ss * USECS_PER_SEC + frac);
-      matchedAny = true;
-      i += 1;
-      continue;
-    }
-    // sql standard year-month: [+-]Y-M
-    const ym = /^([+-]?)(\d+)-(\d{1,2})$/.exec(tok);
-    if (ym) {
-      const sign = ym[1] === "-" ? -1 : 1;
-      months += sign * (Number(ym[2]) * 12 + Number(ym[3]));
-      matchedAny = true;
-      i += 1;
-      continue;
-    }
-    // quantity unit
-    const qm = /^([+-]?\d+(?:\.\d+)?)$/.exec(tok);
-    if (qm && i + 1 < tokens.length) {
-      const unit = INTERVAL_UNIT[tokens[i + 1]!.toLowerCase().replace(/,$/, "")];
-      if (!unit) bad("interval", text);
-      const qty = Number(qm[1]);
-      if (unit.months) {
-        const total = qty * unit.months;
-        const wholeMonths = Math.trunc(total);
-        months += wholeMonths;
-        // fractional months spill into days (30 days per month)
-        const fracMonths = total - wholeMonths;
-        if (fracMonths !== 0) days += Math.trunc(fracMonths * 30);
-      }
-      if (unit.days) {
-        const total = qty * unit.days;
-        const whole = Math.trunc(total);
-        days += whole;
-        const frac = total - whole;
-        if (frac !== 0) micros += BigInt(Math.round(frac * 86_400_000_000));
-      }
-      if (unit.micros) {
-        micros += BigInt(Math.round(qty * Number(unit.micros)));
-      }
-      matchedAny = true;
-      i += 2;
-      continue;
-    }
-    // trailing bare number without a unit is taken as seconds (DecodeInterval)
-    if (qm && i === tokens.length - 1) {
-      micros += BigInt(Math.round(Number(qm[1]) * 1_000_000));
-      matchedAny = true;
-      i += 1;
-      continue;
-    }
-    bad("interval", text);
-  }
-  if (!matchedAny) bad("interval", text);
+  if (fmask === 0 || parsingUnit) bad("interval", text);
+  if (Math.abs(months) > INT32_MAX || Math.abs(days) > INT32_MAX) overflow();
   if (ago) return makeInterval(-months, -days, -micros);
   return makeInterval(months, days, micros);
 }

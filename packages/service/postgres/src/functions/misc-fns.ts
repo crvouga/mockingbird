@@ -21,7 +21,28 @@ import {
   typeDisplayName,
 } from "../types/value.ts";
 import { assertSequenceWritable } from "../transactions/read-only.ts";
-import { argBigInt, argInt, argText, type ScalarFn, strict } from "./util.ts";
+import { argBigInt, argFloat, argInt, argText, type ScalarFn, strict } from "./util.ts";
+import { isWallClock } from "../runtime/clock.ts";
+import {
+  blockingSleep,
+  checkStatementTimeout,
+  statementTimeLeftMs,
+  statementTimeoutError,
+} from "../runtime/statement-timeout.ts";
+import { type Interval, timestampAddInterval } from "../types/datetime.ts";
+
+/** pg_sleep: block for `seconds` of wall time, cut short (57014) by statement_timeout. */
+function sleepSeconds(ctx: EngineCtx, seconds: number): void {
+  checkStatementTimeout(ctx.state);
+  if (!isWallClock(ctx.state.clock) || !(seconds > 0)) return;
+  const ms = seconds * 1000;
+  const left = statementTimeLeftMs(ctx.state);
+  if (left !== null && ms >= left) {
+    blockingSleep(left);
+    throw statementTimeoutError();
+  }
+  blockingSleep(ms);
+}
 
 export const PG_VERSION_TEXT = "PostgreSQL 18.3 (postgres-mem) on TypeScript, in-memory engine";
 export const PG_SERVER_VERSION = "18.3";
@@ -218,10 +239,28 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("current_role", (ctx) => tv("name", currentUserName(ctx.state)));
   m.set("user", (ctx) => tv("name", currentUserName(ctx.state)));
   m.set("pg_backend_pid", () => tv("int4", 1));
-  m.set("txid_current", () => tv("int8", 1n));
-  m.set("pg_current_xact_id", () => tv("int8", 1n));
-  // void results are non-NULL datums that print as ''; pg_sleep is strict
-  m.set("pg_sleep", (_ctx, args) => tv("void", args[0]?.v === null ? null : ""));
+  // txid_current / pg_current_xact_id: session-fns.ts
+  // void results are non-NULL datums that print as ''; pg_sleep is strict. The sleeps really wait
+  // only on the wall clock ({ now: "system" }); with a fixed or injected clock they return at once.
+  m.set("pg_sleep", (ctx, args) => {
+    if (args[0]?.v === null || args[0] === undefined) return tv("void", null);
+    sleepSeconds(ctx, argFloat(ctx, args[0]));
+    return tv("void", "");
+  });
+  // pg_sleep_for / pg_sleep_until are SQL functions over pg_sleep in PostgreSQL: NULL in, NULL out
+  m.set("pg_sleep_for", (ctx, args) => {
+    if (args[0]?.v === null || args[0] === undefined) return tv("void", null);
+    const step = castTo(ctx, args[0], "interval", { explicit: true }).v as Interval;
+    const start = ctx.clockNow();
+    sleepSeconds(ctx, Number(timestampAddInterval(start, step) - start) / 1e6);
+    return tv("void", "");
+  });
+  m.set("pg_sleep_until", (ctx, args) => {
+    if (args[0]?.v === null || args[0] === undefined) return tv("void", null);
+    const until = castTo(ctx, args[0], "timestamptz", { explicit: true }).v as bigint;
+    sleepSeconds(ctx, Number(until - ctx.clockNow()) / 1e6);
+    return tv("void", "");
+  });
   // like regtypeout, an enum is schema-qualified only when its schema is not the one its bare name resolves to
   const visibleTypeName = (ctx: EngineCtx, t: TypeId): string => {
     if (isArrayType(t)) return `${visibleTypeName(ctx, arrayElemType(t))}[]`;
@@ -376,15 +415,11 @@ export function getMiscFunctions(): Map<string, ScalarFn> {
   m.set("pg_indexes_size", () => tv("int8", 0n));
   m.set("pg_database_size", () => tv("int8", 8192n));
 
-  m.set("pg_advisory_lock", (_ctx, args) => tv("void", args.some((a) => a.v === null) ? null : ""));
-  m.set("pg_advisory_unlock", () => tv("bool", true));
-  m.set("pg_advisory_unlock_all", () => tv("void", ""));
-  m.set("pg_try_advisory_lock", () => tv("bool", true));
+  // advisory locks: advisory-fns.ts
 
   m.set("pg_notification_queue_usage", () => tv("float8", 0));
   m.set("pg_listening_channels_check", () => tv("bool", true));
   m.set("pg_is_in_recovery", () => tv("bool", false));
-  m.set("txid_current_if_assigned", () => tv("int8", null));
 
   return m;
 }
