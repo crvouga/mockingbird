@@ -14,6 +14,7 @@
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-ui": "workspace:*",
     "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-pgvector": "0.0.9",
     "@types/bun": "latest",
     "@types/pg": "^8.23.1",
     "embedded-postgres": "18.3.0-beta.17",
