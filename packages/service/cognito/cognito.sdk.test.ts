@@ -6,6 +6,7 @@ import {
   AdminSetUserPasswordCommand,
   AdminUserGlobalSignOutCommand,
   CognitoIdentityProviderClient,
+  CreateGroupCommand,
   GetUserCommand,
   InitiateAuthCommand,
   ListUsersCommand,
@@ -46,6 +47,7 @@ describe("official Cognito clients", () => {
           Permanent: true,
         }),
       )
+      await client.send(new CreateGroupCommand({ UserPoolId: poolId, GroupName: "clinicians" }))
       await client.send(
         new AdminAddUserToGroupCommand({
           UserPoolId: poolId,
