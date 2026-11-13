@@ -11,10 +11,12 @@ import {
   intervalAdd,
   intervalNeg,
   makeInterval,
+  type TimeTz,
   TS_NEG_INF,
   TS_POS_INF,
   timestampAddInterval,
   USECS_PER_DAY,
+  wrapTimeOfDay,
 } from "../types/datetime.ts";
 import {
   type JsonbValue,
@@ -470,7 +472,7 @@ function evalArithmetic(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue
 function tryDatetimeArith(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue): TypedValue | null {
   const lt = l.t;
   const rt = r.t;
-  const isDT = (t: TypeId): boolean => ["date", "time", "timestamp", "timestamptz", "interval"].includes(t);
+  const isDT = (t: TypeId): boolean => ["date", "time", "timetz", "timestamp", "timestamptz", "interval"].includes(t);
   if (!isDT(lt) && !isDT(rt)) return null;
 
   const key = `${lt}${op}${rt}`;
@@ -551,6 +553,27 @@ function tryDatetimeArith(ctx: EngineCtx, op: string, l: TypedValue, r: TypedVal
       let micros = ((t.v as bigint) + (iv.v as Interval).micros) % USECS_PER_DAY;
       if (micros < 0n) micros += USECS_PER_DAY;
       return tv("time", micros);
+    }
+    case "timetz+interval":
+    case "interval+timetz":
+    case "timetz-interval": {
+      // timetz_pl_interval / timetz_mi_interval: only the interval's time part, wrapped to one day
+      const t = lt === "timetz" ? l : r;
+      const iv = lt === "timetz" ? r : l;
+      if (t.v === null || iv.v === null) return nullOf("timetz");
+      const tz = t.v as unknown as TimeTz;
+      const span = (iv.v as Interval).micros;
+      const micros = wrapTimeOfDay(tz.micros + (op === "-" ? -span : span));
+      return tv("timetz", { micros, offsetSec: tz.offsetSec } as unknown as Datum);
+    }
+    case "date+timetz":
+    case "timetz+date": {
+      // datetimetz_timestamptz
+      const d = lt === "date" ? l : r;
+      const t = lt === "date" ? r : l;
+      if (d.v === null || t.v === null) return nullOf("timestamptz");
+      const tz = t.v as unknown as TimeTz;
+      return tv("timestamptz", BigInt(d.v as number) * USECS_PER_DAY + tz.micros - BigInt(tz.offsetSec) * 1_000_000n);
     }
     case "time-interval": {
       if (l.v === null || r.v === null) return nullOf("time");
@@ -650,7 +673,7 @@ function timestampDiff(a: bigint, b: bigint): Interval {
   return makeInterval(0, d, rem);
 }
 
-function intervalScale(iv: Interval, factor: number): Interval {
+export function intervalScale(iv: Interval, factor: number): Interval {
   if (!Number.isFinite(factor)) throw pgError("invalid_parameter_value", "interval out of range", "22015");
   const months = iv.months * factor;
   const wholeMonths = Math.trunc(months);

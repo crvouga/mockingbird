@@ -15,6 +15,11 @@ export function setCatalogBuilder(b: CatalogBuilder): void {
   builder = b;
 }
 
+/** The registered builder (tests wrap it to count catalog materializations). */
+export function getCatalogBuilder(): CatalogBuilder | null {
+  return builder;
+}
+
 /** regtype / regproc resolution, registered by the catalog builder (keeps the import graph acyclic). */
 export interface RegResolver {
   typeIn(state: DatabaseState, text: string): string;
@@ -85,4 +90,10 @@ export const PG_CATALOG_RELATIONS: ReadonlySet<string> = new Set([
   "pg_cursors",
   "pg_partitioned_table",
   "pg_event_trigger",
+  // issue #725
+  "pg_db_role_setting",
+  "pg_rewrite",
+  "pg_operator",
+  "pg_stat_all_tables",
+  "pg_stat_sys_tables",
 ]);
