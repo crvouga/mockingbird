@@ -1,6 +1,7 @@
 import type { FormValue } from "@crvouga/mockingbird-http-codec"
 import { resolveSchema, type SchemaObject } from "@crvouga/mockingbird-openapi"
 import { type FormIssue, type OperationContext, parseForm } from "@crvouga/mockingbird-service"
+import { requestInfo } from "./context.js"
 import {
   humanList,
   invalidRequest,
@@ -12,6 +13,7 @@ import {
 } from "./errors.js"
 import { expandPathsOf } from "./expand.js"
 import { document } from "./generated/openapi.js"
+import { versionAtLeast } from "./version.js"
 
 /** Stripe words enum alternatives in its own order, not the spec's alphabetical one. */
 const ENUM_ORDER: Record<string, string[]> = {
@@ -388,3 +390,23 @@ export const unsetToNull = <T>(value: T | "" | undefined): T | null | undefined 
 
 export const isSet = (value: unknown): value is string | number | boolean | object =>
   value !== undefined && value !== ""
+
+/** The `Stripe-Version` a request is answered at. */
+export const requestVersion = (context: OperationContext): string =>
+  requestInfo(context.request).version
+
+/**
+ * A request parameter Stripe removed at `removedAt` (see `REQUEST_CHANGES`): requests pinned to
+ * an older version may send it, so the contract declares it; from `removedAt` on it is
+ * `parameter_unknown`, exactly as for a parameter the API never had. Answers the value.
+ */
+export const removedParam = (
+  context: OperationContext,
+  value: unknown,
+  path: string,
+  removedAt: string,
+): unknown => {
+  if (value === undefined) return undefined
+  if (versionAtLeast(requestVersion(context), removedAt)) throw parameterUnknown(path)
+  return value
+}
