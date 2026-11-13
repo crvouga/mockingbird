@@ -1,9 +1,11 @@
 import type { Relation, RelColumn } from "../executor/relation.ts";
 import type { EngineCtx } from "../expressions/context.ts";
+import { ADVISORY_MODE_NAME, engineAdvisoryLocks } from "../functions/advisory-fns.ts";
 import { pgTrgmInstalled } from "../functions/pgtrgm.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { deparseDefault } from "../sql/deparse-default.ts";
 import { type Interval, UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
+import { networkInput } from "../types/network.ts";
 import { zoneOffsetAtUtc } from "../types/timezone.ts";
 import { TIMEZONE_ABBREVS, TIMEZONE_NAMES } from "../types/timezone-data.ts";
 import { builtinNamespaceOid } from "../types/regnamespace.ts";
@@ -256,12 +258,37 @@ const BACKEND_PID = 1;
 
 /**
  * `pg_locks`: what a stock server shows for a session that is only reading: its virtual
- * transaction id lock and the `AccessShareLock` on `pg_locks` itself. Row, table and advisory
- * locks live in the wire server's cluster and are not listed.
+ * transaction id lock and the `AccessShareLock` on `pg_locks` itself, plus the advisory locks held
+ * (and, over the wire, waited for) by every session. Row and table locks live in the wire server's
+ * cluster and are not listed.
  */
 function pgLocks(ctx: EngineCtx): Relation {
   const databaseOid = databaseOidOf(ctx);
   const virtualTransaction = `1/${ctx.state.inTransaction ? 2 : 1}`;
+  const context = databaseCatalogContext(ctx.state);
+  const names = context.names();
+  const self = currentBackendPid(ctx);
+  const advisory = (
+    context.advisoryLocks?.() ??
+    engineAdvisoryLocks(ctx.state).map((lock) => ({ ...lock, pid: self, databaseName: context.name, granted: true }))
+  ).map((lock): Datum[] => [
+    "advisory",
+    5 + Math.max(names.indexOf(lock.databaseName), 0),
+    null,
+    null,
+    null,
+    null,
+    null,
+    lock.key.classid,
+    lock.key.objid,
+    lock.key.objsubid,
+    lock.pid === self ? virtualTransaction : `${lock.pid}/1`,
+    lock.pid,
+    ADVISORY_MODE_NAME[lock.mode],
+    lock.granted,
+    false,
+    null,
+  ]);
   return rel(
     [
       ["locktype", "text"],
@@ -318,6 +345,7 @@ function pgLocks(ctx: EngineCtx): Relation {
         true,
         null,
       ],
+      ...advisory,
     ],
     "pg_locks",
   );
@@ -365,9 +393,9 @@ function pgStatActivity(ctx: EngineCtx): Relation {
       SUPERUSER_OID,
       "postgres",
       current ? (ctx.state.getSetting("application_name") ?? "") : backend.applicationName,
+      backend.clientAddr === undefined ? null : networkInput("inet", backend.clientAddr),
       null,
-      null,
-      null,
+      backend.clientPort ?? null,
       now,
       state === "idle" ? null : now,
       now,
@@ -391,7 +419,7 @@ function pgStatActivity(ctx: EngineCtx): Relation {
       ["usesysid", "oid"],
       ["usename", "name"],
       ["application_name", "text"],
-      ["client_addr", "text"],
+      ["client_addr", "inet"],
       ["client_hostname", "text"],
       ["client_port", "int4"],
       ["backend_start", "timestamptz"],

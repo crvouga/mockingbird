@@ -47,6 +47,7 @@ import {
 import { ACCESS_METHODS, indexAttributeCount, indexMethod, isKeyConstraint } from "./index-catalog.ts";
 import { PGVECTOR_ACCESS_METHODS, pgvectorSchema } from "../functions/pgvector.ts";
 import { extensionCatalogRelation } from "./catalog-extensions.ts";
+import { catalogRelation725 } from "./catalog-725.ts";
 import { catalogRelation692, extendPgClass } from "./catalog-692.ts";
 import { attrdefOid, columnDefaults, systemCatalogRelation } from "./catalog-system.ts";
 import { type Persistence, relPersistence } from "./persistence.ts";
@@ -120,6 +121,8 @@ function pgNamespace(state: DatabaseState): Relation {
 
 /** position of `relam` in a pg_class row */
 const RELAM = 5;
+/** position of `reloptions` in a pg_class row */
+const RELOPTIONS = 28;
 
 function pgClass(ctx: EngineCtx): Relation {
   const state = ctx.state;
@@ -207,6 +210,13 @@ function pgClass(ctx: EngineCtx): Relation {
       // relam: the index's own access method (push assumes btree)
       rows[rows.length - 1]![RELAM] =
         ACCESS_METHODS.get(indexMethod(i))?.[0] ?? PGVECTOR_ACCESS_METHODS.get(indexMethod(i)) ?? 403;
+      // reloptions: the index's storage parameters as `name=value`
+      if (i.options && i.options.length > 0) {
+        rows[rows.length - 1]![RELOPTIONS] = makeArray(
+          "text",
+          i.options.map((o) => `${o.name}=${o.value}`),
+        );
+      }
     }
   }
   extendPgClass(ctx, rows);
@@ -379,7 +389,7 @@ function pgProc(ctx: EngineCtx): Relation {
   const rows: Datum[][] = [];
   for (const p of builtinProcs()) {
     // the engine does not model builtin signatures: no return type, argument count -1
-    rows.push([p.oid, p.name, NS_PG_CATALOG, p.kind, p.retset, -1, 10, 12, 0, false, false, "v", null]);
+    rows.push([p.oid, p.name, NS_PG_CATALOG, p.kind, p.retset, -1, 10, 12, 0, false, false, "v", null, null]);
   }
   for (const schema of ctx.state.schemas.values()) {
     for (const fns of schema.functions.values()) {
@@ -399,6 +409,13 @@ function pgProc(ctx: EngineCtx): Relation {
           f.strict,
           f.volatility === "immutable" ? "i" : f.volatility === "stable" ? "s" : "v",
           f.rawBody,
+          // CREATE FUNCTION ... SET name = value, as `name=value` in declaration order
+          f.settings && Object.keys(f.settings).length > 0
+            ? makeArray(
+                "text",
+                Object.entries(f.settings).map(([k, v]) => `${k}=${v}`),
+              )
+            : null,
         ]);
       }
     }
@@ -418,6 +435,7 @@ function pgProc(ctx: EngineCtx): Relation {
       ["proisstrict", "bool"],
       ["provolatile", "bpchar"],
       ["prosrc", "text"],
+      ["proconfig", "text[]"],
     ],
     rows,
     "pg_proc",
@@ -1523,7 +1541,7 @@ function infoRoutines(ctx: EngineCtx): Relation {
 // --- dispatch ----------------------------------------------------------------
 
 function buildCatalogRelation(ctx: EngineCtx, schema: string, name: string): Relation | null {
-  const extended = catalogRelation692(ctx, schema, name);
+  const extended = catalogRelation692(ctx, schema, name) ?? catalogRelation725(ctx, schema, name);
   if (extended) return extended;
   if (schema === "pg_catalog") {
     switch (name) {

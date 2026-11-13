@@ -22,6 +22,7 @@ import {
   sessionUserName,
 } from "../storage/roles.ts";
 import { encryptPassword } from "../storage/password.ts";
+import { databaseCatalogContext } from "../runtime/database-context.ts";
 import { commandResult, type ExecEnv, type ExecResult } from "./relation.ts";
 
 /**
@@ -211,9 +212,56 @@ function replaceRole(state: DatabaseState, old: RoleData, next: RoleData): void 
   });
 }
 
+/** The SET / RESET of one pg_db_role_setting entry: the new settings, in PostgreSQL's order (a changed name keeps its place). */
+function changeSettings(
+  current: Readonly<Record<string, string>>,
+  action: Extract<AlterRoleStmt["action"], { kind: "set" | "reset" }>,
+): Record<string, string> {
+  const settings = { ...current };
+  if (action.kind === "set" && action.value !== null) settings[action.setting] = action.value;
+  else if (action.kind === "reset" && action.setting === "all")
+    for (const key of Object.keys(settings)) delete settings[key];
+  else delete settings[action.setting];
+  return settings;
+}
+
+/** `ALTER ROLE ALL ...`, `ALTER ROLE r IN DATABASE d ...`, `ALTER DATABASE d SET / RESET`. */
+function alterScopedSettings(env: ExecEnv, stmt: AlterRoleStmt, role: RoleData | null): ExecResult {
+  const state = env.ctx.state;
+  const action = stmt.action;
+  const tag = stmt.tag ?? "ALTER ROLE";
+  if (action.kind !== "set" && action.kind !== "reset") throw pgError("syntax", "expected SET or RESET", "42601");
+  const database = stmt.database ?? null;
+  if (database !== null && !databaseCatalogContext(state).names().includes(database)) {
+    throw pgError("undefined_object", `database "${database}" does not exist`, "3D000");
+  }
+  const me = currentRole(state);
+  // a role's own defaults need CREATEROLE (or being that role); every role's need a superuser
+  if (role === null ? !me.superuser : me.oid !== role.oid && !me.superuser) {
+    if (role === null)
+      permissionDenied(stmt.tag ? `must be owner of database ${database}` : "permission denied to alter role");
+    assertCanManageRoles(state, "alter", role);
+  }
+  const roleOid = role?.oid ?? 0;
+  updateExt(state, (ext) => {
+    const rows = (ext.dbRoleSettings ?? []).slice();
+    const index = rows.findIndex((r) => r.database === database && r.role === roleOid);
+    const settings = changeSettings(index >= 0 ? rows[index]!.settings : {}, action);
+    if (Object.keys(settings).length === 0) {
+      if (index >= 0) rows.splice(index, 1);
+    } else if (index >= 0) rows[index] = { database, role: roleOid, settings };
+    else rows.push({ database, role: roleOid, settings });
+    const { dbRoleSettings: _old, ...rest } = ext;
+    return rows.length > 0 ? { ...rest, dbRoleSettings: rows } : rest;
+  });
+  return commandResult(tag, 0);
+}
+
 export function executeAlterRole(env: ExecEnv, stmt: AlterRoleStmt): ExecResult {
   const state = env.ctx.state;
+  if (stmt.allRoles) return alterScopedSettings(env, stmt, null);
   const role = requireRole(state, stmt.name);
+  if (stmt.database !== undefined) return alterScopedSettings(env, stmt, role);
   const action = stmt.action;
   const me = currentRole(state);
   switch (action.kind) {
@@ -254,11 +302,7 @@ export function executeAlterRole(env: ExecEnv, stmt: AlterRoleStmt): ExecResult 
     case "set":
     case "reset": {
       if (me.oid !== role.oid) assertCanManageRoles(state, "alter", role);
-      const settings = { ...(role.settings ?? {}) };
-      if (action.kind === "set" && action.value !== null) settings[action.setting] = action.value;
-      else if (action.kind === "reset" && action.setting === "all")
-        for (const key of Object.keys(settings)) delete settings[key];
-      else delete settings[action.setting];
+      const settings = changeSettings(role.settings ?? {}, action);
       const { settings: _old, ...rest } = role;
       replaceRole(state, role, Object.keys(settings).length > 0 ? { ...rest, settings } : rest);
       return commandResult("ALTER ROLE", 0);
@@ -312,11 +356,17 @@ export function executeDropRole(env: ExecEnv, stmt: DropRoleStmt): ExecResult {
     dropping.push(role);
   }
   const oids = new Set(dropping.map((r) => r.oid));
-  updateExt(state, (ext) => ({
-    ...ext,
-    roles: new Map([...ext.roles].filter(([, r]) => !oids.has(r.oid))),
-    memberships: ext.memberships.filter((m) => !oids.has(m.role) && !oids.has(m.member)),
-  }));
+  updateExt(state, (ext) => {
+    const { dbRoleSettings, ...rest } = ext;
+    // its pg_db_role_setting rows go with the role
+    const settings = dbRoleSettings?.filter((r) => !oids.has(r.role)) ?? [];
+    return {
+      ...rest,
+      roles: new Map([...ext.roles].filter(([, r]) => !oids.has(r.oid))),
+      memberships: ext.memberships.filter((m) => !oids.has(m.role) && !oids.has(m.member)),
+      ...(settings.length > 0 ? { dbRoleSettings: settings } : {}),
+    };
+  });
   return commandResult("DROP ROLE", 0);
 }
 
@@ -488,6 +538,17 @@ export function executeGrant(env: ExecEnv, stmt: GrantStmt): ExecResult {
           privileges: all,
           grantable: "",
         });
+        // a function's default ACL also lets PUBLIC execute it (acldefault: {=X/owner, owner=X/owner})
+        if (target.kind === "function") {
+          grants.push({
+            objectKind: "function",
+            objectOid: target.oid,
+            grantee: 0,
+            grantor: owner,
+            privileges: "X",
+            grantable: "",
+          });
+        }
       }
       for (const grantee of grantees) {
         const index = grants.findIndex(

@@ -1,4 +1,5 @@
 import { materializedTable } from "../storage/indexable-relation.ts";
+import { mergeIndexOptions, validateIndexOptions } from "./index-reloptions.ts";
 import type {
   AlterEnumStmt,
   AlterIndexStmt,
@@ -601,6 +602,7 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
     return createPartition(env, stmt, (plain) => executeCreateTable(env, plain));
   }
   const state = env.ctx.state;
+  const onCommit = onCommitAction(env, stmt);
   const { schema, name } = targetSchema(env, stmt.name);
   if (schema.hasRelation(name)) {
     if (stmt.ifNotExists) return commandResult("CREATE TABLE", 0);
@@ -691,6 +693,7 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
   }
   const table = new TableData(schema.name, name, built.columns, state.nextOid(), stmt.temp);
   table.unlogged = stmt.unlogged;
+  table.onCommit = onCommit;
   table.constraints = built.constraints;
   if (stmt.partitionBy) setPartitionKey(env, table, stmt.partitionBy);
   checkForeignKeyTargets(state, built.constraints);
@@ -698,8 +701,20 @@ export function executeCreateTable(env: ExecEnv, stmt: CreateTableStmt): ExecRes
   return commandResult("CREATE TABLE", 0);
 }
 
+/** A table's `ON COMMIT` action to remember; PRESERVE ROWS is the default and needs none. */
+function onCommitAction(env: ExecEnv, stmt: CreateTableStmt | CreateTableAsStmt): "drop" | "delete_rows" | null {
+  if (!stmt.onCommit) return null;
+  if (!stmt.temp) {
+    throw pgError("invalid_table_definition", "ON COMMIT can only be used on temporary tables", "42P16");
+  }
+  if (stmt.onCommit === "preserve_rows") return null;
+  env.ctx.state.mayHaveOnCommitActions = true;
+  return stmt.onCommit;
+}
+
 export function executeCreateTableAs(env: ExecEnv, stmt: CreateTableAsStmt): ExecResult {
   const state = env.ctx.state;
+  const onCommit = onCommitAction(env, stmt);
   const { schema, name } = targetSchema(env, stmt.name);
   if (schema.hasRelation(name)) {
     if (stmt.ifNotExists) return commandResult("CREATE TABLE AS", 0);
@@ -718,6 +733,7 @@ export function executeCreateTableAs(env: ExecEnv, stmt: CreateTableAsStmt): Exe
   }));
   const table = new TableData(schema.name, name, columns, state.nextOid(), stmt.temp);
   table.unlogged = stmt.unlogged === true;
+  table.onCommit = onCommit;
   if (stmt.withData) {
     for (const row of rel.rows) {
       const stored = row.slice();
@@ -775,6 +791,7 @@ export function executeCreateIndex(env: ExecEnv, stmt: CreateIndexStmt): ExecRes
   if (stmt.unique && method !== "btree") {
     throw pgError("feature_not_supported", `access method "${method}" does not support unique indexes`, "0A000");
   }
+  if (stmt.options) validateIndexOptions(method, stmt.options);
   for (const column of stmt.include) {
     if (table.columnIndex(column) === -1) {
       throw pgError("undefined_column", `column "${column}" does not exist`, "42703");
@@ -1697,7 +1714,19 @@ export function executeAlterIndex(env: ExecEnv, stmt: AlterIndexStmt): ExecResul
   const idx = schema?.indexes.get(idxName);
   if (!schema || !idx) {
     if (stmt.ifExists) return commandResult("ALTER INDEX", 0);
+    if (stmt.action.kind !== "rename_table" && (state.findTable(parts) || state.findView(parts))) {
+      throw pgError("wrong_object_type", `"${idxName}" is not an index`, "42809");
+    }
     throw pgError("undefined_table", `relation "${stmt.name.join(".")}" does not exist`, "42P01");
+  }
+  if (stmt.action.kind !== "rename_table") {
+    const reset = stmt.action.kind === "reset_options";
+    if (!reset) validateIndexOptions(idx.method ?? "btree", stmt.action.options);
+    const options = mergeIndexOptions(idx.options ?? [], stmt.action.options, reset);
+    // the index object is shared with transaction snapshots: replace it instead of changing it in place
+    const { options: _previous, ...rest } = idx;
+    schema.indexes.set(idxName, options.length > 0 ? { ...rest, options } : rest);
+    return commandResult("ALTER INDEX", 0);
   }
   const to = stmt.action.to;
   if (to === idxName) return commandResult("ALTER INDEX", 0);

@@ -1,6 +1,7 @@
 import {
   type CatalogExt,
   type CompositeTypeData,
+  type DbRoleSetting,
   EMPTY_CATALOG_EXT,
   type EventTriggerData,
   type RoleData,
@@ -20,6 +21,7 @@ interface CatalogExtBjv {
   composites: CompositeTypeData[];
   tables: Array<TableExt & { oid: number }>;
   eventTriggers: EventTriggerData[];
+  dbRoleSettings?: DbRoleSetting[];
 }
 
 /** Drop `undefined` members (BJV would turn them into null). */
@@ -39,6 +41,8 @@ function toBjv(ext: CatalogExt): CatalogExtBjv {
     composites: [...ext.composites.values()],
     tables: [...ext.tables].map(([oid, t]) => ({ oid, ...t })),
     eventTriggers: [...ext.eventTriggers.values()],
+    // only when present, so a catalog without any encodes as before
+    ...(ext.dbRoleSettings?.length ? { dbRoleSettings: ext.dbRoleSettings } : {}),
   }) as CatalogExtBjv;
 }
 
@@ -74,5 +78,6 @@ export function catalogExtFromBjv(value: unknown): CatalogExt {
       }),
     ),
     eventTriggers: new Map(v.eventTriggers.map((e) => [e.name, e])),
+    ...(v.dbRoleSettings?.length ? { dbRoleSettings: v.dbRoleSettings } : {}),
   };
 }
