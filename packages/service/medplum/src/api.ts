@@ -4,6 +4,7 @@ import { clearNamespace, type SqliteClient } from "@crvouga/mockingbird-sqlite"
 import {
   allOk,
   badRequest,
+  ContentType,
   conflict,
   createReference,
   forbidden,
@@ -25,6 +26,7 @@ import {
 } from "@medplum/core"
 import type {
   Binary,
+  Bot,
   ClientApplication,
   DomainConfiguration,
   IdentityProvider,
@@ -34,14 +36,17 @@ import type {
   Practitioner,
   Project,
   ProjectMembership,
+  ProjectSetting,
   Reference,
   RelatedPerson,
   Resource,
+  Subscription,
   User,
   UserSecurityRequest,
 } from "@medplum/fhirtypes"
 import { getAccessPolicyForMembership } from "./auth/access-policy.js"
 import {
+  base64UrlDecode,
   decodeJwt,
   generateSigningKey,
   type JwtPayload,
@@ -51,10 +56,17 @@ import {
   signJwt,
   verifyJwt,
 } from "./auth/jwt.js"
+import {
+  BOTS_NOT_EMULATED,
+  botResponse,
+  type MedplumBotContext,
+  type MedplumBotHandler,
+  runBotHandler,
+} from "./bots.js"
 import { type BinaryStorage, handleFhir } from "./fhir/http.js"
 import { MockRepository, type RepositoryServices } from "./fhir/repo.js"
 import { FhirStore } from "./fhir/store.js"
-import { RestHookSubscriptions } from "./fhir/subscriptions.js"
+import { type Delivery, RestHookSubscriptions } from "./fhir/subscriptions.js"
 import {
   BodyParseError,
   contentCouldNotBeParsed,
@@ -145,6 +157,8 @@ export type MedplumAPIOptions = {
         clientSecret?: string
         /** Whether the default client is a project admin (needed for `/admin/projects/*`). Default true. */
         clientAdmin?: boolean
+        /** `Project.features`, e.g. `["bots"]` to let bots run. Default none. */
+        features?: NonNullable<Project["features"]>
         /** Users with a password login in the default project. */
         users?: MedplumUserFixture[]
       }
@@ -162,8 +176,19 @@ export type MedplumAPIOptions = {
    * also listed by `GET /__admin/medplum/security-requests`.
    */
   onSecurityRequest?: (request: MedplumSecurityRequest) => void
-  /** `fetch` used to call a client's `identityProvider.userInfoUrl` during token exchange. Default: global `fetch`. */
+  /**
+   * `fetch` for calls to third parties: a client's `identityProvider.userInfoUrl` during token
+   * exchange, and Google's signing keys for `/auth/google`. Default: global `fetch`.
+   */
   externalFetch?: (input: string, init?: RequestInit) => Promise<Response>
+  /** The server's own Google client id (`config.googleClientId`) for `/auth/google`. Default none. */
+  googleClientId?: string
+  /**
+   * Runs Bots in place of their deployed code: called for `Bot/$execute` and for subscriptions
+   * whose endpoint is `Bot/<id>`. Without it, `$execute` answers an emulator-limitation 400 and
+   * Bot subscriptions are inert. The project still needs the `bots` feature, as on the server.
+   */
+  bots?: MedplumBotHandler
   /** Largest `_offset` accepted (`maxSearchOffset`). Default unlimited, as on the server. */
   maxSearchOffset?: number
 }
@@ -173,7 +198,26 @@ type AuthState = {
   project: WithId<Project>
   membership: WithId<ProjectMembership>
   accessToken?: string
+  /** `X-Medplum-On-Behalf-Of`: the member the caller acts as, and their profile. */
+  onBehalfOfMembership?: WithId<ProjectMembership>
+  onBehalfOf?: WithId<Resource>
 }
+
+/** Work to finish once the namespace lock is released, so it may call back into the API. */
+type Unlocked = () => Promise<Response>
+
+/** The claims of a Google ID token that sign-in reads (`GoogleCredentialClaims`, oauth/utils.ts). */
+type GoogleCredentialClaims = {
+  iss?: string
+  aud?: string | string[]
+  exp?: number
+  email?: string
+  given_name?: string
+  family_name?: string
+  picture?: string
+}
+
+const GOOGLE_CERTS_URL = "https://www.googleapis.com/oauth2/v3/certs"
 
 type LoginRecord = WithId<Login>
 
@@ -229,7 +273,9 @@ export class MedplumAPI implements FetchAPI {
     const base = options.baseUrl ?? DEFAULT_BASE_URL
     this.baseUrl = base.endsWith("/") ? base : `${base}/`
     this.store = new FhirStore(this.sqlite, this.namespace)
-    this.subscriptions = new RestHookSubscriptions(this.store)
+    this.subscriptions = new RestHookSubscriptions(this.store, (delivery) =>
+      this.runSubscriptionBot(delivery),
+    )
     this.idSource = new IdSource(
       this.sqlite,
       this.namespace,
@@ -425,6 +471,7 @@ export class MedplumAPI implements FetchAPI {
       id: defaults?.id ?? DEFAULT_PROJECT_ID,
       name: defaults?.name ?? "Mockingbird",
       strictMode: true,
+      ...(defaults?.features ? { features: defaults.features } : {}),
     })
     const projectClient = await system.updateResource<ClientApplication>({
       meta: { project: project.id },
@@ -637,7 +684,9 @@ export class MedplumAPI implements FetchAPI {
   /** `getRepoForLogin`: the repository an authenticated request works through. */
   private repoFor(auth: AuthState, request: Request): MockRepository {
     const system = this.systemRepo()
-    const accessPolicy = getAccessPolicyForMembership(system, auth.project, auth.membership)
+    // The on-behalf-of member's access policy applies; the caller stays the author.
+    const membership = auth.onBehalfOfMembership ?? auth.membership
+    const accessPolicy = getAccessPolicyForMembership(system, auth.project, membership)
     const profile = this.readSystem<Resource>(auth.membership.profile)
     const projects: WithId<Project>[] = [auth.project]
     for (const link of auth.project.link ?? []) {
@@ -649,10 +698,39 @@ export class MedplumAPI implements FetchAPI {
       currentProject: auth.project,
       author: profile ? createReference(profile) : (auth.membership.profile as Reference),
       superAdmin: auth.project.superAdmin,
-      projectAdmin: auth.membership.admin,
+      projectAdmin: membership.admin,
       accessPolicy,
       extendedMode: request.headers.get("x-medplum") === "extended",
+      onBehalfOf: auth.onBehalfOf ? createReference(auth.onBehalfOf) : undefined,
     })
+  }
+
+  /** `tryAddOnBehalfOf` (oauth/utils.ts): honour `X-Medplum-On-Behalf-Of` for project admins. */
+  private async addOnBehalfOf(auth: AuthState, request: Request): Promise<void> {
+    const header = request.headers.get("x-medplum-on-behalf-of")
+    if (!header) return
+    if (!auth.membership.admin && !auth.project.superAdmin)
+      throw new OperationOutcomeError(forbidden)
+    const repo = this.repoFor(auth, request)
+    let membership: WithId<ProjectMembership> | undefined
+    if (header.startsWith("ProjectMembership/")) {
+      membership = await repo.readReference<ProjectMembership>({ reference: header })
+    } else {
+      membership = await repo.searchOne<ProjectMembership>({
+        resourceType: "ProjectMembership",
+        filters: [
+          { code: "profile", operator: Operator.EQUALS, value: header },
+          {
+            code: "project",
+            operator: Operator.EQUALS,
+            value: getReferenceString(auth.project),
+          },
+        ],
+      })
+      if (!membership) throw new OperationOutcomeError(forbidden)
+    }
+    auth.onBehalfOf = await repo.readReference(membership.profile as Reference)
+    auth.onBehalfOfMembership = membership
   }
 
   // ------------------------------------------------------------------ tokens
@@ -771,8 +849,6 @@ export class MedplumAPI implements FetchAPI {
     }
     if (issues.length > 0) return this.invalidRequest(issues)
     const clientId = stringField(body, "clientId")
-    const codeChallenge = stringField(body, "codeChallenge")
-    const codeChallengeMethod = stringField(body, "codeChallengeMethod")
     let projectId = stringField(body, "projectId")
     let client: WithId<ClientApplication> | undefined
     if (clientId) {
@@ -784,32 +860,43 @@ export class MedplumAPI implements FetchAPI {
       }
       projectId = projectId ?? clientProject
     }
-    if (!client?.pkceOptional) {
-      if (!codeChallenge && codeChallengeMethod)
-        throw new OperationOutcomeError(badRequest("Invalid code challenge", "code_challenge"))
-      if (codeChallenge && !codeChallengeMethod) {
-        throw new OperationOutcomeError(
-          badRequest("Invalid code challenge method", "code_challenge_method"),
-        )
-      }
-      if (
-        codeChallengeMethod &&
-        codeChallengeMethod !== "plain" &&
-        codeChallengeMethod !== "S256"
-      ) {
-        throw new OperationOutcomeError(
-          badRequest("Invalid code challenge method", "code_challenge_method"),
-        )
-      }
-    }
+    this.validatePkce(body, client)
     const user = this.userByEmail(email as string, projectId)
     if (!user) throw new OperationOutcomeError(badRequest("User not found"))
     if (!user.passwordHash || user.passwordHash !== (await this.hashPassword(password as string))) {
       throw new OperationOutcomeError(badRequest("Email or password is invalid"))
     }
-    const scope = stringField(body, "scope") || "openid"
+    return this.startLogin(request, body, {
+      user,
+      client,
+      projectId,
+      authMethod: "password",
+      scope: stringField(body, "scope") || "openid",
+      allowNoMembership: projectId === "new",
+    })
+  }
+
+  /**
+   * The rest of `tryLogin` and `sendLoginResult` (oauth/utils.ts, auth/utils.ts) once the user
+   * is authenticated: a Login, bound now when the user has exactly one membership.
+   */
+  private startLogin(
+    request: Request,
+    body: unknown,
+    options: {
+      user: WithId<User>
+      client: WithId<ClientApplication> | undefined
+      projectId: string | undefined
+      authMethod: NonNullable<Login["authMethod"]>
+      scope: string
+      allowNoMembership: boolean
+      pictureUrl?: string | undefined
+    },
+  ): Response {
+    const { user, client, projectId, scope } = options
     const offline = scope.split(" ").some((s) => s === "offline" || s === "offline_access")
     const remember = isRecord(body) && body.remember === true
+    const refresh = offline || remember || Boolean(client?.grantType?.includes("refresh_token"))
     let login: LoginRecord = {
       resourceType: "Login",
       id: this.idSource.uuid(),
@@ -817,21 +904,26 @@ export class MedplumAPI implements FetchAPI {
       project: projectId ? { reference: `Project/${projectId}` } : undefined,
       profileType: stringField(body, "resourceType") as Login["profileType"],
       user: createReference(user),
-      authMethod: "password",
+      authMethod: options.authMethod,
       authTime: new Date(this.now()).toISOString(),
       code: this.idSource.secret(16),
       cookie: this.idSource.secret(16),
-      refreshSecret: offline || remember ? this.idSource.secret(32) : undefined,
+      refreshSecret: refresh ? this.idSource.secret(32) : undefined,
       scope,
       nonce: stringField(body, "nonce") || this.idSource.uuid(),
-      codeChallenge,
-      codeChallengeMethod: codeChallengeMethod as Login["codeChallengeMethod"],
+      codeChallenge: stringField(body, "codeChallenge"),
+      codeChallengeMethod: stringField(body, "codeChallengeMethod") as Login["codeChallengeMethod"],
       remoteAddress: remoteAddressOf(request),
       userAgent: request.headers.get("user-agent") ?? undefined,
+      pictureUrl: options.pictureUrl,
     }
     const memberships = this.membershipsForLogin(login)
-    if (memberships.length === 0 && projectId !== "new")
+    if (memberships.length === 0 && !options.allowNoMembership)
       throw new OperationOutcomeError(badRequest("User not found"))
+    if (login.project?.reference === "Project/new") {
+      this.saveLogin(login)
+      return json(200, { login: login.id })
+    }
     this.saveLogin(login)
     if (memberships.length === 1)
       login = this.setLoginMembership(login, memberships[0] as WithId<ProjectMembership>)
@@ -845,6 +937,215 @@ export class MedplumAPI implements FetchAPI {
         identifier: m.identifier,
       })),
     })
+  }
+
+  /** `validatePkce` (oauth/utils.ts). */
+  private validatePkce(body: unknown, client: ClientApplication | undefined): void {
+    if (client?.pkceOptional) return
+    const codeChallenge = stringField(body, "codeChallenge")
+    const codeChallengeMethod = stringField(body, "codeChallengeMethod")
+    if (!codeChallenge && codeChallengeMethod)
+      throw new OperationOutcomeError(badRequest("Invalid code challenge", "code_challenge"))
+    if (codeChallenge && !codeChallengeMethod) {
+      throw new OperationOutcomeError(
+        badRequest("Invalid code challenge method", "code_challenge_method"),
+      )
+    }
+    if (codeChallengeMethod && codeChallengeMethod !== "plain" && codeChallengeMethod !== "S256") {
+      throw new OperationOutcomeError(
+        badRequest("Invalid code challenge method", "code_challenge_method"),
+      )
+    }
+  }
+
+  /** `POST /auth/changepassword` (auth/changepassword.ts). */
+  private async handleChangePassword(auth: AuthState, body: unknown): Promise<Response> {
+    const oldPassword = stringField(body, "oldPassword")
+    const newPassword = stringField(body, "newPassword")
+    const issues: { field: string; msg: string }[] = []
+    if (!oldPassword) issues.push({ field: "oldPassword", msg: "Missing oldPassword" })
+    const passwordIssue = this.passwordIssue(newPassword)
+    if (passwordIssue) issues.push({ field: "newPassword", msg: passwordIssue })
+    if (issues.length > 0) return this.invalidRequest(issues)
+    const user = this.readSystem<User>(auth.membership.user)
+    if (!user || user.resourceType !== "User") throw new OperationOutcomeError(notFound)
+    if (!user.passwordHash) {
+      throw new OperationOutcomeError(badRequest("Existing password not set", "oldPassword"))
+    }
+    if (user.passwordHash !== (await this.hashPassword(oldPassword as string))) {
+      throw new OperationOutcomeError(badRequest("Incorrect password", "oldPassword"))
+    }
+    await this.setPassword(user, newPassword as string)
+    return sendOutcome(allOk, this.freshIds())
+  }
+
+  /** The `newPassword` / `password` validator: 8 characters to 72 bytes. */
+  private passwordIssue(password: string | undefined): string | undefined {
+    if (!password || password.length < MIN_PASSWORD_LENGTH)
+      return `Password must be at least ${MIN_PASSWORD_LENGTH} characters`
+    if (new TextEncoder().encode(password).length > MAX_PASSWORD_LENGTH)
+      return `Password must be no more than ${MAX_PASSWORD_LENGTH} characters`
+    return undefined
+  }
+
+  /** `setPassword` (auth/setpassword.ts): store the hash and revoke every login of the user. */
+  private async setPassword(user: WithId<User>, password: string): Promise<void> {
+    await this.systemRepo().updateResource<User>({
+      ...user,
+      passwordHash: await this.hashPassword(password),
+    })
+    for (const entry of this.logins.list()) {
+      if (entry.value.user?.reference === `User/${user.id}` && !entry.value.revoked)
+        this.saveLogin({ ...entry.value, revoked: true })
+    }
+  }
+
+  /** `POST /auth/google` (auth/google.ts). */
+  private async handleGoogle(request: Request, body: unknown): Promise<Response> {
+    const googleClientId = stringField(body, "googleClientId")
+    const googleCredential = stringField(body, "googleCredential")
+    const issues: { field: string; msg: string }[] = []
+    if (!googleClientId) issues.push({ field: "googleClientId", msg: "Missing googleClientId" })
+    if (!googleCredential)
+      issues.push({ field: "googleCredential", msg: "Missing googleCredential" })
+    if (issues.length > 0) return this.invalidRequest(issues)
+
+    const requested = stringField(body, "projectId")
+    let projectId =
+      requested && (UUID.test(requested) || requested === "new") ? requested : undefined
+    const clientId = stringField(body, "clientId")
+    let client: WithId<ClientApplication> | undefined
+    if (clientId) {
+      client = this.readSystem<ClientApplication>({ reference: `ClientApplication/${clientId}` })
+      if (!client) throw new OperationOutcomeError(notFound)
+      const clientProject = client.meta?.project
+      if (projectId !== undefined && projectId !== clientProject)
+        throw new OperationOutcomeError(badRequest("Invalid projectId"))
+      projectId = clientProject
+    }
+    if (googleClientId !== this.options.googleClientId) {
+      // Any other Google client id must belong to a project's site.
+      const projects = this.store
+        .rows("Project")
+        .filter((row) => !row.deleted && row.content)
+        .map((row) => row.content as WithId<Project>)
+        .filter(
+          (p) =>
+            p.site?.some((site) => site.googleClientId === googleClientId) &&
+            (!projectId || p.id === projectId),
+        )
+      if (projects.length === 0)
+        return sendOutcome(badRequest("Invalid googleClientId"), this.freshIds())
+      if (projects.length === 1) projectId = projects[0]?.id
+    }
+
+    let claims: GoogleCredentialClaims
+    try {
+      claims = await this.verifyGoogleCredential(
+        googleCredential as string,
+        googleClientId as string,
+      )
+    } catch (error) {
+      return sendOutcome(badRequest((error as Error).message), this.freshIds())
+    }
+    const email = String(claims.email ?? "").toLowerCase()
+    const external = this.externalAuthFor(email)
+    if (external) return json(200, external)
+
+    let user = this.userByEmail(email, projectId)
+    if (!user) {
+      if (!(isRecord(body) && body.createUser))
+        return sendOutcome(badRequest("User not found"), this.freshIds())
+      user = await this.systemRepo().createResource<User>({
+        resourceType: "User",
+        firstName: claims.given_name as string,
+        lastName: claims.family_name as string,
+        email,
+        project:
+          projectId && projectId !== "new" ? { reference: `Project/${projectId}` } : undefined,
+      })
+    }
+    this.validatePkce(body, client)
+    return this.startLogin(request, body, {
+      user,
+      client,
+      projectId,
+      authMethod: "google",
+      scope: stringField(body, "scope") || "openid offline_access",
+      allowNoMembership: Boolean(isRecord(body) && body.createUser) || projectId === "new",
+      pictureUrl: claims.picture,
+    })
+  }
+
+  /**
+   * `jwtVerify(credential, createRemoteJWKSet(GOOGLE_CERTS), { issuer, audience, RS256 })`, with
+   * WebCrypto. Google's keys are fetched through `externalFetch`; errors carry jose's messages.
+   */
+  private async verifyGoogleCredential(
+    credential: string,
+    audience: string,
+  ): Promise<GoogleCredentialClaims> {
+    const parts = credential.split(".")
+    if (parts.length !== 3) throw new Error("Invalid Compact JWS")
+    let header: { alg?: string; kid?: string }
+    let claims: GoogleCredentialClaims
+    try {
+      header = JSON.parse(new TextDecoder().decode(base64UrlDecode(parts[0] as string)))
+      claims = JSON.parse(new TextDecoder().decode(base64UrlDecode(parts[1] as string)))
+    } catch {
+      throw new Error("Invalid Compact JWS")
+    }
+    if (header.alg !== "RS256")
+      throw new Error('"alg" (Algorithm) Header Parameter value not allowed')
+    const fetcher = this.options.externalFetch ?? ((input, init) => fetch(input, init))
+    const response = await fetcher(GOOGLE_CERTS_URL, { headers: { accept: "application/json" } })
+    if (!response.ok) throw new Error("Expected 200 OK from the JSON Web Key Set HTTP response")
+    const { keys = [] } = (await response.json()) as { keys?: (JsonWebKey & { kid?: string })[] }
+    const jwk = keys.find((key) => key.kty === "RSA" && (!header.kid || key.kid === header.kid))
+    if (!jwk) throw new Error("no applicable key found in the JSON Web Key Set")
+    const key = await crypto.subtle.importKey(
+      "jwk",
+      { kty: jwk.kty, n: jwk.n, e: jwk.e },
+      { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
+      false,
+      ["verify"],
+    )
+    const valid = await crypto.subtle.verify(
+      "RSASSA-PKCS1-v1_5",
+      key,
+      base64UrlDecode(parts[2] as string),
+      new TextEncoder().encode(`${parts[0]}.${parts[1]}`),
+    )
+    if (!valid) throw new Error("signature verification failed")
+    if (claims.iss !== "https://accounts.google.com")
+      throw new Error('unexpected "iss" claim value')
+    const aud = Array.isArray(claims.aud) ? claims.aud : [claims.aud]
+    if (!aud.includes(audience)) throw new Error('unexpected "aud" claim value')
+    if (typeof claims.exp === "number" && claims.exp <= Math.floor(this.now() / 1000))
+      throw new Error('"exp" claim timestamp check failed')
+    return claims
+  }
+
+  /** `isExternalAuth` (auth/method.ts): the domain's external identity provider, if any. */
+  private externalAuthFor(email: string): { domain: string; authorizeUrl: string } | undefined {
+    const domain = email.split("@")[1] as string
+    const config = this.store
+      .rows("DomainConfiguration")
+      .filter((row) => !row.deleted && row.content)
+      .map((row) => row.content as DomainConfiguration)
+      .find((c) => c.domain?.toLowerCase() === domain)
+    const idp = config?.identityProvider
+    if (!idp?.authorizeUrl || !idp.clientId) return undefined
+    try {
+      const url = new URL(idp.authorizeUrl)
+      url.searchParams.set("client_id", idp.clientId)
+      url.searchParams.set("redirect_uri", `${this.baseUrl}auth/external`)
+      url.searchParams.set("response_type", "code")
+      url.searchParams.set("scope", "openid profile email")
+      return { domain, authorizeUrl: url.toString() }
+    } catch {
+      throw new OperationOutcomeError(badRequest("Failed to construct URL for the domain"))
+    }
   }
 
   private userByEmail(email: string, projectId: string | undefined): WithId<User> | undefined {
@@ -1308,7 +1609,7 @@ export class MedplumAPI implements FetchAPI {
       type: request.type ?? "reset",
       secret: request.secret as string,
       email: user?.email ?? "",
-      url: `${base.endsWith("/") ? base : `${base}/`}setpassword/${request.id}/${request.secret}`,
+      url: `${base.endsWith("/") ? base : `${base}/`}${request.type === "verify-email" ? "verifyemail" : "setpassword"}/${request.id}/${request.secret}`,
       ...(request.redirectUri ? { redirectUri: request.redirectUri } : {}),
       used: request.used === true,
     }
@@ -1819,6 +2120,249 @@ export class MedplumAPI implements FetchAPI {
     return respond(status, stringify(resource), "application/fhir+json; charset=utf-8", headers)
   }
 
+  // ------------------------------------------------------------------ $update-email
+
+  /** `POST /fhir/R4/User/:id/$update-email` (fhir/operations/update-user-email.ts). */
+  private async handleUpdateEmail(
+    auth: AuthState,
+    request: Request,
+    userId: string,
+    body: unknown,
+  ): Promise<Response> {
+    const membership = auth.onBehalfOfMembership ?? auth.membership
+    if (!auth.project.superAdmin && !membership.admin) throw new OperationOutcomeError(forbidden)
+    const params = updateEmailParameters(body)
+    const system = this.systemRepo()
+    let user = system.readResourceImpl<User>("User", userId)
+    if (!auth.project.superAdmin && user.project?.reference !== getReferenceString(auth.project))
+      throw new OperationOutcomeError(forbidden)
+    if (params.updateProfileTelecom && !user.project)
+      throw new OperationOutcomeError(badRequest("Cannot update profile of server-scoped User"))
+    const oldEmail = user.email
+    user = await system.updateResource<User>({
+      ...user,
+      email: params.email,
+      emailVerified: false,
+    })
+    if (!params.skipEmailVerification) {
+      const verification = await this.createSecurityRequest(user, "verify-email", undefined)
+      this.options.onSecurityRequest?.(verification)
+    }
+    if (params.updateProfileTelecom && user.project?.reference) {
+      const userMembership = this.store
+        .rows("ProjectMembership")
+        .filter((row) => !row.deleted && row.content)
+        .map((row) => row.content as WithId<ProjectMembership>)
+        .find(
+          (m) =>
+            m.user?.reference === getReferenceString(user) &&
+            m.project?.reference === user.project?.reference,
+        )
+      const profile = this.readSystem<Patient | Practitioner | RelatedPerson>(
+        userMembership?.profile,
+      )
+      if (profile && ["Patient", "Practitioner", "RelatedPerson"].includes(profile.resourceType)) {
+        let telecom = [...(profile.telecom ?? [])]
+        if (!telecom.some((c) => c.system === "email" && c.value === params.email))
+          telecom = [...telecom, { use: "work", system: "email", value: params.email }]
+        if (oldEmail) {
+          telecom = telecom.map((c) =>
+            c.system === "email" && c.value === oldEmail ? { ...c, use: "old" } : c,
+          )
+        }
+        await system.updateResource({ ...profile, telecom })
+      }
+    }
+    // The server answers the User as its system repository wrote it: every field, full meta.
+    return this.fhirJson(request, user)
+  }
+
+  // ------------------------------------------------------------------ bots
+
+  /**
+   * `GET|POST /fhir/R4/Bot/[:id/]$execute` (fhir/operations/execute.ts): find the bot as the
+   * caller, check it may run, then run the suite's handler once the namespace lock is released.
+   */
+  private async prepareExecute(
+    auth: AuthState,
+    repo: MockRepository,
+    request: Request,
+    url: URL,
+    id: string | undefined,
+    parsed: ParsedBody,
+    ids: RequestIds,
+  ): Promise<Response | Unlocked> {
+    let found: WithId<Bot> | undefined
+    const identifier = url.searchParams.get("identifier")
+    if (id) {
+      found = await repo.readResource<Bot>("Bot", id)
+    } else if (identifier) {
+      found = await repo.searchOne<Bot>({
+        resourceType: "Bot",
+        filters: [{ code: "identifier", operator: Operator.EXACT, value: identifier }],
+      })
+      if (!found) throw new OperationOutcomeError(notFound)
+    }
+    if (!found) return sendOutcome(badRequest("Must specify bot ID or identifier."), ids)
+    if (request.headers.get("prefer") === "respond-async") {
+      return sendOutcome(
+        badRequest("Asynchronous bot execution (Prefer: respond-async) is not emulated"),
+        ids,
+      )
+    }
+    const bot = this.systemRepo().readResourceImpl<Bot>("Bot", found.id)
+    const contentType = request.headers.get("content-type")
+    if (!this.botsEnabled(bot))
+      return botResponse({ success: false, logResult: "Bots not enabled" }, contentType, ids)
+    const handler = this.options.bots
+    if (!handler) return sendOutcome(badRequest(BOTS_NOT_EMULATED), ids)
+    const membership = auth.onBehalfOfMembership ?? auth.membership
+    const runAs = bot.runAsUser
+      ? membership
+      : (this.botMembership(bot.meta?.project, bot) ?? membership)
+    let input: unknown
+    if (request.method === "POST") {
+      input =
+        parsed.kind === "json" || parsed.kind === "form" || parsed.kind === "text"
+          ? parsed.value
+          : parsed.kind === "raw"
+            ? parsed.bytes
+            : undefined
+    } else {
+      const query: Record<string, string | string[]> = {}
+      for (const [key, value] of url.searchParams) {
+        const existing = query[key]
+        if (existing === undefined) query[key] = value
+        else query[key] = Array.isArray(existing) ? [...existing, value] : [existing, value]
+      }
+      input = query
+    }
+    const headers: Record<string, string> = {}
+    request.headers.forEach((value, key) => {
+      headers[key] = value
+    })
+    const context = await this.botContext(bot, runAs, {
+      contentType: contentType ?? "",
+      requester: membership.profile,
+      headers,
+      traceId: ids.traceId,
+    })
+    return async () => {
+      const result = await runBotHandler(handler, bot, input, context)
+      return botResponse(result, contentType, ids)
+    }
+  }
+
+  /** `isBotEnabled` (bots/utils.ts): the bot's project has the `bots` feature. */
+  private botsEnabled(bot: Bot): boolean {
+    const project = this.readSystem<Project>({ reference: `Project/${bot.meta?.project}` })
+    return Boolean(project?.features?.includes("bots"))
+  }
+
+  /** `findProjectMembership` (workers/utils.ts): the membership of `profile` in a project. */
+  private botMembership(
+    projectId: string | undefined,
+    profile: Resource | Reference | undefined,
+  ): WithId<ProjectMembership> | undefined {
+    const reference =
+      profile && "resourceType" in profile ? getReferenceString(profile) : profile?.reference
+    if (!projectId || !reference) return undefined
+    return this.store
+      .rows("ProjectMembership")
+      .filter((row) => !row.deleted && row.content)
+      .map((row) => row.content as WithId<ProjectMembership>)
+      .find(
+        (m) =>
+          m.project?.reference === `Project/${projectId}` && m.profile?.reference === reference,
+      )
+  }
+
+  /** The rest of `BotExecutionContext`: a token for `runAs` (`getBotAccessToken`) and the secrets. */
+  private async botContext(
+    bot: WithId<Bot>,
+    runAs: WithId<ProjectMembership>,
+    fields: Omit<MedplumBotContext, "runAs" | "baseUrl" | "accessToken" | "secrets">,
+  ): Promise<MedplumBotContext> {
+    const login = this.saveLogin({
+      resourceType: "Login",
+      id: this.idSource.uuid(),
+      authMethod: "execute",
+      user: runAs.user,
+      membership: createReference(runAs),
+      authTime: new Date(this.now()).toISOString(),
+      scope: "openid",
+      granted: true,
+    })
+    const now = Math.floor(this.now() / 1000)
+    const subject = runAs.user?.reference ? resolveId(runAs.user) : undefined
+    const accessToken = await signJwt(await this.key(), {
+      login_id: login.id,
+      sub: subject,
+      username: subject,
+      profile: runAs.profile?.reference,
+      scope: "openid",
+      aud: this.baseUrl,
+      jti: this.idSource.uuid(),
+      iat: now,
+      nbf: now,
+      iss: this.baseUrl,
+      exp: now + 3600,
+    })
+    // `getBotSecrets`: the bot project's secrets, then the runAs project's (system ones for system bots).
+    const secrets: ProjectSetting[] = []
+    const botProjectId = bot.meta?.project
+    const runAsProjectId = runAs.project?.reference ? resolveId(runAs.project) : undefined
+    const projectIds =
+      botProjectId && botProjectId !== runAsProjectId
+        ? [botProjectId, runAsProjectId]
+        : [runAsProjectId]
+    for (const projectId of projectIds) {
+      const project = this.readSystem<Project>({ reference: `Project/${projectId}` })
+      if (bot.system && project?.systemSecret) secrets.push(...project.systemSecret)
+      if (project?.secret) secrets.push(...project.secret)
+    }
+    return {
+      ...fields,
+      runAs,
+      baseUrl: this.baseUrl,
+      accessToken,
+      secrets: Object.fromEntries(secrets.map((secret) => [secret.name, secret])),
+    }
+  }
+
+  /**
+   * `execBot` (workers/subscription.ts): a subscription whose endpoint is `Bot/<id>`. Errors are
+   * the delivery's, never the write's; a bot with no membership in the project does not run.
+   */
+  private async runSubscriptionBot({
+    subscription,
+    resource,
+    interaction,
+    headers,
+  }: Delivery & { headers: Record<string, string> }): Promise<void> {
+    const handler = this.options.bots
+    if (!handler) return
+    const prepared = await this.store.exclusively(async () => {
+      const bot = this.readSystem<Bot>({ reference: subscription.channel.endpoint as string })
+      if (!bot) return undefined
+      const requester = resource.meta?.author
+      const runAs = this.botMembership(subscription.meta?.project, bot.runAsUser ? requester : bot)
+      if (!runAs || !this.botsEnabled(bot)) return undefined
+      const context = await this.botContext(bot, runAs, {
+        contentType: ContentType.FHIR_JSON,
+        requester,
+        headers,
+        traceId: this.idSource.uuid(),
+        subscription: subscription as WithId<Subscription>,
+        interaction,
+      })
+      return { bot, context }
+    })
+    if (!prepared) return
+    const input = interaction === "delete" ? { deletedResource: resource } : resource
+    await runBotHandler(handler, prepared.bot, input, prepared.context)
+  }
+
   // ------------------------------------------------------------------ routing
 
   async fetch(incoming: Request): Promise<Response> {
@@ -1828,10 +2372,10 @@ export class MedplumAPI implements FetchAPI {
       return { response, deliveries: this.subscriptions.take() }
     })
     await this.subscriptions.deliver(deliveries)
-    return response
+    return typeof response === "function" ? response() : response
   }
 
-  private async handleRequest(incoming: Request): Promise<Response> {
+  private async handleRequest(incoming: Request): Promise<Response | Unlocked> {
     const url = new URL(incoming.url)
     let path = url.pathname
     // `/api/...` is an alias for `/...` on the self-hosted server.
@@ -1908,11 +2452,14 @@ export class MedplumAPI implements FetchAPI {
         return await this.handleResetPassword(body)
       if (incoming.method === "POST" && path === "/auth/setpassword")
         return await this.handleSetPassword(body)
+      if (incoming.method === "POST" && path === "/auth/google")
+        return await this.handleGoogle(incoming, body)
       if (incoming.method === "POST" && path === "/oauth2/token")
         return await this.handleToken(incoming, parsed)
 
       const needsAuth =
         path === "/auth/me" ||
+        path === "/auth/changepassword" ||
         path.startsWith("/fhir/R4") ||
         path.startsWith("/admin/") ||
         path === "/oauth2/userinfo" ||
@@ -1920,6 +2467,16 @@ export class MedplumAPI implements FetchAPI {
       if (!needsAuth) return expressNotFound(incoming.method, url.pathname)
 
       const auth = await this.authenticate(incoming)
+      if (auth) {
+        try {
+          await this.addOnBehalfOf(auth, incoming)
+        } catch (error) {
+          // `attachRequestContext` (context.ts) reports any authentication failure this way.
+          const outcome = badRequest("Authentication error")
+          ;(outcome.issue[0] as { diagnostics?: string }).diagnostics = String(error)
+          return sendOutcome(outcome, ids)
+        }
+      }
       if (!auth) {
         const scheme = incoming.headers.get("authorization")?.split(" ")[0] || "Bearer"
         const responseScheme = url.searchParams.get("_medplum-prompt-basic-auth") ? "Basic" : scheme
@@ -1928,6 +2485,8 @@ export class MedplumAPI implements FetchAPI {
         })
       }
       if (incoming.method === "GET" && path === "/auth/me") return this.handleMe(auth)
+      if (incoming.method === "POST" && path === "/auth/changepassword")
+        return await this.handleChangePassword(auth, body)
       if (
         path === "/oauth2/userinfo" &&
         (incoming.method === "GET" || incoming.method === "POST")
@@ -1946,6 +2505,13 @@ export class MedplumAPI implements FetchAPI {
       if (path.startsWith("/fhir/R4")) {
         const repo = this.repoFor(auth, incoming)
         const rest = url.pathname.slice(url.pathname.indexOf("/fhir/R4") + "/fhir/R4".length)
+        const updateEmail = /^\/User\/([^/]+)\/(?:\$|%24)update-email$/.exec(rest)
+        if (incoming.method === "POST" && updateEmail)
+          return await this.handleUpdateEmail(auth, incoming, updateEmail[1] as string, body)
+        const execute = /^\/Bot(?:\/([^/$%]+))?\/(?:\$|%24)execute(?:\/.*)?$/.exec(rest)
+        if ((incoming.method === "GET" || incoming.method === "POST") && execute) {
+          return await this.prepareExecute(auth, repo, incoming, url, execute[1], parsed, ids)
+        }
         return await handleFhir({
           repo,
           ids,
@@ -2250,6 +2816,37 @@ export class MedplumAPI implements FetchAPI {
 
   /** The operator keys of `@medplum/core`, re-exported for fixture building. */
   static readonly Operator = Operator
+}
+
+/**
+ * `parseInputParameters` for `$update-email`: a `Parameters` resource or a plain JSON object;
+ * `email` is required.
+ */
+const updateEmailParameters = (
+  body: unknown,
+): { email: string; updateProfileTelecom?: boolean; skipEmailVerification?: boolean } => {
+  const input = isRecord(body) ? body : {}
+  let values: Record<string, unknown> = input
+  if (input.resourceType === "Parameters") {
+    values = {}
+    for (const parameter of (input.parameter ?? []) as Record<string, unknown>[]) {
+      const name = parameter.name as string
+      if (name === "email") values.email = parameter.valueString
+      else if (name === "updateProfileTelecom" || name === "skipEmailVerification")
+        values[name] = parameter.valueBoolean
+    }
+  }
+  const email = values.email
+  if (email === undefined || email === null || email === "") {
+    throw new OperationOutcomeError(
+      badRequest("Expected at least 1 value(s) for required input parameter 'email'"),
+    )
+  }
+  return {
+    email: String(email),
+    updateProfileTelecom: values.updateProfileTelecom === true,
+    skipEmailVerification: values.skipEmailVerification === true,
+  }
 }
 
 /**
