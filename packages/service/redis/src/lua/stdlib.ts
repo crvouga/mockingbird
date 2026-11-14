@@ -175,7 +175,7 @@ function caught(error: unknown): LuaValue {
     }
     return value
   }
-  if (error instanceof RangeError) return `user_script:${pos.line}: stack overflow`
+  if (error instanceof RangeError) return `${pos.chunk}:${pos.line}: stack overflow`
   throw error
 }
 
@@ -263,7 +263,7 @@ function errorBuiltin(...args: Args): Result {
   let value = args[0]
   const level = optInt(args, 1, "error", 1)
   if ((typeof value === "string" || typeof value === "number") && level > 0 && pos.line >= 0) {
-    value = `user_script:${pos.line}: ${tostr(value)}`
+    value = `${pos.chunk}:${pos.line}: ${tostr(value)}`
   }
   throw new LuaError(value)
 }
@@ -675,7 +675,7 @@ function withoutPosition(
       return less(a, b)
     } catch (error) {
       if (error instanceof LuaError && typeof error.value === "string") {
-        const prefix = `user_script:${error.line}: `
+        const prefix = `${pos.chunk}:${error.line}: `
         if (error.value.startsWith(prefix))
           throw new LuaError(error.value.slice(prefix.length), error.line)
       }

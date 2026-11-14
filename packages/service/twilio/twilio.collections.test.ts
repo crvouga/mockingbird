@@ -1,11 +1,32 @@
 import { describe, expect, test } from "bun:test"
 import { createRuntime } from "./src/index.js"
 import { FetchRequestClient } from "./test/consumer.js"
-import { Twilio } from "./test/twilio-sdk.js"
+import { RequestClient, Twilio } from "./test/twilio-sdk.js"
 
 const ACCOUNT = `AC${"0".repeat(32)}`
 const OTHER = `AC${"1".repeat(32)}`
 const base = (account = ACCOUNT) => `/api/2010-04-01/Accounts/${account}/Messages.json`
+/** The same collection as api.twilio.com serves it: no product prefix. */
+const upstream = (account = ACCOUNT) => `/2010-04-01/Accounts/${account}/Messages.json`
+
+/**
+ * twilio-node pointed at the mock origin as a stand-in for `https://api.twilio.com` itself
+ * (no `/api` product prefix): what a proxy or an edge/base-URL override does.
+ */
+class RootRequestClient extends RequestClient {
+  constructor(private readonly send: (request: Request) => Promise<Response>) {
+    super()
+  }
+  override async request(opts: Parameters<RequestClient["request"]>[0]): Promise<never> {
+    const url = new URL(opts.uri)
+    if (url.hostname !== "api.twilio.com") throw new Error(`unexpected host ${url.hostname}`)
+    return new FetchRequestClient("http://mock.test", (request) => {
+      const routed = new URL(request.url)
+      routed.pathname = routed.pathname.replace(/^\/api(?=\/)/, "")
+      return this.send(new Request(routed, request))
+    }).request(opts)
+  }
+}
 
 const harness = () => {
   const runtime = createRuntime()
@@ -124,5 +145,87 @@ describe("Message collection reconciliation (#257)", () => {
       messages: [],
       next_page_uri: null,
     })
+  })
+
+  test("#762: the un-prefixed /2010-04-01 list accepts the credentials /api accepts", async () => {
+    const { create, request, send } = harness()
+    for (let i = 0; i < 2; i++) await create(`fixture-root-${i}`)
+    const sids = async (response: Response) => {
+      expect(response.status).toBe(200)
+      return ((await response.json()) as { messages: { sid: string }[] }).messages.map((m) => m.sid)
+    }
+    const expected = await sids(await request(`${base()}?PageSize=1`))
+    expect(expected).toHaveLength(1)
+    expect(await sids(await request(`${upstream()}?PageSize=1`))).toEqual(expected)
+    const authorization = `Basic ${btoa(`${ACCOUNT}:fixture-token`)}`
+    for (const url of [`http://mock.test${upstream()}`, `https://api.twilio.com${upstream()}`]) {
+      const hosted = new Request(`${url}?PageSize=1`, {
+        headers: { authorization, host: "api.twilio.com" },
+      })
+      expect(await sids(await send(hosted))).toEqual(expected)
+    }
+    // Behind a namespace, another account sees its own (empty) collection.
+    expect(
+      await sids(await request(`/__admin/ns/other${upstream(OTHER)}`, undefined, OTHER)),
+    ).toEqual([])
+    // The credential rule itself is unchanged: none, or a non-account username, is 401 20003.
+    for (const headers of [{}, { authorization: `Basic ${btoa("user:pass")}` }]) {
+      const denied = await send(new Request(`http://mock.test${upstream()}`, { headers }))
+      expect(denied.status).toBe(401)
+      expect(await denied.json()).toMatchObject({ code: 20003 })
+    }
+    const strict = createRuntime({ accounts: { [ACCOUNT]: "right-token" } })
+    const wrong = await strict.fetch(
+      new Request(`http://mock.test${upstream()}`, {
+        headers: { authorization: `Basic ${btoa(`${ACCOUNT}:wrong-token`)}` },
+      }),
+    )
+    expect(wrong.status).toBe(401)
+  })
+
+  test("#762: page URIs are api.twilio.com paths that a raw client follows from the mock origin", async () => {
+    const { create, request } = harness()
+    const ids = []
+    for (let i = 0; i < 2; i++) ids.push((await create(`fixture-raw-${i}`)).sid)
+    for (const start of [`${base()}?PageSize=1`, `${upstream()}?PageSize=1`]) {
+      let path: string | null = start
+      const seen = []
+      for (let i = 0; i < 2; i++) {
+        if (!path) throw new Error("pagination ended early")
+        const response = await request(path)
+        expect(response.status).toBe(200)
+        const page = (await response.json()) as {
+          messages: { sid: string }[]
+          uri: string
+          first_page_uri: string
+          next_page_uri: string | null
+          previous_page_uri: string | null
+        }
+        for (const uri of [page.uri, page.first_page_uri, page.next_page_uri ?? upstream()]) {
+          expect(uri.startsWith(`${upstream()}?`) || uri === upstream()).toBe(true)
+        }
+        if (i === 1) expect(page.previous_page_uri?.startsWith(`${upstream()}?`)).toBe(true)
+        seen.push(page.messages[0]?.sid)
+        path = page.next_page_uri
+      }
+      expect(path).toBeNull()
+      expect(seen).toEqual([...ids].reverse())
+    }
+  })
+
+  test("#762: the SDK pages PageSize=1 across two pages with or without the /api prefix", async () => {
+    const { create, send, client } = harness()
+    const older = (await create("sdk-mount-0")).sid
+    const newer = (await create("sdk-mount-1")).sid
+    const root = new Twilio(ACCOUNT, "fixture-token", { httpClient: new RootRequestClient(send) })
+    for (const sdk of [client, root]) {
+      const first = await sdk.messages.page({ pageSize: 1 })
+      expect(first.instances.map((message) => message.sid)).toEqual([newer])
+      const second = await first.nextPage()
+      expect(second?.instances.map((message) => message.sid)).toEqual([older])
+      expect(second?.nextPageUrl).toBeUndefined()
+      const all = await sdk.messages.list({ pageSize: 1, limit: 10 })
+      expect(all.map((message) => message.sid)).toEqual([newer, older])
+    }
   })
 })

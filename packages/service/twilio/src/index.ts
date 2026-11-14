@@ -1,5 +1,6 @@
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import {
+  getTwilioStore,
   ProviderExpansion,
   type ProviderOptions,
   seedTwilio,
@@ -268,7 +269,7 @@ export class TwilioAPI implements FetchAPI {
     }
     if (this.expansion.handles(request)) {
       syncToExpanded(this.state, this.expansion)
-      const response = await this.expansion.fetch(request)
+      const response = await this.expansion.fetch(this.bridgeCredentials(request))
       syncFromExpanded(this.state, this.expansion)
       return response
     }
@@ -290,23 +291,54 @@ export class TwilioAPI implements FetchAPI {
     syncFromExpanded(this.state, this.expansion)
   }
 
-  private authenticate(context: OperationContext): Response | undefined {
-    const credentials = basicAuth(context.request)
-    if (!credentials?.username || !credentials.password || !/^(AC|SK)/.test(credentials.username)) {
+  /**
+   * The vendor-compatible routes (`/2010-04-01/…` and the rest of the expansion) check Basic
+   * auth against their own store, which holds only the seeded account. Credentials the native
+   * routes accept are accepted there too (#762): the account they act for is created in that
+   * store on first use, and the request is passed on with the token it holds. Credentials the
+   * native rule rejects are passed on unchanged, so the seeded account keeps working.
+   */
+  private bridgeCredentials(request: Request): Request {
+    const credentials = basicAuth(request)
+    if (!credentials || this.rejects(credentials.username, credentials.password)) return request
+    const accounts = getTwilioStore(this.expansion.store).accounts
+    const sid = credentials.username.startsWith("AC") ? credentials.username : DEFAULT_ACCOUNT_SID
+    const account =
+      accounts.findOneBy("sid", sid) ??
+      accounts.insert({
+        sid,
+        friendly_name: "Local Twilio Account",
+        auth_token: credentials.password,
+        status: "active",
+        owner_account_sid: null,
+      })
+    const headers = new Headers(request.headers)
+    headers.set("authorization", `Basic ${btoa(`${account.sid}:${account.auth_token}`)}`)
+    return new Request(request, { headers })
+  }
+
+  /** The native credential rule: the 401 a Basic `username:password` gets, if any. */
+  private rejects(username: string, password: string): Response | undefined {
+    if (!username || !password || !/^(AC|SK)/.test(username)) {
       return twilioError(401, 20003, "Authenticate")
     }
     if (this.accounts !== undefined) {
-      const expected = this.accounts[credentials.username]
+      const expected = this.accounts[username]
       if (expected === undefined) return twilioError(401, 20003, "Authenticate")
-      if (expected !== credentials.password) {
+      if (expected !== password) {
         return twilioError(
           401,
           20003,
-          `authentication failed, auth token is not valid for account ${credentials.username}`,
+          `authentication failed, auth token is not valid for account ${username}`,
         )
       }
     }
     return undefined
+  }
+
+  private authenticate(context: OperationContext): Response | undefined {
+    const credentials = basicAuth(context.request)
+    return this.rejects(credentials?.username ?? "", credentials?.password ?? "")
   }
 
   /** The account a request acts for: the path's, else the Basic username when it is one. */

@@ -2,7 +2,7 @@
 
 > Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
-Stateful Amazon SQS emulator for AWS SDK v3. It models standard and FIFO queues, message attributes, visibility and receipt handles, batches, deduplication, purge locking, and dead-letter redrive without contacting AWS.
+Stateful Amazon SQS emulator for AWS SDK v3 (AWS JSON) and for older SDKs and clients that speak the AWS query protocol. It models standard and FIFO queues, message attributes, visibility and receipt handles, batches, deduplication, purge locking, and dead-letter redrive without contacting AWS.
 
 ## Install
 
@@ -62,6 +62,23 @@ A held request polls the clock every 25 ms of real time while it waits, so an id
 
 Evidence: [short and long polling](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-short-and-long-polling.html) and the [ReceiveMessage reference](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html), implemented from the documentation (not observed against live SQS). `WaitTimeSeconds` above 20 is `InvalidParameterValue`, as documented.
 
+### AWS query protocol
+
+A request without `X-Amz-Target` whose form body (or, for `GET`, query string) carries `Action=<Operation>` is the AWS query protocol that older SDKs (AWS SDK for JavaScript v2, older boto3, many third-party clients) still send. Every operation listed above answers it through the same handlers as AWS JSON; only the encoding differs (`src/query.ts`):
+
+- `QueueUrl` is a parameter or the request path (`POST /<account>/<queue>`).
+- Lists and maps are flattened and indexed from 1: `Attribute.N.Name`/`.Value` (CreateQueue, SetQueueAttributes), `Tag.N.Key`/`.Value`, `TagKey.N`, `AttributeName.N`, `MessageSystemAttributeName.N`, `MessageAttributeName.N` (a bare `AttributeName=All` works too), `MessageAttribute.N.Name` with `.Value.DataType`/`.Value.StringValue`/`.Value.BinaryValue`, and batch entries as `SendMessageBatchRequestEntry.N.*`, `DeleteMessageBatchRequestEntry.N.*`, `ChangeMessageVisibilityBatchRequestEntry.N.*`. Integer parameters (`MaxNumberOfMessages`, `VisibilityTimeout`, `WaitTimeSeconds`, `DelaySeconds`, `MaxResults`) are validated as in AWS JSON, so `MaxNumberOfMessages=1.5` is `InvalidParameterValue`.
+- Answers are `text/xml`: `<ActionResponse xmlns="http://queue.amazonaws.com/doc/2012-11-05/"><ActionResult>…</ActionResult><ResponseMetadata><RequestId>…</RequestId></ResponseMetadata></ActionResponse>`, with repeated `QueueUrl`, `Attribute` (`Name`/`Value`), `Tag` (`Key`/`Value`), `Message` (with `Attribute` and `MessageAttribute` entries), `<Batch>ResultEntry` and `BatchResultErrorEntry` elements. Operations without output (DeleteQueue, SetQueueAttributes, TagQueue, UntagQueue, DeleteMessage, ChangeMessageVisibility, PurgeQueue) answer only `ResponseMetadata`.
+- Errors are `<ErrorResponse xmlns="…"><Error><Type>Sender</Type><Code>…</Code><Message>…</Message><Detail/></Error><RequestId>…</RequestId></ErrorResponse>` with the same status and code as AWS JSON (`Type` is `Receiver` for a 5xx).
+- An `Action` SQS does not have answers `400 InvalidAction` (`The action <Action> is not valid for this endpoint.`); the unmodelled SQS operations below answer `400 UnknownOperationException` as over AWS JSON. Neither touches state.
+
+Best guess, not oracle-verified (no live SQS credentials were available): shapes follow the query examples in the [ReceiveMessage reference](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html), [Making query API requests](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-making-api-requests-xml.html), [Interpreting XML API responses](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-api-responses.html) and [Common errors](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/CommonErrors.html) (`InvalidAction`). Not modelled for the query protocol: SigV2 query signing (auth parameters are ignored, as SigV4 is), `StringListValue`/`BinaryListValue` attribute members (refused as over AWS JSON), and the fault presets, which still answer with an AWS JSON body.
+
+### Dead-letter queues and FIFO deduplication
+
+- A message the redrive policy moves to a dead-letter queue carries the `DeadLetterQueueSourceArn` system attribute (the ARN of the queue it was moved from) when received from the DLQ with `MessageSystemAttributeNames`/`AttributeNames` of `All` or `DeadLetterQueueSourceArn`. Evidence: the `DeadLetterQueueSourceArn` value of `MessageSystemAttributeNames` in the [ReceiveMessage reference](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_ReceiveMessage.html); best guess, not oracle-verified. A message redriven twice carries the queue of its latest move.
+- A FIFO send deduplicated within the 5-minute interval is acknowledged but not delivered: it answers the original message's `MessageId` and `SequenceNumber`, and `MD5OfMessageBody` (and `MD5OfMessageAttributes`) of what this call sent, even when the body differs from the original. Best guess, not oracle-verified: AWS documents that a duplicate is ["acknowledged but not delivered to consumers"](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/using-messagededuplicationid-property.html) without naming the MD5, and AWS SDK v3 ([`@aws-sdk/middleware-sdk-sqs` send-message checksum](https://github.com/aws/aws-sdk-js-v3/blob/main/packages/middleware-sdk-sqs/src/send-message.ts)) and v2 compare `MD5OfMessageBody` against the body they sent and throw `InvalidChecksumError` on a mismatch, so the original body's MD5 would break every SDK retry that re-sends a changed body.
+
 ### Unknown operations
 
 An `X-Amz-Target` the emulator does not answer is refused before any queue is looked up, as `400 UnknownOperationException` (`{"__type":"UnknownOperationException","message":"Unknown operation Nope"}`), never as a missing queue. The SQS operations that exist but are not modelled (`AddPermission`, `RemovePermission`, `StartMessageMoveTask`, `CancelMessageMoveTask`, `ListMessageMoveTasks`) get the same type with the message `<Operation> is an Amazon SQS operation this emulator does not implement.`, so a missing operation is told apart from a missing queue.
@@ -83,7 +100,7 @@ Operations outside the surface listed above (queue permissions and message move 
 
 ## API
 
-- `SqsAPI`, `SqsAPIOptions`, `SqsSeedQueue`: AWS JSON handler and fixtures.
+- `SqsAPI`, `SqsAPIOptions`, `SqsSeedQueue`: AWS JSON and AWS query handler and fixtures.
 - `SqsMessage`, `SqsMessageAttribute`, `SqsQueue`: state types.
 - `createRuntime`, `SqsRuntime`, `SqsRuntimeOptions`: full Mockingbird runtime.
 - `SQS_NAMESPACE`, `SQS_PRESETS`, `accessKeyCredential`: constants and controls.
