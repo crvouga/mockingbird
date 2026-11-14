@@ -29,13 +29,14 @@ export type SqsMessage = {
   groupId?: string
   deduplicationId?: string
   sequenceNumber?: string
+  /** ARN of the queue whose redrive policy moved this message to its dead-letter queue. */
+  deadLetterQueueSourceArn?: string
 }
 export type SqsDeduplication = {
   queue: string
   id: string
   messageId: string
   expiresAt: number
-  md5?: string
   sequenceNumber?: string
 }
 
