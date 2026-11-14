@@ -30,14 +30,14 @@ const config = new Configuration({
 const accounts = new AccountApi(config)
 await accounts.createAccount({ name: "Synthetic Customer", externalKey: "customer-1", currency: "USD" }, "example")
 const { data: account } = await accounts.getAccountByKey("customer-1")
-console.log(account.accountId, account.currency) // acc-… USD
+console.log(account.accountId, account.currency) // a UUID, USD
 
 await emulator.close()
 ```
 
 The default credentials are Basic auth `admin:password` plus tenant headers `X-Killbill-ApiKey: bob` and `X-Killbill-ApiSecret: lazar`. Mutations also require `X-Killbill-CreatedBy`; optional reason and comment headers are recorded in the audit journal.
 
-`POST /1.0/kb/tenants` creates another tenant with Basic auth and `X-Killbill-CreatedBy` only. Accounts created with that tenant's api key stay hidden from other tenants. `POST /1.0/kb/tenants/registerNotificationCallback?cb=` stores one push-notification URL for the tenant; invoice and payment events are POSTed there as Kill Bill notification JSON. As in Kill Bill 0.24.16 (measured with a callback against a real server), delivery happens after the request has answered, in order per account. As in Kill Bill 0.24.10 (issue #652), adding a tag sends `TAG_CREATION` (objectType TAG, the new `tagId`); creating a subscription sends `SUBSCRIPTION_CREATION`, `ENTITLEMENT_CREATION`, `ACCOUNT_CHANGE` when it sets the account BCD, a second `SUBSCRIPTION_CREATION` (billing), then `INVOICE_CREATION`; cancelling sends `SUBSCRIPTION_CANCEL`, `ENTITLEMENT_CANCEL` and a second `SUBSCRIPTION_CANCEL` ahead of any repair invoice's `INVOICE_CREATION` (sent at the request for every policy: best guess, not oracle-verified, for a stop still ahead). `TENANT_CONFIG_CHANGE` and `TAG_DELETION` are not sent. Timing: an event raised while the bus is idle waits `notificationDelayMs` (2000 by default; Kill Bill's bus took 2–3 s), and one raised during or right after a delivery, such as a payment the callback makes, goes out at once (Kill Bill's bus polls again after delivering; ~70 ms measured). `GET /1.0/kb/test/queues` waits for pending deliveries. A delivery the callback refuses (non-2xx or no answer) is retried 15 minutes, 30 minutes, 2 hours, 12 hours and a day after each failed attempt, when the clock reaches it (a clock move or the next request), then dropped. The in-process `onEvent` hook still receives events during the request.
+`POST /1.0/kb/tenants` creates another tenant with Basic auth and `X-Killbill-CreatedBy` only. Accounts created with that tenant's api key stay hidden from other tenants. `POST /1.0/kb/tenants/registerNotificationCallback?cb=` stores one push-notification URL for the tenant; invoice and payment events are POSTed there as Kill Bill notification JSON. As in Kill Bill 0.24.16 (measured with a callback against a real server), delivery happens after the request has answered, in order per account. As in Kill Bill 0.24.10 (issue #652), adding a tag sends `TAG_CREATION` (objectType TAG, the new `tagId`); creating a subscription sends `SUBSCRIPTION_CREATION`, `ENTITLEMENT_CREATION`, `ACCOUNT_CHANGE` when it sets the account BCD, a second `SUBSCRIPTION_CREATION` (billing), then `INVOICE_CREATION`; cancelling sends `SUBSCRIPTION_CANCEL`, `ENTITLEMENT_CANCEL` and a second `SUBSCRIPTION_CANCEL` ahead of any repair invoice's `INVOICE_CREATION` (sent at the request for every policy: best guess, not oracle-verified, for a stop still ahead). Removing a tag sends `TAG_DELETION`. `TENANT_CONFIG_CHANGE` is not sent. Callbacks go through the `webhooks.fetch` transport given to `createRuntime`, else the global `fetch`. Timing: an event raised while the bus is idle waits `notificationDelayMs` (2000 by default; Kill Bill's bus took 2–3 s), and one raised during or right after a delivery, such as a payment the callback makes, goes out at once (Kill Bill's bus polls again after delivering; ~70 ms measured). `GET /1.0/kb/test/queues` waits for pending deliveries. A delivery the callback refuses (non-2xx or no answer) is retried 15 minutes, 30 minutes, 2 hours, 12 hours and a day after each failed attempt, when the clock reaches it (a clock move or the next request), then dropped. The in-process `onEvent` hook still receives events during the request.
 
 `GET /1.0/kb/accounts/pagination` and `GET /1.0/kb/invoices/pagination` enumerate the authenticated
 tenant's existing billing records as bare arrays. `offset` defaults to 0 and `limit` to 100;
@@ -80,7 +80,10 @@ clock (one, two stacked, and on an annual plan), plan changes on annual and semi
 after it), and a renewal-day move (a billing hold, its release and a BCD change). Plan-change
 scenarios use a second catalog whose rules leave changes and cancellations at END_OF_TERM and
 every alignment at Kill Bill's defaults. All of them matched Kill Bill 0.24.16 (the version
-Geviti runs in production) on 2026-11-06.
+Geviti runs in production) on 2026-11-06. Scenario `bundle-keys-tags-fields` (the catalog read back, a
+`bundleExternalKey` and the bundle lookups by key, a second base subscription on the bundle,
+subscription custom fields, a `WRITTEN_OFF` invoice tag and invoices by number) matched it on
+2026-11-13.
 
 ## Controls
 
@@ -184,7 +187,8 @@ exact vendor errors, account-specific permissions, proration and billing transit
 - `POST /1.0/kb/invoices/dryRun?accountId=...&targetDate=YYYY-MM-DD` previews the recurring
   periods due through `targetDate` per active, unblocked subscription without creating invoices,
   consuming IDs, emitting events, charging payments or advancing billing state. It supports
-  `TARGET_DATE` only; other dry-run types/actions return an explicit error. A due charge returns
+  `TARGET_DATE` and `UPCOMING_INVOICE` (see below); other dry-run types/actions return an
+  explicit error. A due charge returns
   200 with invoice `items`; nothing due returns 204. Preview IDs are synthetic. Tax and
   entitlement-change simulations are not modelled.
 - `POST /1.0/kb/invoices?accountId=...&targetDate=YYYY-MM-DD` invoices every period of the
@@ -240,8 +244,8 @@ exact vendor errors, account-specific permissions, proration and billing transit
   #647: a $100 invoice $40 paid by credit ends at balance 0 and the $40 comes back). A requested instant before the subscription started is `EntitlementApiException` 1001.
 - An unknown account, subscription or invoice id is 404 `ObjectDoesNotExist` ("Object id=…
   type=ACCOUNT doesn't exist!"); an unknown account external key is 404 `AccountApiException`
-  3003. Kill Bill answers a malformed (non-UUID) id with Tomcat's 404 page; emulator ids are not
-  UUIDs, so the emulator answers every unknown id with `ObjectDoesNotExist`.
+  3003. Kill Bill answers a malformed (non-UUID) id with Tomcat's 404 page; the emulator answers
+  every unknown id, malformed or not, with `ObjectDoesNotExist`.
 - `audit=FULL` (or `MINIMAL`) on a read adds each invoice, invoice item, payment and transaction's
   audit rows: `INSERT` (and `UPDATE` for payments and transactions) with the writing request's
   `X-Killbill-CreatedBy`, `-Comment`, `-Reason`, and its `X-Request-Id` as `userToken` (generated
@@ -274,3 +278,80 @@ exact vendor errors, account-specific permissions, proration and billing transit
 
 Unknown account, subscription and invoice IDs retain their existing 404 error envelopes;
 tenant isolation applies to these operations.
+
+## Bundles, custom fields, tags, account close, trials and notification metaData
+
+Measured against Kill Bill 0.24.16 (the `killbill/killbill:0.24.16` image with a push-notification
+callback and the test clock) on 2026-11-13, issues #737–#742, unless a line says best guess.
+
+- Object ids (accounts, subscriptions, bundles, invoices and their items, payments, transactions,
+  payment attempts, payment methods, tags, custom fields, tenants, request ids) are version-4-shaped
+  UUIDs, as Kill Bill's are. They come from the namespace's id sequence, so the same requests mint
+  the same ids, and a runtime `idBase` mints a different, unrelated run. Dry-run preview ids are
+  UUIDs derived from the request and consume none.
+- `POST /1.0/kb/subscriptions` keys the bundle by `bundleExternalKey` (its own id when absent) and
+  the subscription by `externalKey` (its own id when absent). A bundle with that key and an active
+  base subscription refuses another base subscription (400 `SubscriptionBaseApiException` 1015
+  "Subscription bundle … already has a base subscription") and takes an `ADD_ON` plan its base
+  product lists under `<available>` (else 1019 "Can't create AddOn … for BasePlan … (Not
+  available)"); once its base is cancelled, the key opens a new bundle and both bundles keep it.
+  Adding an add-on to an existing bundle is a best guess (the probe only saw 1019). An `ADD_ON` plan
+  without a keyed bundle still opens its own bundle (not modelled further).
+- `GET /1.0/kb/accounts/{id}/bundles?externalKey=` returns only that key's bundles (`[]` when none),
+  `bundlesFilter=` only the listed bundle ids, and `GET /1.0/kb/bundles?externalKey=` the tenant's
+  bundles with the key, or 404 `SubscriptionApiException` 1084 "Could not find a bundle matching key …".
+- Custom fields on accounts, subscriptions and invoices: `POST …/customFields [{name, value}]` (201,
+  Location the list), `GET` (`CustomFieldJson` list), `PUT [{customFieldId, value}]` and
+  `DELETE ?customField=` (204). Each field sends `CUSTOM_FIELD_CREATION` / `_DELETION` (objectType
+  CUSTOM_FIELD). Tags on accounts, subscriptions and invoices: `POST …/tags [tagDefinitionId]` (201),
+  `GET` (`TagJson` with `objectType` and the built-in `tagDefinitionName`), `DELETE ?tagDef=` (204).
+  An invoice tagged `WRITTEN_OFF` (`00000000-0000-0000-0000-000000000004`) reads balance 0, owes
+  nothing to the account balance, overdue or account payments, and owes again once untagged.
+- `GET /1.0/kb/invoices/byNumber/{n}` returns the invoice, or 400 `InvoiceApiException` 4018 "No
+  invoice could be found for number n.".
+- `DELETE /1.0/kb/accounts/{id}` closes the account and answers 204; it stays readable. With
+  `cancelAllSubscriptions=true` each subscription's entitlement stops now and billing at the end of
+  the billed period; with `writeOffUnpaidInvoices=true` each unpaid invoice is tagged `WRITTEN_OFF`
+  (and sends `INVOICE_ADJUSTMENT`); the account is tagged `AUTO_INVOICING_OFF` and gets the
+  `account-service` `CLOSE_ACCOUNT` blocking state (`isBlockChange`). `itemAdjustUnpaidInvoices=true`
+  is the emulator limitation 400 `UNSUPPORTED_ACCOUNT_CLOSE`. Kill Bill also lists `CLOSE_ACCOUNT` as
+  a `SERVICE_STATE_CHANGE` among the subscription's events; the emulator does not.
+- `POST /1.0/kb/accounts/{id}/block` adds an account blocking state (201, Location
+  `/1.0/kb/accounts/{id}/block?blockingStateTypes=ACCOUNT`) that applies to every subscription of the
+  account, as a subscription blocking state does (a billing pause credits the rest of the billed
+  period). A subscription blocking state answers Location
+  `/1.0/kb/accounts/{accountId}/block?blockingStateTypes=SUBSCRIPTION`. Both send `BLOCKING_STATE`
+  (objectType ACCOUNT or SUBSCRIPTION).
+- An account whose overdue state changes (to `OD1` or back to clear; the fixed config above) sends
+  `OVERDUE_CHANGE` (metaData null) then `BLOCKING_STATE` from `overdue-service`. The emulator
+  evaluates it after every request. Kill Bill with no overdue config uploaded has only a clear state
+  and sends neither.
+- A plan whose `<initialPhases>` holds a `TRIAL` phase with a fixed price (or none, meaning 0)
+  starts in phase `TRIAL`: one `FIXED` item (`{plan}-trial`) from the start to the trial end, the
+  account's bill-cycle day taken from the trial end, `chargedThroughDate` the trial end, `prices`
+  listing the TRIAL and EVERGREEN phases and a `PHASE` event at the trial end. On that day it moves
+  to `EVERGREEN`, sends `SUBSCRIPTION_PHASE`, then bills the evergreen price. A trial with a
+  recurring charge, and other initial phase types, are not modelled. Best guess, not
+  oracle-verified: on an account that already has a bill-cycle day, the stub to it bills on the
+  trial's last day.
+- `POST /1.0/kb/invoices/dryRun` with `dryRunType: UPCOMING_INVOICE` previews the next invoice: the
+  periods due on the earliest next billing day of the account's unblocked subscriptions (the trial
+  end during a trial), as `targetDate`; `targetDate` in the query is ignored, and nothing due is 204.
+- `GET /1.0/kb/catalog` reads back the tenant's uploaded catalog: its `<catalogName>`, its
+  `<effectiveDate>` ("2024-01-01T00:00:00.000+00:00"), its currencies, the plans it defined grouped
+  under their products (products and plans ordered by name, as Kill Bill lists them) with the product `<category>` as `type` and
+  `<available>` add-ons, each plan's own `billingPeriod` name (`QUARTERLY`, not `NINETY_DAYS`), and a
+  `TRIAL` phase. Several uploads are merged into one version named and dated after the latest.
+  Subscriptions report the plan's `billingPeriod` and `productCategory`.
+- Notification `metaData` is Kill Bill's JSON string: subscription events carry
+  `{"actionType","bundleExternalKey","subscriptionChangeUndo":false}` (`SUBSCRIPTION_CREATION` and
+  `SUBSCRIPTION_CANCEL` once `REQUESTED` and once `EFFECTIVE`; `SUBSCRIPTION_CHANGE` `REQUESTED` on
+  the request and `EFFECTIVE` when the plan changes; `SUBSCRIPTION_PHASE` `EFFECTIVE`;
+  `SUBSCRIPTION_UNCANCEL` `REQUESTED`, a best guess), `PAYMENT_*` the transaction
+  (`paymentTransactionId`, `amount` with two decimals, `currency`, `status`, `transactionType`,
+  `effectiveDate`), `INVOICE_PAYMENT_*` the payment attempt (`invoicePaymentType: "ATTEMPT"`,
+  `paymentCookieId` the transaction id), `TAG_*` the `tagDefinitionName`, and `BLOCKING_STATE` the
+  blockable, service, state and `transitionedTo…` flags. The others (`ACCOUNT_*`, `ENTITLEMENT_*`,
+  `INVOICE_CREATION`, `INVOICE_ADJUSTMENT`, `INVOICE_VOID`, `CUSTOM_FIELD_*`, `OVERDUE_CHANGE`) carry
+  null. An external refund's `INVOICE_PAYMENT_SUCCESS` carries null (not measured). The in-process
+  `onEvent` hook receives the same `metaData`.
