@@ -471,7 +471,8 @@
           "parity": {
             "enabled": true,
             "safe": true
-          }
+          },
+          "reason": "Page URIs are api.twilio.com-relative (`/2010-04-01/\u2026`, no `/api`), as twilio-node's `Page.getNextPageUrl` resolves them with `Domain.absoluteUrl` (#762; best guess from Twilio's paging docs and twilio-node 5.10.0 source, not oracle-verified)."
         },
         "parameters": [
           {
@@ -1869,7 +1870,8 @@
             "enabled": false,
             "safe": false,
             "reason": "Verified against a pinned package oracle; independent live vendor evidence is not available."
-          }
+          },
+          "reason": "Verified against a pinned package oracle; independent live vendor evidence is not available. Accepts the same Basic credentials as `ListMessages` under `/api` and pages in the same newest-first order, so its page URIs and those `/api` returns can be followed from the emulator origin (#762; best guess from Twilio's paging docs and twilio-node source, not oracle-verified)."
         },
         "parameters": [
           {

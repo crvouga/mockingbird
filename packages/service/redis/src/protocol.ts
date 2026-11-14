@@ -100,13 +100,41 @@ function concat(parts: Uint8Array[]): Uint8Array {
   return out
 }
 
-function formatDouble(value: number): string {
+/** `LLONG_MAX / 2` as a double: inside it, an integral double prints as an integer. */
+const INTEGRAL_LIMIT = 2 ** 62
+
+/**
+ * A double as Redis 7 prints it (`d2string`): an integral value within ±2^62 as an integer,
+ * anything else as the shortest round-trip digits laid out by `fpconv_dtoa` (plain up to seven
+ * trailing zeros or six leading decimal zeros, otherwise `1.5e-7` / `1e+20`). Sorted-set scores
+ * use this in RESP2 bulk strings and RESP3 doubles alike.
+ */
+export function formatScore(value: number): string {
   if (Number.isNaN(value)) return "nan"
   if (value === Infinity) return "inf"
   if (value === -Infinity) return "-inf"
-  if (Object.is(value, -0)) return "-0"
-  if (Number.isInteger(value)) return String(value)
-  return String(value)
+  if (Number.isInteger(value) && Math.abs(value) <= INTEGRAL_LIMIT) return BigInt(value).toString()
+  const negative = value < 0
+  const [mantissa = "0", exponentText = "0"] = Math.abs(value).toExponential().split("e")
+  const digits = mantissa.replace(".", "")
+  const exponent = Number(exponentText)
+  const count = digits.length
+  const k = exponent - count + 1
+  const magnitude = Math.abs(exponent)
+  let out: string
+  if (k >= 0 && magnitude < count + 7) out = digits + "0".repeat(k)
+  else if (k < 0 && (k > -7 || magnitude < 4)) {
+    const offset = count + k
+    out =
+      offset <= 0
+        ? `0.${"0".repeat(-offset)}${digits}`
+        : `${digits.slice(0, offset)}.${digits.slice(offset)}`
+  } else {
+    const kept = digits.slice(0, Math.min(count, negative ? 17 : 18))
+    const fraction = kept.length > 1 ? `.${kept.slice(1)}` : ""
+    out = `${kept[0]}${fraction}e${exponent < 0 ? "-" : "+"}${magnitude}`
+  }
+  return negative ? `-${out}` : out
 }
 
 export function encodeReply(reply: Reply, protocol: Protocol = 2): Uint8Array {
@@ -150,8 +178,8 @@ export function encodeReply(reply: Reply, protocol: Protocol = 2): Uint8Array {
         else text(value.v ? ":1\r\n" : ":0\r\n")
         return
       case "double":
-        if (protocol === 3) text(`,${formatDouble(value.v)}\r\n`)
-        else walk(bulk(formatDouble(value.v)))
+        if (protocol === 3) text(`,${formatScore(value.v)}\r\n`)
+        else walk(bulk(formatScore(value.v)))
         return
       case "map":
         if (protocol === 3) {

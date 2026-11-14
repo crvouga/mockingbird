@@ -83,6 +83,8 @@ export class Database {
   private touched = new Map<string, number>()
   private order: string[] = []
   private tick = 0
+  /** Called with each key removed because its TTL passed (keyspace `expired` events). */
+  onExpired: ((key: string) => void) | undefined
 
   constructor(private readonly clock: RedisClock) {}
 
@@ -133,6 +135,7 @@ export class Database {
       this.order = this.order.filter((item) => item !== key)
       this.lru.delete(key)
       this.touched.delete(key)
+      this.onExpired?.(key)
     }
   }
 

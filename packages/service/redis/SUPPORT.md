@@ -6,17 +6,19 @@ spot checks. The server reports `redis_version` 7.2.4 and `redis_mode:standalone
 | area | commands | notes |
 | --- | --- | --- |
 | connection | `AUTH`, `HELLO`, `PING`, `QUIT`, `RESET`, `SELECT`, `CLIENT`, `INFO`, `ECHO` | RESP2 and RESP3. `HELLO 3` switches before its map reply. |
-| strings | `GET`, `SET`, `MGET`, `MSET`, `INCR`, `DECR`, `APPEND`, `GETSET`, `GETDEL`, `GETEX` | `NX` `XX` `EX` `PX` `EXAT` `PXAT` `KEEPTTL` `GET`. |
+| strings | `GET`, `SET`, `MGET`, `MSET`, `INCR`, `DECR`, `APPEND`, `GETSET`, `GETDEL`, `GETEX`, `SETBIT`, `GETBIT`, `BITCOUNT` | `NX` `XX` `EX` `PX` `EXAT` `PXAT` `KEEPTTL` `GET`. `BITCOUNT` takes `BYTE`/`BIT` ranges. |
+| HyperLogLog | `PFADD`, `PFCOUNT`, `PFMERGE` | Exact counts: best guess, see #753 below. |
 | expiration | `EXPIRE`, `PEXPIRE`, `EXPIREAT`, `PEXPIREAT`, `TTL`, `PTTL`, `PERSIST` | Injected clock. Negative `EXPIRE` deletes an existing key. |
-| keys | `DEL`, `EXISTS`, `TYPE`, `SCAN`, `KEYS`, `RENAME`, `FLUSHDB`, `FLUSHALL` | `SCAN` cursor is a bulk string. |
+| keys | `DEL`, `EXISTS`, `TOUCH`, `TYPE`, `SCAN`, `KEYS`, `RENAME`, `FLUSHDB`, `FLUSHALL` | `SCAN` cursor is a bulk string. |
 | hashes | `HSET`, `HGET`, `HMGET`, `HGETALL`, `HDEL`, `HINCRBY` | |
-| lists | `LPUSH`, `RPUSH`, `LPOP`, `RPOP`, `LRANGE`, `LPOS`, `LMOVE`, `BLPOP`, `BRPOP` | Blocking waits release the command queue; LPOS supports RANK, COUNT and MAXLEN. |
-| sets | `SADD`, `SREM`, `SMEMBERS`, `SISMEMBER`, `SPOP` | Members are ordered bytewise. |
-| sorted sets | `ZADD`, `ZRANGE`, `ZPOPMIN`, `BZPOPMIN`, `ZINCRBY` | Integer scores encode without a trailing `.0`. |
-| streams | `XADD`, `XREAD`, `XGROUP`, `XREADGROUP`, `XACK`, `XPENDING`, `XCLAIM`, `XAUTOCLAIM` | Consumer-group pending entries and claim. |
+| lists | `LPUSH`, `RPUSH`, `LPUSHX`, `RPUSHX`, `LPOP`, `RPOP`, `LRANGE`, `LPOS`, `LMOVE`, `BLPOP`, `BRPOP` | Blocking waits release the command queue; LPOS supports RANK, COUNT and MAXLEN. |
+| sets | `SADD`, `SREM`, `SMEMBERS`, `SISMEMBER`, `SPOP`, `SINTER`/`SUNION`/`SDIFF` and their `STORE` forms, `SINTERCARD` | Members are ordered bytewise. |
+| sorted sets | `ZADD`, `ZRANGE` (`BYSCORE`, `BYLEX`, `REV`, `LIMIT`), `ZRANGESTORE`, `ZRANGEBYLEX`, `ZREVRANGEBYLEX`, `ZLEXCOUNT`, `ZREMRANGEBYLEX`, `ZPOPMIN`, `BZPOPMIN`, `ZINCRBY`, `ZRANK ... WITHSCORE`, `ZUNION`/`ZINTER`/`ZDIFF` and their `STORE` forms, `ZINTERCARD`, `ZRANDMEMBER` | Scores print as Redis 7 does (`1e+20`, `1.5e-7`). RESP3 scores are doubles and `WITHSCORES` replies are `[member, score]` pairs. |
+| streams | `XADD`, `XRANGE`, `XREVRANGE`, `XREAD`, `XGROUP`, `XREADGROUP`, `XACK`, `XPENDING`, `XCLAIM`, `XAUTOCLAIM` | Consumer-group pending entries and claim. `XRANGE`/`XREVRANGE` take `(` exclusive and incomplete (`ms`) IDs. |
 | transactions | `MULTI`, `EXEC`, `DISCARD`, `WATCH`, `UNWATCH` | A watched key change makes `EXEC` a null array. |
-| pub/sub | `SUBSCRIBE`, `UNSUBSCRIBE`, `PSUBSCRIBE`, `PUBLISH`, `PUBSUB` | |
-| scripts | `EVAL`, `EVALSHA`, `SCRIPT LOAD`, `SCRIPT EXISTS`, `SCRIPT FLUSH` | Lua 5.1 with Redis's libraries (see "Lua scripting" below). |
+| pub/sub | `SUBSCRIBE`, `UNSUBSCRIBE`, `PSUBSCRIBE`, `PUBLISH`, `PUBSUB`, `SSUBSCRIBE`, `SUNSUBSCRIBE`, `SPUBLISH` | Sharded channels on one node. Keyspace notifications (`notify-keyspace-events`), see below. |
+| scripts | `EVAL`, `EVALSHA`, `EVAL_RO`, `EVALSHA_RO`, `SCRIPT LOAD`, `SCRIPT EXISTS`, `SCRIPT FLUSH`, `FUNCTION LOAD`/`LIST`/`DELETE`/`FLUSH`/`STATS`, `FCALL`, `FCALL_RO` | Lua 5.1 with Redis's libraries (see "Lua scripting" below). |
+| replication | `WAIT` | No replicas: answers `0` at once. |
 | cluster | `CLUSTER`, `READONLY`, `ASKING` | Single node: cluster support disabled. |
 
 BullMQ 5.76.2 is exercised through unmodified Queue, Worker, QueueEvents and FlowProducer clients:
@@ -88,6 +90,64 @@ run). Tests: `test/redis.commands.test.ts`.
 | `ACL SETUSER`, `GETUSER`, `DELUSER`, `CAT`, `LOG`, `GENPASS`, `DRYRUN`, `LOAD`, `SAVE`, `HELP` | **Unsupported**: `ERR ACL <sub> is not supported by the Mockingbird Redis emulator`. There is no defensible deterministic model for a full ACL rule engine; users are fixed at construction and nothing changes. |
 | `COMMAND`, `COMMAND COUNT`, `LIST` (incl. `FILTERBY`), `INFO`, `DOCS`, `GETKEYS` | Metadata for the commands the emulator implements (captured from redis-server 8.4.0 by `scripts/command-table.ts`). `COMMAND COUNT` is the number of those commands, not Redis's `272`. `GETKEYS` handles fixed key specs plus `EVAL`, `ZUNIONSTORE`-style `numkeys`, `LMPOP` and `XREAD`. Sub-command entries and key specifications inside `INFO` are empty arrays. |
 | `COMMAND GETKEYSANDFLAGS`, `COMMAND HELP` | **Unsupported**, explicit `ERR COMMAND <sub> is not supported by the Mockingbird Redis emulator`. |
+
+## Issue #753: XREVRANGE, RESP3 scores, keyspace notifications, missing commands
+
+Unless marked **best guess, not oracle-verified**, every behavior below was compared byte for byte
+against redis-server 7.4.12 (the `redis:7.4` Docker image), and the `COMMAND INFO` rows of the new
+commands were captured from redis-server 8.4.0 (`scripts/command-table.ts`). Tests:
+`test/redis.issue-753.test.ts`; `bun run parity` replays the deterministic commands against
+`REDIS_URL` (passes against both 7.4.12 and 8.4.0).
+
+| behavior | evidence |
+| --- | --- |
+| `XREVRANGE key end start [COUNT n]` returns newest first; `XRANGE`/`XREVRANGE` accept `(` exclusive and incomplete IDs, reject invalid IDs (`ERR Invalid stream ID ...`, `ERR invalid start/end ID for the interval`), and `COUNT 0` (or negative) is a null array | oracle |
+| After `HELLO 3`: `ZRANGE`/`ZREVRANGE`/`ZRANGEBYSCORE`/`ZREVRANGEBYSCORE`/`ZUNION`/`ZINTER`/`ZDIFF`/`ZRANDMEMBER ... WITHSCORES` and `ZPOPMIN`/`ZPOPMAX` with a count reply `[member, double]` pairs; `ZPOPMIN`/`ZPOPMAX` without a count, `BZPOPMIN`/`BZPOPMAX` stay flat with a double score; `ZSCORE`, `ZMSCORE`, `ZINCRBY`, `ZADD INCR`, `ZRANK ... WITHSCORE` reply doubles. RESP2 and Lua scripts keep flat bulk-string replies | oracle |
+| `HGETALL` and `CONFIG GET` reply RESP3 maps after `HELLO 3` | oracle |
+| Scores print as Redis's `d2string` (integers within ±2^62, otherwise shortest digits laid out by `fpconv_dtoa`: `1e+20`, `1.5e-7`, `0.00001`) | oracle; Redis's grisu digits can be one digit longer than the shortest round trip (`1e23` prints `99999999999999990000000` there, `1e+23` here) |
+| `TOUCH`, `LPUSHX`, `RPUSHX`, `SUNIONSTORE`, `SINTERSTORE`, `SDIFFSTORE`, `SINTERCARD`, `ZINTERSTORE`, `ZDIFFSTORE`, `ZUNION`, `ZINTER`, `ZDIFF`, `ZINTERCARD`, `ZRANGESTORE`, `ZRANGEBYLEX`, `ZREVRANGEBYLEX`, `ZLEXCOUNT`, `ZREMRANGEBYLEX`, `ZRANGE ... BYLEX`, `ZRANK ... WITHSCORE`, `SETBIT`, `GETBIT`, `BITCOUNT`, `WAIT` (0 at once, no replicas), `EVAL_RO`/`EVALSHA_RO` (write commands raise `Write commands are not allowed from read-only scripts.`), `SPUBLISH`/`SSUBSCRIBE`/`SUNSUBSCRIBE`, `PUBSUB SHARDCHANNELS`/`SHARDNUMSUB`, and their error replies | oracle |
+| `ZRANDMEMBER` member choice | random in Redis; the emulator draws from its seeded generator (`createRedis({ seed })`), so the choice differs from Redis but repeats run to run |
+| `PFADD`, `PFCOUNT`, `PFMERGE`: replies (`1`/`0`, `OK`), `TYPE` string, the `WRONGTYPE Key is not a valid HyperLogLog string value.` error and keyspace events | oracle |
+| `PFCOUNT` is exact, and `GET`/`STRLEN` of an HLL key show this emulator's encoding (`HYLL` magic, then the members), not Redis's registers | **best guess, not oracle-verified**: Redis's estimate has a 0.81% standard error, so the exact count is what an approximate count converges to for small sets |
+| `FUNCTION LOAD [REPLACE]` (metadata, compile and registration errors, `Function ... already exists`, `No functions registered`), `FCALL`/`FCALL_RO` (`Function not found`, key-count errors, `no-writes` flag, `*_ro` refusal, `user_function:N` error positions), `FUNCTION LIST [WITHCODE] [LIBRARYNAME]` (RESP2 shape), `DELETE`, `FLUSH` | oracle |
+| `FUNCTION LIST` order (load order; Redis's is hash order), `FUNCTION LIST` flags as an array (Redis sends a RESP3 set), `FUNCTION KILL` answering `NOTBUSY`, `FUNCTION STATS` | **best guess, not oracle-verified** |
+| `FUNCTION DUMP`, `RESTORE`, `HELP` | **Unsupported**: explicit `ERR FUNCTION <sub> is not supported by the Mockingbird Redis emulator` (emulator limitation, not a Redis error). Libraries are not part of `snapshot()` / fleet archives and `reset()` drops them. |
+
+### Keyspace notifications
+
+`CONFIG SET notify-keyspace-events <classes>` accepts Redis's class characters (`K E g $ l s h z x e
+t m d n A`), rejects anything else with Redis's `Invalid event class character` error, and
+`CONFIG GET` prints the flags normalised exactly as Redis does (`Ex` reads back `xE`, `KEA` reads
+back `AKE`, and `n` is dropped from the text next to `A` though still active). `CONFIG SET` takes
+several parameter/value pairs at once and rejects a duplicate. The setting starts empty (nothing
+published) and `emulator.reset()` clears it. Events are published as Redis does,
+on `__keyspace@<db>__:<key>` (message: the event) and `__keyevent@<db>__:<event>` (message: the
+key), to `SUBSCRIBE` and `PSUBSCRIBE` alike, and from commands inside `MULTI`/`EXEC` and scripts.
+
+Expiry (`x`): a key whose TTL passes publishes `expired` when the injected clock moves past it
+(`emulator.advance(ms)` delivers the event synchronously, before `advance` returns), when a command
+touches it, or, on the wall clock, within about 100 ms (a timer runs only while `x` events are
+enabled, like Redis's active-expiry cycle). Eviction under `allkeys-lru` publishes `evicted` (`e`).
+
+Events published, observed against redis-server 7.4.12 command by command (including which no-op
+calls publish nothing, e.g. `SET NX` on an existing key, a `ZADD` that changes nothing, an empty
+`SINTERSTORE`, an `XTRIM` that trims nothing): `set`, `expire`, `persist`, `del`, `incrby`,
+`incrbyfloat`, `append`, `setrange`, `setbit`, `rename_from`/`rename_to`, `copy_to`, `new`;
+`lpush`, `rpush`, `lpop`, `rpop`, `lset`, `linsert`, `lrem`, `ltrim` (including `LMOVE`,
+`RPOPLPUSH`, `LMPOP` and served `BLPOP`/`BRPOP`/`BLMOVE`, push before pop); `sadd`, `srem`, `spop`,
+`sinterstore`, `sunionstore`, `sdiffstore`; `hset`, `hdel`, `hincrby`, `hincrbyfloat`; `zadd`,
+`zincr`, `zrem`, `zpopmin`, `zpopmax`, `zremrangebyscore`, `zremrangebyrank`, `zremrangebylex`,
+`zunionstore`, `zinterstore`, `zdiffstore`, `zrangestore`; `xadd`, `xtrim`, `xdel`,
+`xgroup-create`, `xgroup-setid`, `xgroup-destroy`, `xgroup-createconsumer`,
+`xgroup-delconsumer`; `pfadd`; `expired`; `evicted`. A blocked client served by a write publishes
+its pop after the write's own event, as Redis serves it after the command.
+
+Not published (the class is accepted, nothing is sent): key-miss events (`m`, `keymiss`), module
+events (`d`), hash-field expiry events (`hexpire`, `hpersist`, `hexpired`), `xgroup-createconsumer`
+for a consumer `XREADGROUP` creates implicitly, `XCLAIM`/`XAUTOCLAIM`/`XACK` events, and events for
+commands the emulator does not implement (`MOVE`, `SORT ... STORE`, `RESTORE`, ...). The `new`
+event for a key is published before the command's own event; its position relative to `expired`
+events of other keys is a best guess.
 
 ## Transports (#698)
 
