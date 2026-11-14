@@ -317,11 +317,12 @@ describe("Kill Bill REST adapter", () => {
           }>
         }>
       }>
+      // The evergreen phase is the last one (a TRIAL phase comes first).
       return (versions.at(-1)?.products ?? []).flatMap((product) =>
         product.plans.map((plan) => ({
           name: plan.name,
-          amount: plan.phases[0]?.prices[0]?.value,
-          currency: plan.phases[0]?.prices[0]?.currency,
+          amount: plan.phases.at(-1)?.prices[0]?.value,
+          currency: plan.phases.at(-1)?.prices[0]?.currency,
           billingPeriod: plan.billingPeriod,
         })),
       )
@@ -836,7 +837,9 @@ describe("Kill Bill tenants and notification callbacks", () => {
         endpoints: [
           { url: "https://sink.test/kill-bill", secret: "webhook-secret", events: ["*"] },
         ],
+        // The injected transport also carries tenant callbacks (issue #739); it forwards those.
         fetch: async (request) => {
+          if (!request.url.startsWith("https://sink.test/")) return fetch(request)
           hooked.push(((await request.json()) as { objectType?: string }).objectType ?? "")
           return new Response(null, { status: 204 })
         },

@@ -97,7 +97,13 @@ export type Subscription = Record<string, unknown> & {
   createdAt?: string
   /** Phase prices sent on create. Kill Bill 0.24 echoes these on GET. */
   priceOverrides?: Record<string, unknown>[]
+  /** The day a TRIAL phase ends and the evergreen phase (and recurring billing) starts. */
+  trialEndDate?: string
+  /** The TRIAL phase's fixed item has been invoiced. */
+  trialInvoiced?: boolean
 }
+/** A blocking state on an account (Kill Bill blockingType ACCOUNT): it applies to every subscription. */
+export type BlockingState = NonNullable<Subscription["blockingStates"]>[number]
 export type Bundle = {
   bundleId: string
   accountId: string
@@ -172,6 +178,14 @@ export type CatalogPlan = {
   intervalDays?: number
   /** Catalog product of the plan (`<product>` in catalog XML); the plan name when not given. */
   product?: string
+  /** The catalog `<billingPeriod>` name (QUARTERLY and NINETY_DAYS share `intervalDays`). */
+  billingPeriod?: string
+  /** The product's `<category>`: BASE (the default), ADD_ON or STANDALONE. */
+  productCategory?: "BASE" | "ADD_ON" | "STANDALONE"
+  /** Add-on products the base product lists in `<available>`. */
+  availableAddons?: string[]
+  /** A TRIAL initial phase: its duration and fixed price (0 for an empty `<fixedPrice/>`). */
+  trial?: { unit: "DAYS" | "WEEKS" | "MONTHS" | "YEARS"; number: number; fixedPrice: number }
   /**
    * The catalog's `<billingAlignment>` for this plan. ACCOUNT (the default) bills month-based
    * plans to the account's bill-cycle day.
@@ -208,10 +222,39 @@ export class KillBillState {
   readonly bundles: Collection<Bundle>
   readonly invoices: Collection<Invoice>
   readonly payments: Collection<Payment>
-  readonly tags: Collection<{ tagId?: string; objectId: string; tagDefinitionId: string }>
+  readonly tags: Collection<{
+    tagId?: string
+    objectId: string
+    /** ACCOUNT (the default for tags written before objectType was stored), INVOICE, SUBSCRIPTION… */
+    objectType?: string
+    tagDefinitionId: string
+  }>
+  readonly customFields: Collection<{
+    customFieldId: string
+    objectId: string
+    objectType: string
+    accountId: string
+    name: string
+    value: string
+  }>
+  /** Account-level blocking states, keyed by accountId. */
+  readonly accountBlocking: Collection<{ states: BlockingState[] }>
+  /** The overdue state last notified per account (OVERDUE_CHANGE is sent when it changes). */
+  readonly overdue: Collection<{ name: string }>
   readonly plans: Collection<CatalogPlan>
-  /** Effective dates of the catalog versions each tenant uploaded, keyed by tenantId. */
-  readonly catalogVersions: Collection<{ effectiveDates: string[] }>
+  /**
+   * Effective dates of the catalog versions each tenant uploaded, keyed by tenantId, with the
+   * latest upload's `<catalogName>`, date and currencies for GET /1.0/kb/catalog.
+   */
+  readonly catalogVersions: Collection<{
+    effectiveDates: string[]
+    name?: string
+    effectiveDate?: string
+    currencies?: string[]
+    recurringBillingMode?: string
+    /** Every plan the tenant's uploads defined, in catalog order. */
+    plans?: string[]
+  }>
   readonly audits: Collection<Audit>
   readonly notifications: Collection<QueuedNotification>
   readonly busEvents: Collection<QueuedBusEvent>
@@ -226,6 +269,9 @@ export class KillBillState {
     this.invoices = new Collection(sqlite, namespace, "kb_invoices")
     this.payments = new Collection(sqlite, namespace, "kb_payments")
     this.tags = new Collection(sqlite, namespace, "kb_tags")
+    this.customFields = new Collection(sqlite, namespace, "kb_custom_fields")
+    this.accountBlocking = new Collection(sqlite, namespace, "kb_account_blocking")
+    this.overdue = new Collection(sqlite, namespace, "kb_overdue")
     this.plans = new Collection(sqlite, namespace, "kb_plans")
     this.catalogVersions = new Collection(sqlite, namespace, "kb_catalog_versions")
     this.audits = new Collection(sqlite, namespace, "kb_audits")
