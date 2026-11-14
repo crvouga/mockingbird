@@ -2,8 +2,8 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **54**
-- supported by the emulator: **54**
+- operations in spec: **61**
+- supported by the emulator: **61**
 - parity enabled: **5**
 
 | operationId | route | emulator | parity | notes |
@@ -18,6 +18,8 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `PostAuthProfile` | `POST /auth/profile` | ✅ supported | ❌ disabled | Multi-membership login step. |
 | `PostAuthResetPassword` | `POST /auth/resetpassword` | ✅ supported | ❌ disabled | Creates a UserSecurityRequest; covered by the auth acceptance tests. |
 | `PostAuthSetPassword` | `POST /auth/setpassword` | ✅ supported | ❌ disabled | Consumes a UserSecurityRequest; covered by the auth acceptance tests. |
+| `PostAuthChangePassword` | `POST /auth/changepassword` | ✅ supported | ❌ disabled | Changes the caller's password and revokes their logins; verified against the oracle by hand, covered by the account acceptance tests. |
+| `PostAuthGoogle` | `POST /auth/google` | ✅ supported | ❌ disabled | Needs a credential signed by Google; validation and client-id errors verified against the oracle by hand, sign-in covered by the account acceptance tests. |
 | `GetAuthMe` | `GET /auth/me` | ✅ supported | ❌ disabled | Covered by the auth and admin scenarios. |
 | `PostOauth2Token` | `POST /oauth2/token` | ✅ supported | ❌ disabled | Tokens are minted per call; covered by the auth scenarios. |
 | `GetOauth2UserInfo` | `GET /oauth2/userinfo` | ✅ supported | ❌ disabled | Covered by the auth scenarios. |
@@ -48,6 +50,11 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `DeletePatient` | `DELETE /fhir/R4/Patient/{id}` | ✅ supported | ✅ |  |
 | `ReadPatientHistory` | `GET /fhir/R4/Patient/{id}/_history` | ✅ supported | ✅ |  |
 | `PatientEverything` | `GET /fhir/R4/Patient/{id}/$everything` | ✅ supported | ❌ disabled | Covered by the resource variety scenario. |
+| `FhirUserUpdateEmail` | `POST /fhir/R4/User/{id}/$update-email` | ✅ supported | ❌ disabled | Rewrites a login email; verified against the oracle by hand, covered by the account acceptance tests. |
+| `BotExecuteByIdentifierGet` | `GET /fhir/R4/Bot/$execute` | ✅ supported | ❌ disabled | Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests. |
+| `BotExecuteByIdentifier` | `POST /fhir/R4/Bot/$execute` | ✅ supported | ❌ disabled | Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests. |
+| `BotExecuteGet` | `GET /fhir/R4/Bot/{id}/$execute` | ✅ supported | ❌ disabled | Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests. |
+| `BotExecute` | `POST /fhir/R4/Bot/{id}/$execute` | ✅ supported | ❌ disabled | Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests. |
 | `FhirSearch` | `GET /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Every resource type; covered by the search scenarios and random walks. |
 | `FhirConditionalUpdate` | `PUT /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Covered by the conditional scenario. |
 | `FhirCreate` | `POST /fhir/R4/{resourceType}` | ✅ supported | ❌ disabled | Every resource type, including rest-hook Subscriptions; covered by scenarios, random walks and subscription regressions. |
