@@ -64,9 +64,14 @@ describe("SpeechAPI", () => {
             return {
               fetch: async (request: Request) => {
                 const response = await api.fetch(request)
-                if (response.status !== 200) return response
-                // Diverge: every successful synthesis answers 500 instead.
-                return Response.json({ message: "diverged" }, { status: 500 })
+                // Every generated request must reveal the injected fault, including requests
+                // rejected by cross-field rules (e.g. an incompatible format/sample rate).
+                // Otherwise an unlucky seed can miss every 200 and the outer property spends
+                // its timeout shrinking that seed instead of testing divergence detection.
+                return Response.json(
+                  { message: "diverged" },
+                  { status: response.status === 500 ? 502 : 500 },
+                )
               },
             }
           }

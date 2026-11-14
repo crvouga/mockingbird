@@ -82,7 +82,7 @@ test("browser runs Node core libraries and Node/Bun/Deno servers in one world", 
     )
     await page.goto("https://runtime.test/")
     await page.addScriptTag({ content: result.outputFiles[0]?.text ?? "" })
-    expect(await page.evaluate("globalThis.result")).toBe("passed")
+    expect(await page.evaluate<string>("globalThis.result")).toBe("passed")
   } finally {
     await browser.close()
   }
