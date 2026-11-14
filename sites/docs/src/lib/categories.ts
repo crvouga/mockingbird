@@ -5,6 +5,10 @@
 export const CATEGORIES = {
   infrastructure: { label: "Infrastructure", blurb: "Container engines and orchestration APIs." },
   payments: { label: "Payments", blurb: "Charges, subscriptions, checkout and HSA/FSA billing." },
+  commerce: {
+    label: "Commerce",
+    blurb: "Store orders, products, fulfilment and merchant webhooks.",
+  },
   health: {
     label: "Health & labs",
     blurb: "EHRs, lab ordering, diagnostics, telehealth, nutrition.",

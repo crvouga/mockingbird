@@ -91,6 +91,7 @@
     "@crvouga/mockingbird-service-scheduler": "workspace:*",
     "@crvouga/mockingbird-service-sentry": "workspace:*",
     "@crvouga/mockingbird-service-ses": "workspace:*",
+    "@crvouga/mockingbird-service-shopify": "workspace:*",
     "@crvouga/mockingbird-service-slack": "workspace:*",
     "@crvouga/mockingbird-service-sns": "workspace:*",
     "@crvouga/mockingbird-service-sqs": "workspace:*",

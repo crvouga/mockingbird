@@ -886,6 +886,15 @@ export const CATALOG: readonly CatalogEntry[] = [
     "docs": "https://docs.aws.amazon.com/"
   },
   {
+    "target": "shopify",
+    "package": "@crvouga/mockingbird-service-shopify",
+    "displayName": "Shopify",
+    "category": "commerce",
+    "description": "Stateful emulator of the Shopify Admin GraphQL API: orderCreate, draft orders, order fulfillment status and tracking, product variants, metafieldsSet, webhook subscriptions, HMAC-signed order and fulfillment webhooks, userErrors and THROTTLED responses.",
+    "website": "https://www.shopify.com",
+    "docs": "https://shopify.dev/docs/api/admin-graphql"
+  },
+  {
     "target": "slack",
     "package": "@crvouga/mockingbird-service-slack",
     "displayName": "Slack",
@@ -1202,6 +1211,7 @@ export const LOADERS: Record<string, () => Promise<{ serveTarget?: unknown }>> =
   "scheduler": () => import("@crvouga/mockingbird-service-scheduler/server"),
   "sentry": () => import("@crvouga/mockingbird-service-sentry/server"),
   "ses": () => import("@crvouga/mockingbird-service-ses/server"),
+  "shopify": () => import("@crvouga/mockingbird-service-shopify/server"),
   "slack": () => import("@crvouga/mockingbird-service-slack/server"),
   "sns": () => import("@crvouga/mockingbird-service-sns/server"),
   "sqs": () => import("@crvouga/mockingbird-service-sqs/server"),

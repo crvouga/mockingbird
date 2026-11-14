@@ -10,15 +10,22 @@ import {
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { document } from "./generated/openapi.js"
 import { accessTokenCredential, META_NAMESPACE, MetaAPI } from "./index.js"
-import type { MetaSettings } from "./state.js"
+import { type MetaSettings, OAUTH_CODES } from "./state.js"
 
-const graphError = (status: number, code: number, message: string, transient = false) => ({
+const graphError = (
+  status: number,
+  code: number,
+  message: string,
+  transient = false,
+  errorSubcode?: number,
+) => ({
   status,
   body: {
     error: {
       message,
-      type: code === 190 ? "OAuthException" : "GraphMethodException",
+      type: OAUTH_CODES.has(code) ? "OAuthException" : "GraphMethodException",
       code,
+      ...(errorSubcode === undefined ? {} : { error_subcode: errorSubcode }),
       is_transient: transient,
       fbtrace_id: "trace_fault",
     },
@@ -31,7 +38,7 @@ export const META_PRESETS: Record<string, FaultPreset> = {
     rules: [
       {
         pathPrefix: "/v26.0/",
-        ...graphError(401, 190, "Error validating access token: Session has expired."),
+        ...graphError(401, 190, "Error validating access token: Session has expired.", false, 463),
       },
     ],
   },
@@ -39,6 +46,30 @@ export const META_PRESETS: Record<string, FaultPreset> = {
     description: "The next Graph request answers the standard transient rate-limit error",
     rules: [
       { pathPrefix: "/v26.0/", ...graphError(429, 4, "Application request limit reached", true) },
+    ],
+  },
+  user_request_limit: {
+    description: "The next Graph request answers (#17) User request limit reached",
+    rules: [
+      {
+        pathPrefix: "/v26.0/",
+        ...graphError(400, 17, "(#17) User request limit reached", true, 2446079),
+      },
+    ],
+  },
+  ad_account_rate_limit: {
+    description: "The next Graph request answers (#80004) too many calls to this ad account",
+    rules: [
+      {
+        pathPrefix: "/v26.0/",
+        ...graphError(
+          400,
+          80004,
+          "(#80004) There have been too many calls to this ad-account. Wait a bit and try again.",
+          true,
+          2446079,
+        ),
+      },
     ],
   },
   server_error: {

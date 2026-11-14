@@ -97,6 +97,7 @@ import type { createRuntime as createS3Control } from "@crvouga/mockingbird-serv
 import type { createRuntime as createScheduler } from "@crvouga/mockingbird-service-scheduler"
 import type { createRuntime as createSentry } from "@crvouga/mockingbird-service-sentry"
 import type { createRuntime as createSes } from "@crvouga/mockingbird-service-ses"
+import type { createRuntime as createShopify } from "@crvouga/mockingbird-service-shopify"
 import type { createRuntime as createSlack } from "@crvouga/mockingbird-service-slack"
 import type { createRuntime as createSns } from "@crvouga/mockingbird-service-sns"
 import type { createRuntime as createSqs } from "@crvouga/mockingbird-service-sqs"
@@ -217,6 +218,7 @@ export type SurfaceProof = [
   Assert<typeof createVibe>,
   Assert<typeof createUnsplash>,
   Assert<typeof createMeta>,
+  Assert<typeof createShopify>,
   Assert<typeof createKinesis>,
   Assert<typeof createSsm>,
   Assert<typeof createKms>,
