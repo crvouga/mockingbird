@@ -42,3 +42,16 @@ export const withBillingAlignment = (
 
 /** The day of the month of a `YYYY-MM-DD…` date. */
 export const dayOfMonth = (date: string) => Number(date.slice(8, 10))
+
+/**
+ * The first new billing day of a BCD change: its day on or after its effective date, clamped to
+ * the month's last day (BCD 5 from 02-01 is 02-05; BCD 31 from 02-01 is 02-28).
+ */
+export const firstBillingDay = ({ day, effectiveFrom }: { day: number; effectiveFrom: string }) => {
+  const [year, month] = effectiveFrom.split("-").map(Number) as [number, number]
+  const onDay = (monthIndex: number) => {
+    const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
+    return new Date(Date.UTC(year, monthIndex, Math.min(day, last))).toISOString().slice(0, 10)
+  }
+  return onDay(month - 1) >= effectiveFrom ? onDay(month - 1) : onDay(month)
+}
