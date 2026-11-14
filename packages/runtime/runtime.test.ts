@@ -15,13 +15,17 @@ describe("@crvouga/mockingbird-runtime", () => {
     ])
   })
 
-  test("every subpath re-exports the workspace helper of the same name", () => {
+  test("every subpath maps to its source and helper entries preserve their re-exports", () => {
     for (const subpath of RUNTIME_SUBPATHS) {
       expect(manifest.exports[`./${subpath}`]).toEqual({
         types: `./dist/${subpath}.d.ts`,
         default: `./dist/${subpath}.js`,
       })
       const source = readFileSync(join(import.meta.dir, "src", `${subpath}.ts`), "utf8")
+      if (subpath.startsWith("preview/")) {
+        expect(source).toContain("export ")
+        continue
+      }
       expect(source).toBe(`export * from "@crvouga/mockingbird-${subpath}"\n`)
     }
   })

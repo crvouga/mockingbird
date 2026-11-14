@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import {
+  bumpVersion,
+  firstReleaseVersion,
   githubRetryDelayMs,
   initialPackageBlocker,
   isRetryableGitHubError,
@@ -150,4 +152,12 @@ describe("GitHub release retries", () => {
     expect(githubRetryDelayMs(1)).toBe(10_000)
     expect(githubRetryDelayMs(8)).toBe(60_000)
   })
+})
+
+test("initial releases ignore code-free npm reservations", () => {
+  expect(firstReleaseVersion([])).toBe("0.1.0")
+  expect(firstReleaseVersion(["0.0.0-reserved"])).toBe("0.1.0")
+  expect(firstReleaseVersion(["0.0.0-reserved", "0.2.0"])).toBe("0.2.1")
+  expect(bumpVersion("1.2.3-beta.1", "patch")).toBe("1.2.4")
+  expect(() => bumpVersion("invalid", "patch")).toThrow("Invalid release version")
 })

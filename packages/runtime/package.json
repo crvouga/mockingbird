@@ -63,6 +63,22 @@
     "./adapter-node": {
       "types": "./dist/adapter-node.d.ts",
       "default": "./dist/adapter-node.js"
+    },
+    "./preview/bridge": {
+      "types": "./dist/preview/bridge.d.ts",
+      "default": "./dist/preview/bridge.js"
+    },
+    "./preview/host": {
+      "types": "./dist/preview/host.d.ts",
+      "default": "./dist/preview/host.js"
+    },
+    "./preview/artifacts": {
+      "types": "./dist/preview/artifacts.d.ts",
+      "default": "./dist/preview/artifacts.js"
+    },
+    "./preview/harness": {
+      "types": "./dist/preview/harness.d.ts",
+      "default": "./dist/preview/harness.js"
     }
   },
   "publishConfig": {
@@ -84,7 +100,8 @@
     "runtime": "portable",
     "entries": {
       "adapter-node": "node",
-      "mqtt-broker/node": "node"
+      "mqtt-broker/node": "node",
+      "preview/harness": "node"
     },
     "layer": "runtime"
   },
@@ -114,6 +131,7 @@
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
-    "@crvouga/mockingbird-ui": "workspace:*"
+    "@crvouga/mockingbird-ui": "workspace:*",
+    "@playwright/test": "1.65.0"
   }
 }

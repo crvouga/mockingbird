@@ -42,7 +42,7 @@ for (const pkg of pkgs) {
   }
   if (pkg.name === "@crvouga/mockingbird-runtime" && manifest.mockingbird?.layer === "runtime") {
     toolingLines.push(
-      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): The runtime every emulator service depends on (router, admin API and page, snapshots, faults, clock), installed once however many emulators an application uses. Installed with each emulator; nothing to import from it directly.`,
+      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): The runtime every emulator service depends on (router, admin API and page, snapshots, faults, clock), installed once however many emulators an application uses. Installed with each emulator; the supported UI and preview entries expose the reusable system harness, worker hosting, streaming bridge and artifact helpers.`,
     )
     continue
   }
