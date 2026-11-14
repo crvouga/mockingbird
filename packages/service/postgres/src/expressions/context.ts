@@ -2,8 +2,10 @@ import { quoteIdentifier } from "../sql/keywords.ts";
 import { pgError } from "../errors/error.ts";
 import { getRegResolver } from "../schema/catalog.ts";
 import { catalogRelationByOid, catalogRelationOid } from "../schema/catalog-oids.ts";
+import { clockMicros } from "../runtime/clock.ts";
 import { databaseCatalogContext } from "../runtime/database-context.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
+import { findRole, roleByOid } from "../storage/roles.ts";
 import type { CastEnv } from "../types/cast.ts";
 import type { CompareCtx } from "../types/compare.ts";
 import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
@@ -23,17 +25,31 @@ export class EngineCtx implements CastEnv, CompareCtx {
     if (this.state.inTransaction) return (this.state.transactionXid ??= this.state.allocateXid());
     return (this.writeXid ??= this.state.allocateXid());
   }
+
+  /** The transaction id assigned so far (by a write or pg_current_xact_id()), or null when none is. */
+  assignedXid(): number | null {
+    return this.state.inTransaction ? this.state.transactionXid : this.writeXid;
+  }
   /** transaction timestamp (now(), current_timestamp) — UTC micros since PG epoch */
   readonly txNow: bigint;
   /** statement timestamp */
   readonly stmtNow: bigint;
 
+  /**
+   * @param txNow the transaction start when the caller already knows it (later statements of one
+   *   implicit multi-statement transaction); inside a transaction block the block's own start wins.
+   */
   constructor(state: DatabaseState, txNow?: bigint) {
     this.state = state;
-    const nowMs = state.clock().getTime();
-    const nowMicros = BigInt(Math.round(nowMs)) * 1000n + UNIX_EPOCH_MICROS_FROM_PG;
-    this.txNow = txNow ?? nowMicros;
+    const nowMicros = this.clockNow();
     this.stmtNow = nowMicros;
+    // PostgreSQL: now() is the start of the transaction, the statement start of an implicit one
+    this.txNow = state.inTransaction ? (state.transactionStart ??= txNow ?? nowMicros) : (txNow ?? nowMicros);
+  }
+
+  /** clock_timestamp(): the clock read afresh, PG-epoch UTC micros. */
+  clockNow(): bigint {
+    return clockMicros(this.state.clock) + UNIX_EPOCH_MICROS_FROM_PG;
   }
 
   timezone(): string {
@@ -121,6 +137,16 @@ export class EngineCtx implements CastEnv, CompareCtx {
     return null;
   }
 
+  roleOid(name: string): number {
+    const role = findRole(this.state, name);
+    if (!role) throw pgError("undefined_object", `role "${name}" does not exist`, "42704");
+    return role.oid;
+  }
+
+  roleName(oid: number): string | null {
+    return roleByOid(this.state.catalogExt, oid)?.name ?? null;
+  }
+
   regtypeIn(text: string): string {
     return getRegResolver().typeIn(this.state, text);
   }
@@ -139,6 +165,11 @@ export class EngineCtx implements CastEnv, CompareCtx {
 
   zoneOffsetAt(utcMicros: bigint): number {
     return zoneOffsetAtUtc(this.timezone(), utcMicros);
+  }
+
+  /** 'now' / 'today' input reads the transaction timestamp, as now() does */
+  datetimeNow(): { utc: bigint; offsetSec: number } {
+    return { utc: this.txNow, offsetSec: this.zoneOffsetAt(this.txNow) };
   }
 
   zoneOffsetForNaive(naiveMicros: bigint): number {

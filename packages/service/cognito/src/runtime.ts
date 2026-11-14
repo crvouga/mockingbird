@@ -59,6 +59,10 @@ export type CognitoRuntimeOptions = {
   appClients?: readonly CognitoAppClient[]
   fixtures?: CognitoFixtures
   baseUrl?: string
+  /** UsernameAttributes: sign up with an email or phone number; the username is the generated sub. */
+  usernameAttributes?: readonly ("email" | "phone_number")[]
+  /** UsernameConfiguration.CaseSensitive (default false). */
+  usernameCaseSensitive?: boolean
 }
 export type CognitoRuntime = ServiceRuntime<CognitoAPI>
 const json = (body: unknown, status = 200) => Response.json(body, { status })
@@ -180,6 +184,10 @@ export const createRuntime = (options: CognitoRuntimeOptions = {}): CognitoRunti
         ...(options.poolId ? { poolId: options.poolId } : {}),
         ...(options.clientId ? { clientId: options.clientId } : {}),
         ...(options.region ? { region: options.region } : {}),
+        ...(options.usernameAttributes ? { usernameAttributes: options.usernameAttributes } : {}),
+        ...(options.usernameCaseSensitive !== undefined
+          ? { usernameCaseSensitive: options.usernameCaseSensitive }
+          : {}),
         ...((fixtures?.users ?? options.users) ? { users: fixtures?.users ?? options.users } : {}),
         ...(appClients ? { appClients } : {}),
       }),

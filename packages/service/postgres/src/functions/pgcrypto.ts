@@ -1,9 +1,11 @@
-import { pgError } from "../errors/error.ts";
+import { pgError, unsupported } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import type { DatabaseState, FunctionData } from "../storage/database-state.ts";
 import { castTo } from "../types/cast.ts";
 import type { TypedValue, TypeId } from "../types/value.ts";
 import { tv } from "../types/value.ts";
+import { pgCrypt, pgGenSalt } from "./pgcrypto-crypt.ts";
+import { evalUuidOsspFunction, UUID_OSSP_BODY } from "./uuid-ossp.ts";
 
 /** Marks functions installed by `CREATE EXTENSION pgcrypto` (survives PGMM). */
 const PGCRYPTO_BODY = "pgcrypto";
@@ -431,19 +433,34 @@ export function pgcryptoInstalled(state: DatabaseState): boolean {
   return false;
 }
 
+/** The pgcrypto functions this engine implements: name, argument types, result, volatility. */
+const PGCRYPTO_FUNCTIONS: ReadonlyArray<{
+  name: string;
+  args: TypeId[];
+  returns: TypeId;
+  volatility?: "immutable";
+}> = [
+  // text overloads first so untyped literals prefer them, as PostgreSQL does
+  { name: "digest", args: ["text", "text"], returns: "bytea" },
+  { name: "digest", args: ["bytea", "text"], returns: "bytea" },
+  { name: "hmac", args: ["text", "text", "text"], returns: "bytea", volatility: "immutable" },
+  { name: "hmac", args: ["bytea", "bytea", "text"], returns: "bytea", volatility: "immutable" },
+  { name: "gen_random_bytes", args: ["int4"], returns: "bytea" },
+  { name: "crypt", args: ["text", "text"], returns: "text", volatility: "immutable" },
+  { name: "gen_salt", args: ["text"], returns: "text" },
+  { name: "gen_salt", args: ["text", "int4"], returns: "text" },
+];
+
 export function installPgcrypto(state: DatabaseState, schemaName: string): void {
   const schema = state.getSchema(schemaName);
-  const existing = (schema.functions.get("digest") ?? []).slice();
-  // text overload first so untyped literals prefer digest(text, text), as PostgreSQL does.
-  const arg0Types: TypeId[] = ["text", "bytea"];
-  for (const arg0 of arg0Types) {
+  for (const spec of PGCRYPTO_FUNCTIONS) {
     const fn: FunctionData = {
-      name: "digest",
+      name: spec.name,
       schema: schema.name,
-      argNames: [null, null],
-      argTypes: [arg0, "text"],
-      argDefaults: [null, null],
-      returns: "bytea",
+      argNames: spec.args.map(() => null),
+      argTypes: [...spec.args],
+      argDefaults: spec.args.map(() => null),
+      returns: spec.returns,
       returnsSet: false,
       returnsTable: null,
       language: "internal",
@@ -451,10 +468,10 @@ export function installPgcrypto(state: DatabaseState, schemaName: string): void 
       rawBody: PGCRYPTO_BODY,
       strict: true,
       oid: state.nextOid(),
+      ...(spec.volatility ? { volatility: spec.volatility } : {}),
     };
-    existing.push(fn);
+    schema.functions.set(spec.name, [...(schema.functions.get(spec.name) ?? []), fn]);
   }
-  schema.functions.set("digest", existing);
 }
 
 export function uninstallPgcrypto(state: DatabaseState): boolean {
@@ -472,14 +489,89 @@ export function uninstallPgcrypto(state: DatabaseState): boolean {
 }
 
 export function evalPgcryptoFunction(ctx: EngineCtx, fn: FunctionData, args: TypedValue[]): TypedValue {
+  if (fn.rawBody === UUID_OSSP_BODY) return evalUuidOsspFunction(ctx, fn, args);
   const ret = fn.returns ?? "bytea";
   if (fn.strict && args.some((arg) => arg.v === null)) return tv(ret, null);
-  if (fn.name !== "digest" || args.length !== 2) {
-    throw pgError("undefined_function", `function ${fn.schema}.${fn.name} is not implemented`, "42883");
+  const arg = (i: number): TypedValue => castTo(ctx, args[i]!, fn.argTypes[i] ?? "text", {});
+  const bytesOf = (i: number): Uint8Array => {
+    const v = arg(i);
+    return v.t === "bytea" ? (v.v as Uint8Array) : utf8.encode(v.v as string);
+  };
+  switch (`${fn.name}/${args.length}`) {
+    case "digest/2":
+      return tv("bytea", digestBytes(bytesOf(0), arg(1).v as string));
+    case "hmac/3":
+      return tv("bytea", hmacBytes(bytesOf(0), bytesOf(1), arg(2).v as string));
+    case "gen_random_bytes/1": {
+      const n = arg(0).v as number;
+      if (n < 1 || n > 1024) throw pgError("data_exception", "Length not in range", "39000");
+      return tv("bytea", randomBytes(ctx, n));
+    }
+    case "crypt/2":
+      return tv("text", pgCrypt(arg(0).v as string, arg(1).v as string));
+    case "gen_salt/1":
+    case "gen_salt/2":
+      return tv(
+        "text",
+        pgGenSalt(arg(0).v as string, args.length > 1 ? (arg(1).v as number) : 0, (n) => randomBytes(ctx, n)),
+      );
+    default:
+      throw pgError("undefined_function", `function ${fn.schema}.${fn.name} is not implemented`, "42883");
   }
-  const data = castTo(ctx, args[0]!, fn.argTypes[0] ?? "bytea", {});
-  const algorithm = castTo(ctx, args[1]!, "text", {});
-  if (data.v === null || algorithm.v === null) return tv("bytea", null);
-  const bytes = fn.argTypes[0] === "bytea" ? (data.v as Uint8Array) : utf8.encode(data.v as string);
-  return tv("bytea", digestBytes(bytes, algorithm.v as string));
+}
+
+/** Bytes from the engine PRNG: deterministic per seed, rolled back with transactions. */
+export function randomBytes(ctx: EngineCtx, n: number): Uint8Array {
+  const out = new Uint8Array(n);
+  for (let i = 0; i < n; i += 8) {
+    let v = ctx.state.prng.nextU64();
+    for (let j = 0; j < 8 && i + j < n; j++) {
+      out[i + j] = Number(v & 0xffn);
+      v >>= 8n;
+    }
+  }
+  return out;
+}
+
+/** Digests PostgreSQL reaches through OpenSSL that this engine does not implement (fail loud). */
+const OPENSSL_ONLY_DIGESTS = new Set([
+  "md4",
+  "ripemd160",
+  "rmd160",
+  "sha3224",
+  "sha3256",
+  "sha3384",
+  "sha3512",
+  "sha512224",
+  "sha512256",
+  "shake128",
+  "shake256",
+  "sm3",
+  "blake2b512",
+  "blake2s256",
+  "md5sha1",
+]);
+
+/** RFC 2104 HMAC over the digest() algorithms. */
+export function hmacBytes(data: Uint8Array, key: Uint8Array, algorithm: string): Uint8Array {
+  const name = algorithm.toLowerCase().replaceAll("-", "");
+  if (!["md5", "sha1", "sha224", "sha256", "sha384", "sha512"].includes(name)) {
+    if (OPENSSL_ONLY_DIGESTS.has(name)) throw unsupported(`hmac() with the "${algorithm}" algorithm`);
+    throw pgError("invalid_parameter_value", `Cannot use "${algorithm}": Cipher cannot be initialized`, "22023");
+  }
+  const blockSize = name === "sha384" || name === "sha512" ? 128 : 64;
+  const k = key.length > blockSize ? digestBytes(key, name) : key;
+  const ipad = new Uint8Array(blockSize + data.length);
+  const opadKey = new Uint8Array(blockSize);
+  for (let i = 0; i < blockSize; i++) {
+    const b = k[i] ?? 0;
+    ipad[i] = b ^ 0x36;
+    opadKey[i] = b ^ 0x5c;
+  }
+  ipad.set(data, blockSize);
+  const inner = digestBytes(ipad, name);
+  const outer = new Uint8Array(blockSize + inner.length);
+  outer.set(opadKey);
+  outer.set(inner, blockSize);
+  return digestBytes(outer, name);
 }

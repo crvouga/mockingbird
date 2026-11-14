@@ -199,6 +199,27 @@ interface ArbiterMatch {
   spec: ReturnType<typeof uniqueSpecsFor>[number];
 }
 
+/** An inference element or index expression, compared structurally (column qualifiers dropped). */
+function inferenceKey(e: Expr): string {
+  return JSON.stringify(e, (key, value) => {
+    if (key === "parts" && Array.isArray(value) && value.length > 1) return [value[value.length - 1]];
+    return value;
+  });
+}
+
+function sameSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  return a.size === b.size && [...a].every((x) => b.has(x));
+}
+
+/** predicate_implied_by, structurally: the index predicate is the target's WHERE or one of its AND-ed terms. */
+function predicateImplied(indexWhere: Expr, targetWhere: Expr): boolean {
+  const wanted = inferenceKey(indexWhere);
+  const conjuncts = (e: Expr): Expr[] =>
+    e.type === "binop" && e.op === "and" ? [...conjuncts(e.left), ...conjuncts(e.right)] : [e];
+  const have = new Set(conjuncts(targetWhere).map(inferenceKey));
+  return have.has(wanted) || conjuncts(indexWhere).every((c) => have.has(inferenceKey(c)));
+}
+
 function resolveArbiters(env: ExecEnv, table: TableData, clause: OnConflictClause): ArbiterMatch[] {
   const specs = uniqueSpecsFor(env, table);
   if (!clause.target) {
@@ -213,14 +234,24 @@ function resolveArbiters(env: ExecEnv, table: TableData, clause: OnConflictClaus
     }
     return [{ spec }];
   }
-  const wanted = clause.target.columns.map((e) => {
-    if (e.type === "colref" && e.parts.length === 1) return e.parts[0]!;
-    throw unsupported("ON CONFLICT expression inference targets");
-  });
-  const sorted = [...wanted].sort();
+  // infer_arbiter_indexes: a unique index (or key constraint) whose key columns and expressions are
+  // exactly the inference elements, and whose partial-index predicate the target's WHERE implies
+  const wantedColumns = new Set<string>();
+  const wantedExprs = new Set<string>();
+  for (const e of clause.target.columns) {
+    if (e.type === "colref") wantedColumns.add(e.parts[e.parts.length - 1]!);
+    else wantedExprs.add(inferenceKey(e));
+  }
+  const targetWhere = clause.target.where;
   const matches = specs.filter((s) => {
-    const names = [...s.columnNames].sort();
-    return names.length === sorted.length && names.every((n, i) => n === sorted[i]);
+    const columns = new Set<string>();
+    const exprs = new Set<string>();
+    for (const k of s.keys) {
+      if (k.expr) exprs.add(inferenceKey(k.expr));
+      else columns.add(table.columns[k.colIdx]?.name ?? "");
+    }
+    if (!sameSet(columns, wantedColumns) || !sameSet(exprs, wantedExprs)) return false;
+    return s.where === null || (targetWhere !== null && predicateImplied(s.where, targetWhere));
   });
   if (matches.length === 0) {
     throw pgError(
@@ -469,6 +500,7 @@ export function applyUpdateSets(
           ctes: env.ctes,
           outer: scope,
           allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+          stmtCache: env.stmtCache,
         },
         set.value.query,
       );
@@ -631,7 +663,7 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResu
   ];
   const updatedRows: Datum[][] = [];
   const returningRows: ReturningRow[] = [];
-  const moved: Array<{ ri: number; oldRow: Datum[]; newRow: Datum[] }> = [];
+  const moved: Array<{ ri: number; oldRow: Datum[]; newRow: Datum[]; source: Datum[] | undefined }> = [];
   const replacedRows: Datum[][] = [];
   let updateCount = 0;
 
@@ -663,6 +695,7 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResu
     const oldRow = point ? table.rowAt(ri) : rows![ri]!;
     if ((updatable && !updatable(oldRow)) || (readable && !readable(oldRow))) continue;
     let matchScope: RowScope | null = null;
+    let matchSource: Datum[] | undefined;
 
     if (fromSource) {
       // find the first FROM row satisfying WHERE
@@ -673,6 +706,7 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResu
         const scope = new RowScope(cols, [...targetRow, ...frow], env.outer, new Set([label, ...fromSource.rangeVars]));
         if (!stmt.where || evalPredicate(env, scope, stmt.where)) {
           matchScope = scope;
+          matchSource = frow;
           found = true;
           break;
         }
@@ -701,7 +735,7 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResu
     if (stmt.returning) checkReturnedRowVisible(env, root ?? table, finalRow);
     // through a partitioned table a row whose key now belongs elsewhere moves there
     if (root && !satisfiesPartitionConstraint(env, table, finalRow)) {
-      moved.push({ ri, oldRow, newRow: finalRow });
+      moved.push({ ri, oldRow, newRow: finalRow, source: matchSource });
       continue;
     }
     checkPartitionConstraint(env, table, finalRow);
@@ -720,7 +754,15 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResu
     handleReferencedUpdate(env, table, [oldRow], [finalRow]);
     updateCount++;
     updatedRows.push(finalRow);
-    if (stmt.returning) returningRows.push({ old: oldRow, new: finalRow, position: ri, xmax: 0 });
+    if (stmt.returning) {
+      returningRows.push({
+        old: oldRow,
+        new: finalRow,
+        position: ri,
+        xmax: 0,
+        ...(matchSource ? { source: matchSource } : {}),
+      });
+    }
     replacedRows.push(oldRow);
     fireRowTriggers(env, table, "after", "update", oldRow, finalRow);
   }
@@ -735,18 +777,35 @@ function updateRows(env0: ExecEnv, stmt: UpdateStmt, root?: TableData): ExecResu
     }
     rebuildTableIndexes(env, table);
     for (const { oldRow } of moved) fireRowTriggers(env, table, "after", "delete", oldRow, null);
-    for (const { oldRow, newRow } of moved) {
+    for (const { oldRow, newRow, source } of moved) {
       const placed = insertRoutedRow(env, root, newRow);
       updateCount++;
       if (stmt.returning) {
-        returningRows.push({ old: oldRow, new: newRow, position: placed.position, xmax: 0, table: placed.table });
+        returningRows.push({
+          old: oldRow,
+          new: newRow,
+          position: placed.position,
+          xmax: 0,
+          table: placed.table,
+          ...(source ? { source } : {}),
+        });
       }
     }
   }
   fireStatementTriggers(env, table, "after", "update", { oldRows: replacedRows, newRows: updatedRows });
   env.ctx.state.changes = updateCount;
   if (stmt.returning) {
-    const res = evalReturning(env, table, label, stmt.returning, stmt.returningAliases, returningRows, "UPDATE");
+    // RETURNING also reads the FROM items, as the statement's other range variables
+    const res = evalReturning(
+      env,
+      table,
+      label,
+      stmt.returning,
+      stmt.returningAliases,
+      returningRows,
+      "UPDATE",
+      fromSource ? { columns: fromSource.rel.columns, rangeVars: fromSource.rangeVars, afterTarget: true } : undefined,
+    );
     return { ...res, rowCount: updateCount };
   }
   return commandResult("UPDATE", updateCount);
@@ -799,6 +858,8 @@ function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   ];
 
   const toDelete: number[] = [];
+  // the USING row each deleted row matched, for RETURNING
+  const matchedUsing = new Map<number, Datum[]>();
   const deletable = rowSecurityFilter(env, table, "delete");
   const readable = stmt.where || stmt.returning || usingSource ? rowSecurityFilter(env, table, "select") : null;
   for (let ri = 0; ri < rows.length; ri++) {
@@ -806,7 +867,7 @@ function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
     if ((deletable && !deletable(row)) || (readable && !readable(row))) continue;
     let matched: boolean;
     if (usingSource) {
-      matched = usingSource.rel.rows.some((urow) => {
+      const hit = usingSource.rel.rows.find((urow) => {
         const cols = [...targetCols, ...usingSource.rel.columns];
         const targetRow = system ? withSystemValues(table, row, ri) : row;
         const scope = new RowScope(
@@ -817,6 +878,8 @@ function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
         );
         return !stmt.where || evalPredicate(env, scope, stmt.where);
       });
+      matched = hit !== undefined;
+      if (hit && stmt.returning) matchedUsing.set(ri, hit);
     } else {
       const scope = new RowScope(
         targetCols,
@@ -831,6 +894,7 @@ function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
 
   const deletedRows: Datum[][] = [];
   const deletedPositions: number[] = [];
+  const deletedSources: Array<Datum[] | undefined> = [];
   // delete from the end to keep indexes stable
   const skipped = new Set<number>();
   for (const ri of toDelete) {
@@ -846,6 +910,7 @@ function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
     rows.splice(ri, 1);
     deletedRows.unshift(row);
     deletedPositions.unshift(ri);
+    deletedSources.unshift(matchedUsing.get(ri));
   }
   for (const row of deletedRows) {
     fireRowTriggers(env, table, "after", "delete", row, null);
@@ -856,8 +921,23 @@ function deleteRows(env0: ExecEnv, stmt: DeleteStmt): ExecResult {
   env.ctx.state.changes = deletedRows.length;
   if (stmt.returning) {
     const xmax = env.ctx.rowVersionXid();
-    const returningRows = deletedRows.map((row, k) => ({ old: row, new: null, position: deletedPositions[k]!, xmax }));
-    const res = evalReturning(env, table, label, stmt.returning, stmt.returningAliases, returningRows, "DELETE");
+    const returningRows: ReturningRow[] = deletedRows.map((row, k) => {
+      const source = deletedSources[k];
+      return { old: row, new: null, position: deletedPositions[k]!, xmax, ...(source ? { source } : {}) };
+    });
+    // RETURNING also reads the USING items, as the statement's other range variables
+    const res = evalReturning(
+      env,
+      table,
+      label,
+      stmt.returning,
+      stmt.returningAliases,
+      returningRows,
+      "DELETE",
+      usingSource
+        ? { columns: usingSource.rel.columns, rangeVars: usingSource.rangeVars, afterTarget: true }
+        : undefined,
+    );
     return { ...res, rowCount: deletedRows.length };
   }
   return commandResult("DELETE", deletedRows.length);

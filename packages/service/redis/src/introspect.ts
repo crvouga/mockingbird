@@ -317,7 +317,7 @@ function keyPositions(row: CommandRow, args: Uint8Array[]): number[] | Reply {
     const positions = Array.from({ length: Number(declared) }, (_, i) => first + i)
     return store ? [0, ...positions] : positions
   }
-  if (name === "eval" || name === "evalsha") {
+  if (["eval", "evalsha", "eval_ro", "evalsha_ro", "fcall", "fcall_ro"].includes(name)) {
     const declared = parseI64(args[1] ?? utf8(""))
     if (declared === null || declared < 1n || declared > BigInt(args.length - 2)) return []
     return Array.from({ length: Number(declared) }, (_, i) => 2 + i)

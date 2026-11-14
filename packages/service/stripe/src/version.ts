@@ -33,3 +33,28 @@ export const eraOf = (version: string): ApiEra => {
   if (date < BASIL_START) return "acacia"
   return "basil"
 }
+
+/**
+ * Request surface Stripe changed after the versions our consumers pin. The vendored (dahlia)
+ * contract declares the old parameters and enum values too (`EXTRA_BODY_PARAMS` in
+ * `scripts/vendor.ts`), so schema validation lets them through; each handler then refuses them
+ * the way Stripe does from the version named here on, and models them before it.
+ */
+export const REQUEST_CHANGES = {
+  /**
+   * The singular `coupon` / `promotion_code` parameters on subscriptions, subscription schedule
+   * phases and customers, replaced by `discounts`:
+   * https://docs.stripe.com/changelog/basil/2025-03-31/deprecate-singular-coupon-promotion-code
+   */
+  singularDiscountRemoved: "2025-03-31",
+  /**
+   * Checkout's `ui_mode` values `hosted` / `embedded` / `custom`, renamed `hosted_page` /
+   * `embedded_page` / `elements`:
+   * https://docs.stripe.com/changelog/dahlia/2026-03-25/updates-available-checkout-session-ui-modes
+   */
+  checkoutUiModeRenamed: "2026-03-25",
+} as const
+
+/** Is `version` at or after the date of a breaking request change? */
+export const versionAtLeast = (version: string, date: string): boolean =>
+  version.slice(0, 10) >= date

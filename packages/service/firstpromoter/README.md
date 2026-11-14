@@ -5,7 +5,9 @@
 Stateful emulator of the **FirstPromoter v2** affiliate API for test suites: promoter create (adopt
 before create by `cust_id`), lookups by id / `cust_id` / `ref_token` / email, list, update,
 archive, the dashboard iframe login, signup tracking by click `tid`, `promoter_id` or ref token,
-and the Basic-auth `lead_becomes_referral` webhook our backend receives. Every request is
+campaigns and rewards, and the Basic-auth `lead_becomes_referral` webhook our backend receives.
+The legacy **v1** promoters, signup-tracking and campaigns-report routes run over the same store
+(best guesses from the vendor docs, not oracle-verified). Every request is
 recorded in the journal, so a checkout suite can assert what the post-checkout job sent instead
 of producing a failed job.
 
@@ -82,13 +84,45 @@ await server.close()
 | `PUT /v2/company/commissions/{id}` | `{internal_note?, external_note?}` (the vendor's `CommissionUpdate`) → the updated commission, reflected in `GET /v2/company/commissions`; other fields are not writable. An unknown id is 404 `{message: "Commission not found", code: "not_found"}`. |
 | `GET /v2/company/referrals` | A bare array of stored referrals and live promoter/campaign metadata. `q` searches email/uid; `ids[]`, `filters[type]=lead\|customer`, `filters[state]`, `filters[promoter_id]`, and inclusive `filters[created_at\|customer_since][from\|to]` filter before paging. `page` starts at 1; `per_page` defaults to 20 (max 100). Exhausted pages and unmatched searches return `[]`. |
 | `GET /v2/company/referrals/{id}` | The same referral projection as listing. A numeric ID or `find_by=email\|uid` selects it; missing records are 404. |
+| `GET /v2/company/campaigns` | **Best guess, not oracle-verified.** A bare array of the configured campaigns (`PUT /__admin/settings` `campaigns`): `{id, name, color, stats: {referrals_count, sales_count, customers_count, promoters_count, revenue_amount}, landing_url, visitor_cookie_life, ref_token_param, auto_approve_leads, track_ad_traffic, auto_approve_promoters, is_private, is_default, upgrade_details, signup_url, links, rewards_for_promoters, rewards_for_referrals}`. `stats` come from stored live promoters, referrals and sales; `is_default` marks `defaultCampaignId`; `landing_url` is the settings `website`. Account settings the emulator has no state for are fixed: `visitor_cookie_life: 60`, `ref_token_param: "fpr"`, auto-approval on, `track_ad_traffic: "allow"`, not private, `upgrade_details` / `signup_url` null, no `links`. `page` / `per_page` (default 10, max 50) follow the v2 API introduction. |
+| `GET /v2/company/rewards?scope=promoters\|referrals` | **Best guess, not oracle-verified.** A bare array of every campaign reward, by `id`: `{id, name, is_promoter_reward, promoter_reward_type, coupon, editable, hide_reward, provider_coupon_id, duration, duration_in_months, max_redemptions, new_customers_only, created_at, updated_at, provider, tier_reward_mode, tier_level, schemas: [{unit, amount, flat_amount, rules: []}]}`. `scope=promoters` keeps promoter rewards (`promoterRewards`), `scope=referrals` referred-customer rewards (`referralRewards`); any other scope is 422 `{message, code: "invalid_params"}`. A percent reward is `{unit: "cash", amount: <percent>, flat_amount: false}`. Seeded rewards carry a fixed `created_at` of `2024-01-01T00:00:00.000Z`. |
 
 The [official referral reference](https://docs.firstpromoter.com/api-reference-v2/api-admin/referrals/get-referrals)
 specifies the bare array. Paging parameters and limits follow the official
 [n8n client](https://github.com/firstpromoter/n8n-app/blob/0842d761a3c024e7cf3030e5a108447375f03807/nodes/FirstPromoter/GeneralFunctions.ts)
 and [input definitions](https://github.com/firstpromoter/n8n-app/blob/0842d761a3c024e7cf3030e5a108447375f03807/nodes/FirstPromoter/FirstPromoter.node.ts).
 
-Every call needs `Authorization: Bearer <key>` and an `Account-ID` header (else 401).
+Every v2 call needs `Authorization: Bearer <key>` and an `Account-ID` header (else 401).
+
+The campaign and reward shapes come from the vendor's published v2 OpenAPI
+([campaigns](https://docs.firstpromoter.com/api-reference-v2/api-advanced/campaigns-api/openapi-v2-campaigns.json),
+[rewards](https://docs.firstpromoter.com/api-reference-v2/api-advanced/rewards/openapi-v2-rewards.json));
+no FirstPromoter credentials were available to compare them with a live account.
+
+### Legacy v1 API (best guess, not oracle-verified)
+
+The v1 routes share the v2 store (a promoter created through one API is visible through the
+other). They authenticate with `X-API-KEY` only (no `Account-ID`); a missing key is 401 with the
+documented JSON string body `"Bad credentials"`, and a v2 Bearer token alone is not accepted. As
+documented, parameters travel in the query string; a form or JSON body is read too. Shapes and
+messages follow the vendor's v1 reference
+([promoters](https://docs.firstpromoter.com/api-reference-v1/promoters-api/openapi-promoters.json),
+[signup tracking](https://docs.firstpromoter.com/api-reference-v1/tracking-api/leads-and-signups.md),
+[campaigns report](https://docs.firstpromoter.com/api-reference-v1/reports-api/campaign.md));
+none of it is oracle-verified. Documented options the emulator has no state for are an
+**emulator limitation**: 501 `{message: "Mockingbird: …", code: "mockingbird_unsupported"}`,
+checked before anything is stored.
+
+| Route | Behaviour |
+| --- | --- |
+| `GET /v1/promoters/list?campaign_id=` | Live (unarchived) promoters as v1 promoter objects `{id, status, cust_id, email, created_at, default_promotion_id, default_ref_id, note, auth_token, earnings_balance: {cash}, current_balance, paid_balance, profile, promotions: [{id, campaign_id, ref_id, referral_link, campaign_name, current_offer, current_referral_reward, visitors_count, leads_count, customers_count, sales_count, sales_total, …}], promo_codes: []}`; `status` is `approved` (or `pending`). An unknown `campaign_id` is 422 `{"error": "Campaign not found."}`. No pagination headers. |
+| `GET /v1/promoters/show` | By `id`, `promoter_email`, `cust_id`, `ref_id` or `auth_token` (first given wins). 404 `{"error": "Promoter not found."}`; none given is 422. |
+| `POST /v1/promoters/create` | `email` (422 `{"error": "Email can't be blank"}` / `"Email is invalid"`), `first_name`, `last_name`, `cust_id`, `ref_id` (the ref token), `campaign_id` (default campaign otherwise; unknown is 422 `Campaign not found.`), `note`, `skip_email_notification` (the emulator sends no email anyway). A live duplicate email / `cust_id` / `ref_id` is 422 `{"error": "Email\|Cust\|Ref has already been taken"}`. `promo_code`, `customer_promo_code`, `temp_password`, `parent_promoter_*`, `created_at`, `always_approve` and the profile/social fields are 501. |
+| `PUT /v1/promoters/update` | Finds the promoter by `id`, `cust_id`, `auth_token` or `ref_id`, else by `email`; writes `email` (when it is not the identifier), `first_name`, `last_name`, `new_cust_id`, `new_ref_id` (the default promotion's ref token) and `note`, with the same 422 duplicate checks. `campaign_id`, `promo_code` and the profile/social fields are 501. |
+| `DELETE /v1/promoters/delete` | By `id`, `cust_id`, `ref_id` or `auth_token` → `{"message": "Promoter removed."}`. The emulator archives the promoter (v2 lookups still return it with `archived_at`; v1 show/list no longer do); unknown is 404, none given is 422. |
+| `POST /v1/track/signup` | `email` (+ optional `uid`) attributed by a click `tid` or a `ref_id` → `{id, type: "signup", amount_cents: null, reward: null, lead: {id, state, email, uid, customer_since, …}, promoter: {…}}`. The lead is the same referral v2 lists, and `autoConvert` applies as for v2. Neither `email` nor `uid`: 400 `{"message": "Error. Email and uid can not be blank!"}`; unknown `tid` / `ref_id`: the documented 404 visitor message; an archived promoter: 404 `This promotion is blocked…`; an email or `uid` already tracked: 422 `{"transaction_id": "there is already a signup event registered on this lead"}`. `uid` without `email`, and `promoter_email`, `created_at`, `username`, `first_name`, `last_name`, `website`, `custom_fields`, `sub_id`, `override_existing_lead`, are 501. `ip` is accepted (the emulator has no fraud analysis). |
+| `GET /v1/reports/campaigns` | One row per configured campaign: `{campaign_name, campaign_id, <fields>, items: [{period, <fields>}]}` between `start_date` and `end_date` (`YYYY-MM-DD`, default 12 months ago to today), `group_by=day\|month\|year` (default month; labels `2026-10-04`, `Oct 2026`, `2026`; every period in range is listed). Fields: `selected_fields[]` of `revenue_amount` (sales, as `"$613.17"`), `clicks_count`, `referrals_count` (leads by creation), `customers_count` (by `customer_since`), `sales_count`; default the first four. An unknown field, grouping or date, or day grouping over 90 days, is 422 `{message, code: "invalid_params"}`; the other documented fields (`monthly_churn`, `net_revenue_amount`, the EPC / conversion-rate fields, …) are 501. |
+| `POST /v1/promoters/iframe_login` | **Unsupported (emulator limitation).** The vendor's v1 reference documents no `iframe_login` (only v2 does), so there is no defensible behavior to model: 501 `{message: "Mockingbird: V1IframeLogin is not implemented", code: "mockingbird_unsupported"}`, with no token and no state change. Use `POST /v2/promoters/iframe_login`. |
 
 ### Webhooks
 
@@ -168,15 +202,18 @@ emulator assumption until a live response is captured.
 ### Namespaces
 
 `x-mockingbird-namespace`, a `/__admin/ns/<name>` prefix in `FIRST_PROMOTER_API_URL`, or by API key:
-`PUT /__admin/credentials {"credentials": {"<FIRST_PROMOTER_API_KEY>": "<namespace>"}}`.
+`PUT /__admin/credentials {"credentials": {"<FIRST_PROMOTER_API_KEY>": "<namespace>"}}`. The key is the v2
+Bearer token or, for v1 calls, the `X-API-KEY` value.
 
 ### Deliberately not modelled
 
 - Error bodies and exact status codes of the real API are unverified (no sandbox credentials):
   errors use `{message}` and validation `{message, errors: {field: [...]}}`. Our consumer only
   branches on `ok` / 404, which the emulator gets right.
-- The v1 API our EMR backend still calls (`/v1/promoters/*`, `/v1/track/signup`,
-  `/v1/reports/campaigns`); the catalog scopes this emulator to v2.
+- v1 `iframe_login` (undocumented by the vendor, answered 501), the other v1 APIs (leads,
+  sales/refund/cancellation tracking, rewards, payouts, promoter and overview reports,
+  `move_to_campaign`, `add_to_campaign`, `refresh_token`), v1 pagination headers, and the v1
+  options listed above as 501.
 - Refunds, standalone commission creation/editing/approval, cash payouts and commission filters
   beyond those listed above; fraud checks;
   public promo-code provisioning; the hosted affiliate portal behind the iframe token.

@@ -221,6 +221,73 @@ type Invoice = {
 type Subscription = { chargedThroughDate?: string }
 
 const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
+  /**
+   * Issues #737, #738 and #742: the catalog read back, a subscription keyed by bundleExternalKey and
+   * the bundle lookups by key, a second base subscription on that bundle, subscription custom
+   * fields, a WRITTEN_OFF invoice tag and invoice lookups by number.
+   */
+  async "bundle-keys-tags-fields"(kb) {
+    await kb.call("upload catalog", "POST", "/1.0/kb/catalog/xml", PARITY_CATALOG_XML, "text/xml")
+    await kb.call("read the catalog", "GET", "/1.0/kb/catalog", undefined, undefined, {
+      accept: "application/json",
+    })
+    const account = await kb.call("create account", "POST", "/1.0/kb/accounts", {
+      name: "Parity Member",
+      currency: "USD",
+    })
+    const accountId = kb.idFrom(account)
+    await kb.call("tag AUTO_PAY_OFF", "POST", `/1.0/kb/accounts/${accountId}/tags`, [
+      "00000000-0000-0000-0000-000000000001",
+    ])
+    const subscription = await kb.call(
+      "subscribe with a bundle key",
+      "POST",
+      "/1.0/kb/subscriptions",
+      {
+        accountId,
+        planName: MONTHLY,
+        bundleExternalKey: "parity-purchase",
+      },
+    )
+    const subscriptionId = kb.idFrom(subscription)
+    await kb.call("read subscription", "GET", `/1.0/kb/subscriptions/${subscriptionId}`)
+    await kb.call(
+      "bundles with the key",
+      "GET",
+      `/1.0/kb/accounts/${accountId}/bundles?externalKey=parity-purchase`,
+    )
+    await kb.call(
+      "bundles with an unknown key",
+      "GET",
+      `/1.0/kb/accounts/${accountId}/bundles?externalKey=parity-none`,
+    )
+    await kb.call("second base subscription on the bundle", "POST", "/1.0/kb/subscriptions", {
+      accountId,
+      planName: ANNUAL,
+      bundleExternalKey: "parity-purchase",
+    })
+    await kb.call(
+      "add subscription custom fields",
+      "POST",
+      `/1.0/kb/subscriptions/${subscriptionId}/customFields`,
+      [{ name: "purchase", value: "p-1" }],
+    )
+    await kb.call(
+      "read subscription custom fields",
+      "GET",
+      `/1.0/kb/subscriptions/${subscriptionId}/customFields`,
+    )
+    const [invoice] = (await kb.raw("GET", `/1.0/kb/accounts/${accountId}/invoices`))
+      .body as Array<{ invoiceId: string; invoiceNumber: string }>
+    if (!invoice) throw new Error("bundle-keys-tags-fields: the subscription was not invoiced")
+    await kb.call("write the invoice off", "POST", `/1.0/kb/invoices/${invoice.invoiceId}/tags`, [
+      "00000000-0000-0000-0000-000000000004",
+    ])
+    await kb.call("read invoice tags", "GET", `/1.0/kb/invoices/${invoice.invoiceId}/tags`)
+    await kb.call("read the written-off invoice", "GET", `/1.0/kb/invoices/${invoice.invoiceId}`)
+    await kb.call("invoice by number", "GET", `/1.0/kb/invoices/byNumber/${invoice.invoiceNumber}`)
+    await kb.call("invoice by unknown number", "GET", "/1.0/kb/invoices/byNumber/999999999")
+  },
   /** Lookups of what does not exist: an external key, then account, subscription and invoice ids. */
   async "not-found"(kb) {
     await kb.call(

@@ -12,8 +12,11 @@ export class LuaUserdata {
   constructor(readonly label: string) {}
 }
 
-/** Where the running script is, for `user_script:N:` error prefixes. Scripts run one at a time. */
-export const pos = { line: 0 }
+/**
+ * Where the running script is, for `user_script:N:` error prefixes (`user_function:N:` while a
+ * `FUNCTION` library loads or runs). Scripts run one at a time.
+ */
+export const pos = { line: 0, chunk: "user_script" }
 
 /** A raised Lua error. `value` is whatever `error` was given (usually a message string). */
 export class LuaError {
@@ -29,7 +32,7 @@ export class LuaError {
 /** Raise a runtime error with the `user_script:LINE:` prefix Lua adds to its own messages. */
 export function rtError(message: string): never {
   // A negative line marks a library function called straight from `pcall`, which has no position.
-  throw new LuaError(pos.line < 0 ? message : `user_script:${pos.line}: ${message}`)
+  throw new LuaError(pos.line < 0 ? message : `${pos.chunk}:${pos.line}: ${message}`)
 }
 
 export const EMPTY: LuaValue[] = []

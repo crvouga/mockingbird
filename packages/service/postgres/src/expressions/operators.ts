@@ -1,5 +1,6 @@
 import { pgError } from "../errors/error.ts";
-import { evalTrgmWordSimilar } from "../functions/pgtrgm.ts";
+import { evalTrgmBinary } from "../functions/pgtrgm.ts";
+import { evalPgvectorBinary } from "../functions/pgvector.ts";
 import { tsqueryCombine, tsqueryNegate, tsvectorConcat, tsvectorMatches } from "../tsearch/tsearch.ts";
 import { castTo, isTextType, unifyTypes } from "../types/cast.ts";
 import { datumCompare, datumEquals } from "../types/compare.ts";
@@ -10,10 +11,12 @@ import {
   intervalAdd,
   intervalNeg,
   makeInterval,
+  type TimeTz,
   TS_NEG_INF,
   TS_POS_INF,
   timestampAddInterval,
   USECS_PER_DAY,
+  wrapTimeOfDay,
 } from "../types/datetime.ts";
 import {
   type JsonbValue,
@@ -193,6 +196,10 @@ const AMBIGUOUS_ON_UNKNOWN = new Set(["+", "-", "*", "/", "%", "&", "|", "#", "<
 export function evalBinary(ctx: EngineCtx, op: string, l0: TypedValue, r0: TypedValue): TypedValue {
   const special = evalRangeOrNetworkBinary(ctx, op, l0, r0);
   if (special !== null) return special;
+  const trigram = evalTrgmBinary(ctx, op, l0, r0);
+  if (trigram !== null) return trigram;
+  const vector = evalPgvectorBinary(ctx, op, l0, r0);
+  if (vector !== null) return vector;
   // jsonb/json extraction ops keep unknown on rhs as text
   const [l, r] = resolveJsonUnknowns(ctx, op, l0, r0);
 
@@ -246,8 +253,6 @@ export function evalBinary(ctx: EngineCtx, op: string, l0: TypedValue, r0: Typed
     case "@@":
       if (l.t === "jsonb" && (r.t === "jsonpath" || r.t === "unknown")) return evalJsonpathOp(ctx, op, l, r);
       return evalTextSearchMatch(ctx, l, r);
-    case "<%":
-      return evalTrgmWordSimilar(ctx, l, r);
     default:
       opNotExist(op, l.t, r.t);
   }
@@ -467,7 +472,7 @@ function evalArithmetic(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue
 function tryDatetimeArith(ctx: EngineCtx, op: string, l: TypedValue, r: TypedValue): TypedValue | null {
   const lt = l.t;
   const rt = r.t;
-  const isDT = (t: TypeId): boolean => ["date", "time", "timestamp", "timestamptz", "interval"].includes(t);
+  const isDT = (t: TypeId): boolean => ["date", "time", "timetz", "timestamp", "timestamptz", "interval"].includes(t);
   if (!isDT(lt) && !isDT(rt)) return null;
 
   const key = `${lt}${op}${rt}`;
@@ -548,6 +553,27 @@ function tryDatetimeArith(ctx: EngineCtx, op: string, l: TypedValue, r: TypedVal
       let micros = ((t.v as bigint) + (iv.v as Interval).micros) % USECS_PER_DAY;
       if (micros < 0n) micros += USECS_PER_DAY;
       return tv("time", micros);
+    }
+    case "timetz+interval":
+    case "interval+timetz":
+    case "timetz-interval": {
+      // timetz_pl_interval / timetz_mi_interval: only the interval's time part, wrapped to one day
+      const t = lt === "timetz" ? l : r;
+      const iv = lt === "timetz" ? r : l;
+      if (t.v === null || iv.v === null) return nullOf("timetz");
+      const tz = t.v as unknown as TimeTz;
+      const span = (iv.v as Interval).micros;
+      const micros = wrapTimeOfDay(tz.micros + (op === "-" ? -span : span));
+      return tv("timetz", { micros, offsetSec: tz.offsetSec } as unknown as Datum);
+    }
+    case "date+timetz":
+    case "timetz+date": {
+      // datetimetz_timestamptz
+      const d = lt === "date" ? l : r;
+      const t = lt === "date" ? r : l;
+      if (d.v === null || t.v === null) return nullOf("timestamptz");
+      const tz = t.v as unknown as TimeTz;
+      return tv("timestamptz", BigInt(d.v as number) * USECS_PER_DAY + tz.micros - BigInt(tz.offsetSec) * 1_000_000n);
     }
     case "time-interval": {
       if (l.v === null || r.v === null) return nullOf("time");
@@ -647,7 +673,7 @@ function timestampDiff(a: bigint, b: bigint): Interval {
   return makeInterval(0, d, rem);
 }
 
-function intervalScale(iv: Interval, factor: number): Interval {
+export function intervalScale(iv: Interval, factor: number): Interval {
   if (!Number.isFinite(factor)) throw pgError("invalid_parameter_value", "interval out of range", "22015");
   const months = iv.months * factor;
   const wholeMonths = Math.trunc(months);
@@ -727,6 +753,14 @@ function evalConcat(ctx: EngineCtx, l: TypedValue, r: TypedValue): TypedValue {
   }
   if (r.t === "bytea" && l.t === "unknown") {
     return evalConcat(ctx, castTo(ctx, l, "bytea"), r);
+  }
+  const bitish = (t: TypeId): boolean => t === "bit" || t === "varbit";
+  if ((bitish(l.t) && (bitish(r.t) || r.t === "unknown")) || (bitish(r.t) && l.t === "unknown")) {
+    // bitcat(varbit, varbit): the result is always bit varying
+    const lb = castTo(ctx, l, "varbit");
+    const rb = castTo(ctx, r, "varbit");
+    if (lb.v === null || rb.v === null) return tv("varbit", null);
+    return tv("varbit", (lb.v as string) + (rb.v as string));
   }
   if (l.t === "tsvector" && r.t === "tsvector") {
     if (l.v === null || r.v === null) return tv("tsvector", null);
@@ -815,18 +849,20 @@ function evalBitwise(ctx: EngineCtx, op: string, l0: TypedValue, r0: TypedValue)
   const [l, r] = resolveUnknowns(ctx, op, l0, r0);
   // bit-string ops: bit & bit / | / # (xor); shifts take an int rhs
   if ((l.t === "bit" || l.t === "varbit") && (op === "<<" || op === ">>") && isIntType(r.t)) {
-    if (l.v === null || r.v === null) return tv(l.t, null);
+    // bitshiftleft/right(bit, int4): varbit operands resolve to bit, and so does the result
+    if (l.v === null || r.v === null) return tv("bit", null);
     const s = l.v as string;
     const n = Number(toI8(r.t, r.v));
-    if (n <= 0) return op === "<<" && n < 0 ? evalBitwise(ctx, ">>", l, tv("int4", -n)) : l;
+    if (n === 0) return tv("bit", s);
+    if (n < 0) return evalBitwise(ctx, op === "<<" ? ">>" : "<<", tv("bit", s), tv("int4", -n));
     const shifted =
       op === "<<"
         ? s.slice(Math.min(n, s.length)).padEnd(s.length, "0")
         : s.slice(0, Math.max(0, s.length - n)).padStart(s.length, "0");
-    return tv(l.t, shifted);
+    return tv("bit", shifted);
   }
   if ((l.t === "bit" || l.t === "varbit") && (r.t === "bit" || r.t === "varbit")) {
-    if (l.v === null || r.v === null) return tv(l.t, null);
+    if (l.v === null || r.v === null) return tv("bit", null);
     const a = l.v as string;
     const b = r.v as string;
     if (a.length !== b.length) {
@@ -839,7 +875,7 @@ function evalBitwise(ctx: EngineCtx, op: string, l0: TypedValue, r0: TypedValue)
       const y = b[i] === "1";
       out += (op === "&" ? x && y : op === "|" ? x || y : x !== y) ? "1" : "0";
     }
-    return tv(l.t, out);
+    return tv("bit", out);
   }
   if (!isIntType(l.t) || !isIntType(r.t)) opNotExist(op, l.t, r.t);
   const t = NUM_LADDER[Math.max(NUM_LADDER.indexOf(l.t), NUM_LADDER.indexOf(r.t))]!;
@@ -1173,6 +1209,12 @@ export function evalUnary(ctx: EngineCtx, op: string, operand: TypedValue): Type
     }
     case "~": {
       if (t === "unknown") throw pgError("ambiguous_function", "operator is not unique: ~ unknown");
+      if (t === "bit" || t === "varbit") {
+        // bitnot(bit)
+        if (v === null) return tv("bit", null);
+        const flipped = (v as string).replace(/[01]/g, (c) => (c === "0" ? "1" : "0"));
+        return tv("bit", flipped);
+      }
       if (!isIntType(t)) throw pgError("undefined_function", `operator does not exist: ~ ${typeDisplayName(t)}`);
       if (v === null) return tv(t, null);
       const bits = t === "int2" ? 16 : t === "int4" ? 32 : 64;

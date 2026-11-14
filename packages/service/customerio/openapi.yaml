@@ -452,6 +452,267 @@ paths:
           $ref: "#/components/responses/AppError"
         "404":
           $ref: "#/components/responses/AppError"
+  /v1/reporting_webhooks:
+    get:
+      operationId: ListReportingWebhooks
+      description: |
+        The workspace's reporting webhooks (App API `listWebhooks`). Seeded through
+        `PUT /__admin/content`; empty by default. Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      responses:
+        "200":
+          description: Every reporting webhook
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [reporting_webhooks]
+                properties:
+                  reporting_webhooks:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReportingWebhook" }
+        "401": { $ref: "#/components/responses/AppError" }
+  /v1/subscription_topics:
+    get:
+      operationId: ListSubscriptionTopics
+      description: |
+        The workspace's subscription-center topics (App API `getTopics`); an empty array when
+        there are none. Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      responses:
+        "200":
+          description: Every subscription topic
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [topics]
+                properties:
+                  topics:
+                    type: array
+                    items: { $ref: "#/components/schemas/SubscriptionTopic" }
+        "401": { $ref: "#/components/responses/AppError" }
+  /v1/exports/customers:
+    post:
+      operationId: ExportCustomers
+      description: |
+        Export the people matching `filters` (App API `exportPeopleData`). The emulator evaluates
+        `and` / `or` / `not` / `attribute` (`eq`, `exists`, `inverse`) filters against its
+        profiles and finishes the export at once (`status: done`). `segment` filters answer 400
+        (no segments are modelled). Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: false }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [filters]
+              properties:
+                filters:
+                  description: "One filter node: `{and: [...]}`, `{or: [...]}`, `{not: {...}}`, `{segment: {id}}` or `{attribute: {field, operator: eq|exists, value?, inverse?}}`."
+                  type: object
+                  additionalProperties: true
+                attributes:
+                  description: Attribute names added as CSV columns after `id`, `cio_id` and `email`.
+                  type: array
+                  items: { type: string }
+      responses:
+        "200":
+          description: The export
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportEnvelope" }
+        "400": { $ref: "#/components/responses/AppError" }
+        "401": { $ref: "#/components/responses/AppError" }
+  /v1/exports/{export_id}:
+    parameters:
+      - name: export_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: GetExport
+      description: One export (App API `getExport`). Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      responses:
+        "200":
+          description: The export
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ExportEnvelope" }
+        "401": { $ref: "#/components/responses/AppError" }
+        "404": { $ref: "#/components/responses/AppError" }
+  /v1/exports/{export_id}/download:
+    parameters:
+      - name: export_id
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 1
+    get:
+      operationId: DownloadExport
+      description: |
+        A link to the export file (App API `downloadExport`; the vendor signs a link that expires
+        after 15 minutes). The emulator's link is its own CSV route under the admin prefix and
+        counts a download. Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      responses:
+        "200":
+          description: The download link
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                    x-mockingbird-volatile:
+                      kind: url
+        "401": { $ref: "#/components/responses/AppError" }
+        "404": { $ref: "#/components/responses/AppError" }
+  /v1/snippets:
+    get:
+      operationId: ListSnippets
+      description: The workspace's snippets (App API `listSnippets`). Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      responses:
+        "200":
+          description: Every snippet
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [snippets]
+                properties:
+                  snippets:
+                    type: array
+                    items: { $ref: "#/components/schemas/Snippet" }
+        "401": { $ref: "#/components/responses/AppError" }
+  /v1/campaigns:
+    get:
+      operationId: ListCampaigns
+      description: The workspace's automations (App API `listCampaigns`), read-only. Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      responses:
+        "200":
+          description: Every automation
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [campaigns]
+                properties:
+                  campaigns:
+                    type: array
+                    items: { $ref: "#/components/schemas/Campaign" }
+        "401": { $ref: "#/components/responses/AppError" }
+  /v1/newsletters:
+    get:
+      operationId: ListNewsletters
+      description: |
+        The workspace's one-time sends (App API `listNewsletters`), paginated by `limit` and an
+        opaque `start` cursor (`next`), `sort` asc (default) or desc. Best guess from vendor docs,
+        not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      parameters:
+        - { $ref: "#/components/parameters/PageLimit" }
+        - { $ref: "#/components/parameters/PageSort" }
+        - { $ref: "#/components/parameters/PageStart" }
+      responses:
+        "200":
+          description: A page of one-time sends
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [newsletters]
+                properties:
+                  next: { type: string }
+                  newsletters:
+                    type: array
+                    items: { $ref: "#/components/schemas/Newsletter" }
+        "400": { $ref: "#/components/responses/AppError" }
+        "401": { $ref: "#/components/responses/AppError" }
+  /v1/sender_identities:
+    get:
+      operationId: ListSenderIdentities
+      description: |
+        The workspace's senders (App API `listSenders`), paginated like newsletters. Hidden senders
+        are listed only with `hidden=true`. Best guess from vendor docs, not oracle-verified.
+      security:
+        - appApiKey: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from vendor docs, not oracle-verified.
+        parity: { enabled: true, safe: true }
+      parameters:
+        - { $ref: "#/components/parameters/PageLimit" }
+        - { $ref: "#/components/parameters/PageSort" }
+        - { $ref: "#/components/parameters/PageStart" }
+        - name: hidden
+          in: query
+          schema: { type: boolean }
+      responses:
+        "200":
+          description: A page of senders
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [sender_identities]
+                properties:
+                  next: { type: string }
+                  sender_identities:
+                    type: array
+                    items: { $ref: "#/components/schemas/SenderIdentity" }
+        "400": { $ref: "#/components/responses/AppError" }
+        "401": { $ref: "#/components/responses/AppError" }
   /click/{linkId}:
     parameters:
       - name: linkId
@@ -508,6 +769,19 @@ components:
       type: http
       scheme: bearer
       description: "`Bearer <App API key>`."
+  parameters:
+    PageLimit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1 }
+    PageSort:
+      name: sort
+      in: query
+      schema: { type: string, enum: [asc, desc] }
+    PageStart:
+      name: start
+      in: query
+      schema: { type: string }
   responses:
     Queued:
       description: Queued for delivery
@@ -543,6 +817,95 @@ components:
                   error:
                     type: string
   schemas:
+    ReportingWebhook:
+      type: object
+      required: [name, endpoint, events]
+      additionalProperties: true
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        endpoint: { type: string }
+        events: { type: array, items: { type: string } }
+        type: { type: string, enum: [webhook, js] }
+        disabled: { type: boolean }
+        full_resolution: { type: boolean }
+        with_content: { type: boolean }
+    SubscriptionTopic:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: integer }
+        identifier: { type: string }
+        name: { type: string }
+        description: { type: string }
+        subscribed_by_default: { type: boolean }
+    Snippet:
+      type: object
+      required: [name, value]
+      additionalProperties: true
+      properties:
+        name: { type: string }
+        value: { type: string }
+        updated_at: { type: integer }
+    Campaign:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        state: { type: string }
+        active: { type: boolean }
+        created: { type: integer }
+        updated: { type: integer }
+        tags: { type: array, items: { type: string } }
+    Newsletter:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { type: string }
+        send_state: { type: string }
+        created: { type: integer }
+        updated: { type: integer }
+        tags: { type: array, items: { type: string } }
+    SenderIdentity:
+      type: object
+      additionalProperties: true
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string }
+        address: { type: string }
+        phone: { type: string }
+        template_type: { type: string }
+        hidden: { type: boolean }
+        auto_generated: { type: boolean }
+        deduplicate_id: { type: string }
+    ExportEnvelope:
+      type: object
+      required: [export]
+      properties:
+        export:
+          type: object
+          required: [id, type, status, failed, total, downloads, created_at, updated_at, deduplicate_id]
+          properties:
+            id: { type: integer }
+            type: { type: string, enum: [customers, deliveries] }
+            status: { type: string, enum: [done, pending, failed] }
+            failed: { type: boolean }
+            total: { type: integer }
+            downloads: { type: integer }
+            created_at:
+              type: integer
+              x-mockingbird-volatile: { kind: timestamp }
+            updated_at:
+              type: integer
+              x-mockingbird-volatile: { kind: timestamp }
+            deduplicate_id:
+              type: string
+              x-mockingbird-volatile: { kind: id }
     SenderOptOut:
       type: object
       required: [channel, from]

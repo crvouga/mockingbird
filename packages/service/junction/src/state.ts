@@ -130,8 +130,24 @@ export type PendingSimulateTransition = {
   flags: Record<string, unknown> | null
 }
 
+/**
+ * Every event the emulator publishes on its own (`labtest.*`), plus those `POST
+ * /__admin/webhooks/emit` sends: `labtest.appointment.created`, `provider.connection.*`,
+ * `daily.data.<resource>.{created,updated}` and `historical.data.<resource>.created`.
+ */
+export type JunctionWebhookEventType =
+  | "labtest.order.created"
+  | "labtest.order.updated"
+  | "labtest.appointment.created"
+  | "labtest.appointment.updated"
+  | "provider.connection.created"
+  | "provider.connection.error"
+  | `daily.data.${string}.created`
+  | `daily.data.${string}.updated`
+  | `historical.data.${string}.created`
+
 export type JunctionWebhookEvent = {
-  event_type: "labtest.order.created" | "labtest.order.updated" | "labtest.appointment.updated"
+  event_type: JunctionWebhookEventType
   data: Record<string, unknown>
   team_id: string
   user_id: string
@@ -336,6 +352,8 @@ export class JunctionState {
     request?: { labAccountId: string | null; nestedLabAccountId: string | null }
   }>
   readonly webhookEvents: Collection<WebhookEventRecord>
+  /** Wearable provider connections, keyed `<user_id>:<provider slug>` (#757). */
+  readonly connections: Collection<import("./wearables.js").ConnectionRecord>
   readonly webhookDeliveryAttempts: Collection<WebhookDeliveryAttempt>
 
   readonly labTests: Collection<LabTestRecord>
@@ -412,6 +430,7 @@ export class JunctionState {
     this.orderByTransaction = new Collection(sqlite, namespace, "orders_by_transaction")
     this.orderLabAccounts = new Collection(sqlite, namespace, "order_lab_accounts")
     this.webhookEvents = new Collection(sqlite, namespace, "webhook_events")
+    this.connections = new Collection(sqlite, namespace, "wearable_connections")
     this.webhookDeliveryAttempts = new Collection(sqlite, namespace, "webhook_delivery_attempts")
     this.labTests = new Collection(sqlite, namespace, "lab_tests")
     this.labs = new Collection(sqlite, namespace, "labs")

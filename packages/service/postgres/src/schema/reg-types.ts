@@ -12,6 +12,8 @@ import { resolveTypeName } from "../types/resolve.ts";
 import {
   ARRAY_OIDS,
   arrayElemType,
+  EXTENSION_ARRAY_OIDS,
+  EXTENSION_TYPE_OIDS,
   enumTypeName,
   isArrayType,
   isCompositeType,
@@ -166,8 +168,8 @@ export function regtypeOid(state: DatabaseState, name: string): number | null {
   if (isArrayType(id) && isCompositeType(arrayElemType(id))) {
     return state.catalogExt.composites.get(arrayElemType(id).slice(5))?.arrayOid ?? null;
   }
-  if (isArrayType(id)) return ARRAY_OIDS[arrayElemType(id)] ?? null;
-  return TYPE_OIDS[id] ?? null;
+  if (isArrayType(id)) return ARRAY_OIDS[arrayElemType(id)] ?? EXTENSION_ARRAY_OIDS[arrayElemType(id)] ?? null;
+  return TYPE_OIDS[id] ?? EXTENSION_TYPE_OIDS[id] ?? null;
 }
 
 /** regtypeout for an oid, or null when no type has it. */
@@ -176,6 +178,8 @@ export function regtypeName(state: DatabaseState, oid: number): string | null {
   for (const [name, pseudo] of PSEUDO_TYPES) if (pseudo === oid) return name;
   for (const [name, o] of Object.entries(TYPE_OIDS)) if (o === oid) return typeDisplayName(name);
   for (const [name, o] of Object.entries(ARRAY_OIDS)) if (o === oid) return `${typeDisplayName(name)}[]`;
+  for (const [name, o] of Object.entries(EXTENSION_TYPE_OIDS)) if (o === oid) return name;
+  for (const [name, o] of Object.entries(EXTENSION_ARRAY_OIDS)) if (o === oid) return `${name}[]`;
   for (const schema of state.schemas.values()) {
     for (const e of schema.enums.values()) if (e.oid === oid) return visibleUserType(state, e.schema, e.name, "enum");
     for (const d of schema.domains.values()) {
@@ -198,8 +202,8 @@ export function typeIdOid(state: DatabaseState, t: TypeId): number {
   if (isArrayType(t) && isCompositeType(arrayElemType(t))) {
     return state.catalogExt.composites.get(arrayElemType(t).slice(5))?.arrayOid ?? 0;
   }
-  if (isArrayType(t)) return ARRAY_OIDS[arrayElemType(t)] ?? 0;
-  return TYPE_OIDS[t] ?? 0;
+  if (isArrayType(t)) return ARRAY_OIDS[arrayElemType(t)] ?? EXTENSION_ARRAY_OIDS[arrayElemType(t)] ?? 0;
+  return TYPE_OIDS[t] ?? EXTENSION_TYPE_OIDS[t] ?? 0;
 }
 
 /** The oid of a function's declared return type: `record` for OUT parameters and RETURNS TABLE. */
@@ -320,6 +324,8 @@ function formatScalar(state: DatabaseState, oid: number, typmod: number | null):
       return `time(${typmod}) with time zone`;
     case 1186:
       return `interval${intervalModifier(typmod)}`;
+    case EXTENSION_TYPE_OIDS.vector:
+      return `vector(${typmod})`;
     default:
       return name;
   }
@@ -332,6 +338,9 @@ export function formatType(state: DatabaseState, oid: number, typmod: number | n
       const elemOid = TYPE_OIDS[elem];
       if (elemOid !== undefined) return `${formatScalar(state, elemOid, typmod)}[]`;
     }
+  }
+  for (const [elem, arrayOid] of Object.entries(EXTENSION_ARRAY_OIDS)) {
+    if (arrayOid === oid) return `${formatScalar(state, EXTENSION_TYPE_OIDS[elem]!, typmod)}[]`;
   }
   return formatScalar(state, oid, typmod);
 }

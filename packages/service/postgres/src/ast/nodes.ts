@@ -296,7 +296,17 @@ export interface CommonTableExpr {
   readonly columns: string[] | null;
   readonly query: Statement; // select / insert / update / delete (data-modifying CTE)
   readonly materialized: boolean | null; // null = default
-  /** SEARCH / CYCLE clauses are not supported (parser rejects) */
+  /** `SEARCH { DEPTH | BREADTH } FIRST BY col, ... SET seqcol` (recursive CTEs) */
+  readonly search?: { readonly breadth: boolean; readonly columns: string[]; readonly set: string };
+  /** `CYCLE col, ... SET markcol [TO value DEFAULT default] USING pathcol` (recursive CTEs) */
+  readonly cycle?: {
+    readonly columns: string[];
+    readonly mark: string;
+    /** TO / DEFAULT values; null for the boolean true / false */
+    readonly value: Expr | null;
+    readonly default: Expr | null;
+    readonly path: string;
+  };
 }
 
 export type SelectBody = SelectCore | SetOp | ValuesBody;
@@ -557,7 +567,11 @@ export interface CreateTableStmt {
   readonly partitionBy?: PartitionSpec;
   /** `PARTITION OF parent FOR VALUES ...` */
   readonly partitionOf?: PartitionOfClause;
+  /** `ON COMMIT { DROP | DELETE ROWS | PRESERVE ROWS }` (temporary tables only) */
+  readonly onCommit?: OnCommitAction;
 }
+
+export type OnCommitAction = "drop" | "delete_rows" | "preserve_rows";
 
 export interface CreateTableAsStmt {
   readonly type: "create_table_as";
@@ -569,6 +583,8 @@ export interface CreateTableAsStmt {
   readonly withData: boolean;
   readonly materialized: boolean; // CREATE MATERIALIZED VIEW handled separately
   readonly unlogged?: boolean;
+  /** `ON COMMIT { DROP | DELETE ROWS | PRESERVE ROWS }` (temporary tables only) */
+  readonly onCommit?: OnCommitAction;
 }
 
 export interface CreateIndexStmt {
@@ -764,7 +780,17 @@ export interface AlterIndexStmt {
   readonly type: "alter_index";
   readonly name: string[];
   readonly ifExists: boolean;
-  readonly action: { kind: "rename_table"; to: string };
+  readonly action:
+    | { kind: "rename_table"; to: string }
+    /** `SET (name = value, ...)` / `RESET (name, ...)`: storage parameters (pg_class.reloptions) */
+    | { kind: "set_options" | "reset_options"; options: ReadonlyArray<RelOption> };
+}
+
+/** One `[namespace.]name [= value]` of a reloptions list; `value` is null when left out. */
+export interface RelOption {
+  readonly name: string;
+  readonly value: string | null;
+  readonly namespace?: string;
 }
 
 export interface AlterSchemaStmt {

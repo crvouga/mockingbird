@@ -1,6 +1,8 @@
-import { pgError } from "../errors/error.ts";
 import { flushDeferredForeignKeys } from "../constraints/enforce.ts";
+import { pgError } from "../errors/error.ts";
 import { endTransactionCursors } from "../executor/cursors.ts";
+import { releaseAdvisoryLocks } from "../functions/advisory-fns.ts";
+import { runOnCommitActions } from "../executor/on-commit.ts";
 import { flushConstraintTriggers } from "../executor/triggers.ts";
 import { assert } from "../runtime/assert.ts";
 import type { DatabaseState } from "../storage/database-state.ts";
@@ -51,8 +53,11 @@ export class TransactionManager {
     // A savepoint may be restored repeatedly. Keep its catalog maps independent
     // when the live branch replaces a table after the first ROLLBACK TO.
     // The snapshot's hold is still alive here, so its objects stay copy-on-write.
+    const custom = [...this.state.settings.keys()].filter((name) => name.includes("."));
     this.state.restoreFrom(snap.state.cloneShallow(), true);
     this.state.prng.setState(snap.prngState);
+    // a custom parameter defined in the rolled-back work stays defined, as an empty placeholder
+    for (const name of custom) if (!this.state.settings.has(name)) this.state.settings.set(name, "");
   }
 
   private releaseHolds(): void {
@@ -67,6 +72,7 @@ export class TransactionManager {
     this.base = this.takeSnapshot();
     this.state.inTransaction = true;
     this.snapshotTaken = false;
+    this.state.transactionStart = null;
     // the transaction's own characteristics start from the session's defaults
     for (const [name, sessionDefault] of TRANSACTION_GUCS) {
       const value = this.state.getSetting(sessionDefault);
@@ -79,6 +85,7 @@ export class TransactionManager {
     try {
       flushConstraintTriggers(this.state, true);
       flushDeferredForeignKeys(this.state, true);
+      runOnCommitActions(this.state);
     } catch (error) {
       this.rollback();
       throw error;
@@ -88,11 +95,13 @@ export class TransactionManager {
     this.state.inTransaction = false;
     this.snapshotTaken = false;
     this.state.transactionXid = null;
+    this.state.transactionStart = null;
     this.state.localSettings.clear();
     this.state.pendingTriggers = [];
     this.state.pendingForeignKeys = [];
     this.state.constraintModes.clear();
     endTransactionCursors(this.state, true);
+    releaseAdvisoryLocks(this.state, "xact");
     this.releaseHolds();
   }
 
@@ -105,11 +114,13 @@ export class TransactionManager {
     this.state.inTransaction = false;
     this.snapshotTaken = false;
     this.state.transactionXid = null;
+    this.state.transactionStart = null;
     this.state.localSettings.clear();
     this.state.pendingTriggers = [];
     this.state.pendingForeignKeys = [];
     this.state.constraintModes.clear();
     endTransactionCursors(this.state, false);
+    releaseAdvisoryLocks(this.state, "xact");
     this.releaseHolds();
   }
 
@@ -147,6 +158,7 @@ export class TransactionManager {
     this.savepoints = [];
     this.state.inTransaction = false;
     this.state.transactionXid = null;
+    this.state.transactionStart = null;
     this.releaseHolds();
   }
 }

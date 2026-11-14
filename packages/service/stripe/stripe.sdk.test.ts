@@ -394,8 +394,20 @@ const walk = async (stripe: Stripe, tag: string) => {
   const cancelable = await stripe.subscriptionSchedules.create({ from_subscription: backdated.id })
   expect((await stripe.subscriptionSchedules.cancel(cancelable.id)).status).toBe("canceled")
   expect((await stripe.subscriptions.cancel(incomplete.id)).status).toBe("canceled")
+  const removable = await stripe.coupons.create({ percent_off: 5, duration: "forever" })
+  await stripe.subscriptions.update(subscription.id, {
+    discounts: [{ coupon: removable.id }],
+    proration_behavior: "none",
+  })
+  expect((await stripe.subscriptions.deleteDiscount(subscription.id)).deleted).toBe(true)
+  await stripe.customers.update(customer.id, { coupon: removable.id })
+  expect((await stripe.customers.deleteDiscount(customer.id)).deleted).toBe(true)
   const upcoming = await stripe.invoices.retrieveUpcoming({ subscription: subscription.id })
   expect(upcoming.next_payment_attempt).toBe(subscription.current_period_end)
+  const preview = await stripe.invoices.createPreview({ subscription: subscription.id })
+  expect(preview.id).toStartWith("upcoming_in_")
+  const upcomingLines = await stripe.invoices.listUpcomingLines({ subscription: subscription.id })
+  expect(upcomingLines.data.length).toBeGreaterThan(0)
 
   // Customer portal and paused collection.
   const portalConfig = await stripe.billingPortal.configurations.create({
@@ -470,6 +482,19 @@ const walk = async (stripe: Stripe, tag: string) => {
   })
   await stripe.invoices.finalizeInvoice(sendable.id)
   expect((await stripe.invoices.voidInvoice(sendable.id)).status).toBe("void")
+  const owed = await stripe.invoices.create({
+    customer: customer.id,
+    collection_method: "send_invoice",
+    days_until_due: 5,
+  })
+  await stripe.invoiceItems.create({
+    customer: customer.id,
+    invoice: owed.id,
+    price: oneTime.id,
+    quantity: 1,
+  })
+  await stripe.invoices.finalizeInvoice(owed.id)
+  expect((await stripe.invoices.markUncollectible(owed.id)).status).toBe("uncollectible")
   await stripe.invoices.retrieve(invoice.id, {
     expand: [
       "discount.coupon",
@@ -491,6 +516,7 @@ const walk = async (stripe: Stripe, tag: string) => {
   // Charges, refunds, disputes, balance, events, account.
   const charge = await stripe.charges.retrieve(offSession.latest_charge as string)
   expect(charge.paid).toBe(true)
+  await stripe.charges.update(charge.id, { metadata: { order: tag } })
   await stripe.charges.list({
     customer: customer.id,
     limit: 100,
@@ -537,7 +563,12 @@ const walk = async (stripe: Stripe, tag: string) => {
     automatic_payment_methods: { enabled: true, allow_redirects: "never" },
   })
   const disputes = await stripe.disputes.list({ payment_intent: disputed.id })
-  await stripe.disputes.retrieve(disputes.data[0]?.id as string)
+  const dispute = await stripe.disputes.retrieve(disputes.data[0]?.id as string)
+  await stripe.disputes.update(dispute.id, {
+    evidence: { product_description: "Monthly membership" },
+    submit: false,
+  })
+  expect((await stripe.disputes.close(dispute.id)).status).toBe("lost")
   const pending = await stripe.invoiceItems.create({
     customer: customer.id,
     amount: 300,

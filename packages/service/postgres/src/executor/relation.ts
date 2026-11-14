@@ -2,6 +2,8 @@ import { pgError } from "../errors/error.ts";
 import type { EngineCtx } from "../expressions/context.ts";
 import type { Datum, TypedValue, TypeId } from "../types/value.ts";
 import { normalizeTypeName, tv, type TypeMod } from "../types/value.ts";
+import type { StatementCache } from "./subquery-plan.ts";
+import { SQLJSON_INTERNAL } from "../parser/sqljson.ts";
 
 /** A column of an intermediate or final result relation. */
 export interface RelColumn {
@@ -120,6 +122,11 @@ export interface ExecEnv {
    * contributes its column shape and no rows, matching PostgreSQL planning.
    */
   allowUnpopulatedMatviews?: boolean;
+  /**
+   * Subquery and catalog memo of the statement being executed (#765). Copied into every env of the
+   * same statement; an env a function, trigger or DO block builds for its own statements has none.
+   */
+  stmtCache?: StatementCache;
 }
 
 export function childEnv(env: ExecEnv, outer: RowScope | null): ExecEnv {
@@ -129,6 +136,7 @@ export function childEnv(env: ExecEnv, outer: RowScope | null): ExecEnv {
     ctes: env.ctes,
     outer,
     allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+    stmtCache: env.stmtCache,
   };
 }
 
@@ -139,6 +147,7 @@ export function withCtes(env: ExecEnv, ctes: Map<string, Relation>): ExecEnv {
     ctes,
     outer: env.outer,
     allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
+    stmtCache: env.stmtCache,
   };
 }
 
@@ -169,6 +178,7 @@ const INTERNAL_FUNCTION_LABELS: Record<string, string> = {
   __any_array: "?column?",
   __all_array: "?column?",
   __overlaps: "overlaps",
+  __is_json: "?column?",
 };
 
 /**
@@ -182,6 +192,7 @@ function figureColumnName(e: import("../ast/nodes.ts").Expr): { name: string; st
       return named(e.parts[e.parts.length - 1]!);
     case "func": {
       const name = e.name[e.name.length - 1]!;
+      if (name in SQLJSON_INTERNAL) return named(SQLJSON_INTERNAL[name]!);
       return name in INTERNAL_FUNCTION_LABELS ? named(INTERNAL_FUNCTION_LABELS[name]!, 0) : named(name);
     }
     case "cast": {

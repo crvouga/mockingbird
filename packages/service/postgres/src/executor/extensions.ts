@@ -1,7 +1,10 @@
 import type { CreateExtensionStmt, DropStmt } from "../ast/nodes.ts";
 import { pgError, unsupported } from "../errors/error.ts";
+import { installFuzzystrmatch, uninstallFuzzystrmatch } from "../functions/fuzzystrmatch.ts";
 import { installPgcrypto, uninstallPgcrypto } from "../functions/pgcrypto.ts";
 import { installPgTrgm, uninstallPgTrgm } from "../functions/pgtrgm.ts";
+import { installUuidOssp, uninstallUuidOssp } from "../functions/uuid-ossp.ts";
+import { installPgvector, PGVECTOR_OPCLASSES, uninstallPgvector } from "../functions/pgvector.ts";
 import { type ExtensionSpec, extensionMembers, findExtensionSpec, installedExtension } from "../schema/extensions.ts";
 import type { DatabaseState, FunctionData } from "../storage/database-state.ts";
 import { typeDisplayName } from "../types/value.ts";
@@ -16,6 +19,15 @@ function installMembers(state: DatabaseState, spec: ExtensionSpec, schemaName: s
     case "pg_trgm":
       installPgTrgm(state, schemaName);
       return;
+    case "uuid-ossp":
+      installUuidOssp(state, schemaName);
+      return;
+    case "fuzzystrmatch":
+      installFuzzystrmatch(state, schemaName);
+      return;
+    case "vector":
+      installPgvector(state, schemaName);
+      return;
     default:
       throw unsupported(`CREATE EXTENSION ${spec.name}`);
   }
@@ -24,6 +36,9 @@ function installMembers(state: DatabaseState, spec: ExtensionSpec, schemaName: s
 function uninstallMembers(state: DatabaseState, spec: ExtensionSpec): void {
   if (spec.name === "pgcrypto") uninstallPgcrypto(state);
   else if (spec.name === "pg_trgm") uninstallPgTrgm(state);
+  else if (spec.name === "uuid-ossp") uninstallUuidOssp(state);
+  else if (spec.name === "fuzzystrmatch") uninstallFuzzystrmatch(state);
+  else if (spec.name === "vector") uninstallPgvector(state);
 }
 
 export function executeCreateExtension(env: ExecEnv, stmt: CreateExtensionStmt): ExecResult {
@@ -64,8 +79,17 @@ export function assertNotExtensionMember(fn: FunctionData): void {
 }
 
 /** Operators and operator classes an extension adds besides its functions. */
-const EXTENSION_OPERATORS: Readonly<Record<string, readonly string[]>> = { pg_trgm: ["<%"] };
-const EXTENSION_OPCLASSES: Readonly<Record<string, readonly string[]>> = { pg_trgm: ["gin_trgm_ops"] };
+// (pg_trgm's `%` and `<->` are left out: the same tokens are integer modulo and geometric distance)
+const EXTENSION_OPERATORS: Readonly<Record<string, readonly string[]>> = {
+  pg_trgm: ["<%", "%>", "<<%", "%>>", "<<->", "<->>", "<<<->", "<->>>"],
+};
+const EXTENSION_OPCLASSES: Readonly<Record<string, readonly string[]>> = {
+  pg_trgm: ["gin_trgm_ops"],
+  vector: PGVECTOR_OPCLASSES,
+};
+
+/** Types an extension adds: a column of one goes with the extension (DROP EXTENSION ... CASCADE). */
+const EXTENSION_TYPES: Readonly<Record<string, readonly string[]>> = { vector: ["vector", "vector[]"] };
 
 /**
  * Objects that use an extension's functions, operators or operator classes:
@@ -78,6 +102,7 @@ function extensionDependents(env: ExecEnv, spec: ExtensionSpec): Array<() => voi
   const functions = new Set(extensionMembers(state, spec.name).map((fn) => fn.name));
   const operators = EXTENSION_OPERATORS[spec.name] ?? [];
   const opclasses = EXTENSION_OPCLASSES[spec.name] ?? [];
+  const types = EXTENSION_TYPES[spec.name] ?? [];
   const uses = (node: unknown): boolean => {
     if (Array.isArray(node)) return node.some(uses);
     if (node === null || typeof node !== "object") return false;
@@ -105,7 +130,7 @@ function extensionDependents(env: ExecEnv, spec: ExtensionSpec): Array<() => voi
     for (const table of schema.tables.values()) {
       const writable = () => state.ensureWritableTable(schema.tables.get(table.name) ?? table);
       for (const column of table.columns) {
-        if (uses(column.generated)) {
+        if (types.includes(column.type.id) || uses(column.generated)) {
           drops.push(() => {
             runStatement(env, {
               type: "alter_table",

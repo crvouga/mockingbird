@@ -36,6 +36,7 @@ import {
   UTC_INPUT,
   wrapJsonb,
 } from "../types/value.ts";
+import { formatTimestamp, formatTimestampTz } from "../types/datetime.ts";
 import { argText, type ScalarFn, strict } from "./util.ts";
 
 /** Convert an engine Datum to a JsonbValue tree (to_jsonb / jsonb_build_*). */
@@ -63,6 +64,11 @@ export function datumToJsonb(ctx: EngineCtx, t: TypeId, v: Datum): JsonbValue {
     case "json": {
       return parseJsonText(v as string);
     }
+    // JSON carries date-times in ISO 8601 (XML Schema) form whatever the DateStyle
+    case "timestamp":
+      return jsonbStr(formatTimestamp(v as bigint, true));
+    case "timestamptz":
+      return jsonbStr(formatTimestampTz(v as bigint, ctx.zoneOffsetAt(v as bigint), true));
     default:
       break;
   }
@@ -191,12 +197,47 @@ export function getJsonFunctions(): Map<string, ScalarFn> {
 
   m.set(
     "json_object",
-    strict("json", (ctx, args) => tv("json", buildSpacedObjectText(jsonObjectFromArrays(ctx, args)))),
+    // json keeps every pair, duplicate keys included
+    strict("json", (ctx, args) => {
+      const body = jsonObjectFromArrays(ctx, args).map(([k, x]) => `${JSON.stringify(k)} : ${jsonbCompactText(x)}`);
+      return tv("json", `{${body.join(", ")}}`);
+    }),
   );
   m.set(
     "jsonb_object",
-    strict("jsonb", (ctx, args) => outJsonb(jsonObjectFromArrays(ctx, args))),
+    strict("jsonb", (ctx, args) => outJsonb(jsonbObj(jsonObjectFromArrays(ctx, args)))),
   );
+
+  // jsonb_exists(jsonb, text) / jsonb_exists_any(jsonb, text[]) / jsonb_exists_all(jsonb, text[]):
+  // the functions behind the ? ?| ?& operators
+  for (const [name, mode] of [
+    ["jsonb_exists", "one"],
+    ["jsonb_exists_any", "any"],
+    ["jsonb_exists_all", "all"],
+  ] as const) {
+    m.set(name, (ctx, args) => {
+      const [doc, keys] = args;
+      const keyTypes = mode === "one" ? KEY_ARG_TYPES : KEY_ARRAY_ARG_TYPES;
+      if (args.length !== 2 || (doc!.t !== "jsonb" && doc!.t !== UNKNOWN) || !keyTypes.has(keys!.t)) {
+        throw pgError(
+          "undefined_function",
+          `function ${name}(${args.map((a) => typeDisplayName(a.t)).join(", ")}) does not exist`,
+          "42883",
+        );
+      }
+      if (doc!.v === null || keys!.v === null) return tv("bool", null);
+      const value = jsonArg(ctx, doc!);
+      const has = (key: string): boolean =>
+        value.j === "obj"
+          ? value.v.has(key)
+          : value.j === "arr"
+            ? value.v.some((x) => x.j === "str" && x.v === key)
+            : value.j === "str" && value.v === key;
+      if (mode === "one") return tv("bool", has(argText(ctx, keys!)));
+      const wanted = textArrayArg(keys!).items.filter((k): k is string => k !== null);
+      return tv("bool", mode === "any" ? wanted.some(has) : wanted.every(has));
+    });
+  }
 
   const typeofFn = strict("text", (ctx: EngineCtx, args: TypedValue[]) => {
     const v = jsonArg(ctx, args[0]!);
@@ -374,42 +415,52 @@ function buildObject(ctx: EngineCtx, args: TypedValue[]): JsonbValue {
   return jsonbObj(entries);
 }
 
-function jsonObjectFromArrays(_ctx: EngineCtx, args: TypedValue[]): JsonbValue {
-  if (args.length === 1) {
-    const arr = args[0]!.v as PgArray;
-    if (arr.dims.length === 2) {
-      const entries: Array<[string, JsonbValue]> = [];
-      for (let i = 0; i < arr.items.length; i += 2) {
-        const k = arr.items[i];
-        if (k === null || k === undefined)
-          throw pgError("null_value_not_allowed", "null value not allowed for object key", "22004");
-        entries.push([String(k), arr.items[i + 1] == null ? JSONB_NULL : jsonbStr(String(arr.items[i + 1]))]);
-      }
-      return jsonbObj(entries);
-    }
-    if (arr.items.length % 2 !== 0) {
-      throw pgError("invalid_parameter_value", "array must have even number of elements", "22023");
-    }
-    const entries: Array<[string, JsonbValue]> = [];
-    for (let i = 0; i < arr.items.length; i += 2) {
-      const k = arr.items[i];
-      if (k === null) throw pgError("null_value_not_allowed", "null value not allowed for object key", "22004");
-      entries.push([String(k), arr.items[i + 1] == null ? JSONB_NULL : jsonbStr(String(arr.items[i + 1]))]);
-    }
-    return jsonbObj(entries);
-  }
-  const keys = args[0]!.v as PgArray;
-  const values = args[1]!.v as PgArray;
-  if (keys.items.length !== values.items.length) {
-    throw pgError("invalid_parameter_value", "mismatched array dimensions", "22023");
-  }
+const KEY_ARG_TYPES = new Set<TypeId>([UNKNOWN, "text", "varchar", "bpchar", "name"]);
+const KEY_ARRAY_ARG_TYPES = new Set<TypeId>([UNKNOWN, "text[]", "varchar[]", "bpchar[]", "name[]"]);
+
+/** A text[] argument; an untyped literal (`'{a,b}'`) is parsed as text[]. */
+function textArrayArg(arg: TypedValue): PgArray {
+  return isPgArray(arg.v) ? arg.v : (datumFromText("text[]", String(arg.v), UTC_INPUT) as PgArray);
+}
+
+const arraySubscriptError = (message: string): never => {
+  throw pgError("array_subscript_error", message, "2202E");
+};
+
+/** `json[b]_object(text[])` (a flat key/value list or a two-column 2-D array) or `json[b]_object(keys, values)`. */
+function jsonObjectFromArrays(_ctx: EngineCtx, args: TypedValue[]): Array<[string, JsonbValue]> {
   const entries: Array<[string, JsonbValue]> = [];
-  for (let i = 0; i < keys.items.length; i++) {
-    const k = keys.items[i];
-    if (k === null) throw pgError("null_value_not_allowed", "null value not allowed for object key", "22004");
-    entries.push([String(k), values.items[i] == null ? JSONB_NULL : jsonbStr(String(values.items[i]))]);
+  const add = (key: Datum | undefined, value: Datum | undefined) => {
+    if (key === null || key === undefined) {
+      throw pgError("null_value_not_allowed", "null value not allowed for object key", "22004");
+    }
+    entries.push([String(key), value === null || value === undefined ? JSONB_NULL : jsonbStr(String(value))]);
+  };
+  if (args.length === 1) {
+    const arr = textArrayArg(args[0]!);
+    switch (arr.dims.length) {
+      case 0:
+        break;
+      case 1:
+        if (arr.dims[0]! % 2 !== 0) arraySubscriptError("array must have even number of elements");
+        break;
+      case 2:
+        if (arr.dims[1] !== 2) arraySubscriptError("array must have two columns");
+        break;
+      default:
+        arraySubscriptError("wrong number of array subscripts");
+    }
+    for (let i = 0; i < arr.items.length; i += 2) add(arr.items[i], arr.items[i + 1]);
+    return entries;
   }
-  return jsonbObj(entries);
+  const keys = textArrayArg(args[0]!);
+  const values = textArrayArg(args[1]!);
+  if (keys.dims.length > 1 || keys.dims.length !== values.dims.length) {
+    arraySubscriptError("wrong number of array subscripts");
+  }
+  if (keys.items.length !== values.items.length) arraySubscriptError("mismatched array dimensions");
+  for (let i = 0; i < keys.items.length; i++) add(keys.items[i], values.items[i]);
+  return entries;
 }
 
 function pathTexts(pathArg: TypedValue): string[] {

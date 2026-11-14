@@ -25,8 +25,9 @@ import {
  * `lax` / `strict` modes, accessors (`.key`, `.*`, `[n]`, `[*]`, `[a to b]`, `last`), filters
  * (`? (@.a > 1)` with `&&`, `||`, `!`, `exists`, `like_regex`, `starts with`, `is unknown`),
  * arithmetic, `$var` variables and the item methods `type() size() double() ceiling() floor() abs()`.
- * Not modelled (refused with 0A000): `.**`, `.keyvalue()`, the datetime methods and `.bigint()`-style
- * conversions.
+ * The `.**` recursive wildcard (`.**{n}`, `.**{n to m}`, `last`) walks the item and everything inside it
+ * in document order. Not modelled (refused with 0A000): `.keyvalue()`, the datetime methods and
+ * `.bigint()`-style conversions.
  */
 
 // --- syntax tree -----------------------------------------------------------------
@@ -36,6 +37,8 @@ type Accessor =
   | { k: "wildcardMember" }
   | { k: "index"; subscripts: Array<{ from: Node; to: Node | null }> }
   | { k: "wildcardIndex" }
+  /** `.**{first to last}`: the levels to keep, {@link ANY_LAST} standing for `last` */
+  | { k: "any"; first: number; last: number }
   | { k: "method"; name: string }
   | { k: "filter"; predicate: Node };
 
@@ -62,6 +65,9 @@ export interface JsonPath {
   /** a predicate at the top (`$.a > 1`) yields true, false or null instead of path items */
   predicate: boolean;
 }
+
+/** `last` as a `.**` level: PostgreSQL stores it as the largest uint32. */
+const ANY_LAST = 0xffffffff;
 
 // --- errors -----------------------------------------------------------------
 
@@ -178,12 +184,12 @@ function lex(input: string): Token[] {
       continue;
     }
     const two = input.slice(i, i + 2);
-    if (["==", "!=", "<>", "<=", ">=", "&&", "||"].includes(two)) {
+    if (["==", "!=", "<>", "<=", ">=", "&&", "||", "**"].includes(two)) {
       tokens.push({ t: "op", v: two === "<>" ? "!=" : two, at });
       i += 2;
       continue;
     }
-    if ("+-*/%()[],.?<>!".includes(c)) {
+    if ("+-*/%()[],.?<>!{}".includes(c)) {
       tokens.push({ t: "op", v: c, at });
       i++;
       continue;
@@ -404,6 +410,23 @@ class PathParser {
     return this.fail();
   }
 
+  /** One level of `.**{...}`: an unsigned integer or `last`. */
+  private anyLevel(): number {
+    const token = this.peek();
+    if (token.t === "ident" && token.v === "last") {
+      this.pos++;
+      return ANY_LAST;
+    }
+    if (token.t === "num" && /^\d+$/.test(token.v)) {
+      this.pos++;
+      const level = Number(token.v);
+      if (level > 0x7fffffff)
+        throw pgError("numeric_value_out_of_range", `value "${token.v}" is out of range for type integer`, "22003");
+      return level;
+    }
+    return this.fail();
+  }
+
   private parseAccessors(base: Node): Node {
     let node = base;
     for (;;) {
@@ -412,16 +435,21 @@ class PathParser {
         const token = this.peek();
         if (token.t === "op" && token.v === "*") {
           this.pos++;
-          if (this.atOp("*")) {
-            throw pgError(
-              "feature_not_supported",
-              "jsonpath recursive wildcard accessor .** is not supported",
-              "0A000",
-            );
-          }
           node = { k: "acc", base: node, acc: { k: "wildcardMember" } };
         } else if (token.t === "op" && token.v === "**") {
-          throw pgError("feature_not_supported", "jsonpath recursive wildcard accessor .** is not supported", "0A000");
+          this.pos++;
+          let first = 0;
+          let last = ANY_LAST;
+          if (this.eatOp("{")) {
+            first = this.anyLevel();
+            last = first;
+            if (this.atWord("to")) {
+              this.pos++;
+              last = this.anyLevel();
+            }
+            this.expectOp("}");
+          }
+          node = { k: "acc", base: node, acc: { k: "any", first, last } };
         } else if (token.t === "str") {
           this.pos++;
           node = { k: "acc", base: node, acc: { k: "member", name: token.v } };
@@ -556,6 +584,12 @@ function printNode(node: Node, brackets: boolean): string {
           return `${base}.*`;
         case "wildcardIndex":
           return `${base}[*]`;
+        case "any": {
+          const level = (n: number) => (n === ANY_LAST ? "last" : String(n));
+          if (acc.first === 0 && acc.last === ANY_LAST) return `${base}.**`;
+          if (acc.first === acc.last) return `${base}.**{${level(acc.first)}}`;
+          return `${base}.**{${level(acc.first)} to ${level(acc.last)}}`;
+        }
         case "method":
           return `${base}.${acc.name}()`;
         case "filter":
@@ -615,6 +649,20 @@ interface Run {
   cur: JsonbValue | null;
   /** the length of the array a subscript is evaluated against (for `last`) */
   last: number | null;
+  /**
+   * strict mode's structural errors (a missing key, an accessor on the wrong kind of item, a
+   * subscript out of bounds) are skipped instead of raised: PostgreSQL does so for whatever follows `.**`
+   */
+  ignoreStructural?: boolean;
+}
+
+/** Whether strict mode raises a structural error here. */
+const structural = (run: Run): boolean => run.strict && run.ignoreStructural !== true;
+
+/** Whether an accessor chain passes through `.**`. */
+function chainHasAny(node: Node): boolean {
+  for (let n = node; n.k === "acc"; n = n.base) if (n.acc.k === "any") return true;
+  return false;
 }
 
 const isNum = (v: JsonbValue): v is Extract<JsonbValue, { j: "num" }> => v.j === "num";
@@ -647,8 +695,11 @@ function evalNode(run: Run, node: Node): JsonbValue[] {
     }
     case "lit":
       return [node.v];
-    case "acc":
-      return evalAccessor(run, evalNode(run, node.base), node.acc);
+    case "acc": {
+      const items = evalNode(run, node.base);
+      const inner = structural(run) && chainHasAny(node.base) ? { ...run, ignoreStructural: true } : run;
+      return evalAccessor(inner, items, node.acc);
+    }
     case "unary": {
       const items = unwrap(run, evalNode(run, node.e));
       return items.map((item) => {
@@ -715,8 +766,8 @@ function evalAccessor(run: Run, items: JsonbValue[], acc: Accessor): JsonbValue[
           if (v.j === "obj") {
             const found = v.v.get(acc.name);
             if (found !== undefined) out.push(found);
-            else if (run.strict) fail(`JSON object does not contain key "${acc.name}"`, "2203A");
-          } else if (run.strict) fail("jsonpath member accessor can only be applied to an object", "2203A");
+            else if (structural(run)) fail(`JSON object does not contain key "${acc.name}"`, "2203A");
+          } else if (structural(run)) fail("jsonpath member accessor can only be applied to an object", "2203A");
         };
         if (item.j === "arr" && !run.strict) for (const element of item.v) apply(element);
         else apply(item);
@@ -730,7 +781,9 @@ function evalAccessor(run: Run, items: JsonbValue[], acc: Accessor): JsonbValue[
                 .sort(([a], [b]) => a.length - b.length || jsonbKeyCompare(a, b))
                 .map(([, value]) => value),
             );
-          else if (run.strict) fail("jsonpath wildcard member accessor can only be applied to an object", "2203A");
+          else if (structural(run)) {
+            fail("jsonpath wildcard member accessor can only be applied to an object", "2203A");
+          }
         };
         if (item.j === "arr" && !run.strict) for (const element of item.v) apply(element);
         else apply(item);
@@ -740,7 +793,8 @@ function evalAccessor(run: Run, items: JsonbValue[], acc: Accessor): JsonbValue[
       case "index": {
         let array: JsonbValue[];
         if (item.j === "arr") array = item.v;
-        else if (run.strict) return fail("jsonpath array accessor can only be applied to an array", "22039");
+        else if (structural(run)) return fail("jsonpath array accessor can only be applied to an array", "22039");
+        else if (run.strict) break;
         else array = [item];
         if (acc.k === "wildcardIndex") {
           out.push(...array);
@@ -755,13 +809,16 @@ function evalAccessor(run: Run, items: JsonbValue[], acc: Accessor): JsonbValue[
         for (const { from, to } of acc.subscripts) {
           const lo = toIndex(from);
           const hi = to === null ? lo : toIndex(to);
-          if (run.strict && (lo < 0 || hi >= array.length || lo > hi)) {
+          if (structural(run) && (lo < 0 || hi >= array.length || lo > hi)) {
             return fail("jsonpath array subscript is out of bounds", "22033");
           }
           for (let i = Math.max(lo, 0); i <= Math.min(hi, array.length - 1); i++) out.push(array[i]!);
         }
         break;
       }
+      case "any":
+        anyItems(item, acc.first, acc.last, out);
+        break;
       case "method":
         out.push(...evalMethod(run, item, acc.name));
         break;
@@ -777,6 +834,26 @@ function evalAccessor(run: Run, items: JsonbValue[], acc: Accessor): JsonbValue[
   return out;
 }
 
+/**
+ * `.**{first to last}`: the item (level 0) and everything nested in it, each before its own
+ * contents and an object's values in jsonb key order. `{last}` alone keeps only the scalars.
+ */
+function anyItems(item: JsonbValue, first: number, last: number, out: JsonbValue[]): void {
+  const leavesOnly = first === ANY_LAST && last === ANY_LAST;
+  const children = (v: JsonbValue): JsonbValue[] =>
+    v.j === "arr"
+      ? v.v
+      : v.j === "obj"
+        ? [...v.v.entries()].sort(([a], [b]) => a.length - b.length || jsonbKeyCompare(a, b)).map(([, x]) => x)
+        : [];
+  const walk = (v: JsonbValue, level: number) => {
+    const container = v.j === "arr" || v.j === "obj";
+    if (level >= first || (level > 0 && leavesOnly && !container)) out.push(v);
+    if (level < last && container) for (const child of children(v)) walk(child, level + 1);
+  };
+  walk(item, 0);
+}
+
 /** Truncation toward zero, which is how a numeric subscript becomes an index. */
 function numericFloorToward(n: Numeric): Numeric {
   return numericCmp(n, numericFromBigInt(0n)) < 0 ? numericCeil(n) : numericFloor(n);
@@ -788,7 +865,8 @@ function evalMethod(run: Run, item: JsonbValue, name: string): JsonbValue[] {
       return [jsonbStr(typeName(item))];
     case "size":
       if (item.j === "arr") return [jsonbNum(numericFromBigInt(BigInt(item.v.length)))];
-      if (run.strict) return fail("jsonpath item method .size() can only be applied to an array", "22039");
+      if (structural(run)) return fail("jsonpath item method .size() can only be applied to an array", "22039");
+      if (run.strict) return [];
       return [jsonbNum(numericFromBigInt(1n))];
     default: {
       // the numeric methods look through an array in lax mode
@@ -990,10 +1068,8 @@ export function jsonpathExists(
   const path = parseJsonpath(pathText);
   const run: Run = { root: doc, vars, strict: path.strict, cur: null, last: null };
   try {
-    const items = evalNode(run, path.expr);
-    // a predicate path exists when it is not unknown
-    if (path.predicate) return items[0]?.j === "null" ? null : items.length > 0;
-    return items.length > 0;
+    // a predicate path always yields its (possibly unknown) result, so it always exists
+    return evalNode(run, path.expr).length > 0;
   } catch (error) {
     if (error instanceof JsonPathError) {
       if (silent) return null;

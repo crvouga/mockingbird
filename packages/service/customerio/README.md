@@ -5,7 +5,7 @@
 Stateful emulator of **Customer.io** for test suites, serving all three hosts our code talks to from
 one process: the Segment-compatible **CDP** (`identify`, `track`, `batch`, exactly as
 `@customerio/cdp-analytics-node` posts them), the **App API** transactional sends (email, SMS,
-push, inbox message), message catalog, profile attribute reads with device lists, sender opt-out reconciliation, and delivery-status reads, and the
+push, inbox message), message catalog, profile attribute reads with device lists, sender opt-out reconciliation, delivery-status reads, read-only workspace lists and customer exports, and the
 **link-tracking** click endpoint. Sends land in an outbox a suite asserts on (and reads links out
 of); reporting events (`unsubscribed`, `subscribed`, `spammed`, subscription preferences,
 `clicked`) are posted to our reporting webhook, signed the way Customer.io signs them.
@@ -97,6 +97,10 @@ await cio.close()
 | `GET /v1/optouts?limit=&start=&from=` | Workspace sender opt-outs as `{optouts: [{customer_id, cio_id, optouts: [{channel, from}]}], next?}`. `limit` defaults to 100 (1–1000); follow `next` using `start` until it is absent. `from` filters sender/channel entries, omitting people with no matches. Sender values are trimmed and lowercased; E.164 numbers retain their form. |
 | `GET /v1/customers/{customer_id}/optouts?id_type=id\|email\|cio_id` | `{optouts: [{channel, from}]}` for an existing profile, empty if none, 404 for unknown people. Uses the same identity state as CDP identify and profile updates. App API authentication applies to both reads. |
 | `GET /v1/messages/{delivery_id}` | `{message: {id, type, recipient, customer_id, created, state, status, metrics}}`. `type` is `in_app` for inbox. No `message_data`. 404 when the id is missing or still inside `statusVisibleAfterMs`. Failure states add `failure_message`, `rejection_reason`, and `error`. |
+| `GET /v1/reporting_webhooks`, `/v1/subscription_topics`, `/v1/snippets`, `/v1/campaigns` | Bearer auth as above. `{reporting_webhooks: [...]}`, `{topics: [...]}`, `{snippets: [...]}`, `{campaigns: [...]}`: whatever `PUT /__admin/content` seeded, empty by default. Read-only. See [Workspace reads and exports](#workspace-reads-and-exports-best-guess-not-oracle-verified). |
+| `GET /v1/newsletters`, `/v1/sender_identities?limit=&sort=asc\|desc&start=&hidden=` | `{newsletters: [...], next?}`, `{sender_identities: [...], next?}` from seeded content. `limit` (positive integer) pages; follow `next` with `start`; `sort=desc` reverses the seeded order. Senders with `hidden: true` are listed only with `hidden=true`. A bad `limit`, `sort` or cursor is 400. |
+| `POST /v1/exports/customers` | `{filters, attributes?}` → `{export: {id, type: "customers", status: "done", failed: false, total, downloads, created_at, updated_at, deduplicate_id}}`. `filters` is one node: `{and: [...]}`, `{or: [...]}`, `{not: {...}}` or `{attribute: {field, operator: "eq"\|"exists", value?, inverse?}}`, evaluated against the emulator's profiles (stored traits plus `id`, `cio_id`, `email`, `unsubscribed`; `eq` compares as strings). Ids count from 1 per namespace. A missing or malformed filter is 400 and creates nothing; `{segment: {...}}` is 400 `filters: segment filters are not supported by the emulator` (no segments are modelled). |
+| `GET /v1/exports/{export_id}`, `/v1/exports/{export_id}/download` | `{export: {...}}`, or `{url}` pointing at the runtime's `GET /__admin/exports/{id}/file` (with the `/__admin/ns/<name>` prefix outside the default namespace), which serves the CSV: header `id,cio_id,email,<attributes…>`, one row per matching person, frozen at creation. Each download request adds 1 to `downloads`. Unknown ids are 404 `{meta: {error: "not found"}}`. |
 | `POST /click/{linkId}` | Our backend's click report (unauthenticated) → 200, counts the click and posts a `clicked` reporting event. Unknown link: plain-text 404. |
 | `GET /click/{linkId}` | A browser following a tracked link → 302 to the original URL. |
 
@@ -123,6 +127,8 @@ is the JSON string of subscription preferences. `timestamp` never runs ahead of 
 | `POST /__admin/namespace-clock` | `{"advance": <ms>}` adds to this namespace's clock offset only. |
 | `GET\|PUT /__admin/transactional` | Read or replace the workspace's transactional messages (`[{id?, name?, trigger_name, link_tracking?, send_to_unsubscribed?}]`). |
 | `GET /__admin/devices/:id`, `PUT /__admin/devices/:id` | Read or replace a person's device list: `{devices: [{token, platform, last_used?, attributes?}]}` (at most 25; `last_used` defaults to now). Creates the person when missing and applies `deviceTokenOwnership` to the tokens. |
+| `GET\|PUT /__admin/content` | Read or replace the read-only workspace lists: `{reporting_webhooks?, topics?, snippets?, campaigns?, newsletters?, sender_identities?}`, each an array of vendor-shaped objects that replaces that list (lists left out stay). Missing `id`s count from 1; reporting webhooks need `name`, `endpoint` and `events` (defaults `type: "webhook"`, `disabled: false`, `full_resolution: true`, `with_content: false`), snippets need `name` and `value` (`updated_at` defaults to now), topics default `identifier` to `topic_<id>`. Any invalid item is 400 and nothing changes. |
+| `GET /__admin/exports/:id/file` | The export's CSV (the link `GET /v1/exports/{id}/download` returns). Behind `adminKey` when one is set. |
 | `GET\|PUT /__admin/settings` | `{strictMessages?, trackingBase?, keys?, statusVisibleAfterMs?, clockOffsetMs?, retainMessageDataForTests?, transactionalListKey?, pushUnknownTargets?: "accept"\|"reject", deviceTokenOwnership?: "move"\|"share"}` (`keys` restricts accepted write / App API keys). |
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /__admin/faults/presets`):
@@ -175,11 +181,31 @@ Each of these is a **best guess, not oracle-verified**:
 - Error texts for these cases (`platform: values other than all require web push`,
   `to: device not found on profile`, …) are emulator wording.
 
+### Workspace reads and exports (best guess, not oracle-verified)
+
+Added for [#759](https://github.com/crvouga/mockingbird/issues/759). No live Customer.io workspace
+backs these routes (no parity keys); the shapes follow the vendor's published App API OpenAPI
+document (<https://docs.customer.io/files/journeys-app.json>, operations `listWebhooks`,
+`getTopics`, `exportPeopleData`, `getExport`, `downloadExport`, `listSnippets`, `listCampaigns`,
+`listNewsletters`, `listSenders`; reference: <https://docs.customer.io/api/app/>). Each of these is
+a **best guess, not oracle-verified**:
+
+- The lists hold only what `PUT /__admin/content` seeded; nothing the emulator does (sends,
+  reporting webhooks it posts, subscription preferences) adds to them.
+- Pagination for newsletters and senders: the cursor encoding, `asc` as the default `sort`, and no
+  page-size cap are emulator choices. The other lists are not paginated.
+- Exports finish at once (`status: "done"`); the vendor builds them asynchronously. The CSV columns
+  and layout are unobserved; `downloads` counting each link request is a guess. The vendor's link is
+  a signed URL that expires after 15 minutes; the emulator's does not expire.
+- Error texts for these routes are emulator wording in the App API `{meta: {error}}` shape.
+
 ### Deliberately not modelled
 
 - Opt-out writes through the public PUT API, phone identifier workspace configuration, Twilio sender identity casing recovery, and automatic carrier STOP callbacks. Use the admin control to script reconciler state; it does not model carrier delivery enforcement.
 - Rendering: templates are not rendered; the outbox holds `message_data`, not HTML.
-- Campaigns, segments, journeys, broadcasts and the Track API (`track.customer.io`).
+- Segments, journeys, broadcasts, writes to campaigns / newsletters / snippets / reporting
+  webhooks / sender identities, delivery exports, and the Track API (`track.customer.io`). Campaign,
+  newsletter and the other workspace lists are read-only seeded content.
 - CDP `page`, `screen`, `group` and `alias` calls (our consumers send none).
 - Push delivery itself (no APNs/FCM calls), push reporting webhooks are not emitted automatically
   (post `delivered` / `opened` / `failed` with `POST /__admin/reporting-events`), web push
@@ -194,7 +220,7 @@ Each of these is a **best guess, not oracle-verified**:
 
 | Export | Kind | Description |
 | --- | --- | --- |
-| `CustomerIoAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `report(input)`, `profiles()`, `mergeProfile(id, patch)`, `transitionDelivery(id, state)`, `advanceClock(ms)`, `state`. Options: `sqlite`, `now`, `wallClock`, `namespace`, `messages`, `settings`, `onReport`. |
+| `CustomerIoAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `report(input)`, `profiles()`, `mergeProfile(id, patch)`, `transitionDelivery(id, state)`, `advanceClock(ms)`, `setContent(body)`, `content()`, `exportFile(id)`, `state`. Options: `sqlite`, `now`, `wallClock`, `namespace`, `publicNamespace`, `adminPrefix`, `messages`, `settings`, `onReport`. |
 | `createRuntime` | function | The emulator with the full service contract (health, admin, namespaces, credentials, presets, outbox, reporting webhooks). Options: `webhooks: {url, secret, retryDelaysMs?, fetch?}`, `messages`, `settings`, `clock`, `wallClock`, `seed`, `adminKey`, `onLog`, `sqlite`. |
 | `CUSTOMERIO_PRESETS` | object | Every named fault preset. |
 | `CUSTOMERIO_NAMESPACE` | string | The service name, `"customerio"`. |
@@ -202,6 +228,7 @@ Each of these is a **best guess, not oracle-verified**:
 | `signReporting` | function | `(secret, timestampSeconds, body)` → the hex `x-cio-signature`. |
 | `customerIoCredential` | function | The write key or App API key a request carries. |
 | `DEFAULT_TRANSACTIONAL_MESSAGES`, `DEFAULT_SETTINGS`, `TRANSACTIONAL_EMAIL_KEYS` | values | The seeded catalog, settings, and our backend's legacy email keys. |
+| `CONTENT_LISTS` | values | The workspace content lists `PUT /__admin/content` seeds. |
 | `DEVICE_UPSERT_EVENT`, `DEVICE_DELETE_EVENT`, `MAX_DEVICES_PER_PERSON` | values | The `Device Created or Updated` / `Device Deleted` event names that maintain a person's device list, and its cap (25; a 26th device drops the oldest). |
 | `DELIVERY_STATES` | values | Delivery lifecycle states. An accepted send starts at `pending`. |
 | `FAILURE_STATES` | values | Terminal failure states: `bounced`, `dropped`, `failed`, `spammed`, `undeliverable`, `suppressed`. `delivered` is success; `sent` stays open. |
