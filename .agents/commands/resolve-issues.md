@@ -151,7 +151,8 @@ issues still blocked for other reasons, with the precise blocker. Update the bat
 second PR for follow-up fixes or individual workers. Handle PR attestations autonomously using
 available evidence; leave unsupported claims unchecked and report their blockers.
 
-Stop at a green, ready-to-merge PR; never merge. Continue through the requested batch, not an
+Stop at a green PR with auto-merge enabled (`/pr-ready` enables it), which lands itself once the
+required checks pass; never merge around the gate. Continue through the requested batch, not an
 unbounded queue unless the user asked for the whole queue. Report every issue touched: fixed
 (the shared PR link and evidence level), resolved as explicitly unsupported, closed as invalid or
 duplicate, or waiting on information unrelated to oracle access.

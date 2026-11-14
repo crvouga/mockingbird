@@ -1,6 +1,6 @@
 ---
 name: pr-ready
-description: Take the current branch to a merge-ready PR (commit, publish, sync with main, resolve conflicts, open the PR, fix every failing check — CI and third-party) and stop there; never merges.
+description: Take the current branch to a merge-ready PR (commit, publish, sync with main, resolve conflicts, open the PR with auto-merge enabled, fix every failing check — CI and third-party) so it lands itself once the required checks pass.
 ---
 
 # /pr-ready
@@ -13,8 +13,11 @@ All mechanical git/GitHub work is done by `bun scripts/pr-ready.ts`; your job is
 conflict resolution, PR title/body, and root-cause fixes for every failing check.
 
 The job is done when the PR is ready: the branch is pushed, synced with `main`, not a draft, and
-**every** check on the PR has passed. **Never merge it** — not with the script, `gh pr merge`, auto-merge,
-or the GitHub UI. Merging to `main` publishes, and that call belongs to the user.
+**every** check on the PR has passed. **Auto-merge is the default**: `pr` (and `advance`) enables it
+with a merge commit (`gh pr merge --auto --merge`) on every open, non-draft PR, so the PR lands
+itself once the required checks pass — or immediately, if it is already clean. A draft gets it when
+it is marked ready. Never merge by hand around the gate (an admin merge, a direct push, the GitHub UI
+while a check is failing).
 
 Run it as `bun run pr:ready <command>` (or `bun scripts/pr-ready.ts <command>`). Every command except
 `logs` prints exactly one JSON object on stdout — parse that; never scrape raw `git`/`gh` text.
@@ -35,7 +38,8 @@ bun run pr:ready advance --timeout 1800
 ```
 
 It syncs both the remote head and `origin/main`, publishes, creates a PR if needed using the
-non-merge commit subjects, marks a draft ready, waits for every check, and runs the `ready` gate. It
+non-merge commit subjects, marks a draft ready, enables auto-merge, waits for every check, and runs
+the `ready` gate. It
 stops with one JSON object at the first blocker. Fix the reported conflict or check and rerun. Pass
 `--title` and `--body-file` to control a new PR's text. Confirm `ready: true`; pending checks are not
 completion. The detailed commands below are for investigating and fixing blockers.
@@ -140,7 +144,9 @@ Repeat until `sync` reports `alreadyUpToDate` or `merged` with no conflicts.
 bun run pr:ready pr
 ```
 
-If `created: false`, the PR already exists — do nothing. Otherwise, generate a Conventional-Commits
+Every `pr` call on an open, non-draft PR enables auto-merge (idempotent) and reports `autoMerge: true`;
+`autoMergeError` explains a failure. If `created: false`, the PR already exists — do nothing else.
+Otherwise, generate a Conventional-Commits
 title (CI's `action-semantic-pull-request` enforces it) and a Markdown body with a `## Summary`
 (2–4 bullets drawn from the `context` commits/files) and a `## Test plan` (the exact commands you ran).
 Write the body to a temp file outside the repo, then:
@@ -149,7 +155,7 @@ Write the body to a temp file outside the repo, then:
 bun run pr:ready pr --title "<conventional title>" --body-file /tmp/pr-body.md
 ```
 
-If the PR is a draft, mark it ready for review:
+If the PR is a draft, mark it ready for review (this also enables auto-merge):
 
 ```
 bun run pr:ready pr --ready
@@ -225,7 +231,7 @@ When `checks` exits 0, run the ready gate. It verifies, without merging:
 bun run pr:ready ready
 ```
 
-- exit 0 (`ready: true`) → done; go to step 8.
+- exit 0 (`ready: true`) → done; go to step 8. `merged: true` means auto-merge already landed it.
 - exit 4 (`pending`) → checks or GitHub's mergeability are still settling; run `checks`, then `ready`
   again.
 - exit 1 (`step: "ready-gate"`) → each entry in `blockers` says what to do: commit/publish, `sync`
@@ -239,15 +245,16 @@ bun run pr:ready status
 ```
 
 Report exactly: branch, PR number and URL, base branch, the PR `state` (must be `OPEN`, not a draft),
-every check name with its bucket, and the required contexts. Say the PR is ready for the user to
-merge. Success requires `ready: true` — never report success on a partial, queued, or filtered run.
+every check name with its bucket, and the required contexts. Say auto-merge is enabled (or that it
+merged). If `main` moves first, the PR becomes `BEHIND`: `sync`/`publish` (or `gh pr update-branch`)
+and wait for the checks again. Success requires `ready: true` — never report success on a partial, queued, or filtered run.
 
 ## Rules
 
 - Never `git push --force`; only `--force-with-lease`, and only to fix an unpushed-tip message via `--amend`.
 - Never push the base branch.
 - Never `git reset --hard` or `git checkout .` to discard work.
-- Never merge the PR, enable auto-merge, or approve it — stop at ready.
+- Let auto-merge land the PR; never merge around a failing or pending check, and never approve it.
 - Never disable or bypass a check. A check that ran is required.
 - Keep each fix minimal and focused on the failing check's root cause.
 - Use the script's JSON instead of raw `git`/`gh` output.
