@@ -45,6 +45,12 @@ export const serveTarget: ServeTarget = {
       value: "<secret>",
       description: "Sign x-webhook-signature with this (the EMR's DAILY_WEBHOOK_SECRET)",
     },
+    "webhook-signature": {
+      type: "string",
+      value: "<hex|daily>",
+      description:
+        "hex (default): hex HMAC of the body; daily: Daily's base64 HMAC of '<ts>.<body>' (base64 secret)",
+    },
     "api-key": {
       type: "string",
       value: "<key>",
@@ -85,7 +91,14 @@ export const serveTarget: ServeTarget = {
     "transcript-key-pattern": {
       type: "string",
       value: "<pattern>",
-      description: "Default {roomName}/{sessionId}.json (DAILY_TRANSCRIPT_S3_KEY_PATTERN)",
+      description:
+        "Default {roomName}/{sessionId}.json, or {domain}/{roomName}/{epochMs}.vtt with --transcript-format vtt",
+    },
+    "transcript-format": {
+      type: "string",
+      value: "<json|vtt>",
+      description:
+        "json (default): [{s,t,ts,te}] + transcription.stopped; vtt: Daily's WebVTT + transcript.ready-to-download",
     },
   },
   create: (values, common) => {
@@ -104,6 +117,18 @@ export const serveTarget: ServeTarget = {
     const secretAccessKey =
       text(values["s3-secret-access-key"]) ?? process.env.AWS_SECRET_ACCESS_KEY
     const keyPattern = text(values["transcript-key-pattern"])
+    const signature = text(values["webhook-signature"])
+    if (signature !== undefined && signature !== "hex" && signature !== "daily") {
+      throw new Error("--webhook-signature is hex or daily")
+    }
+    const transcriptFormat = text(values["transcript-format"])
+    if (
+      transcriptFormat !== undefined &&
+      transcriptFormat !== "json" &&
+      transcriptFormat !== "vtt"
+    ) {
+      throw new Error("--transcript-format is json or vtt")
+    }
     const transcripts: TranscriptStore | undefined =
       endpoint && bucket
         ? {
@@ -121,8 +146,11 @@ export const serveTarget: ServeTarget = {
       ...(roomUrlBase ? { roomUrlBase } : {}),
     }
     return createRuntime({
-      ...(url ? { webhooks: { url, ...(secret ? { secret } : {}) } } : {}),
+      ...(url
+        ? { webhooks: { url, ...(secret ? { secret } : {}), ...(signature ? { signature } : {}) } }
+        : {}),
       ...(transcripts ? { transcripts } : {}),
+      ...(transcriptFormat ? { transcriptFormat } : {}),
       settings,
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
@@ -133,7 +161,7 @@ export const serveTarget: ServeTarget = {
   },
   banner: () => [
     "auth: Authorization: Bearer <DAILY_API_KEY>; tokens are HS256 JWTs signed with it",
-    "calls: POST /__admin/rooms/<name>/session {participants, durationSec, transcript?} → transcription.stopped",
+    "calls: POST /__admin/rooms/<name>/session {participants, durationSec, transcript?} → transcription.stopped (or transcript.ready-to-download with --transcript-format vtt)",
     "namespaces: x-mockingbird-namespace, /__admin/ns/<name>/…, or PUT /__admin/credentials {<DAILY_API_KEY>: <ns>}",
   ],
 }

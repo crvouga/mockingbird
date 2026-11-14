@@ -705,3 +705,241 @@ describe("contract", () => {
     )
   })
 })
+
+describe("Daily's transcript storage, signature and meetings (issue #755)", () => {
+  // Daily hands out base64 HMAC secrets (`hmac` on the webhook resource).
+  const DAILY_HMAC = Buffer.from("daily-webhook-hmac-secret").toString("base64")
+
+  const dailyHarness = (options: { retryDelaysMs?: number[] } = {}) => {
+    const s3 = new FakeS3()
+    const deliveries: { headers: Headers; raw: Buffer }[] = []
+    const runtime = createRuntime({
+      settings: { roomUrlBase: "https://acme.daily.co/" },
+      transcriptFormat: "vtt",
+      transcripts: { endpoint: "http://s3.local:4569", bucket: BUCKET, fetch: s3.fetch },
+      webhooks: {
+        url: "http://app.local/daily/webhooks",
+        secret: DAILY_HMAC,
+        signature: "daily",
+        ...options,
+        fetch: async (request) => {
+          deliveries.push({
+            headers: request.headers,
+            raw: Buffer.from(await request.arrayBuffer()),
+          })
+          return new Response("ok")
+        },
+      },
+    })
+    runtime.clock.freeze()
+    runtime.clock.set(NOW)
+    const call = (path: string, init: { method?: string; body?: unknown } = {}) =>
+      runtime.fetch(
+        new Request(`${API}${path}`, {
+          method: init.method ?? (init.body === undefined ? "GET" : "POST"),
+          headers: { authorization: `Bearer ${API_KEY}`, "content-type": "application/json" },
+          ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+        }),
+      )
+    const session = async (room: string, body: Record<string, unknown>) =>
+      (await (await call(`/__admin/rooms/${room}/session`, { body })).json()) as {
+        sessionId: string
+        s3Key: string
+        events: string[]
+      }
+    return { runtime, s3, deliveries, call, session }
+  }
+
+  const events = (deliveries: { raw: Buffer }[]) =>
+    deliveries.map((d) => JSON.parse(d.raw.toString()) as DailyWebhook)
+
+  test("transcriptFormat vtt emits transcript.ready-to-download with Daily's payload", async () => {
+    const { runtime, call, session, deliveries } = dailyHarness()
+    await call("/v1/rooms", { body: { name: "consult-1" } })
+    const result = await session("consult-1", {
+      participants: [{ userId: "prac-1" }, { userId: "pat-1" }],
+      durationSec: 600,
+      sessionId: "mtg-1",
+      recording: false,
+    })
+    expect(result.events).toEqual(["transcript.ready-to-download"])
+    await runtime.webhooks.idle()
+    const [event] = events(deliveries)
+    expect(event).toMatchObject({
+      version: "1.1.0",
+      type: "transcript.ready-to-download",
+      payload: {
+        room_name: "consult-1",
+        mtg_session_id: "mtg-1",
+        status: "t_finished",
+        duration: 600,
+        out_params: { s3: { key: result.s3Key, bucket: BUCKET } },
+      },
+    })
+    expect(typeof event?.payload.id).toBe("string")
+    expect(typeof event?.payload.room_id).toBe("string")
+  })
+
+  test("the transcript is WebVTT at <domain>/<room>/<epochMs>.vtt", async () => {
+    const { call, session, s3 } = dailyHarness()
+    await call("/v1/rooms", { body: { name: "consult-2" } })
+    const result = await session("consult-2", {
+      participants: [{ userId: "prac-1" }, { userId: "pat-1" }],
+      durationSec: 600,
+      transcript: [
+        { s: "prac-1", t: "How are you feeling?", ts: 0.5, te: 2.1 },
+        { s: "pat-1", t: "Better.", ts: 62, te: 63.25 },
+      ],
+      recording: false,
+    })
+    const startedMs = NOW - 600_000
+    expect(result.s3Key).toBe(`acme/consult-2/${startedMs}.vtt`)
+    expect(s3.get(BUCKET, result.s3Key)).toBe(
+      [
+        "WEBVTT",
+        "",
+        "1",
+        "00:00:00.500 --> 00:00:02.100",
+        "<v prac-1>How are you feeling?",
+        "",
+        "2",
+        "00:01:02.000 --> 00:01:03.250",
+        "<v pat-1>Better.",
+        "",
+      ].join("\n"),
+    )
+  })
+
+  test("a session with transcriptError emits transcript.error and writes no file", async () => {
+    const { runtime, call, session, deliveries, s3 } = dailyHarness()
+    await call("/v1/rooms", { body: { name: "consult-3" } })
+    const result = await session("consult-3", {
+      participants: [{ userId: "prac-1" }],
+      durationSec: 30,
+      sessionId: "mtg-3",
+      recording: false,
+      transcriptError: "s3:PutObject denied",
+    })
+    expect(result.events).toEqual(["transcript.error"])
+    expect(s3.objects.size).toBe(0)
+    await runtime.webhooks.idle()
+    expect(events(deliveries)[0]).toMatchObject({
+      type: "transcript.error",
+      payload: {
+        room_name: "consult-3",
+        mtg_session_id: "mtg-3",
+        status: "t_error",
+        error: "s3:PutObject denied",
+      },
+    })
+  })
+
+  test("POST /__admin/events emits an arbitrary Daily event", async () => {
+    const { runtime, call, deliveries } = dailyHarness()
+    const response = await call("/__admin/events", {
+      body: { type: "meeting.ended", payload: { room: "consult-4" } },
+    })
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { type: string }).type).toBe("meeting.ended")
+    await runtime.webhooks.idle()
+    expect(events(deliveries)).toMatchObject([
+      { version: "1.0.0", type: "meeting.ended", payload: { room: "consult-4" } },
+    ])
+    const bad = await call("/__admin/events", { body: { payload: {} } })
+    expect(bad.status).toBe(400)
+  })
+
+  test("signature daily: base64 HMAC over '<timestamp>.<body>' keyed by the decoded secret", async () => {
+    const { runtime, call, deliveries } = dailyHarness()
+    await call("/__admin/events", { body: { type: "meeting.started", payload: {} } })
+    await runtime.webhooks.idle()
+    const [delivery] = deliveries
+    const timestamp = delivery?.headers.get("x-webhook-timestamp") as string
+    expect(timestamp).toMatch(/^\d+$/)
+    expect(delivery?.headers.get("x-webhook-signature")).toBe(
+      createHmac("sha256", Buffer.from(DAILY_HMAC, "base64"))
+        .update(`${timestamp}.${delivery?.raw.toString()}`)
+        .digest("base64"),
+    )
+  })
+
+  test("retryDelaysMs: [] still makes one immediate attempt with the injected fetch", async () => {
+    const { runtime, call, deliveries } = dailyHarness({ retryDelaysMs: [] })
+    await call("/__admin/events", { body: { type: "meeting.started", payload: {} } })
+    await runtime.webhooks.idle()
+    expect(deliveries).toHaveLength(1)
+    expect(runtime.webhooks.deliveries().map((d) => [d.state, d.attempts.length])).toEqual([
+      ["delivered", 1],
+    ])
+  })
+
+  test("GET /v1/meetings lists ended sessions newest first, filtered by room", async () => {
+    const { runtime, call, session } = dailyHarness()
+    await call("/v1/rooms", { body: { name: "room-a" } })
+    await call("/v1/rooms", { body: { name: "room-b" } })
+    await session("room-a", {
+      participants: [{ userId: "prac-1", userName: "Dr Hopper" }, { userId: "pat-1" }],
+      durationSec: 600,
+      sessionId: "mtg-a1",
+      recording: false,
+    })
+    runtime.clock.set(NOW + 3_600_000)
+    await session("room-a", {
+      participants: [{ userId: "prac-1" }],
+      durationSec: 120,
+      sessionId: "mtg-a2",
+      recording: false,
+    })
+    await session("room-b", {
+      participants: [{ userId: "x" }],
+      durationSec: 60,
+      sessionId: "mtg-b1",
+      recording: false,
+    })
+    const response = await call("/v1/meetings?room=room-a&limit=100")
+    expect(response.status).toBe(200)
+    const body = (await response.json()) as {
+      total_count: number
+      data: { id: string; participants: Record<string, unknown>[] }[]
+    }
+    expect(body.total_count).toBe(2)
+    expect(body.data.map((m) => m.id)).toEqual(["mtg-a2", "mtg-a1"])
+    expect(body.data[1]).toMatchObject({
+      id: "mtg-a1",
+      room: "room-a",
+      start_time: Math.floor(NOW / 1000) - 600,
+      duration: 600,
+      ongoing: false,
+      max_participants: 2,
+    })
+    expect(body.data[1]?.participants).toEqual([
+      {
+        user_id: "prac-1",
+        participant_id: expect.any(String),
+        user_name: "Dr Hopper",
+        join_time: Math.floor(NOW / 1000) - 600,
+        duration: 600,
+      },
+      {
+        user_id: "pat-1",
+        participant_id: expect.any(String),
+        user_name: null,
+        join_time: Math.floor(NOW / 1000) - 600,
+        duration: 600,
+      },
+    ])
+    const all = (await (await call("/v1/meetings?limit=1")).json()) as typeof body
+    expect(all.total_count).toBe(3)
+    expect(all.data).toHaveLength(1)
+    const single = await call("/v1/meetings/mtg-a1")
+    expect(await single.json()).toEqual({
+      id: "mtg-a1",
+      room: "room-a",
+      start_time: Math.floor(NOW / 1000) - 600,
+      duration: 600,
+      ongoing: false,
+      max_participants: 2,
+    })
+    expect((await call("/v1/meetings/nope")).status).toBe(404)
+  })
+})

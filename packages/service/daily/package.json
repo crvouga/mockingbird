@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-daily",
   "version": "0.0.0-development",
-  "description": "Stateful emulator of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), and transcription/recording webhooks with transcripts written to S3.",
+  "description": "Stateful emulator of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), meetings, and transcription/recording webhooks with transcripts written to S3 (JSON or Daily's WebVTT).",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,
