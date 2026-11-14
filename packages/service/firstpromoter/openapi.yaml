@@ -4,7 +4,8 @@ info:
   description: |
     Stateful emulator subset of FirstPromoter's v2 company API: promoters (create, list, find by
     id / cust_id / ref_token / email, update, archive), signup tracking, and the dashboard
-    iframe login. Hand-authored from the wire shapes our consumer sends and the zod schemas it
+    iframe login, campaigns and rewards, plus the legacy v1 promoters, signup tracking and
+    campaign report routes (best guesses from the vendor docs, not oracle-verified). Hand-authored from the wire shapes our consumer sends and the zod schemas it
     parses responses with (`first-promoter.types.ts`).
   version: "2"
   x-mockingbird-upstream:
@@ -978,13 +979,849 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ValidationError"
+  /v2/company/campaigns:
+    get:
+      operationId: ListCampaigns
+      description: |
+        The account's campaigns as a bare array. Best guess from the vendor's published v2
+        campaigns OpenAPI (api-reference-v2/api-advanced/campaigns-api/openapi-v2-campaigns.json),
+        not oracle-verified. Campaigns come from the emulator settings; `stats` are computed from
+        stored promoters, referrals and sales. `page` / `per_page` (default 10, max 50) follow
+        the v2 API introduction's note for this list.
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 5
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+      responses:
+        "200":
+          description: Campaigns
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Campaign"
+        "401":
+          description: Missing API key or Account-ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v2/company/rewards:
+    get:
+      operationId: ListRewards
+      description: |
+        Every campaign reward as a bare array; `scope=promoters` keeps promoter rewards and
+        `scope=referrals` keeps referred-customer rewards. Best guess from the vendor's published
+        v2 rewards OpenAPI (api-reference-v2/api-advanced/rewards/openapi-v2-rewards.json), not
+        oracle-verified.
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: scope
+          in: query
+          schema:
+            type: string
+            enum: [promoters, referrals]
+      responses:
+        "200":
+          description: Rewards
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/RewardDetail"
+        "401":
+          description: Missing API key or Account-ID
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: Unknown scope
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/promoters/list:
+    get:
+      operationId: V1ListPromoters
+      description: |
+        Legacy v1 API (`X-API-KEY`). Live promoters as v1 promoter objects, optionally only those
+        enrolled in `campaign_id`. Best guess from the vendor's v1 promoters OpenAPI, not
+        oracle-verified; no pagination headers are sent.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: true
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: campaign_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+      responses:
+        "200":
+          description: Promoters
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/V1Promoter"
+        "401": &v1unauthorized
+          description: Missing X-API-KEY
+          content:
+            application/json:
+              schema:
+                type: string
+        "422": &v1error
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Error"
+  /v1/promoters/show:
+    get:
+      operationId: V1ShowPromoter
+      description: |
+        One live promoter by `id`, `promoter_email`, `cust_id`, `ref_id` or `auth_token`. Best
+        guess from the vendor's v1 promoters OpenAPI, not oracle-verified.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: true
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: integer
+            minimum: 4800001
+            maximum: 4800010
+        - name: promoter_email
+          in: query
+          schema:
+            type: string
+            format: email
+            maxLength: 120
+        - name: cust_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: ref_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: auth_token
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: The promoter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Promoter"
+        "401": *v1unauthorized
+        "404": &v1notfound
+          description: No such live promoter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Error"
+        "422": *v1error
+  /v1/promoters/create:
+    post:
+      operationId: V1CreatePromoter
+      description: |
+        Create a promoter from query (or form / JSON body) parameters `email`, `first_name`,
+        `last_name`, `cust_id`, `ref_id`, `campaign_id`, `note`, `skip_email_notification`. Other
+        documented options are 501 `mockingbird_unsupported`. Best guess from the vendor's v1
+        promoters OpenAPI, not oracle-verified.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: false
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: email
+          in: query
+          schema:
+            type: string
+            format: email
+            maxLength: 120
+        - name: first_name
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: last_name
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: cust_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: ref_id
+          in: query
+          schema:
+            type: string
+            pattern: "^[a-z0-9]{1,20}$"
+        - name: campaign_id
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 3
+        - name: note
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: The new promoter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Promoter"
+        "401": *v1unauthorized
+        "422": *v1error
+        "501": &unsupported
+          description: A documented option the emulator does not model (emulator limitation)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /v1/promoters/update:
+    put:
+      operationId: V1UpdatePromoter
+      description: |
+        Update a live promoter found by `id`, `cust_id`, `auth_token` or `ref_id`, else by
+        `email`. Writable: `email` (when not the identifier), `first_name`, `last_name`,
+        `new_cust_id`, `new_ref_id` (the default promotion's ref token), `note`. Other documented
+        options are 501 `mockingbird_unsupported`. Best guess from the vendor's v1 promoters
+        OpenAPI, not oracle-verified.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: false
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: integer
+            minimum: 4800001
+            maximum: 4800010
+        - name: email
+          in: query
+          schema:
+            type: string
+            format: email
+            maxLength: 120
+        - name: first_name
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: last_name
+          in: query
+          schema:
+            type: string
+            maxLength: 40
+        - name: new_cust_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: new_ref_id
+          in: query
+          schema:
+            type: string
+            pattern: "^[a-z0-9]{1,20}$"
+        - name: note
+          in: query
+          schema:
+            type: string
+            maxLength: 200
+      responses:
+        "200":
+          description: The updated promoter
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1Promoter"
+        "401": *v1unauthorized
+        "404": *v1notfound
+        "422": *v1error
+        "501": *unsupported
+  /v1/promoters/delete:
+    delete:
+      operationId: V1DeletePromoter
+      description: |
+        Remove a promoter (by `id`, `cust_id`, `ref_id` or `auth_token`) from the v1 API. The
+        emulator archives it in the shared store, so v2 lookups still see it with `archived_at`.
+        Best guess from the vendor's v1 promoters OpenAPI, not oracle-verified.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: false
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: id
+          in: query
+          schema:
+            type: integer
+            minimum: 4800001
+            maximum: 4800010
+        - name: cust_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: ref_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: auth_token
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+      responses:
+        "200":
+          description: Removed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [message]
+                properties:
+                  message:
+                    type: string
+        "401": *v1unauthorized
+        "404": *v1notfound
+        "422": *v1error
+  /v1/promoters/iframe_login:
+    post:
+      operationId: V1IframeLogin
+      description: |
+        Not in the vendor's v1 API reference (only v2 documents `iframe_login`), so there is no
+        defensible behavior to model: the emulator answers 501 `mockingbird_unsupported`
+        (an emulator limitation, not an observed vendor error). Use `POST /v2/promoters/iframe_login`.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: false
+        reason: Undocumented in the vendor's v1 API reference; use the v2 iframe_login.
+        parity:
+          enabled: false
+          safe: true
+          reason: Unsupported in the emulator.
+      responses:
+        "501": *unsupported
+  /v1/track/signup:
+    post:
+      operationId: V1TrackSignup
+      description: |
+        Track a lead by `email` (+ optional `uid`) attributed by `tid` or `ref_id`; the response is
+        the v1 signup event `{id, type, amount_cents, reward, lead, promoter}`. Leads are shared
+        with v2 (and `autoConvert` applies). `uid` without `email` and the options `promoter_email`,
+        `created_at`, `username`, `first_name`, `last_name`, `website`, `custom_fields`, `sub_id`
+        and `override_existing_lead` are 501 `mockingbird_unsupported`. Best guess from the
+        vendor's v1 tracking OpenAPI, not oracle-verified.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: false
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: email
+          in: query
+          schema:
+            type: string
+            format: email
+            maxLength: 120
+        - name: uid
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: tid
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: ref_id
+          in: query
+          schema:
+            type: string
+            maxLength: 64
+        - name: ip
+          in: query
+          schema:
+            type: string
+            maxLength: 45
+        - name: skip_email_notification
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: The signup event
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/V1SignupEvent"
+        "400":
+          description: Neither email nor uid
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401": *v1unauthorized
+        "404":
+          description: Unknown visitor / ref_id, or a blocked promotion
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "422":
+          description: The lead already has a signup event
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [transaction_id]
+                properties:
+                  transaction_id:
+                    type: string
+        "501": *unsupported
+  /v1/reports/campaigns:
+    get:
+      operationId: V1CampaignsReport
+      description: |
+        Per-campaign report grouped by `day` / `month` / `year` between `start_date` and
+        `end_date` (default: 12 months ago to today), computed from stored clicks, leads,
+        customers and sales. Modelled `selected_fields[]`: `revenue_amount`, `clicks_count`,
+        `referrals_count`, `customers_count`, `sales_count`; other documented fields are 501
+        `mockingbird_unsupported`. Period labels and the `$` revenue string are best guesses from
+        the vendor's v1 reports OpenAPI, not oracle-verified.
+      security:
+        - apiKeyAuth: []
+      x-mockingbird:
+        supported: true
+        reason: Best guess from the vendor docs, not oracle-verified (see README).
+        parity:
+          enabled: false
+          safe: true
+          reason: Legacy v1 API (X-API-KEY); no oracle credentials, covered by self-parity only.
+      parameters:
+        - name: selected_fields[]
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            items:
+              type: string
+              enum: [revenue_amount, clicks_count, referrals_count, customers_count, sales_count]
+        - name: group_by
+          in: query
+          schema:
+            type: string
+            enum: [day, month, year]
+        - name: start_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: end_date
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: One row per campaign
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/V1CampaignReport"
+        "401": *v1unauthorized
+        "422":
+          description: Invalid fields, grouping or dates
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "501": *unsupported
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       description: "`Authorization: Bearer <FIRST_PROMOTER_API_KEY>` plus `Account-ID: <FIRST_PROMOTER_ACCOUNT_ID>`."
+    apiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-KEY
+      description: "Legacy v1 API: `X-API-KEY: <key>` (no Account-ID)."
   schemas:
+    Campaign:
+      type: object
+      required: [id, name, color, stats, is_default, rewards_for_promoters, rewards_for_referrals]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        color:
+          type: string
+        stats:
+          type: object
+          required: [referrals_count, sales_count, customers_count, promoters_count, revenue_amount]
+          properties:
+            referrals_count:
+              type: integer
+            sales_count:
+              type: integer
+            customers_count:
+              type: integer
+            promoters_count:
+              type: integer
+            revenue_amount:
+              type: integer
+        landing_url:
+          type: string
+        visitor_cookie_life:
+          type: integer
+        ref_token_param:
+          type: string
+        auto_approve_leads:
+          type: boolean
+        track_ad_traffic:
+          type: string
+          enum: [pending, allow, block]
+        auto_approve_promoters:
+          type: boolean
+        is_private:
+          type: boolean
+        is_default:
+          type: boolean
+        upgrade_details:
+          type: ["object", "null"]
+        signup_url:
+          type: ["string", "null"]
+        links:
+          type: array
+        rewards_for_promoters:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reward"
+        rewards_for_referrals:
+          type: array
+          items:
+            $ref: "#/components/schemas/Reward"
+    RewardDetail:
+      type: object
+      required: [id, name, is_promoter_reward, schemas]
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        is_promoter_reward:
+          type: boolean
+        promoter_reward_type:
+          type: ["string", "null"]
+        coupon:
+          type: ["string", "null"]
+        editable:
+          type: boolean
+        hide_reward:
+          type: ["boolean", "null"]
+        provider_coupon_id:
+          type: ["string", "null"]
+        duration:
+          type: ["string", "null"]
+        duration_in_months:
+          type: ["integer", "null"]
+        max_redemptions:
+          type: ["integer", "null"]
+        new_customers_only:
+          type: boolean
+        created_at:
+          type: string
+        updated_at:
+          type: string
+        provider:
+          type: ["string", "null"]
+        tier_reward_mode:
+          type: ["string", "null"]
+        tier_level:
+          type: ["integer", "null"]
+        schemas:
+          type: array
+          items:
+            type: object
+            required: [unit, amount, flat_amount, rules]
+            properties:
+              unit:
+                type: string
+              amount:
+                type: number
+              flat_amount:
+                type: boolean
+              rules:
+                type: array
+    V1Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+    V1Balance:
+      type: object
+      required: [cash]
+      properties:
+        cash:
+          type: integer
+    V1PromoterSummary:
+      type: object
+      required: [id, status, email, auth_token, default_ref_id, default_promotion_id]
+      properties:
+        id:
+          type: integer
+          x-mockingbird-volatile:
+            kind: id
+        status:
+          type: string
+          enum: [approved, pending, denied]
+        cust_id:
+          type: ["string", "null"]
+        email:
+          type: string
+        created_at:
+          type: string
+          x-mockingbird-volatile:
+            kind: timestamp
+        temp_password:
+          type: ["string", "null"]
+        default_promotion_id:
+          type: ["integer", "null"]
+        pref:
+          type: ["string", "null"]
+        default_ref_id:
+          type: ["string", "null"]
+        note:
+          type: ["string", "null"]
+        w8_form_url:
+          type: ["string", "null"]
+        w9_form_url:
+          type: ["string", "null"]
+        parent_promoter_id:
+          type: ["integer", "null"]
+        earnings_balance:
+          $ref: "#/components/schemas/V1Balance"
+        current_balance:
+          $ref: "#/components/schemas/V1Balance"
+        paid_balance:
+          $ref: "#/components/schemas/V1Balance"
+        auth_token:
+          type: string
+          x-mockingbird-volatile:
+            kind: token
+    V1Promoter:
+      allOf:
+        - $ref: "#/components/schemas/V1PromoterSummary"
+        - type: object
+          required: [profile, promotions]
+          properties:
+            profile:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: integer
+                first_name:
+                  type: ["string", "null"]
+                last_name:
+                  type: ["string", "null"]
+            promotions:
+              type: array
+              items:
+                type: object
+                required: [id, promoter_id, campaign_id, ref_id, referral_link]
+                properties:
+                  id:
+                    type: integer
+                  promoter_id:
+                    type: integer
+                  campaign_id:
+                    type: integer
+                  status:
+                    type: string
+                  ref_id:
+                    type: string
+                  promo_code:
+                    type: ["string", "null"]
+                  customer_promo_code:
+                    type: ["string", "null"]
+                  referral_link:
+                    type: string
+                  campaign_name:
+                    type: string
+                  hidden:
+                    type: boolean
+                  current_offer:
+                    type: ["object", "null"]
+                  current_referral_reward:
+                    type: ["object", "null"]
+                  visitors_count:
+                    type: integer
+                  leads_count:
+                    type: integer
+                  customers_count:
+                    type: integer
+                  sales_count:
+                    type: integer
+                  sales_total:
+                    type: integer
+            custom_fields:
+              type: ["object", "null"]
+            promo_codes:
+              type: array
+    V1SignupEvent:
+      type: object
+      required: [id, type, lead, promoter]
+      properties:
+        id:
+          type: integer
+          x-mockingbird-volatile:
+            kind: id
+        type:
+          type: string
+        amount_cents:
+          type: ["integer", "null"]
+        reward:
+          type: ["object", "null"]
+        lead:
+          type: object
+          required: [id, state, email]
+          properties:
+            id:
+              type: integer
+              x-mockingbird-volatile:
+                kind: id
+            state:
+              type: string
+            email:
+              type: string
+            uid:
+              type: ["string", "null"]
+            customer_since:
+              type: ["string", "null"]
+            created_at:
+              type: string
+              x-mockingbird-volatile:
+                kind: timestamp
+        promoter:
+          $ref: "#/components/schemas/V1PromoterSummary"
+    V1CampaignReport:
+      type: object
+      required: [campaign_name, campaign_id, items]
+      properties:
+        campaign_name:
+          type: string
+        campaign_id:
+          type: integer
+        revenue_amount:
+          type: string
+        clicks_count:
+          type: integer
+        referrals_count:
+          type: integer
+        customers_count:
+          type: integer
+        sales_count:
+          type: integer
+        items:
+          type: array
+          items:
+            type: object
+            required: [period]
+            properties:
+              period:
+                type: string
+              revenue_amount:
+                type: string
+              clicks_count:
+                type: integer
+              referrals_count:
+                type: integer
+              customers_count:
+                type: integer
+              sales_count:
+                type: integer
     Error:
       type: object
       required: [message]

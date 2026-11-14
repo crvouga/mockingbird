@@ -67,6 +67,8 @@ export const HEALTHIE_SDL = /* GraphQL */ `
     providers: [User!]
     other_provider_ids: [String]
     user_group_id: String
+    user_group: UserGroup
+    state_licenses: [StateLicense!]
     qualifications: String
     is_patient: Boolean
     location: Location
@@ -82,6 +84,34 @@ export const HEALTHIE_SDL = /* GraphQL */ `
     skipped_email: Boolean
     created_at: String
     updated_at: String
+  }
+
+  type StateLicense {
+    id: ID!
+    state: String
+    full_state_name: String
+  }
+
+  enum UserGroupOrderKeys {
+    INVITE_CODE_ASC
+    INVITE_CODE_DESC
+    CREATED_AT_ASC
+    CREATED_AT_DESC
+    NAME_ASC
+    NAME_DESC
+    USERS_COUNT_ASC
+    USERS_COUNT_DESC
+  }
+
+  type UserGroup {
+    id: ID!
+    name: String
+    created_at: String!
+    invite_code: String
+    user: User
+    user_ids: [String]
+    users(active_status: String, should_sort: Boolean = true): [User!]!
+    users_count: Int
   }
 
   type DocumentOpen {
@@ -195,6 +225,20 @@ export const HEALTHIE_SDL = /* GraphQL */ `
       page_size: Int
       sort_by: String
       active_status: String
+    ): [User!]
+    userGroups(
+      keywords: String
+      order_by: UserGroupOrderKeys
+      sort_by: String
+      offset: Int
+      should_paginate: Boolean
+      page_size: Int
+    ): [UserGroup!]
+    organizationMembers(
+      keywords: String
+      licensed_in_state: String
+      offset: Int
+      page_size: Int
     ): [User!]
     location(id: ID): Location
     locations(user_id: String, should_paginate: Boolean): [Location!]

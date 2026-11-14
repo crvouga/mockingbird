@@ -273,7 +273,9 @@ export const createRuntime = (options: FirstPromoterRuntimeOptions = {}): FirstP
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
     ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
-    credential: bearerToken,
+    // v2 sends `Authorization: Bearer`, the legacy v1 API `X-API-KEY`.
+    credential: (request) =>
+      bearerToken(request) ?? (request.headers.get("x-api-key")?.trim() || undefined),
     presets: FIRSTPROMOTER_PRESETS,
     webhooks: hub,
     create: ({ sqlite, namespace, publicNamespace, clock }) =>

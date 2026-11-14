@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **17**
-- supported by the emulator: **17**
-- parity enabled: **17**
+- operations in spec: **27**
+- supported by the emulator: **26**
+- parity enabled: **19**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -25,3 +25,13 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `BatchProcessProgress` | `GET /v2/company/batch_processes/progress` | ✅ supported | ✅ |  |
 | `GetBatchProcess` | `GET /v2/company/batch_processes/{id}` | ✅ supported | ✅ |  |
 | `TrackSale` | `POST /v2/track/sale` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `ListCampaigns` | `GET /v2/company/campaigns` | ✅ supported | ✅ | Best guess from the vendor docs, not oracle-verified (see README). |
+| `ListRewards` | `GET /v2/company/rewards` | ✅ supported | ✅ | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1ListPromoters` | `GET /v1/promoters/list` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1ShowPromoter` | `GET /v1/promoters/show` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1CreatePromoter` | `POST /v1/promoters/create` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1UpdatePromoter` | `PUT /v1/promoters/update` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1DeletePromoter` | `DELETE /v1/promoters/delete` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1IframeLogin` | `POST /v1/promoters/iframe_login` | ❌ unsupported | — | Undocumented in the vendor's v1 API reference; use the v2 iframe_login. |
+| `V1TrackSignup` | `POST /v1/track/signup` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |
+| `V1CampaignsReport` | `GET /v1/reports/campaigns` | ✅ supported | ❌ disabled | Best guess from the vendor docs, not oracle-verified (see README). |

@@ -37,6 +37,18 @@ export const REPORTING_WEBHOOK_PATH = "/v1/customer-io/reporting-webhook"
 export const signReporting = (secret: string, timestampSeconds: number, body: string) =>
   hmac("SHA-256", secret, `v0:${timestampSeconds}:${body}`, "hex")
 
+/** App API workspace reads and exports (#759; best guess from vendor docs). */
+const WORKSPACE_READS = [
+  "ListReportingWebhooks",
+  "ListSubscriptionTopics",
+  "ExportCustomers",
+  "GetExport",
+  "DownloadExport",
+  "ListSnippets",
+  "ListCampaigns",
+  "ListNewsletters",
+  "ListSenderIdentities",
+] as const
 const SENDS = ["SendEmail", "SendSms", "SendPush", "SendInboxMessage"] as const
 const CDP = ["CdpIdentify", "CdpTrack", "CdpBatch"] as const
 const onSends = (rule: Omit<NonNullable<FaultPreset["rules"]>[number], "operationId">) =>
@@ -102,6 +114,11 @@ export const CUSTOMERIO_PRESETS: Record<string, FaultPreset> = {
         status: 401,
         body: { meta: { error: "Unauthorized request" } },
       },
+      ...WORKSPACE_READS.map((operationId) => ({
+        operationId,
+        status: 401,
+        body: { meta: { error: "Unauthorized request" } },
+      })),
     ],
   },
   send_drop: {
@@ -360,6 +377,20 @@ const adminRoutes = (runtime: ServiceRuntime<CustomerIoAPI>): AdminRoutes => ({
     const event = runtime.instance(namespace).report(input)
     return typeof event === "string" ? adminError(404, event) : json(201, event)
   },
+  "GET /content": ({ namespace }) => json(200, runtime.instance(namespace).content()),
+  "PUT /content": ({ body, namespace }) => {
+    if (!isRecord(body)) {
+      return adminError(
+        400,
+        "expected {reporting_webhooks?, topics?, snippets?, campaigns?, newsletters?, sender_identities?: [...]}",
+      )
+    }
+    const result = runtime.instance(namespace).setContent(body)
+    return typeof result === "string" ? adminError(400, result) : json(200, result)
+  },
+  "GET /exports/:id/file": ({ params, namespace }) =>
+    runtime.instance(namespace).exportFile(params.id as string) ??
+    adminError(404, `no export ${params.id}`),
   "GET /transactional": ({ namespace }) =>
     json(200, { messages: runtime.instance(namespace).state.catalog() }),
   "PUT /transactional": ({ body, namespace }) => {
@@ -455,10 +486,12 @@ export const createRuntime = (options: CustomerIoRuntimeOptions = {}): CustomerI
     credential: customerIoCredential,
     presets: CUSTOMERIO_PRESETS,
     webhooks: hub,
-    create: ({ sqlite, namespace, publicNamespace, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, adminPrefix, clock }) =>
       new CustomerIoAPI({
         sqlite,
         namespace,
+        publicNamespace,
+        adminPrefix,
         now: clock.now,
         ...(options.wallClock ? { wallClock: options.wallClock } : {}),
         ...(options.messages ? { messages: options.messages } : {}),
