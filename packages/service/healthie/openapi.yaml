@@ -7,7 +7,9 @@ info:
     updateClient, location(s) CRUD, documents and folders (with a `currentUser` root), document
     upload (GraphQL multipart request spec), deletion and `expiring_url` downloads served by the
     emulator, requestedFormCompletion, form answer groups, initial form answers, offerings, billing
-    items and updateBillingItem. GraphQL is one HTTP operation; the documents it accepts are
+    items and updateBillingItem, plus userGroups, organizationMembers and User.state_licenses (a
+    best guess from Healthie's 2024-06-01 schema reference, not oracle-verified). GraphQL is one
+    HTTP operation; the documents it accepts are
     executed with the reference `graphql` implementation against a hand-authored subset of
     Healthie's schema, so selection sets, aliases, variables and errors behave like the real API.
   version: "1"
@@ -28,6 +30,10 @@ paths:
         is anonymous (only `signIn` works); an unknown key answers `API Key is Invalid`.
       x-mockingbird:
         supported: true
+        reason: >-
+          A hand-written subset of Healthie's GraphQL schema; README lists every root field that is
+          modelled and those that are not. userGroups, organizationMembers and User.state_licenses
+          are a best guess from vendor docs, not oracle-verified.
         parity:
           enabled: true
           safe: false

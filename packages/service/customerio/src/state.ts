@@ -157,6 +157,36 @@ export type CustomerOptOuts = { customerId: string; optouts: SenderOptOut[] }
 
 export type TrackedLink = { linkId: string; deliveryId: string; url: string }
 
+/**
+ * Read-only workspace content the App API lists (`PUT /__admin/content` seeds it; empty by
+ * default). Items are stored in the vendor's response shape.
+ */
+export const CONTENT_LISTS = [
+  "reporting_webhooks",
+  "topics",
+  "snippets",
+  "campaigns",
+  "newsletters",
+  "sender_identities",
+] as const
+export type ContentList = (typeof CONTENT_LISTS)[number]
+export type ContentItems = { list: ContentList; items: Record<string, unknown>[] }
+
+/** A finished customer export (`POST /v1/exports/customers`) and the CSV it produced. */
+export type CustomerExport = {
+  id: number
+  type: "customers"
+  status: "done"
+  failed: false
+  total: number
+  downloads: number
+  created_at: number
+  updated_at: number
+  deduplicate_id: string
+  /** The export file, frozen when the export was created. Not part of the API body. */
+  csv: string
+}
+
 /** Per-namespace knobs, set through `PUT /__admin/settings`; cleared on reset. */
 export type Settings = {
   /**
@@ -267,6 +297,8 @@ export class CustomerIoState {
   readonly links: Collection<TrackedLink>
   readonly devices: Collection<PersonDevices>
   readonly settings: Collection<Settings>
+  readonly content: Collection<ContentItems>
+  readonly exports: Collection<CustomerExport>
   readonly ids: IdSequence
 
   constructor(
@@ -285,6 +317,8 @@ export class CustomerIoState {
     this.links = new Collection(sqlite, namespace, "links")
     this.devices = new Collection(sqlite, namespace, "devices")
     this.settings = new Collection(sqlite, namespace, "settings")
+    this.content = new Collection(sqlite, namespace, "content")
+    this.exports = new Collection(sqlite, namespace, "exports")
     this.ids = new IdSequence(sqlite, namespace, "customerio")
     this.ensureSeeded()
   }
@@ -306,6 +340,16 @@ export class CustomerIoState {
     const next = { ...this.current(), ...patch }
     this.settings.insert("settings", next)
     return next
+  }
+
+  /** One workspace content list, in stored order (empty when never seeded). */
+  contentOf(list: ContentList): Record<string, unknown>[] {
+    return this.content.get(list)?.items ?? []
+  }
+
+  setContent(list: ContentList, items: Record<string, unknown>[]): void {
+    if (this.content.has(list)) this.content.update(list, { list, items })
+    else this.content.insert(list, { list, items })
   }
 
   catalog(): TransactionalMessage[] {

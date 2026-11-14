@@ -10,6 +10,7 @@ calls:
 - documents and folders, including multipart uploads, with downloads served by the emulator
 - requested forms and form answers
 - offerings and billing items
+- user groups and organization members with state licenses (best guess from vendor docs)
 - the IP-allowlisted status webhooks
 
 GraphQL documents run on the reference [`graphql`](https://www.npmjs.com/package/graphql)
@@ -103,11 +104,46 @@ await emulator.fetch(
 | `GET /files/{token}` | The bytes behind `document.expiring_url` and `user.avatar_url`, which point here on the request's own origin (with `/__admin/ns/<name>` when namespaced). Links are signed and expire on the emulator clock (`expiringUrlSeconds`, default 300). A tampered or expired link gets a 403 and a deleted file a 404. Each download adds one entry to `document.opens`. |
 
 GraphQL root fields: `currentUser`, `user(id)`, `users(keywords, should_paginate, …)`,
-`location(id)`, `locations`, `documents(…)`, `document(id)`, `folders(…)`,
+`userGroups(keywords, …)`, `organizationMembers(licensed_in_state, …)`, `location(id)`, `locations`, `documents(…)`, `document(id)`, `folders(…)`,
 `requestedFormCompletion(id)`, `formAnswerGroups(user_id, …)`, `formAnswerGroup(id)`,
 `initialFormAnswers(custom_module_form_id, incomplete_form_id, user_id)`,
 `offerings(client_visibility, offering_id, …)` and
 `billingItems(offerings_only, client_id, status)`.
+
+### User groups and organization members (best guess, not oracle-verified)
+
+Added for [issue #761](https://github.com/crvouga/mockingbird/issues/761). No Healthie sandbox
+credentials were available, so this is a **best guess from Healthie's published schema reference
+(API version 2024-06-01), not oracle-verified**: the
+[`userGroups`](https://docs.gethealthie.com/reference/2024-06-01/queries/usergroups) and
+[`organizationMembers`](https://docs.gethealthie.com/reference/2024-06-01/queries/organizationmembers)
+queries, and the [`UserGroup`](https://docs.gethealthie.com/reference/2024-06-01/objects/usergroup)
+and [`StateLicense`](https://docs.gethealthie.com/reference/2024-06-01/objects/statelicense) objects.
+
+- `userGroups(keywords, order_by, sort_by, should_paginate, offset, page_size)`: a
+  case-insensitive substring match on the group name; blank keywords are ignored. Results come
+  back in creation order unless `order_by` (`UserGroupOrderKeys`) is given; a `sort_by` that
+  names an order key (any case) takes precedence, any other `sort_by` is ignored, as the docs
+  say. `offset` / `page_size` (default 10) apply only when `should_paginate: true`.
+  `UserGroup` exposes `id`, `name`, `created_at`, `invite_code`, `user` (owner), `user_ids`,
+  `users_count` and `users(active_status: "active" | "inactive", should_sort = true)` (sorted
+  by last name). Membership is a user's `user_group_id`, the field `updateClient` already sets;
+  `User.user_group` resolves it.
+- `organizationMembers(keywords, licensed_in_state, offset, page_size)`: the organization's
+  providers (never patients) in creation order. `licensed_in_state` is a two-letter code matched
+  case-insensitively against `User.state_licenses`; an unknown code matches no one, a blank one
+  is ignored. `keywords` matches email and names as `users` does. `page_size` defaults to 10 and
+  is capped at 100 (the documented max).
+- `User.state_licenses: [StateLicense!]` with `id`, `state` and `full_state_name`.
+- Both queries return `[]` to anonymous callers and patient keys (as `users` does); the real
+  permission behaviour is not verified.
+- Not modelled from these signatures, so they fail validation: `userGroups(course_id,
+  check_group_level_actions, after)`, `organizationMembers(conversation_id, sort_by, order_by)`,
+  `UserGroup.cursor`, `onboarding_flow`, `recurring_forms`, `doc_share_id`,
+  `users_with_membership`, and `User.appointment_types` (it needs Healthie's `AppointmentType`
+  model, which the emulator does not have).
+- Seed them with `POST /__admin/user-groups`, `POST /__admin/users {state_licenses}` and
+  `POST /__admin/users/:id/state-licenses` (below).
 
 Mutations:
 
@@ -163,6 +199,8 @@ also apply: `GET /__admin/webhooks`, `…/events`, `…/:id/replay` and `…/flu
 | Route | Effect |
 | --- | --- |
 | `GET /__admin/users`, `POST /__admin/users` | List users (never passwords). Create one from `{email, password, first_name?, last_name?, role?: patient \| provider, active?, dietitian_id?, …}` and get back `{user, api_key}`. |
+| `POST /__admin/users/:id/state-licenses` | Add a license `{state: "AZ"}` (a two-letter US state code, any case; 400 otherwise). `POST /__admin/users` also takes `state_licenses: ["AZ", …]`. |
+| `GET /__admin/user-groups`, `POST /__admin/user-groups` | List groups. Create one from `{name, user_ids?, invite_code?, owner_id?}`; the listed users move into it (`user_group_id`). Unknown user ids are a 404. |
 | `POST /__admin/users/:id/archive` \| `/unarchive` | Set `active` (archived users sign in with `active: false`). |
 | `POST /__admin/users/:id/api-keys` | Issue another API key for a user. |
 | `POST /__admin/offerings` | `{name, price?, billing_frequency?, visibility_status?}`. |
@@ -236,10 +274,26 @@ backend uses, so it ships as a normal `dependency` rather than being bundled.
 
 ### Deliberately not modelled
 
-- Every Healthie operation our consumer no longer calls: appointments, providers, metrics,
-  goals, charting, chat, webhooks management, Stripe card mutations, `createClient`/`signUp`,
-  `userGroup`, `offeringCoupons`, `createApiKey`, `updateFolder`/`deleteFolder`,
-  `updateDocument`. Querying one fails GraphQL validation, as a typo would.
+- Every Healthie operation our consumer no longer calls: providers, metrics, charting, chat,
+  Stripe card mutations, `userGroup` (singular), `createApiKey`. Querying one fails GraphQL
+  validation, as a typo would. Of the fields named in
+  [issue #761](https://github.com/crvouga/mockingbird/issues/761), only `userGroups`,
+  `organizationMembers` and `User.state_licenses` are modelled; these are explicitly not:
+  - Appointments: `appointments`, `appointmentTypes`, `availableSlotsForRange`,
+    `createAppointment`, `updateAppointment`, `deleteAppointment`, `User.appointment_types`.
+  - Clients and sign-up: `createClient`, `signUp`.
+  - Forms: `createFormAnswerGroup`, `updateFormAnswerGroup`, `customModuleForm` (root query;
+    `FormAnswerGroup.custom_module_form { id name }` exists), `intakeFlow`. Form answer groups
+    are read-only (`formAnswerGroups`, `formAnswerGroup`) and seeded through the admin plane.
+  - Webhook management: `webhooks`, `createWebhook`.
+  - Files: `updateDocument`, `updateFolder`, `deleteFolder` (`createFolder`, `createDocument`,
+    `deleteDocument` exist).
+  - Billing: `offering` (singular; use `offerings(offering_id)`), `offeringCoupons`,
+    `billingItem` (singular; `billingItems` exists), `createBillingItem` (seed with
+    `POST /__admin/billing-items`), `stripeCustomerDetails` (root query;
+    `User.stripe_customer_detail` exists).
+  - Goals and entries: every goal and entry query and mutation (`goals`, `entries` and their
+    create, update and delete mutations).
 - Healthie's webhook signatures (`Content-Digest` / `Signature`). Our receivers verify only the
   source IP, so deliveries are unsigned.
 - Real pagination cursors: `should_paginate` pages by 10 from `offset`. Fuzzy keyword search is

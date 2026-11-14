@@ -16,6 +16,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
+import { listCampaigns, listRewards } from "./campaigns.js"
 import { Commissions } from "./commissions.js"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
 import {
@@ -27,6 +28,7 @@ import {
   type ReferralRecord,
   type Settings,
 } from "./state.js"
+import { V1 } from "./v1.js"
 
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
@@ -156,6 +158,8 @@ export class FirstPromoterAPI implements FetchAPI {
   readonly sqlite: SqliteClient
   readonly state: FirstPromoterState
   readonly commissions: Commissions
+  /** The legacy v1 API (`X-API-KEY`) over the same store. */
+  readonly v1: V1
   private readonly service: Service
   private readonly now: () => number
   private readonly onWebhook: ((event: LeadBecomesReferralWebhook) => void) | undefined
@@ -167,6 +171,7 @@ export class FirstPromoterAPI implements FetchAPI {
     this.onWebhook = options.onWebhook
     this.state = new FirstPromoterState(sqlite, namespace, options.settings ?? {})
     this.commissions = new Commissions(this.state, this.now)
+    this.v1 = new V1(this)
     const handlers = defineOperations<SupportedOperationId>({
       TrackSignup: (context) => this.trackSignup(context),
       TrackSale: (context) => this.trackSale(context),
@@ -178,6 +183,15 @@ export class FirstPromoterAPI implements FetchAPI {
       IframeLogin: (context) => this.iframeLogin(context),
       ListReferrals: (context) => this.listReferrals(context),
       GetReferral: (context) => this.getReferral(context),
+      ListCampaigns: (context) => listCampaigns(this.state, context.url.searchParams, rewardJson),
+      ListRewards: (context) => listRewards(this.state, context.url.searchParams),
+      V1ListPromoters: (context) => this.v1.list(context),
+      V1ShowPromoter: (context) => this.v1.show(context),
+      V1CreatePromoter: (context) => this.v1.create(context),
+      V1UpdatePromoter: (context) => this.v1.update(context),
+      V1DeletePromoter: (context) => this.v1.remove(context),
+      V1TrackSignup: (context) => this.v1.trackSignup(context),
+      V1CampaignsReport: (context) => this.v1.campaignsReport(context),
       ListCommissions: (context) => this.commissions.list(context.url.searchParams),
       UpdateCommission: (context) => this.updateCommission(context),
       FulfillCommissions: (context) => this.commissionBatch(context, "mark_fulfilled"),
@@ -221,11 +235,24 @@ export class FirstPromoterAPI implements FetchAPI {
       namespace,
       now: this.now,
       notFound: () => error(404, "Not found"),
+      // Declared but unmodelled operations (v1 iframe_login): an explicit emulator limitation.
+      unsupported: (_request, operation) =>
+        jsonRes(501, {
+          message: `Mockingbird: ${operation.operationId} is not implemented`,
+          code: "mockingbird_unsupported",
+        }),
       onError: (thrown) => {
         if (thrown instanceof HttpError) return thrown.toResponse()
         throw thrown
       },
       before: (context) => {
+        if (context.operation.path.startsWith("/v1/")) {
+          // The legacy v1 API authenticates with `X-API-KEY` only (documented 401 body: a string).
+          if (!context.request.headers.get("x-api-key")?.trim())
+            return jsonRes(401, "Bad credentials")
+          this.commissions.settle()
+          return undefined
+        }
         if (!bearerToken(context.request)) return error(401, "Unauthorized")
         if (!context.request.headers.get("account-id")?.trim()) {
           return error(401, "Account-ID header is required")
@@ -245,6 +272,11 @@ export class FirstPromoterAPI implements FetchAPI {
   async reset(): Promise<void> {
     await this.service.reset()
     this.state.ensureSeeded()
+  }
+
+  /** The emulator clock, in milliseconds. */
+  clockNow(): number {
+    return this.now()
   }
 
   private iso(): string {
@@ -704,7 +736,7 @@ export class FirstPromoterAPI implements FetchAPI {
   }
 
   /** A new lead attributed to `promoter` through `enrolment`; counts toward the promoter's referrals. */
-  private createReferral(
+  createReferral(
     promoter: PromoterRecord,
     enrolment: PromoterRecord["campaigns"][number] | undefined,
     email: string,
