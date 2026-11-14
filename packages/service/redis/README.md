@@ -42,6 +42,10 @@ await redis.quit()
 await server.close()
 ```
 
+Keyspace notifications work as in Redis: `CONFIG SET notify-keyspace-events Ex`, subscribe to
+`__keyevent@0__:expired`, and `emulator.advance(ms)` publishes `expired` for every key it expires
+before it returns (see [SUPPORT.md](SUPPORT.md#keyspace-notifications) for the events published).
+
 Two `createRedis()` instances never share keys. `SELECT` isolates logical databases 0–15 inside
 one instance. `emulator.advance(ms)` moves an injected clock. `emulator.inspect()`,
 `emulator.fault()`, `emulator.pauseConsumers()`, `emulator.reset()`, and `emulator.waiterCount()`
@@ -111,4 +115,9 @@ endpoints, readiness, shutdown and coordinated state controls.
   and differentially checked against redis-server 8.4.0; see [SUPPORT.md](SUPPORT.md). BullMQ 5.76.2
   queue/worker flows are covered by the public-client suite.
 - `XADD` / `XTRIM` `MAXLEN ~` trims exactly.
+- Best guess, not oracle-verified: `PFCOUNT` is exact (a HyperLogLog is stored as an exact member
+  set behind Redis's `HYLL` magic), where Redis estimates with a 0.81% standard error.
+- Keyspace `keymiss` (`m`), module (`d`) and hash-field expiry events are accepted but never
+  published. `FUNCTION DUMP`/`RESTORE` return an explicit unsupported error, and function libraries
+  are not part of snapshots.
 - Set members are returned in byte order so results stay deterministic.

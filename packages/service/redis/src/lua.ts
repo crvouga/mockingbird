@@ -22,7 +22,7 @@ import {
   tostringValue,
 } from "./lua/stdlib.ts"
 import { structLib } from "./lua/struct.ts"
-import { LuaError, LuaTable, type LuaValue, pos, rtError } from "./lua/value.ts"
+import { LuaError, type LuaFunction, LuaTable, type LuaValue, pos, rtError } from "./lua/value.ts"
 import { sha1Hex } from "./sha1.ts"
 
 export { LuaError, LuaTable, type LuaValue }
@@ -159,6 +159,11 @@ let shared: LuaTable | null = null
 /** The globals every script sees. Built once; scripts cannot change them. */
 function globals(): LuaTable {
   if (shared !== null) return shared
+  shared = buildGlobals(redisLib())
+  return shared
+}
+
+function buildGlobals(redis: LuaTable): LuaTable {
   const g = new LuaTable()
   baseLib(g)
   g.set("string", stringLib())
@@ -170,7 +175,7 @@ function globals(): LuaTable {
   g.set("struct", structLib())
   g.set("cjson", cjsonLib())
   g.set("cmsgpack", cmsgpackLib())
-  g.set("redis", redisLib())
+  g.set("redis", redis)
   g.set("loadstring", loadstring(g))
   g.set("_G", g)
   const meta = new LuaTable()
@@ -179,7 +184,6 @@ function globals(): LuaTable {
   )
   g.meta = meta
   g.readonly = true
-  shared = g
   return g
 }
 
@@ -210,6 +214,7 @@ export function compileScript(source: string, sha: string): void {
 
 function failure(error: unknown, sha: string): never {
   if (error instanceof ScriptFailure) throw error
+  const chunk = pos.chunk
   let line = pos.line
   let text: string
   if (error instanceof LuaError) {
@@ -220,9 +225,9 @@ function failure(error: unknown, sha: string): never {
       text = typeof message === "string" ? message : "ERR unknown error"
     } else text = `ERR ${tostringValue(value)}`
   } else if (error instanceof RangeError) {
-    text = `ERR user_script:${line}: stack overflow`
+    text = `ERR ${chunk}:${line}: stack overflow`
   } else throw error
-  throw new ScriptFailure(`${text} script: ${sha}, on @user_script:${line}.`)
+  throw new ScriptFailure(`${text} script: ${sha}, on @${chunk}:${line}.`)
 }
 
 /**
@@ -258,4 +263,178 @@ export function runScript(
     g.set("KEYS", previous.keys)
     g.set("ARGV", previous.argv)
   }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Functions (`FUNCTION LOAD`, `FCALL`)
+
+/** One function a library registered with `redis.register_function`. */
+export interface RegisteredFunction {
+  name: string
+  callback: LuaFunction
+  flags: string[]
+  description: string | null
+}
+
+const FUNCTION_FLAGS = new Set([
+  "no-writes",
+  "allow-oom",
+  "allow-stale",
+  "no-cluster",
+  "allow-cross-slot-keys",
+])
+const NAME_PATTERN = /^[A-Za-z0-9_]+$/
+const NAME_ERROR =
+  "Library names can only contain letters, numbers, or underscores(_) and must be at least one character long"
+
+/** Raised while a library loads: becomes `ERR Error registering functions: ERR <message>`. */
+function registerError(message: string): never {
+  throw new LuaError(message)
+}
+
+let functionGlobals: LuaTable | null = null
+let runtimeRedis: LuaTable | null = null
+let registering: Map<string, RegisteredFunction> | null = null
+
+function registerFunction(...args: LuaValue[]): LuaValue[] {
+  const target = registering
+  if (target === null)
+    return registerError("redis.register_function can only be called on FUNCTION LOAD command")
+  let name: LuaValue
+  let callback: LuaValue
+  let flags: string[] = []
+  let description: string | null = null
+  if (args.length === 1 && args[0] instanceof LuaTable) {
+    const spec = args[0]
+    name = spec.getStr("function_name")
+    callback = spec.getStr("callback")
+    const given = spec.getStr("flags")
+    if (given !== undefined) {
+      if (!(given instanceof LuaTable))
+        registerError(
+          "flags argument to redis.register_function must be a table representing function flags",
+        )
+      flags = given.arr.map((flag) => {
+        if (typeof flag !== "string" || !FUNCTION_FLAGS.has(flag))
+          return registerError("unknown flag given")
+        return flag
+      })
+    }
+    const text = spec.getStr("description")
+    if (text !== undefined) {
+      if (typeof text !== "string")
+        registerError("description argument given to redis.register_function must be a string")
+      description = text
+    }
+  } else if (args.length === 2) {
+    ;[name, callback] = args
+  } else registerError("wrong number of arguments to redis.register_function")
+  if (typeof name !== "string")
+    return registerError("function_name argument given to redis.register_function must be a string")
+  if (typeof callback !== "function")
+    return registerError("callback argument given to redis.register_function must be a function")
+  if (!NAME_PATTERN.test(name)) registerError(NAME_ERROR)
+  if (target.has(name)) registerError("Function already exists in the library")
+  target.set(name, { name, callback, flags, description })
+  return []
+}
+
+/** The `redis` table a library sees while it loads: registration and logging only. */
+function loadRedisLib(): LuaTable {
+  const lib = makeLib({
+    register_function: registerFunction,
+    log: () => [],
+    setresp: () => [],
+    LOG_DEBUG: 0,
+    LOG_VERBOSE: 1,
+    LOG_NOTICE: 2,
+    LOG_WARNING: 3,
+  })
+  const meta = new LuaTable()
+  meta.set("__index", (_table: LuaValue, key: LuaValue) =>
+    rtError(`Script attempted to access nonexistent global variable '${tostringValue(key)}'`),
+  )
+  lib.meta = meta
+  return freeze(lib)
+}
+
+function libraryGlobals(): LuaTable {
+  if (functionGlobals === null) {
+    runtimeRedis = redisLib()
+    functionGlobals = buildGlobals(runtimeRedis)
+  }
+  return functionGlobals
+}
+
+/**
+ * Run a library's code (its `#!lua name=...` line already blanked) and return the functions it
+ * registered. Throws `ScriptFailure` with the `FUNCTION LOAD` error reply.
+ */
+export function loadFunctionLibrary(body: string): Map<string, RegisteredFunction> {
+  let chunk: Chunk
+  try {
+    chunk = compileChunk(parseChunk(body, "user_function"))
+  } catch (error) {
+    if (error instanceof LuaSyntaxError)
+      throw new ScriptFailure(`ERR Error compiling function: ${error.message}`)
+    throw error
+  }
+  const g = libraryGlobals()
+  const registered = new Map<string, RegisteredFunction>()
+  const previous = { chunk: pos.chunk, line: pos.line, registering }
+  registering = registered
+  pos.chunk = "user_function"
+  pos.line = 0
+  g.set("redis", loadRedisLib())
+  try {
+    chunk.run(g)()
+  } catch (error) {
+    let text: string
+    if (error instanceof LuaError) {
+      const value = error.value
+      const message = value instanceof LuaTable ? value.getStr("err") : undefined
+      text = typeof message === "string" ? message : `ERR ${tostringValue(value)}`
+    } else if (error instanceof RangeError) text = "ERR user_function: stack overflow"
+    else throw error
+    throw new ScriptFailure(`ERR Error registering functions: ${text}`)
+  } finally {
+    if (runtimeRedis !== null) g.set("redis", runtimeRedis)
+    registering = previous.registering
+    pos.chunk = previous.chunk
+    pos.line = previous.line
+  }
+  if (registered.size === 0) throw new ScriptFailure("ERR No functions registered")
+  return registered
+}
+
+/** Call a registered function with `keys` and `args` tables, as `FCALL` does. */
+export function runFunction(
+  fn: RegisteredFunction,
+  keys: string[],
+  argv: string[],
+  host: ScriptHost,
+  version?: string,
+): LuaValue {
+  libraryGlobals()
+  const keysTable = new LuaTable()
+  keysTable.arr = keys
+  const argvTable = new LuaTable()
+  argvTable.arr = argv
+  const previous = { host: state.host, chunk: pos.chunk }
+  state.host = host
+  if (version !== undefined) state.version = version
+  pos.chunk = "user_function"
+  pos.line = 0
+  try {
+    return firstValue(fn.callback(keysTable, argvTable))
+  } catch (error) {
+    return failure(error, fn.name)
+  } finally {
+    state.host = previous.host
+    pos.chunk = previous.chunk
+  }
+}
+
+function firstValue(result: LuaValue | LuaValue[]): LuaValue {
+  return Array.isArray(result) ? result[0] : result
 }

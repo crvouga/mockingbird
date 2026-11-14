@@ -119,7 +119,7 @@ await server.close()
 | `GET` / `POST /verify/v2/Services/{VA}/Verifications/{VE}` | Fetches a verification, or sets `Status=canceled\|approved` on one. |
 | `POST /api/2010-04-01/Accounts/{AC}/Messages.json` | `To`, `Body` or `MediaUrl`, and `From` or `MessagingServiceSid`. Returns 201 with an `SM…` sid (`MM…` with media) and RFC 2822 dates. `MessagingServiceSid` alone is status `accepted`, `from: null`, `num_segments: "0"` (a sender is not chosen yet). `From` alone is status `queued`. Both are kept and the status is `queued` (Twilio queues on a specific sender). There is no idempotency key: the same body creates another sid. Errors: 21604 (no To), 21602 (no Body), 21603 (no From), 21211 (invalid To), 21617 (over 1600 characters). The message is recorded in the outbox. **WhatsApp:** a `To` of `whatsapp:+15551234567` sends a WhatsApp message; the number behind the prefix is validated the same way (21211 when it is not a phone number), the response's `to` keeps the `whatsapp:` prefix, and the outbox entry has `channel: "whatsapp"` instead of `"sms"`. Pair it with a `whatsapp:` `From`, form-encoded so the `+` survives (`--data-urlencode` in curl). |
 | `GET /api/2010-04-01/Accounts/{AC}/Messages/{SM}.json` | Reads a message back. |
-| `GET /api/2010-04-01/Accounts/{AC}/Messages.json` | Newest-first Message resources for that account. `PageSize` defaults to 50 (1–1000), `PageToken` follows `next_page_uri`/`previous_page_uri`; `Page` is client state. Links keep the vendor path without `/api`, so apply the normal product-prefix rewrite. `To` and `From` filter stored resources. |
+| `GET /api/2010-04-01/Accounts/{AC}/Messages.json` | Newest-first Message resources for that account. `PageSize` defaults to 50 (1–1000), `PageToken` follows `next_page_uri`/`previous_page_uri`; `Page` is client state. Links (`uri`, `first_page_uri`, `next_page_uri`, `previous_page_uri`) are api.twilio.com-relative paths without `/api`, as Twilio returns them: twilio-node resolves them against `https://api.twilio.com` and your `httpClient` rewrite adds the prefix again, and a raw client can follow them from the emulator origin as-is, since the un-prefixed `/2010-04-01/…` routes accept the same credentials (#762; best guess from Twilio's docs and twilio-node source, not oracle-verified). `To` and `From` filter stored resources. |
 | `GET /api/2010-04-01/Accounts/{AC}/Recordings/{RE}.wav` | The recording as a RIFF WAV. With `RequestedChannels=2` you get both channels. Otherwise a dual-channel recording is mixed down to mono, as Twilio does. |
 | `GET` / `DELETE /api/2010-04-01/Accounts/{AC}/Recordings/{RE}.json` | Metadata, or a delete (204; a second delete is 404, which our consumer tolerates). |
 
@@ -128,6 +128,10 @@ Authentication is HTTP Basic: an `AC…` (or `SK…`) username and a non-empty p
 `accounts` (or `--account-sid` plus `--auth-token`) only those pairs are accepted. A missing or
 wrong credential is 401 `20003`. For a wrong token the message matches the live one:
 `authentication failed, auth token is not valid for account AC…`.
+The same rule applies to the un-prefixed vendor-compatible routes (`/2010-04-01/…`,
+`/conversations/v1/…`, …): an account a valid credential names is created there on first use,
+and the seeded `AC00000000000000000000000000000000` / `twilio_test_auth_token` pair keeps
+working (#762).
 
 ### Webhooks (S8.4)
 
