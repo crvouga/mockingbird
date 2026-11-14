@@ -148,7 +148,8 @@ export type WebhookHubOptions = {
   signer: WebhookSigner
   /**
    * Delay before each attempt, in ms; the first entry delays the first attempt. Default:
-   * immediately, then 5 s, 5 min, 30 min, 2 h.
+   * immediately, then 5 s, 5 min, 30 min, 2 h. An empty list means one immediate attempt and no
+   * retries (never zero attempts).
    */
   retryDelaysMs?: readonly number[]
   /** Abort an attempt after this long. Default 15 s. */
@@ -216,7 +217,12 @@ const matchesEndpoint = (endpoint: WebhookEndpoint, message: WebhookMessage): bo
 }
 
 export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
-  const delays = options.retryDelaysMs ?? DEFAULT_DELAYS
+  const delays =
+    options.retryDelaysMs === undefined
+      ? DEFAULT_DELAYS
+      : options.retryDelaysMs.length > 0
+        ? options.retryDelaysMs
+        : [0]
   const timeoutMs = options.timeoutMs ?? 15_000
   const delivered = options.delivered ?? ((status: number) => status >= 200 && status < 300)
   const send = options.fetch ?? ((request: Request) => fetch(request))

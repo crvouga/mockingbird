@@ -91,4 +91,21 @@ describe("served over HTTP", () => {
       roomUrlBase: "https://x.daily.co/",
     })
   })
+  test("--webhook-signature and --transcript-format select Daily's schemes (#755)", async () => {
+    expect(() =>
+      serveTarget.create({ "webhook-url": "http://x", "webhook-signature": "rot13" }, COMMON),
+    ).toThrow("--webhook-signature")
+    expect(() => serveTarget.create({ "transcript-format": "srt" }, COMMON)).toThrow(
+      "--transcript-format",
+    )
+    const runtime = serveTarget.create(
+      { "webhook-url": "http://x", "webhook-signature": "daily", "transcript-format": "vtt" },
+      COMMON,
+    ) as unknown as { fetch(request: Request): Promise<Response> }
+    const health = await runtime.fetch(new Request("http://daily.mock/__admin/health"))
+    expect(await health.json()).toMatchObject({
+      webhookSignature: "daily",
+      transcriptFormat: "vtt",
+    })
+  })
 })

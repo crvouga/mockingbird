@@ -8,7 +8,9 @@ our backend makes:
 - **contacts:** search, create (409 on duplicates, the way Intercom does), update and get;
 - **conversations:** create (optional `Idempotency-Key`), update, reply as the member or as an
   admin (JSON or multipart attachments), close/open/snooze/assign, get with
-  `?display_as=plaintext`, and cursor-paginated search;
+  `?display_as=plaintext`, cursor-paginated search, and tags (attach and detach);
+- **workspace:** tags (list, create), teams, macros (Unstable / Preview), admin-initiated
+  in-app and email messages, and call search with recording redirects;
 - **identity:** `/admins` and `/me`.
 
 Admin replies and close/open (and, for a receiver that subscribes to them, member messages and
@@ -82,8 +84,9 @@ await emulator.close()
 ### Routes
 
 Every route needs `Authorization: Bearer <token>`. Any non-empty token is accepted unless
-`tokens` is set. `Intercom-Version` defaults to 2.11, and a malformed value answers 400
-`intercom_version_invalid`. Every error uses Intercom's envelope:
+`tokens` is set. `Intercom-Version` defaults to 2.11 and accepts `<major>.<minor>`, `Unstable`
+and `Preview` (the label Intercom's unstable OpenAPI description carries — a **best guess**, not
+oracle-verified); any other value answers 400 `intercom_version_invalid`. Every error uses Intercom's envelope:
 `{type: "error.list", request_id, errors: [{code, message}]}`.
 
 | Route | Behaviour |
@@ -102,6 +105,25 @@ Every route needs `Authorization: Bearer <token>`. Any non-empty token is accept
 | `POST /conversations/search` | `{query, pagination: {per_page ≤ 150, starting_after}, sort_field, sort_order}` → `{type: "conversation.list", conversations, total_count, pages: {page, per_page, total_pages, next?: {page, starting_after}}}`. Like the real API, results carry **no `conversation_parts`**. |
 | `GET /admins` | `{type: "admin.list", admins: [{id, name, email, …}]}`. The seeded admins are `1000001` (`support@mock.intercom.local`) and `1000002` (`clinician@mock.intercom.local`). |
 | `GET /me` | The token's admin and app. |
+| `GET /tags` | `{type: "list", data: [{type: "tag", id, name}]}`. |
+| `POST /tags` | `{name}` → the tag; an existing name answers that tag. |
+| `POST /conversations/{id}/tags` | `{id (tag id), admin_id}` → `{type: "tag", id, name, applied_at, applied_by: {type: "admin", id}}`. The conversation's `tags.tags` then lists it. 404 for an unknown conversation, tag or admin. |
+| `DELETE /conversations/{id}/tags/{tag_id}` | `{admin_id}` → the tag, removed from the conversation (detaching a tag that is not applied still answers the tag). |
+| `GET /teams` | `{type: "team.list", teams: [{type: "team", id, name, admin_ids, admin_priority_level}]}`, seeded with `PUT /__admin/teams` (none by default). |
+| `POST /messages` | `{message_type: "inapp" \| "email", subject? (required for email), body, template?, from: {type: "admin", id}, to: {type: "user" \| "lead" \| "contact", id}}` starts an `admin_initiated` conversation (firing `conversation.admin.single.created`) and answers `{type: "admin_message", id, created_at, subject? (email), body, message_type, conversation_id}`. The emulator always creates the conversation, so `conversation_id` is always set. |
+| `GET /macros` | `{type: "list", data: [{type: "macro", id, name, body, body_text, created_at, updated_at, visible_to, visible_to_team_ids, available_on}], pages: {type: "pages", per_page, next?: {starting_after}}}`; `per_page` (default 50, max 150) and `starting_after`. Seeded with `PUT /__admin/macros`. Answered on every `Intercom-Version`. |
+| `GET /macros/{id}` | The macro, or 404. |
+| `POST /calls/search` | `{conversation_ids: [1–20 ids]}` → `{type: "list", data: [call + transcript, transcript_status]}`. Seeded with `PUT /__admin/calls`. |
+| `GET /calls/{id}/recording` | **302** with `Location: <recording_url>`; 404 for an unknown call or one without a recording. |
+
+Tags, teams, messages, macros and calls follow Intercom's 2.14 and Unstable references
+([tags](https://developers.intercom.com/docs/references/2.14/rest-api/api.intercom.io/tags/listtags),
+[teams](https://developers.intercom.com/docs/references/2.14/rest-api/api.intercom.io/teams/listteams),
+[messages](https://developers.intercom.com/docs/references/2.14/rest-api/api.intercom.io/messages/createmessage),
+[calls](https://developers.intercom.com/docs/references/2.14/rest-api/api.intercom.io/calls/)). They are a
+**best guess, not oracle-verified**: the `admin_message` response type, the macro fields, the
+302 status of the recording redirect and the `transcript_status` default are not confirmed
+against a live workspace.
 
 Conversation state follows Intercom:
 
@@ -141,12 +163,13 @@ The emulator sends webhooks for these events:
 | Admin comment or quick reply (API or `POST /__admin/conversations/:id/admin-reply`) | `conversation.admin.replied` |
 | Close (`/parts` or `POST /__admin/conversations/:id/close`) | `conversation.admin.closed` |
 | Open (`/parts` or `POST /__admin/conversations/:id/open`) | `conversation.admin.opened` |
-| Admin-initiated conversation (`POST /__admin/conversations`) | `conversation.admin.single.created` |
+| Admin-initiated conversation (`POST /messages` or `POST /__admin/conversations`) | `conversation.admin.single.created` |
+| Assignment (`/parts` with `message_type: "assignment"`) | `conversation.admin.assigned`, plus `conversation.admin.open.assigned` when the conversation is open (both opt-in) |
 | Member starts a conversation (`POST /conversations`) | `conversation.user.created` (opt-in) |
 | Member reply (`/reply` with `type: "user"`) | `conversation.user.replied` (opt-in) |
 
 An endpoint receives the four admin topics above unless it lists its own `events`. The member
-topics, `conversation.admin.snoozed` and `.assigned` are published but opt-in: subscribe with
+topics, `conversation.admin.snoozed`, `.assigned` and `.open.assigned` are published but opt-in: subscribe with
 `--webhook-events`, `webhooks.urls: [{url, events}]` or `PUT /__admin/webhook-endpoints`. The EMR
 treats every `notification_event` it receives as an admin event, so its subscription must not
 include member topics. Notes send nothing.
@@ -183,6 +206,9 @@ Each delivery is a JSON body posted with `X-Hub-Signature: sha1=<hex HMAC-SHA1(s
 | `POST /__admin/conversations` | `{contactId \| externalId, adminId?, body}` creates an admin-initiated conversation. The EMR then looks the member up by `contacts[0].external_id`. |
 | `GET /__admin/conversations`, `GET /__admin/contacts` | The namespace's records. |
 | `PUT /__admin/admins` | Replace the admins: `[{id, name, email}]`. |
+| `PUT /__admin/teams` | Replace the teams: `{teams: [{id, name, admin_ids?}]}`. |
+| `PUT /__admin/macros` | Replace the macros: `{macros: [{id, name, body (HTML), visible_to_team_ids?, available_on?}]}`; `body_text` is derived. |
+| `PUT /__admin/calls` | Replace the calls: `{calls: [{id, conversation_id?, admin_id?, contact_id?, state?, recording_url?, transcription_url?, transcript?, transcript_status?, …}]}`. |
 | `GET/PUT /__admin/settings` | `{tokens?: string[], customAttributes?: string[] \| null}`. With `customAttributes` set, writing an undefined attribute is a 400, as in a real workspace. |
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`):
@@ -215,8 +241,12 @@ never records message bodies or contact details.
   `@intercom/messenger-js-sdk`). They talk to Intercom's own hosts over their own protocol. The
   web widget has no test-stage gate, so QA should block it.
 - Attachment downloads: URLs are recorded but not served.
-- Tags, notes, companies, segments, tickets, articles, data-attribute management, teams and
+- Contact tags, notes, companies, segments, tickets, articles, data-attribute management and
   SLAs. These appear only as empty lists where a payload has them.
+- Team and macro management through the API, `GET /calls`, `GET /calls/{id}` and call
+  transcripts as files: teams, macros and calls are seeded through `/__admin`.
+- Deferred conversations on `POST /messages`: the emulator always behaves as if
+  `create_conversation_without_contact_reply` were `true`.
 - Rate-limit headers on normal responses. Only `rate_limited` sends them.
 - Intercom's exact wording for the idempotency conflict, which is unverified: the emulator answers
   409 `conflict`.
