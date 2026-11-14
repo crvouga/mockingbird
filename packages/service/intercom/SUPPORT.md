@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **14**
-- supported by the emulator: **14**
-- parity enabled: **14**
+- operations in spec: **24**
+- supported by the emulator: **24**
+- parity enabled: **24**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -22,3 +22,13 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `ManageConversation` | `POST /conversations/{conversation_id}/parts` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `ListAdmins` | `GET /admins` | ✅ supported | ✅ |  |
 | `GetMe` | `GET /me` | ✅ supported | ✅ |  |
+| `ListTags` | `GET /tags` | ✅ supported | ✅ |  |
+| `CreateTag` | `POST /tags` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `AttachTagToConversation` | `POST /conversations/{conversation_id}/tags` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `DetachTagFromConversation` | `DELETE /conversations/{conversation_id}/tags/{tag_id}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `ListTeams` | `GET /teams` | ✅ supported | ✅ |  |
+| `CreateMessage` | `POST /messages` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `ListMacros` | `GET /macros` | ✅ supported | ✅ |  |
+| `GetMacro` | `GET /macros/{id}` | ✅ supported | ✅ |  |
+| `SearchCalls` | `POST /calls/search` | ✅ supported | ✅ |  |
+| `GetCallRecording` | `GET /calls/{id}/recording` | ✅ supported | ✅ |  |

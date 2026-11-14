@@ -1033,3 +1033,239 @@ describe("messaging test controls (B1–B6)", () => {
     expect((await conversations("tok-w2")).body.total_count).toBe(0)
   })
 })
+
+describe("tags, teams, messages, macros and calls (issue #756)", () => {
+  type Json = Record<string, Loose>
+  const setup = (version = "2.11") => {
+    const deliveries: { topic: string }[] = []
+    const runtime = createRuntime({
+      webhooks: {
+        urls: [{ url: EMR_HOOK, events: ["conversation.admin.open.assigned"] }],
+        secret: SECRET,
+        fetch: async (request) => {
+          deliveries.push(JSON.parse(await request.text()) as { topic: string })
+          return new Response(null, { status: 200 })
+        },
+      },
+    })
+    const call = async (
+      method: string,
+      path: string,
+      body?: unknown,
+      headers: Record<string, string> = {},
+    ) => {
+      const response = await runtime.fetch(
+        new Request(`${API}${path}`, {
+          method,
+          redirect: "manual",
+          headers: {
+            authorization: `Bearer ${TOKEN}`,
+            "intercom-version": version,
+            "content-type": "application/json",
+            ...headers,
+          },
+          ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        }),
+      )
+      const text = await response.text()
+      return {
+        status: response.status,
+        headers: response.headers,
+        body: (text ? JSON.parse(text) : null) as Json,
+      }
+    }
+    const admin = (method: string, path: string, body: unknown) =>
+      runtime.fetch(
+        new Request(`${API}/__admin${path}`, {
+          method,
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        }),
+      )
+    const conversation = async () => {
+      const contact = await call("POST", "/contacts", { role: "user", external_id: "u-756" })
+      const message = await call("POST", "/conversations", {
+        from: { type: "user", id: contact.body.id },
+        body: "hello",
+      })
+      return { contactId: contact.body.id as string, id: message.body.conversation_id as string }
+    }
+    return { runtime, call, admin, conversation, deliveries }
+  }
+
+  test("GET /tags lists the workspace's tags (POST /tags creates one)", async () => {
+    const { call } = setup()
+    expect((await call("GET", "/tags")).body).toEqual({ type: "list", data: [] })
+    const created = await call("POST", "/tags", { name: "vip" })
+    expect(created.status).toBe(200)
+    expect(created.body).toEqual({ type: "tag", id: expect.any(String), name: "vip" })
+    // Creating an existing name answers the same tag.
+    expect((await call("POST", "/tags", { name: "vip" })).body.id).toBe(created.body.id)
+    expect((await call("GET", "/tags")).body).toEqual({ type: "list", data: [created.body] })
+  })
+
+  test("POST and DELETE /conversations/{id}/tags attach and detach a tag", async () => {
+    const { call, conversation } = setup()
+    const { id } = await conversation()
+    const tag = (await call("POST", "/tags", { name: "urgent" })).body
+    const attached = await call("POST", `/conversations/${id}/tags`, {
+      id: tag.id,
+      admin_id: "1000001",
+    })
+    expect(attached.status).toBe(200)
+    expect(attached.body).toEqual({
+      type: "tag",
+      id: tag.id,
+      name: "urgent",
+      applied_at: expect.any(Number),
+      applied_by: { type: "admin", id: "1000001" },
+    })
+    expect((await call("GET", `/conversations/${id}`)).body.tags).toEqual({
+      type: "tag.list",
+      tags: [attached.body],
+    })
+    expect(
+      (await call("POST", `/conversations/${id}/tags`, { id: "999", admin_id: "1000001" })).status,
+    ).toBe(404)
+    const detached = await call("DELETE", `/conversations/${id}/tags/${tag.id}`, {
+      admin_id: "1000001",
+    })
+    expect(detached.status).toBe(200)
+    expect(detached.body).toMatchObject({ type: "tag", id: tag.id, name: "urgent" })
+    expect((await call("GET", `/conversations/${id}`)).body.tags.tags).toEqual([])
+  })
+
+  test("GET /teams lists teams seeded with PUT /__admin/teams", async () => {
+    const { call, admin } = setup()
+    expect((await call("GET", "/teams")).body).toEqual({ type: "team.list", teams: [] })
+    expect(
+      (await admin("PUT", "/teams", { teams: [{ id: "7", name: "Care", admin_ids: [1000001] }] }))
+        .status,
+    ).toBe(200)
+    expect((await call("GET", "/teams")).body).toEqual({
+      type: "team.list",
+      teams: [
+        {
+          type: "team",
+          id: "7",
+          name: "Care",
+          admin_ids: [1000001],
+          admin_priority_level: { primary_admin_ids: [], secondary_admin_ids: [] },
+        },
+      ],
+    })
+  })
+
+  test("POST /messages with message_type inapp starts an admin-initiated conversation", async () => {
+    const { call, conversation } = setup()
+    const { contactId } = await conversation()
+    const sent = await call("POST", "/messages", {
+      message_type: "inapp",
+      body: "Your results are in",
+      from: { type: "admin", id: "1000001" },
+      to: { type: "user", id: contactId },
+    })
+    expect(sent.status).toBe(200)
+    expect(sent.body).toEqual({
+      type: "admin_message",
+      id: expect.any(String),
+      created_at: expect.any(Number),
+      body: "<p>Your results are in</p>",
+      message_type: "inapp",
+      conversation_id: expect.any(String),
+    })
+    const created = await call("GET", `/conversations/${sent.body.conversation_id}`)
+    expect(created.body.source).toMatchObject({
+      delivered_as: "admin_initiated",
+      author: { type: "admin", id: "1000001" },
+    })
+    const missing = await call("POST", "/messages", {
+      message_type: "email",
+      body: "no subject",
+      from: { type: "admin", id: "1000001" },
+      to: { type: "user", id: contactId },
+    })
+    expect(missing.status).toBe(400)
+    expect(missing.body.errors[0].code).toBe("parameter_not_found")
+  })
+
+  test("GET /macros pages and GET /macros/{id} returns one (seeded with PUT /__admin/macros)", async () => {
+    const { call, admin } = setup("Unstable")
+    await admin("PUT", "/macros", {
+      macros: [
+        { id: "1", name: "Greeting", body: "<p>Hi!</p>" },
+        { id: "2", name: "Sign-off", body: "<p>Bye</p>" },
+      ],
+    })
+    const page = await call("GET", "/macros?per_page=1")
+    // Read the cursor first: toMatchObject's asymmetric matchers replace matched values.
+    const cursor = page.body.pages.next.starting_after as string
+    expect(page.status).toBe(200)
+    expect(page.body).toMatchObject({
+      type: "list",
+      data: [{ type: "macro", id: "1", name: "Greeting", body: "<p>Hi!</p>", body_text: "Hi!" }],
+      pages: { type: "pages", per_page: 1, next: { starting_after: expect.any(String) } },
+    })
+    const next = await call(
+      "GET",
+      `/macros?per_page=150&starting_after=${encodeURIComponent(cursor)}`,
+    )
+    expect(next.body.data.map((m: Json) => m.id)).toEqual(["2"])
+    expect(next.body.pages.next).toBeUndefined()
+    expect((await call("GET", "/macros/2")).body).toMatchObject({ type: "macro", id: "2" })
+    expect((await call("GET", "/macros/9")).status).toBe(404)
+  })
+
+  test("POST /calls/search finds calls by conversation; GET /calls/{id}/recording redirects", async () => {
+    const { call, admin, conversation } = setup("2.16")
+    const { id } = await conversation()
+    await admin("PUT", "/calls", {
+      calls: [
+        {
+          id: "c1",
+          conversation_id: id,
+          recording_url: "https://recordings.example.test/c1.mp3",
+          transcript: [{ speaker: "admin", text: "Hello" }],
+        },
+        { id: "c2", conversation_id: "other" },
+      ],
+    })
+    const found = await call("POST", "/calls/search", { conversation_ids: [id] })
+    expect(found.status).toBe(200)
+    expect(found.body).toMatchObject({
+      type: "list",
+      data: [
+        {
+          type: "call",
+          id: "c1",
+          conversation_id: id,
+          transcript: [{ speaker: "admin", text: "Hello" }],
+          transcript_status: "completed",
+        },
+      ],
+    })
+    expect((await call("POST", "/calls/search", { conversation_ids: [] })).status).toBe(400)
+    const recording = await call("GET", "/calls/c1/recording")
+    expect(recording.status).toBe(302)
+    expect(recording.headers.get("location")).toBe("https://recordings.example.test/c1.mp3")
+    expect((await call("GET", "/calls/c2/recording")).status).toBe(404)
+  })
+
+  test("Intercom-Version: Preview is accepted", async () => {
+    const { call } = setup("Preview")
+    expect((await call("GET", "/admins")).status).toBe(200)
+  })
+
+  test("assigning an open conversation also fires conversation.admin.open.assigned", async () => {
+    const { call, conversation, runtime, deliveries } = setup()
+    const { id } = await conversation()
+    await call("POST", `/conversations/${id}/parts`, {
+      message_type: "assignment",
+      type: "admin",
+      admin_id: "1000001",
+      assignee_id: "1000002",
+    })
+    await runtime.webhooks.idle()
+    expect(deliveries.map((d) => d.topic)).toEqual(["conversation.admin.open.assigned"])
+  })
+})

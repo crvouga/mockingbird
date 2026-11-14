@@ -1,6 +1,6 @@
 import { type APIOptions, bootSqlite, opaqueToken } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
-import { dayOfMonth, withBillingAlignment } from "./billing.js"
+import { dayOfMonth, firstBillingDay, withBillingAlignment } from "./billing.js"
 import { refundAdjustments, resolvePlanSpec } from "./catalog-spec.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 import {
@@ -1543,6 +1543,25 @@ export class KillBillAPI {
     const amount = sum(["CBA_ADJ", "CREDIT_ADJ"], false)
     let creditAdj = sum(["CBA_ADJ"], true)
     let balance = money(amount + sum(["CREDIT_ADJ"], true) + creditAdj)
+    const status = options.status ?? "COMMITTED"
+    // Kill Bill 0.24.16 turns what a committed invoice would owe below zero into account credit
+    // (parity scenario `change-immediate-annual-to-biannual`: a move to a cheaper plan now).
+    if (status === "COMMITTED" && balance < 0) {
+      items.push({
+        invoiceItemId: this.newId("item-"),
+        invoiceId,
+        accountId,
+        itemType: "CBA_ADJ",
+        amount: -balance,
+        currency: account.currency,
+        description: "Adjustment (account credit)",
+        startDate: date,
+        endDate: date,
+        ...(audit ? { audit } : {}),
+      })
+      creditAdj = money(creditAdj - balance)
+      balance = 0
+    }
     // A new invoice uses the account credit (CBA) first: "Adjustment (use of account credit)".
     const available = options.useCredit === false ? 0 : this.accountCredit(accountId)
     const used = money(Math.min(available, balance))
@@ -1569,7 +1588,7 @@ export class KillBillAPI {
       invoiceDate: date,
       targetDate: date,
       currency: account.currency,
-      status: options.status ?? "COMMITTED",
+      status,
       amount,
       balance,
       creditAdj,
@@ -2148,21 +2167,23 @@ export class KillBillAPI {
   private reportedBillingDay(subscription: Subscription) {
     const today = isoDate(this.now())
     let reported = Number((subscription.trialEndDate ?? subscription.startDate).slice(8, 10))
-    for (const { day, effectiveFrom, fromAccount } of this.bcdSchedule(subscription)) {
+    for (const change of this.bcdSchedule(subscription)) {
       // The account's BCD is the subscription's from its start (issue #643: 20 on day one).
-      if (fromAccount) {
-        reported = day
-        continue
-      }
-      const [year, month] = effectiveFrom.split("-").map(Number) as [number, number]
-      const onDay = (monthIndex: number) => {
-        const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
-        return isoDate(Date.UTC(year, monthIndex, Math.min(day, last)))
-      }
-      const first = onDay(month - 1) >= effectiveFrom ? onDay(month - 1) : onDay(month)
-      if (today >= first) reported = day
+      if (change.fromAccount || today >= firstBillingDay(change)) reported = change.day
     }
     return reported
+  }
+  /**
+   * The first new billing day of a BCD change still ahead of a period starting on `start`: Kill
+   * Bill 0.24.16 ends that period there and bills the next from it (parity scenarios `bcd-twice`,
+   * a monthly stub 04-05..04-10, and `change-immediate-biannual-to-annual-keeping-billing-day`,
+   * an annual plan billed 01-01..07-01 then yearly from 07-01).
+   */
+  private nextBillingDayChange(subscription: Subscription, start: string) {
+    return this.bcdSchedule(subscription)
+      .filter((change) => !change.fromAccount && change.effectiveFrom > start)
+      .map(firstBillingDay)
+      .sort()[0]
   }
   /** The day of the month a period starting on `start` bills on: the BCD once it is effective. */
   private billingDay(subscription: Subscription, start: string) {
@@ -2179,45 +2200,61 @@ export class KillBillAPI {
    * prorated over the period from `start` (02-01..02-05 of a $10 monthly plan is $1.43; an annual
    * plan changed on 04-11 bills 04-11..next 04-01 at 355/365), on the later of the BCD's effective
    * date and the last billing day on or before `start` (BCD 31 from 01-01 bills 02-01..02-28 on
-   * 01-31). Day-based plans bill whole periods.
+   * 01-31). No period runs past the first new billing day of a later BCD change, and periods from
+   * that day fall in its months. Day-based plans bill whole periods.
    */
   private billingPeriod(subscription: Subscription, plan: CatalogPlan, start: string) {
     const days = plan.intervalDays ?? 30
     const months = periodMonths(days)
     if (months === 0) return { end: addPeriod(start, days), fraction: 1, billOn: start }
+    const { end: uncut, whole, billOn } = this.uncutBillingPeriod(subscription, plan, start, months)
+    const cut = this.nextBillingDayChange(subscription, start)
+    const end = cut !== undefined && cut < uncut ? cut : uncut
+    return { end, fraction: (Date.parse(end) - Date.parse(start)) / whole, billOn }
+  }
+  /** A period before a later BCD change cuts it: its end, the span it is prorated over, its billing day. */
+  private uncutBillingPeriod(
+    subscription: Subscription,
+    plan: CatalogPlan,
+    start: string,
+    months: number,
+  ) {
+    const days = plan.intervalDays ?? 30
     const day = this.billingDay(subscription, start)
     const [year, month] = start.split("-").map(Number) as [number, number]
     const onDay = (monthIndex: number) => {
       const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate()
       return isoDate(Date.UTC(year, monthIndex, Math.min(day, last)))
     }
-    const anchorMonth =
-      Number(
-        (
-          subscription.billingAnchorDate ??
-          subscription.trialEndDate ??
-          subscription.startDate
-        ).slice(5, 7),
-      ) - 1
+    const change = this.bcdChangeAt(subscription, start)
+    const anchors = [
+      subscription.billingAnchorDate ?? subscription.trialEndDate ?? subscription.startDate,
+    ]
+    if (change && !change.fromAccount && firstBillingDay(change) <= start)
+      anchors.push(firstBillingDay(change))
+    const anchorMonth = Number((anchors.sort().at(-1) as string).slice(5, 7)) - 1
     const offset = (((month - 1 - anchorMonth) % months) + months) % months
     const aligned = month - 1 - offset
     const thisPeriod = onDay(aligned)
-    if (thisPeriod === start) return { end: onDay(aligned + months), fraction: 1, billOn: start }
+    if (thisPeriod === start) {
+      const end = onDay(aligned + months)
+      return { end, whole: Date.parse(end) - Date.parse(start), billOn: start }
+    }
     const end = thisPeriod > start ? thisPeriod : onDay(aligned + months)
     const previous = thisPeriod < start ? thisPeriod : onDay(aligned - months)
-    const effective = this.bcdChangeAt(subscription, start)?.effectiveFrom ?? start
+    const effective = change?.effectiveFrom ?? start
     // Billed on a new billing day, the stub is prorated over that new period (BCD 5 from 01-01:
     // 02-01..02-05 is 4/31 of 01-05..02-05); otherwise over the period from its start (4/28).
     const realigned = previous > effective
     // A stub to the account's BCD is prorated over the period that ends on it (issue #643: 15/365
     // of an annual plan; for shorter plans this is a best guess, not oracle-verified).
     const whole =
-      realigned || this.bcdChangeAt(subscription, start)?.fromAccount === true
+      realigned || change?.fromAccount === true
         ? Date.parse(end) - Date.parse(previous)
         : Date.parse(addPeriod(start, days)) - Date.parse(start)
     return {
       end,
-      fraction: (Date.parse(end) - Date.parse(start)) / whole,
+      whole,
       billOn: realigned ? previous : effective < start ? effective : start,
     }
   }

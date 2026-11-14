@@ -147,9 +147,10 @@ The portable entry runs in Node 22+, Bun 1.2+, browsers, and Workers. Listening 
 the separate `./server` entry or CLI. Follow the service guide for SDK configuration and
 synthetic credentials; local emulation needs no vendor account.
 
-Bundling emulators into a browser app or worker: the admin page's client (about 1.3 MB) ships
-as each package's `dist/admin-ui.js` and loads with a dynamic `import()` on the first
-`/__admin/ui` request. With code splitting (`esbuild --splitting`, Vite, Rollup, webpack) it
+Bundling emulators into a browser app or worker: every emulator depends on the same
+`@crvouga/mockingbird-runtime`, so a bundle of several carries one runtime. The admin page's
+client (about 1.3 MB) ships once, as that package's `dist/admin-ui.js`, and loads with a dynamic
+`import()` on the first `/__admin/ui` request. With code splitting (`esbuild --splitting`, Vite, Rollup, webpack) it
 stays out of your main chunk. In a single-file bundle that never serves the admin page, leave it
 out with `--external:./admin-ui.js`; `/__admin/ui` then answers 503.
 

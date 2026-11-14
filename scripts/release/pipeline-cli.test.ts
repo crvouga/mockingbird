@@ -10,7 +10,12 @@ test("CI build and publish consume the frozen group without replanning or reconc
   const checkout = join(dir, "checkout")
   const calls = join(dir, "calls")
   const version = "7.8.9"
-  const packages = discoverPackages()
+  // The scenario is SQLite as the one prerequisite; the shared runtime is left out of it.
+  const RUNTIME = "@crvouga/mockingbird-runtime"
+  const packages = discoverPackages().map((p) => ({
+    ...p,
+    runtimeDeps: p.runtimeDeps.filter((d) => d !== RUNTIME),
+  }))
   const selected = packages.filter((p) => /-service-(sqlite|stripe|postgres)$/.test(p.name))
   const plan: Plan = {
     packages,
@@ -36,6 +41,7 @@ Bun.sleep = async (ms) => { appendFileSync(process.env.TEST_RELEASE_CALLS, "slee
 `,
   )
   const originals = selected.map((p) => readFileSync(p.manifestPath, "utf8"))
+  const copies: string[] = []
   try {
     cpSync(join(root, "scripts"), join(checkout, "scripts"), { recursive: true })
     writeFileSync(
@@ -45,7 +51,11 @@ Bun.sleep = async (ms) => { appendFileSync(process.env.TEST_RELEASE_CALLS, "slee
     for (const pkg of selected) {
       const destination = join(checkout, pkg.relDir)
       mkdirSync(destination, { recursive: true })
-      cpSync(pkg.manifestPath, join(destination, "package.json"))
+      const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8"))
+      delete manifest.dependencies?.[RUNTIME]
+      const copy = `${JSON.stringify(manifest, null, 2)}\n`
+      copies.push(copy)
+      writeFileSync(join(destination, "package.json"), copy)
     }
     mkdirSync(join(dir, "package"))
     writeFileSync(
@@ -212,7 +222,7 @@ esac
     ).toHaveLength(1)
     expect(
       selected.map((p) => readFileSync(join(checkout, p.relDir, "package.json"), "utf8")),
-    ).toEqual(originals)
+    ).toEqual(copies)
     expect(selected.map((p) => readFileSync(p.manifestPath, "utf8"))).toEqual(originals)
   } finally {
     rmSync(dir, { recursive: true, force: true })

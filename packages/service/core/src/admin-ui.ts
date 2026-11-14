@@ -131,6 +131,7 @@ export const adminUiRoutes = (
   service: string,
   ui: AdminUi | undefined,
   adminPrefix = ADMIN_PREFIX,
+  brand: AdminBrand | undefined = EMBEDDED_BRAND,
 ): AdminRoutes => {
   // The client bundle is loaded here, on the first page request, not when the runtime is built;
   // `render` and `defaultHtml()` stay synchronous for bespoke documents.
@@ -152,7 +153,7 @@ export const adminUiRoutes = (
   return {
     "GET /ui": page,
     "GET /ui/": page,
-    [`GET ${ADMIN_BRANDS_PATH}`]: () => json(adminBrandCatalog(service)),
+    [`GET ${ADMIN_BRANDS_PATH}`]: () => json(adminBrandCatalog(service, brand)),
     "GET /ui/manifest": () =>
       json({
         service,

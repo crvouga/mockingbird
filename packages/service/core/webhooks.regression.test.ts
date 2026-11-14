@@ -94,3 +94,20 @@ test("delivery observations include explicit replays and flushed retries without
     await hub.idle()
   }
 })
+
+test("an empty retry schedule still makes one immediate attempt (#755)", async () => {
+  let calls = 0
+  const hub = createWebhookHub({
+    signer: signers.none(),
+    retryDelaysMs: [],
+    endpoints: [{ url: "http://receiver.example.test/synthetic" }],
+    fetch: async () => {
+      calls++
+      return new Response("nope", { status: 500 })
+    },
+  })
+  hub.publish({ namespace: "default", type: "synthetic", body: {} })
+  await hub.idle()
+  expect(calls).toBe(1)
+  expect(hub.deliveries().map((d) => [d.state, d.attempts.length])).toEqual([["failed", 1]])
+})

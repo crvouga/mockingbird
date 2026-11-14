@@ -5,6 +5,7 @@ import {
   createRuntime as createServiceRuntime,
   createWebhookHub,
   type FaultPreset,
+  fromBase64,
   hmac,
   type MockControls,
   type RequestLog,
@@ -20,6 +21,7 @@ import {
   DailyAPI,
   type SessionInput,
   type TranscriptEntry,
+  type TranscriptFormat,
   type TranscriptStore,
 } from "./index.js"
 import type { Settings } from "./state.js"
@@ -83,9 +85,15 @@ export const DAILY_PRESETS: Record<string, FaultPreset> = {
 }
 
 /**
+ * How webhook deliveries are signed: `hex` (default) is our EMR's scheme, `daily` is Daily's
+ * documented one.
+ */
+export type DailyWebhookSignature = "hex" | "daily"
+
+/**
  * Our EMR's scheme: `x-webhook-signature` = hex HMAC-SHA256(DAILY_WEBHOOK_SECRET, rawBody).
- * (Daily's documented scheme differs: base64 HMAC over `"<timestamp>.<body>"` with a
- * base64-decoded secret. See the README.) `x-webhook-timestamp` rides along.
+ * (Daily's documented scheme differs: see `dailyDocumentedWebhookSigner`.)
+ * `x-webhook-timestamp` rides along.
  */
 export const dailyWebhookSigner = signers.custom(async ({ body, secret, timestampSeconds }) =>
   secret
@@ -96,7 +104,29 @@ export const dailyWebhookSigner = signers.custom(async ({ body, secret, timestam
     : {},
 )
 
+/**
+ * Daily's documented scheme (docs.daily.co/reference/rest-api/webhooks, `hmac`):
+ * `X-Webhook-Signature` = base64 HMAC-SHA256 over `"<X-Webhook-Timestamp>.<body>"`, keyed by
+ * the base64-decoded secret. The timestamp is unix seconds (Daily does not document the unit).
+ */
+export const dailyDocumentedWebhookSigner = signers.custom(
+  async ({ body, secret, timestampSeconds }) =>
+    secret
+      ? {
+          "x-webhook-signature": await hmac(
+            "SHA-256",
+            fromBase64(secret),
+            `${timestampSeconds}.${body}`,
+            "base64",
+          ),
+          "x-webhook-timestamp": String(timestampSeconds),
+        }
+      : {},
+)
+
 type WebhookDelivery = {
+  /** `hex` (default, our EMR) or `daily` (Daily's documented scheme; the secret is base64). */
+  signature?: DailyWebhookSignature
   retryDelaysMs?: readonly number[]
   fetch?: (request: Request) => Promise<Response>
 }
@@ -115,6 +145,11 @@ export type DailyRuntimeOptions = {
   webhooks?: Omit<WebhookEndpoint, "id"> & WebhookDelivery
   /** Where admin sessions write transcripts (the stack's s3rver). */
   transcripts?: TranscriptStore
+  /**
+   * `json` (default): our EMR's `{room}/{session}.json` and `transcription.stopped`. `vtt`:
+   * Daily's transcript storage, a WebVTT file and `transcript.ready-to-download`.
+   */
+  transcriptFormat?: TranscriptFormat
 }
 
 export type DailyRuntime = ServiceRuntime<DailyAPI> & { readonly webhooks: WebhookHub }
@@ -159,6 +194,8 @@ const parseTranscript = (value: unknown): TranscriptEntry[] | undefined | string
   return value as TranscriptEntry[]
 }
 
+const TRANSCRIPT_FORMATS: readonly string[] = ["json", "vtt"] satisfies TranscriptFormat[]
+
 const adminRoutes = (runtime: ServiceRuntime<DailyAPI>): AdminRoutes => ({
   "GET /rooms": ({ namespace }) => json(200, { rooms: runtime.instance(namespace).rooms() }),
   "GET /rooms/:name": ({ params, namespace }) => {
@@ -182,12 +219,27 @@ const adminRoutes = (runtime: ServiceRuntime<DailyAPI>): AdminRoutes => ({
     }
     const transcript = parseTranscript(body.transcript)
     if (typeof transcript === "string") return adminError(400, transcript)
+    if (
+      body.transcriptFormat !== undefined &&
+      !TRANSCRIPT_FORMATS.includes(body.transcriptFormat as string)
+    ) {
+      return adminError(400, 'transcriptFormat: "json" or "vtt"')
+    }
+    if (body.transcriptError !== undefined && typeof body.transcriptError !== "string") {
+      return adminError(400, "transcriptError: string")
+    }
     const input: SessionInput = {
       participants,
       durationSec: body.durationSec,
       ...(transcript ? { transcript } : {}),
       ...(typeof body.sessionId === "string" ? { sessionId: body.sessionId } : {}),
       ...(typeof body.recording === "boolean" ? { recording: body.recording } : {}),
+      ...(body.transcriptFormat !== undefined
+        ? { transcriptFormat: body.transcriptFormat as TranscriptFormat }
+        : {}),
+      ...(body.transcriptError !== undefined
+        ? { transcriptError: body.transcriptError as string }
+        : {}),
     }
     try {
       const result = await runtime.instance(namespace).endSession(params.name as string, input)
@@ -195,6 +247,27 @@ const adminRoutes = (runtime: ServiceRuntime<DailyAPI>): AdminRoutes => ({
     } catch (err) {
       return adminError(502, `transcript write failed: ${err instanceof Error ? err.message : err}`)
     }
+  },
+  "POST /events": ({ body, namespace }) => {
+    if (!isRecord(body) || typeof body.type !== "string" || body.type === "") {
+      return adminError(400, 'expected {"type": "<event type>", "payload"?: {...}, "version"?}')
+    }
+    if (body.payload !== undefined && !isRecord(body.payload)) {
+      return adminError(400, "payload: object")
+    }
+    if (body.version !== undefined && typeof body.version !== "string") {
+      return adminError(400, "version: string")
+    }
+    return json(
+      200,
+      runtime
+        .instance(namespace)
+        .emit(
+          body.type,
+          (body.payload ?? {}) as Record<string, unknown>,
+          body.version as string | undefined,
+        ),
+    )
   },
   "POST /tokens/decode": async ({ body, namespace, request }) => {
     if (!isRecord(body) || typeof body.token !== "string") {
@@ -244,9 +317,9 @@ const adminRoutes = (runtime: ServiceRuntime<DailyAPI>): AdminRoutes => ({
  * control, fault presets, signed webhooks and a request journal.
  */
 export const createRuntime = (options: DailyRuntimeOptions = {}): DailyRuntime => {
-  const { retryDelaysMs, fetch: send, ...endpoint } = options.webhooks ?? { url: "" }
+  const { retryDelaysMs, fetch: send, signature, ...endpoint } = options.webhooks ?? { url: "" }
   const hub = createWebhookHub({
-    signer: dailyWebhookSigner,
+    signer: signature === "daily" ? dailyDocumentedWebhookSigner : dailyWebhookSigner,
     ...(retryDelaysMs ? { retryDelaysMs } : {}),
     ...(send ? { fetch: send } : {}),
     endpoints: options.webhooks ? [endpoint as WebhookEndpoint] : [],
@@ -271,11 +344,14 @@ export const createRuntime = (options: DailyRuntimeOptions = {}): DailyRuntime =
         now: clock.now,
         ...(options.settings ? { settings: options.settings } : {}),
         ...(options.transcripts ? { transcripts: options.transcripts } : {}),
+        ...(options.transcriptFormat ? { transcriptFormat: options.transcriptFormat } : {}),
         onWebhook: (event) =>
           hub.publish({ namespace: publicNamespace, type: event.type, body: event, id: event.id }),
       }),
     describe: () => ({
       webhooks: hub.endpoints("default").length > 0 ? "on" : "off",
+      webhookSignature: signature ?? "hex",
+      transcriptFormat: options.transcriptFormat ?? "json",
       transcripts: options.transcripts
         ? `${options.transcripts.endpoint}/${options.transcripts.bucket}`
         : "off",

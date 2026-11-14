@@ -378,6 +378,30 @@
         "@crvouga/mockingbird-testing": "workspace:*",
       },
     },
+    "packages/runtime": {
+      "name": "@crvouga/mockingbird-runtime",
+      "version": "0.0.0-development",
+      "dependencies": {
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@noble/hashes": "2.4.0",
+        "buffer": "6.0.3",
+        "graphql": "17.0.0",
+        "hono": "4.13.11",
+        "jose": "6.2.2",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-http-provider": "workspace:*",
+        "@crvouga/mockingbird-mqtt-broker": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-ui": "workspace:*",
+      },
+    },
     "packages/service/acm": {
       "name": "@crvouga/mockingbird-service-acm",
       "version": "0.0.0-development",
@@ -385,6 +409,7 @@
         "mockingbird-acm": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -407,6 +432,7 @@
         "mockingbird-aha": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
         "ssh2": "1.17.0",
@@ -435,6 +461,7 @@
         "mockingbird-airtable": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -461,6 +488,7 @@
         "mockingbird-apigateway": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -483,6 +511,7 @@
         "mockingbird-app-store-connect": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -507,6 +536,7 @@
         "mockingbird-apple": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -529,6 +559,7 @@
         "mockingbird-aws": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -551,6 +582,7 @@
         "mockingbird-aws-iot": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -578,6 +610,7 @@
         "mockingbird-aws-secrets": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -602,6 +635,7 @@
         "mockingbird-aws-speech": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -633,6 +667,7 @@
         "mockingbird-bedrock": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -665,6 +700,7 @@
         "mockingbird-brevo": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -691,6 +727,7 @@
         "mockingbird-caretalk": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -717,6 +754,7 @@
         "mockingbird-checkr": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -740,6 +778,7 @@
         "mockingbird-clerk": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -762,6 +801,7 @@
         "mockingbird-cloudcontrol": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -784,6 +824,7 @@
         "mockingbird-cloudformation": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -806,6 +847,7 @@
         "mockingbird-cloudwatch": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -828,6 +870,7 @@
         "mockingbird-cloudwatch-logs": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -850,6 +893,7 @@
         "mockingbird-cognito": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -876,6 +920,7 @@
         "mockingbird-config": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -994,6 +1039,7 @@
         "@crvouga/mockingbird-service-scheduler": "workspace:*",
         "@crvouga/mockingbird-service-sentry": "workspace:*",
         "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-shopify": "workspace:*",
         "@crvouga/mockingbird-service-slack": "workspace:*",
         "@crvouga/mockingbird-service-sns": "workspace:*",
         "@crvouga/mockingbird-service-sqs": "workspace:*",
@@ -1047,6 +1093,7 @@
         "mockingbird-customerio": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1074,6 +1121,7 @@
         "mockingbird-daily": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1100,6 +1148,7 @@
         "mockingbird-docker": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1124,6 +1173,7 @@
         "mockingbird-dynamodb": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1148,6 +1198,7 @@
         "mockingbird-dynamodb-streams": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1170,6 +1221,7 @@
         "mockingbird-easypost": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1196,6 +1248,7 @@
         "mockingbird-ec2": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1218,6 +1271,7 @@
         "mockingbird-ecs": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1241,6 +1295,7 @@
         "mockingbird-edamam": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1268,6 +1323,7 @@
         "mockingbird-elasticsearch": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1290,6 +1346,7 @@
         "mockingbird-elevenlabs": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/ciphers": "2.4.0",
         "@noble/hashes": "2.4.0",
@@ -1318,6 +1375,7 @@
         "mockingbird-emqx": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1344,6 +1402,7 @@
         "mockingbird-eventbridge": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1368,6 +1427,7 @@
         "mockingbird-fcm": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1396,6 +1456,7 @@
         "mockingbird-firehose": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1418,6 +1479,7 @@
         "mockingbird-firstpromoter": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1444,6 +1506,7 @@
         "mockingbird-fitbit": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1470,6 +1533,7 @@
         "mockingbird-flex": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1499,6 +1563,7 @@
         "mockingbird-formbricks": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1525,6 +1590,7 @@
         "mockingbird-fullscript": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1552,6 +1618,7 @@
         "mockingbird-garmin-health": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1578,6 +1645,7 @@
         "mockingbird-genebygene": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1604,6 +1672,7 @@
         "mockingbird-github": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -1631,6 +1700,7 @@
         "mockingbird-google": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -1653,6 +1723,7 @@
         "mockingbird-google-ads": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/ciphers": "2.4.0",
         "@noble/hashes": "2.4.0",
@@ -1682,6 +1753,7 @@
         "mockingbird-google-calendar": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1710,6 +1782,7 @@
         "mockingbird-google-maps": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1736,6 +1809,7 @@
         "mockingbird-healthie": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "graphql": "16.11.0",
         "hono": "4.13.11",
@@ -1765,6 +1839,7 @@
         "mockingbird-hermes": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1786,6 +1861,7 @@
         "mockingbird-iam": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1808,6 +1884,7 @@
         "mockingbird-infisical": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/ciphers": "2.4.0",
         "hono": "4.13.11",
@@ -1836,6 +1913,7 @@
         "mockingbird-intercom": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1862,6 +1940,7 @@
         "mockingbird-junction": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1892,6 +1971,7 @@
         "mockingbird-kill-bill": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1915,6 +1995,7 @@
         "mockingbird-kinesis": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1937,6 +2018,7 @@
         "mockingbird-klaviyo": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -1963,6 +2045,7 @@
         "mockingbird-kms": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -1985,6 +2068,7 @@
         "mockingbird-lambda": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2007,6 +2091,7 @@
         "mockingbird-lifefile": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2033,6 +2118,7 @@
         "mockingbird-linear": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -2055,6 +2141,7 @@
         "mockingbird-livekit": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2079,6 +2166,7 @@
         "mockingbird-llamacloud": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2105,6 +2193,7 @@
         "mockingbird-mailosaur": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2132,6 +2221,7 @@
         "mockingbird-mediaconvert": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2157,6 +2247,7 @@
         "mockingbird-medplum": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@medplum/core": "5.1.37",
         "@medplum/fhirtypes": "5.1.37",
@@ -2190,6 +2281,7 @@
         "mockingbird-meta": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2216,6 +2308,7 @@
         "mockingbird-microsoft": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -2238,6 +2331,7 @@
         "mockingbird-mongoatlas": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -2260,6 +2354,7 @@
         "mockingbird-notion": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2286,6 +2381,7 @@
         "mockingbird-oauth": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2310,6 +2406,7 @@
         "mockingbird-odx": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2336,6 +2433,7 @@
         "mockingbird-okta": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -2358,6 +2456,7 @@
         "mockingbird-openai": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/ciphers": "2.4.0",
         "@noble/hashes": "2.4.0",
@@ -2389,6 +2488,7 @@
         "mockingbird-opensearch": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2411,6 +2511,7 @@
         "mockingbird-otel": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2447,6 +2548,7 @@
         "mockingbird-oura": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2473,6 +2575,7 @@
         "mockingbird-paddle": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2500,6 +2603,7 @@
         "mockingbird-payload-cms": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2526,6 +2630,7 @@
         "mockingbird-persona": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2553,6 +2658,7 @@
         "mockingbird-pharmetika": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2579,6 +2685,7 @@
         "mockingbird-plane": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2605,6 +2712,7 @@
         "mockingbird-polar": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2658,6 +2766,7 @@
         "mockingbird-posthog": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2687,6 +2796,7 @@
         "mockingbird-prism": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2713,6 +2823,7 @@
         "mockingbird-recaptcha": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2738,6 +2849,9 @@
       "bin": {
         "mockingbird-redis": "./dist/cli.js",
       },
+      "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
+      },
       "devDependencies": {
         "@crvouga/mockingbird-adapter-node": "workspace:*",
         "@crvouga/mockingbird-credentials": "workspace:*",
@@ -2755,6 +2869,7 @@
         "mockingbird-redshift": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2777,6 +2892,7 @@
         "mockingbird-resend": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -2813,6 +2929,7 @@
         "mockingbird-resource-groups": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2835,6 +2952,7 @@
         "mockingbird-resource-groups-tagging-api": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2857,6 +2975,7 @@
         "mockingbird-route53": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2879,6 +2998,7 @@
         "mockingbird-route53resolver": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2901,6 +3021,7 @@
         "mockingbird-rxvortex": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -2927,6 +3048,7 @@
         "mockingbird-s3": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2952,6 +3074,7 @@
         "mockingbird-s3-control": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2974,6 +3097,7 @@
         "mockingbird-scheduler": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -2996,6 +3120,7 @@
         "mockingbird-sentry": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3024,6 +3149,7 @@
         "mockingbird-ses": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3039,6 +3165,35 @@
         "fast-check": "4.9.0",
       },
     },
+    "packages/service/shopify": {
+      "name": "@crvouga/mockingbird-service-shopify",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-shopify": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "graphql": "16.11.0",
+        "hono": "4.13.11",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-http-codec": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
+        "@shopify/admin-api-client": "2.0.1",
+        "fast-check": "4.9.0",
+      },
+    },
     "packages/service/slack": {
       "name": "@crvouga/mockingbird-service-slack",
       "version": "0.0.0-development",
@@ -3046,6 +3201,7 @@
         "mockingbird-slack": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -3080,6 +3236,7 @@
         "mockingbird-sns": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3125,6 +3282,7 @@
         "mockingbird-sqs": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3148,6 +3306,7 @@
         "mockingbird-ssm": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3170,6 +3329,7 @@
         "mockingbird-step-functions": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3193,6 +3353,7 @@
         "mockingbird-stripe": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3228,6 +3389,7 @@
         "mockingbird-sts": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3250,6 +3412,7 @@
         "mockingbird-support": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3272,6 +3435,7 @@
         "mockingbird-suunto": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3298,6 +3462,7 @@
         "mockingbird-swf": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3320,6 +3485,7 @@
         "mockingbird-tavily": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3343,6 +3509,7 @@
         "mockingbird-tempo": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3374,6 +3541,7 @@
         "mockingbird-textract": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
       },
       "devDependencies": {
@@ -3397,6 +3565,7 @@
         "mockingbird-turnstile": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3423,6 +3592,7 @@
         "mockingbird-twilio": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -3457,6 +3627,7 @@
         "mockingbird-unsplash": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3483,6 +3654,7 @@
         "mockingbird-vanta": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3509,6 +3681,7 @@
         "mockingbird-vercel": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "buffer": "6.0.3",
@@ -3531,6 +3704,7 @@
         "mockingbird-vercel-blob": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@noble/hashes": "2.4.0",
         "hono": "4.13.11",
@@ -3559,6 +3733,7 @@
         "mockingbird-vibe": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3585,6 +3760,7 @@
         "mockingbird-vpi": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3612,6 +3788,7 @@
         "mockingbird-wholescripts": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3639,6 +3816,7 @@
         "mockingbird-whoop": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3665,6 +3843,7 @@
         "mockingbird-workos": "./dist/cli.js",
       },
       "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "hono": "4.13.11",
       },
@@ -3836,6 +4015,7 @@
         "@crvouga/mockingbird-service-scheduler": "workspace:*",
         "@crvouga/mockingbird-service-sentry": "workspace:*",
         "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-shopify": "workspace:*",
         "@crvouga/mockingbird-service-slack": "workspace:*",
         "@crvouga/mockingbird-service-sns": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
@@ -3968,6 +4148,7 @@
         "@crvouga/mockingbird-service-scheduler": "workspace:*",
         "@crvouga/mockingbird-service-sentry": "workspace:*",
         "@crvouga/mockingbird-service-ses": "workspace:*",
+        "@crvouga/mockingbird-service-shopify": "workspace:*",
         "@crvouga/mockingbird-service-slack": "workspace:*",
         "@crvouga/mockingbird-service-sns": "workspace:*",
         "@crvouga/mockingbird-service-sqs": "workspace:*",
@@ -4517,6 +4698,8 @@
 
     "@crvouga/mockingbird-parity": ["@crvouga/mockingbird-parity@workspace:packages/parity/runner"],
 
+    "@crvouga/mockingbird-runtime": ["@crvouga/mockingbird-runtime@workspace:packages/runtime"],
+
     "@crvouga/mockingbird-service": ["@crvouga/mockingbird-service@workspace:packages/service/core"],
 
     "@crvouga/mockingbird-service-acm": ["@crvouga/mockingbird-service-acm@workspace:packages/service/acm"],
@@ -4720,6 +4903,8 @@
     "@crvouga/mockingbird-service-sentry": ["@crvouga/mockingbird-service-sentry@workspace:packages/service/sentry"],
 
     "@crvouga/mockingbird-service-ses": ["@crvouga/mockingbird-service-ses@workspace:packages/service/ses"],
+
+    "@crvouga/mockingbird-service-shopify": ["@crvouga/mockingbird-service-shopify@workspace:packages/service/shopify"],
 
     "@crvouga/mockingbird-service-slack": ["@crvouga/mockingbird-service-slack@workspace:packages/service/slack"],
 
@@ -5452,6 +5637,10 @@
     "@shikijs/types": ["@shikijs/types@4.4.3", "", { "dependencies": { "@shikijs/vscode-textmate": "^10.0.2", "@types/hast": "^3.0.5" } }, "sha512-UEJxmRR++MAGR6hugn0vgVS2W/6lWAts84FFSrnlH9sP0LNol7E5+NQ792pH8liWUhyMyjhTgSUH3k7iD7tc5g=="],
 
     "@shikijs/vscode-textmate": ["@shikijs/vscode-textmate@10.0.2", "", {}, "sha512-83yeghZ2xxin3Nj8z1NMd/NCuca+gsYXswywDy5bHvwlWL8tpTQmzGeUuHd9FC3E/SBEMvzJRwWEOz5gGes9Qg=="],
+
+    "@shopify/admin-api-client": ["@shopify/admin-api-client@2.0.1", "", { "dependencies": { "@shopify/graphql-client": "^2.0.1" } }, "sha512-s9Ysgq5we9QI5XYFkOxLX2Sj6F1I/S+f/PDC7WolaELzDhyjvFgR5d68JQDpgrGc8a8uvwzS/OuiXvybUU6sXw=="],
+
+    "@shopify/graphql-client": ["@shopify/graphql-client@2.0.1", "", {}, "sha512-rMWnql45haEQdVnz62azY6yKt67W2jNgyuYLb6cJc6GuQzEp3LNgIUuQRuroGrF0rklt/ZxqPWS2g013ci3lWQ=="],
 
     "@sinclair/typebox": ["@sinclair/typebox@0.27.12", "", {}, "sha512-hhyNJ+nbR6ZR7pToHvllEFun9TL0sbL+tk/ON75lo+Xas054uez98qRbsuNt7MBCyZKK4+8Yli/OAGZhmfBZ/g=="],
 
@@ -6229,6 +6418,8 @@
 
     "graphql": ["graphql@17.0.0", "", {}, "sha512-RSEgqrRNqHVGa46w2pmL9uTFkYPJiJbD5kksOvOaPLrKvBIidX/ttQVlWsR3+Ee8l+mNroC6darpcPIZeElbNg=="],
 
+    "graphql-request": ["graphql-request@7.2.0", "", { "dependencies": { "@graphql-typed-document-node/core": "^3.2.0" }, "peerDependencies": { "graphql": "14 - 16" } }, "sha512-0GR7eQHBFYz372u9lxS16cOtEekFlZYB2qOyq8wDvzRmdRSJ0mgUVX1tzNcIzk3G+4NY+mGtSz411wZdeDF/+A=="],
+
     "gtoken": ["gtoken@7.1.0", "", { "dependencies": { "gaxios": "^6.0.0", "jws": "^4.0.0" } }, "sha512-pCcEwRi+TKpMlxAQObHDQ56KawURgyAf6jtIY046fJ5tIv3zDe/LEIubckAO8fj6JnAxLdmWkUfNyulQ2iKdEw=="],
 
     "h3": ["h3@1.15.11", "", { "dependencies": { "cookie-es": "^1.2.3", "crossws": "^0.3.5", "defu": "^6.1.6", "destr": "^2.0.5", "iron-webcrypto": "^1.2.1", "node-mock-http": "^1.0.4", "radix3": "^1.1.2", "ufo": "^1.6.3", "uncrypto": "^0.1.3" } }, "sha512-L3THSe2MPeBwgIZVSH5zLdBBU90TOxarvhK9d04IDY2AmVS8j2Jz2LIWtwsGOU3lu2I5jCN7FNvVfY2+XyF+mg=="],
@@ -6526,6 +6717,8 @@
     "mailosaur": ["mailosaur@11.1.0", "", { "dependencies": { "https-proxy-agent": "^7.0.6" }, "peerDependencies": { "@types/node": ">=16" }, "optionalPeers": ["@types/node"] }, "sha512-6Yf9dohDbXddOBDLm5x1vcCjaUWMYQbqe0CSgWj2I2mhQppAqhbGxJ0v06QVCpP6oqh4hXSZCSWilY/bvsb8VA=="],
 
     "marked": ["marked@18.0.13", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-xTxVzZsBFwunP6HDmtBkabUQEYArnP7/rMDGmPj9SlrKlQ4i8MdYVow+nJL0eOqwpUqhzBoTBRADGN6uYwPyOw=="],
+
+    "marked-terminal": ["marked-terminal@7.3.0", "", { "dependencies": { "ansi-escapes": "^7.0.0", "ansi-regex": "^6.1.0", "chalk": "^5.4.1", "cli-highlight": "^2.1.11", "cli-table3": "^0.6.5", "node-emoji": "^2.2.0", "supports-hyperlinks": "^3.1.0" }, "peerDependencies": { "marked": ">=1 <16" } }, "sha512-t4rBvPsHc57uE/2nJOLmMbZCQ4tgAccAED3ngXQqW6g+TxA488JzJ+FK3lQkzBQOI1mRV/r/Kq+1ZlJ4D0owQw=="],
 
     "marky": ["marky@1.3.0", "", {}, "sha512-ocnPZQLNpvbedwTy9kNrQEsknEfgvcLMvOtz3sFeWApDq1MXH1TqkCIx58xlpESsfwQOnuBO9beyQuNGzVvuhQ=="],
 
@@ -7293,8 +7486,6 @@
 
     "@arethetypeswrong/cli/marked": ["marked@9.1.6", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-jcByLnIFkd5gSXZmjNvS1TlmRhCXZjIzHYlaGkPlLIekG55JDR2Z4va9tZwCiP+/RDERiNhMOFu01xd6O5ct1Q=="],
 
-    "@arethetypeswrong/cli/marked-terminal": ["marked-terminal@7.3.0", "", { "dependencies": { "ansi-escapes": "^7.0.0", "ansi-regex": "^6.1.0", "chalk": "^5.4.1", "cli-highlight": "^2.1.11", "cli-table3": "^0.6.5", "node-emoji": "^2.2.0", "supports-hyperlinks": "^3.1.0" }, "peerDependencies": { "marked": ">=1 <16" } }, "sha512-t4rBvPsHc57uE/2nJOLmMbZCQ4tgAccAED3ngXQqW6g+TxA488JzJ+FK3lQkzBQOI1mRV/r/Kq+1ZlJ4D0owQw=="],
-
     "@arethetypeswrong/core/fflate": ["fflate@0.8.3", "", {}, "sha512-tbZNuJrLwGUp3zshBtdy4W+ORxZuIh8a5ilyIEQDC5rY1f3U20JMry0Ll3WBzU58EZKsEuJFXhb5gwv8CsPvgA=="],
 
     "@arethetypeswrong/core/lru-cache": ["lru-cache@11.5.2", "", {}, "sha512-4pfM1Ff0x50o0tQwb5ucw/RzNyD0/YJME6IVcStalZuMWxdt3sR3huStTtxz4PUmvZfRguvDejasvQ2kifR11g=="],
@@ -7535,8 +7726,6 @@
 
     "@crvouga/mockingbird-service-healthie/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
 
-    "@crvouga/mockingbird-service-healthie/graphql-request": ["graphql-request@7.2.0", "", { "dependencies": { "@graphql-typed-document-node/core": "^3.2.0" }, "peerDependencies": { "graphql": "14 - 16" } }, "sha512-0GR7eQHBFYz372u9lxS16cOtEekFlZYB2qOyq8wDvzRmdRSJ0mgUVX1tzNcIzk3G+4NY+mGtSz411wZdeDF/+A=="],
-
     "@crvouga/mockingbird-service-medplum/embedded-postgres": ["embedded-postgres@16.14.0-beta.17", "", { "dependencies": { "async-exit-hook": "^2.0.1", "pg": "^8.7.3" }, "optionalDependencies": { "@embedded-postgres/darwin-arm64": "^16.14.0-beta.17", "@embedded-postgres/darwin-x64": "^16.14.0-beta.17", "@embedded-postgres/linux-arm": "^16.14.0-beta.17", "@embedded-postgres/linux-arm64": "^16.14.0-beta.17", "@embedded-postgres/linux-ia32": "^16.14.0-beta.17", "@embedded-postgres/linux-ppc64": "^16.14.0-beta.17", "@embedded-postgres/linux-x64": "^16.14.0-beta.17", "@embedded-postgres/windows-x64": "^16.14.0-beta.17" } }, "sha512-nMz+FokxBkEDcK3XUxTR0Jo2SGBj5mgLm2/wmGV6iIu0+3z44pNCCr6PCdu+dS/JxTCjVVV4tYmgRf7jamJS7Q=="],
 
     "@crvouga/mockingbird-service-medplum/graphql": ["graphql@17.0.2", "", {}, "sha512-FRWbddMxfkjiB7z+aQDWIR+E34xo9I8c9mtK2RPv8PmMzKRvrdsreHL/Ui/TmwHJfhHChEtsFPyMHKI+xuarQQ=="],
@@ -7552,6 +7741,8 @@
     "@crvouga/mockingbird-service-postgres/@types/bun": ["@types/bun@1.4.4", "", { "dependencies": { "bun-types": "1.4.4" } }, "sha512-9wkRDXUXK124pEnAutE6n/l18j+i9GC5IAHK8TmX/2nlySETmky0OU6yL5U8pW1AoKh++AN9auDCr647BfurjQ=="],
 
     "@crvouga/mockingbird-service-postgres/fast-check": ["fast-check@4.10.2", "", { "dependencies": { "pure-rand": "^8.0.0" } }, "sha512-iK2f+YrcmoeGqk6fA0ea2bptcu/itMIm4NfEozq6N25+aG6h7s5HZbB/k1aV7b5w5sFLMCbbtRUsTVR+BgC3xw=="],
+
+    "@crvouga/mockingbird-service-shopify/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
 
     "@crvouga/mockingbird-service-slack/@slack/web-api": ["@slack/web-api@7.9.3", "", { "dependencies": { "@slack/logger": "^4.0.0", "@slack/types": "^2.9.0", "@types/node": ">=18.0.0", "@types/retry": "0.12.0", "axios": "^1.8.3", "eventemitter3": "^5.0.1", "form-data": "^4.0.0", "is-electron": "2.2.2", "is-stream": "^2", "p-queue": "^6", "p-retry": "^4", "retry": "^0.13.1" } }, "sha512-xjnoldVJyoUe61Ltqjr2UVYBolcsTpp5ottqzSI3l41UCaJgHSHIOpGuYps+nhLFvDfGGpDGUeQ7BWiq3+ypqA=="],
 
@@ -7769,6 +7960,8 @@
 
     "googleapis-common/google-auth-library": ["google-auth-library@9.15.0", "", { "dependencies": { "base64-js": "^1.3.0", "ecdsa-sig-formatter": "^1.0.11", "gaxios": "^6.1.1", "gcp-metadata": "^6.1.0", "gtoken": "^7.0.0", "jws": "^4.0.0" } }, "sha512-7ccSEJFDFO7exFbO6NRyC+xH8/mZ1GZGG2xxx9iHxZWcjUjJpjWxIMw3cofAKcueZ6DATiukmmprD7yavQHOyQ=="],
 
+    "graphql-request/graphql": ["graphql@16.11.0", "", {}, "sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw=="],
+
     "gtoken/gaxios": ["gaxios@6.7.1", "", { "dependencies": { "extend": "^3.0.2", "https-proxy-agent": "^7.0.1", "is-stream": "^2.0.0", "node-fetch": "^2.6.9", "uuid": "^9.0.1" } }, "sha512-LDODD4TMYx7XXdpwxAVRAIAuB0bzv0s+ywFonY46k126qzQHT9ygyoa9tncmOiQmmDrik65UYsEkv3lbfqQ3yQ=="],
 
     "import-fresh/resolve-from": ["resolve-from@4.0.0", "", {}, "sha512-pb/MYmXstAkysRFx8piNI1tGFNQIFA3vkE3Gq4EuA1dF6gHp/+vgZqsCGJapvy8N3Q+4o7FwvquPJcnZ7RYy4g=="],
@@ -7804,6 +7997,10 @@
     "lru-memoizer/lru-cache": ["lru-cache@6.0.0", "", { "dependencies": { "yallist": "^4.0.0" } }, "sha512-Jo6dJ04CmSjuznwJSS3pUeWmd/H0ffTlkXXgwZi+eq1UCmqQwCh+eLsYOYCwY991i2Fah4h1BEMCx4qThGbsiA=="],
 
     "mailosaur/https-proxy-agent": ["https-proxy-agent@7.0.6", "", { "dependencies": { "agent-base": "^7.1.2", "debug": "4" } }, "sha512-vK9P5/iUfdl95AI+JVyUuIcVtd4ofvtrOr3HNtM2yxC9bnMbEdp3x01OhQNnjb8IJYi38VlTE3mBXwcfvywuSw=="],
+
+    "marked-terminal/chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
+
+    "marked-terminal/marked": ["marked@9.1.6", "", { "bin": { "marked": "bin/marked.js" } }, "sha512-jcByLnIFkd5gSXZmjNvS1TlmRhCXZjIzHYlaGkPlLIekG55JDR2Z4va9tZwCiP+/RDERiNhMOFu01xd6O5ct1Q=="],
 
     "metro/@babel/code-frame": ["@babel/code-frame@7.29.7", "", { "dependencies": { "@babel/helper-validator-identifier": "^7.29.7", "js-tokens": "^4.0.0", "picocolors": "^1.1.1" } }, "sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw=="],
 
@@ -7900,8 +8097,6 @@
     "youch/cookie": ["cookie@1.1.1", "", {}, "sha512-ei8Aos7ja0weRpFzJnEA9UHJ/7XQmqglbRwnf2ATjcB9Wq874VKH9kfjjirM6UhU2/E5fFYadylyhFldcqSidQ=="],
 
     "@ai-sdk/openai/@ai-sdk/provider-utils/undici": ["undici@7.30.1", "", {}, "sha512-03KrMbjIFDWQR5RNPrSw3bd1r12JpyFQl9/yxjUbJtqkjmllqC5lFjZh6ujeuJCKr8EOQvRW872Oy/az+nLYxg=="],
-
-    "@arethetypeswrong/cli/marked-terminal/chalk": ["chalk@5.6.2", "", {}, "sha512-7NzBL0rN6fMUW+f7A6Io4h40qQlG+xGmtMxfbnH/K7TAtt8JQWVQK+6g0UXKMeVJoyV5EkkNsErQ8pVD3bLHbA=="],
 
     "@aws-crypto/sha256-browser/@aws-sdk/types/@smithy/types": ["@smithy/types@4.18.0", "", { "dependencies": { "tslib": "^2.6.2" } }, "sha512-CgB6HHWer/vrKps24ulRIbpcpb7K4xAU7SkZ7YHzBPlwHsvsrCJFEXK421s+cJzX+ZrqtA/TuU5w1HzI7k9N8A=="],
 

@@ -211,7 +211,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     "package": "@crvouga/mockingbird-service-daily",
     "displayName": "Daily",
     "category": "communication",
-    "description": "Stateful emulator of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), and transcription/recording webhooks with transcripts written to S3.",
+    "description": "Stateful emulator of the Daily.co REST API: rooms, presence, eject, meeting tokens (minted and self-signed HS256, verified and decodable), meetings, and transcription/recording webhooks with transcripts written to S3 (JSON or Daily's WebVTT).",
     "website": "https://www.daily.co",
     "docs": "https://docs.daily.co/reference/rest-api"
   },
@@ -480,7 +480,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     "package": "@crvouga/mockingbird-service-intercom",
     "displayName": "Intercom",
     "category": "communication",
-    "description": "Stateful emulator of the Intercom REST API 2.11: contacts (search, create with 409 on duplicates, update, get), conversations (create with Idempotency-Key, reply as JSON or multipart, close/open, get, cursor search), admins, and X-Hub-Signature-signed admin reply/close/open webhooks.",
+    "description": "Stateful emulator of the Intercom REST API 2.11: contacts (search, create with 409 on duplicates, update, get), conversations (create with Idempotency-Key, reply as JSON or multipart, close/open, tags, get, cursor search), tags, teams, admin messages, macros, call search, admins, and X-Hub-Signature-signed admin reply/close/open webhooks.",
     "website": "https://www.intercom.com",
     "docs": "https://developers.intercom.com/docs/references/rest-api/api.intercom.io"
   },
@@ -886,6 +886,15 @@ export const CATALOG: readonly CatalogEntry[] = [
     "docs": "https://docs.aws.amazon.com/"
   },
   {
+    "target": "shopify",
+    "package": "@crvouga/mockingbird-service-shopify",
+    "displayName": "Shopify",
+    "category": "commerce",
+    "description": "Stateful emulator of the Shopify Admin GraphQL API: orderCreate, draft orders, order fulfillment status and tracking, product variants, metafieldsSet, webhook subscriptions, HMAC-signed order and fulfillment webhooks, userErrors and THROTTLED responses.",
+    "website": "https://www.shopify.com",
+    "docs": "https://shopify.dev/docs/api/admin-graphql"
+  },
+  {
     "target": "slack",
     "package": "@crvouga/mockingbird-service-slack",
     "displayName": "Slack",
@@ -1202,6 +1211,7 @@ export const LOADERS: Record<string, () => Promise<{ serveTarget?: unknown }>> =
   "scheduler": () => import("@crvouga/mockingbird-service-scheduler/server"),
   "sentry": () => import("@crvouga/mockingbird-service-sentry/server"),
   "ses": () => import("@crvouga/mockingbird-service-ses/server"),
+  "shopify": () => import("@crvouga/mockingbird-service-shopify/server"),
   "slack": () => import("@crvouga/mockingbird-service-slack/server"),
   "sns": () => import("@crvouga/mockingbird-service-sns/server"),
   "sqs": () => import("@crvouga/mockingbird-service-sqs/server"),

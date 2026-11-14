@@ -91,6 +91,9 @@
     "pack:check": "bun ../../../scripts/pack-check.ts",
     "parity:bullmq": "bun scripts/bullmq-parity.ts"
   },
+  "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*"
+  },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",

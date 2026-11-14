@@ -4,7 +4,8 @@ info:
   description: |
     Stateful emulator subset of the Intercom REST API (version 2.11): contacts (search, create,
     update, get), conversations (create, update, reply as user or admin with attachments,
-    close/open/snooze/assign, get, search) and the admin identity endpoints. Covers the backend's
+    close/open/snooze/assign, tag, get, search), tags, teams, admin-initiated messages, macros,
+    calls and the admin identity endpoints. Covers the backend's
     member messaging adapter and the Intercom sync adapter.
   version: "2.11"
   x-mockingbird-upstream:
@@ -541,6 +542,327 @@ paths:
                         type: string
         "401":
           $ref: "#/components/responses/Unauthorized"
+  /tags:
+    get:
+      operationId: ListTags
+      description: Every tag in the workspace.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The workspace's tags
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TagList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+    post:
+      operationId: CreateTag
+      description: Create a tag, or answer the existing tag with that name.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:
+                  type: string
+                  minLength: 1
+                  maxLength: 190
+      responses:
+        "200":
+          description: The tag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /conversations/{conversation_id}/tags:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+    post:
+      operationId: AttachTagToConversation
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id, admin_id]
+              properties:
+                id:
+                  type: string
+                admin_id:
+                  type: string
+                  x-mockingbird-resource-ref:
+                    type: admin
+                    missing: "9999999"
+      responses:
+        "200":
+          description: The applied tag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /conversations/{conversation_id}/tags/{tag_id}:
+    parameters:
+      - $ref: "#/components/parameters/ConversationId"
+      - name: tag_id
+        in: path
+        required: true
+        schema:
+          type: string
+    delete:
+      operationId: DetachTagFromConversation
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [admin_id]
+              properties:
+                admin_id:
+                  type: string
+                  x-mockingbird-resource-ref:
+                    type: admin
+                    missing: "9999999"
+      responses:
+        "200":
+          description: The removed tag
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Tag"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /teams:
+    get:
+      operationId: ListTeams
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The workspace's teams
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TeamList"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /messages:
+    post:
+      operationId: CreateMessage
+      description: An admin-initiated in-app or email message; starts an `admin_initiated` conversation.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message_type, body, from, to]
+              properties:
+                message_type:
+                  type: string
+                  enum: [inapp, email]
+                subject:
+                  type: string
+                body:
+                  type: string
+                template:
+                  type: string
+                  enum: [plain, personal]
+                from:
+                  type: object
+                  required: [type, id]
+                  properties:
+                    type:
+                      type: string
+                      enum: [admin]
+                    id:
+                      type: string
+                to:
+                  type: object
+                  required: [type, id]
+                  properties:
+                    type:
+                      type: string
+                      enum: [user, lead, contact]
+                    id:
+                      type: string
+                create_conversation_without_contact_reply:
+                  type: boolean
+      responses:
+        "200":
+          description: The message
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AdminMessage"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /macros:
+    get:
+      operationId: ListMacros
+      description: Saved replies (Intercom-Version Unstable / Preview).
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: per_page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 150
+        - name: starting_after
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: A page of macros
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MacroList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /macros/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetMacro
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: The macro
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Macro"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+  /calls/search:
+    post:
+      operationId: SearchCalls
+      description: Calls (with transcripts) for up to 20 conversations.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [conversation_ids]
+              properties:
+                conversation_ids:
+                  type: array
+                  minItems: 1
+                  maxItems: 20
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: The calls
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CallList"
+        "400":
+          $ref: "#/components/responses/BadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+  /calls/{id}/recording:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      operationId: GetCallRecording
+      description: Redirects to the call's recording.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "302":
+          description: Redirect to the recording
+          headers:
+            Location:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
 components:
   securitySchemes:
     bearerAuth:
@@ -588,6 +910,193 @@ components:
           schema:
             $ref: "#/components/schemas/ErrorList"
   schemas:
+    Tag:
+      type: object
+      required: [type, id, name]
+      properties:
+        type:
+          type: string
+          enum: [tag]
+        id:
+          type: string
+          x-mockingbird-resource:
+            type: tag
+            identity: true
+        name:
+          type: string
+        applied_at:
+          type: integer
+          x-mockingbird-volatile:
+            kind: timestamp
+        applied_by:
+          type: object
+          properties:
+            type:
+              type: string
+            id:
+              type: string
+    TagList:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Tag"
+    Team:
+      type: object
+      required: [type, id, name, admin_ids]
+      properties:
+        type:
+          type: string
+          enum: [team]
+        id:
+          type: string
+        name:
+          type: string
+        admin_ids:
+          type: array
+          items:
+            type: integer
+        admin_priority_level:
+          type: object
+    TeamList:
+      type: object
+      required: [type, teams]
+      properties:
+        type:
+          type: string
+          enum: [team.list]
+        teams:
+          type: array
+          items:
+            $ref: "#/components/schemas/Team"
+    AdminMessage:
+      type: object
+      required: [type, id, created_at, body, message_type]
+      properties:
+        type:
+          type: string
+          enum: [admin_message]
+        id:
+          type: string
+        created_at:
+          type: integer
+          x-mockingbird-volatile:
+            kind: timestamp
+        subject:
+          type: string
+        body:
+          type: string
+        message_type:
+          type: string
+          enum: [inapp, email]
+        conversation_id:
+          type: string
+    Macro:
+      type: object
+      required: [type, id, name, body, body_text]
+      properties:
+        type:
+          type: string
+          enum: [macro]
+        id:
+          type: string
+        name:
+          type: string
+        body:
+          type: string
+        body_text:
+          type: string
+        created_at:
+          type: integer
+        updated_at:
+          type: integer
+        visible_to:
+          type: string
+        visible_to_team_ids:
+          type: array
+          items:
+            type: string
+        available_on:
+          type: array
+          items:
+            type: string
+    MacroList:
+      type: object
+      required: [type, data, pages]
+      properties:
+        type:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Macro"
+        pages:
+          type: object
+          required: [type, per_page]
+          properties:
+            type:
+              type: string
+              enum: [pages]
+            per_page:
+              type: integer
+            next:
+              type: object
+              required: [starting_after]
+              properties:
+                starting_after:
+                  type: string
+    Call:
+      type: object
+      required: [type, id]
+      properties:
+        type:
+          type: string
+          enum: [call]
+        id:
+          type: string
+        conversation_id:
+          type: ["string", "null"]
+        admin_id:
+          type: ["string", "null"]
+        contact_id:
+          type: ["string", "null"]
+        state:
+          type: string
+        initiated_at:
+          type: ["integer", "null"]
+        recording_url:
+          type: ["string", "null"]
+        transcription_url:
+          type: ["string", "null"]
+        call_type:
+          type: string
+        direction:
+          type: string
+        ended_reason:
+          type: ["string", "null"]
+        phone:
+          type: ["string", "null"]
+        transcript:
+          type: array
+        transcript_status:
+          type: ["string", "null"]
+    CallList:
+      type: object
+      required: [type, data]
+      properties:
+        type:
+          type: string
+          enum: [list]
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/Call"
     ErrorList:
       type: object
       required: [type, errors]

@@ -103,6 +103,7 @@ const README_SDKS: Record<string, string> = {
   "@payloadcms/sdk": "3.90.2",
   "@playwright/test": "1.65.0",
   "@sentry/node": "11.4.0",
+  "@shopify/admin-api-client": "2.0.1",
   "@slack/web-api": "7.9.3",
   "@slack/webhook": "8.0.2",
   "@smithy/node-http-handler": "4.12.1",

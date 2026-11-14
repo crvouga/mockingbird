@@ -103,6 +103,7 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@medplum/core": "5.1.37",
     "@medplum/fhirtypes": "5.1.37",

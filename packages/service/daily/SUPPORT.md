@@ -2,9 +2,9 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **9**
-- supported by the emulator: **9**
-- parity enabled: **9**
+- operations in spec: **11**
+- supported by the emulator: **11**
+- parity enabled: **11**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
@@ -17,3 +17,5 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `EjectParticipants` | `POST /v1/rooms/{name}/eject` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `CreateMeetingToken` | `POST /v1/meeting-tokens` | ✅ supported | ✅ |  |
 | `ValidateMeetingToken` | `GET /v1/meeting-tokens/{token}` | ✅ supported | ✅ |  |
+| `ListMeetings` | `GET /v1/meetings` | ✅ supported | ✅ |  |
+| `GetMeeting` | `GET /v1/meetings/{meeting}` | ✅ supported | ✅ |  |

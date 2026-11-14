@@ -18,7 +18,13 @@ import {
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
-import { DailyState, type PresenceRecord, type RoomRecord, type Settings } from "./state.js"
+import {
+  DailyState,
+  type PresenceRecord,
+  type RoomRecord,
+  type SessionRecord,
+  type Settings,
+} from "./state.js"
 import {
   claimsToProperties,
   decodeToken,
@@ -38,6 +44,7 @@ export { document, operationIds, supportedOperationIds } from "./generated/opena
 export type {
   PresenceRecord,
   RoomRecord,
+  SessionParticipant,
   SessionRecord,
   Settings,
   WarningRecord,
@@ -56,7 +63,17 @@ export const DAILY_NAMESPACE = "daily"
 /** The transcript object our scribe reads from S3: `[{s: speaker userId, t, ts, te}]`. */
 export type TranscriptEntry = { s: string; t: string; ts: number; te: number }
 
-/** A Daily webhook event (`transcription.stopped`, `recording.ready-to-download`). */
+/**
+ * How an admin session stores its transcript: `json` is our EMR's `[{s, t, ts, te}]` with
+ * `transcription.stopped`; `vtt` is Daily's transcript storage, WebVTT with
+ * `transcript.ready-to-download` (or `transcript.error`).
+ */
+export type TranscriptFormat = "json" | "vtt"
+
+/**
+ * A Daily webhook event (`transcription.stopped`, `transcript.ready-to-download`,
+ * `transcript.error`, `recording.ready-to-download`, or any type from `POST /__admin/events`).
+ */
 export type DailyWebhook = {
   version: string
   type: string
@@ -75,6 +92,10 @@ export type SessionInput = {
   sessionId?: string
   /** Also emit `recording.ready-to-download`. Default true. */
   recording?: boolean
+  /** Overrides the emulator's `transcriptFormat` for this session. */
+  transcriptFormat?: TranscriptFormat
+  /** `vtt` only: fail the transcript upload with this error (`transcript.error`, no file). */
+  transcriptError?: string
 }
 
 export type SessionResult = {
@@ -87,7 +108,11 @@ export type SessionResult = {
 
 /** Where `POST /__admin/rooms/:name/session` writes transcripts (the stack's s3rver / MinIO). */
 export type TranscriptStore = S3Target & {
-  /** Default `{roomName}/{sessionId}.json` (the EMR's `DAILY_TRANSCRIPT_S3_KEY_PATTERN`). */
+  /**
+   * Placeholders `{roomName}`, `{sessionId}`, `{domain}`, `{epochMs}`. Default
+   * `{roomName}/{sessionId}.json` (the EMR's `DAILY_TRANSCRIPT_S3_KEY_PATTERN`), or
+   * `{domain}/{roomName}/{epochMs}.vtt` for the `vtt` format.
+   */
   keyPattern?: string
 }
 
@@ -112,9 +137,12 @@ export type DailyAPIOptions = APIOptions & {
   onWebhook?: (event: DailyWebhook) => void
   /** Transcript destination for admin sessions. */
   transcripts?: TranscriptStore
+  /** Default `json`. */
+  transcriptFormat?: TranscriptFormat
 }
 
 const DEFAULT_KEY_PATTERN = "{roomName}/{sessionId}.json"
+const DEFAULT_VTT_KEY_PATTERN = "{domain}/{roomName}/{epochMs}.vtt"
 
 const dailyError = (status: number, error: string, info: string) => jsonRes(status, { error, info })
 const invalid = (info: string) => dailyError(400, "invalid-request-error", info)
@@ -134,6 +162,66 @@ const record = (context: OperationContext): Record<string, unknown> => {
 }
 
 const withSlash = (base: string) => (base.endsWith("/") ? base : `${base}/`)
+
+/** `https://acme.daily.co/` → `acme`, the domain name Daily prefixes transcript keys with. */
+const domainName = (roomUrlBase: string): string => {
+  try {
+    return new URL(roomUrlBase).hostname.split(".")[0] || "domain"
+  } catch {
+    return "domain"
+  }
+}
+
+const vttTime = (seconds: number): string => {
+  const ms = Math.round(seconds * 1000)
+  const pad = (n: number, width = 2) => String(n).padStart(width, "0")
+  return `${pad(Math.floor(ms / 3_600_000))}:${pad(Math.floor(ms / 60_000) % 60)}:${pad(
+    Math.floor(ms / 1000) % 60,
+  )}.${pad(ms % 1000, 3)}`
+}
+
+/** A transcript as WebVTT, one numbered cue per entry, the speaker as a `<v>` voice span. */
+export const transcriptToVtt = (transcript: readonly TranscriptEntry[]): string =>
+  [
+    "WEBVTT",
+    "",
+    ...transcript.flatMap((entry, i) => [
+      String(i + 1),
+      `${vttTime(entry.ts)} --> ${vttTime(entry.te)}`,
+      `<v ${entry.s}>${entry.t}`,
+      "",
+    ]),
+  ].join("\n")
+
+const seconds = (ms: number) => Math.floor(ms / 1000)
+
+/** `GET /v1/meetings/:meeting`: a session without its participants. */
+const meetingSummary = (room: string, session: SessionRecord) => {
+  const endedMs = Date.parse(session.endedAt)
+  return {
+    id: session.sessionId,
+    room,
+    start_time: seconds(endedMs) - session.durationSec,
+    duration: session.durationSec,
+    ongoing: false,
+    max_participants: session.participants,
+  }
+}
+
+/** `GET /v1/meetings`: every participant is in the room for the whole session. */
+const meetingView = (room: string, session: SessionRecord) => {
+  const summary = meetingSummary(room, session)
+  return {
+    ...summary,
+    participants: (session.participantList ?? []).map((p) => ({
+      user_id: p.userId,
+      participant_id: p.participantId,
+      user_name: p.userName,
+      join_time: summary.start_time,
+      duration: session.durationSec,
+    })),
+  }
+}
 
 /** The `Room` body Daily answers with. */
 const roomView = (room: RoomRecord) => ({
@@ -162,6 +250,7 @@ export class DailyAPI implements FetchAPI {
   private readonly now: () => number
   private readonly onWebhook: ((event: DailyWebhook) => void) | undefined
   private readonly transcripts: TranscriptStore | undefined
+  private readonly transcriptFormat: TranscriptFormat
 
   constructor(options: DailyAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -169,6 +258,7 @@ export class DailyAPI implements FetchAPI {
     this.now = options.now ?? (() => Date.now())
     this.onWebhook = options.onWebhook
     this.transcripts = options.transcripts
+    this.transcriptFormat = options.transcriptFormat ?? "json"
     this.state = new DailyState(sqlite, namespace, options.settings ?? {})
     const handlers = defineOperations<SupportedOperationId>({
       ListRooms: (context) => this.listRooms(context),
@@ -193,6 +283,13 @@ export class DailyAPI implements FetchAPI {
       EjectParticipants: (context) => this.eject(context),
       CreateMeetingToken: (context) => this.createToken(context),
       ValidateMeetingToken: (context) => this.validateToken(context),
+      ListMeetings: (context) => this.listMeetings(context),
+      GetMeeting: (context) => {
+        const id = context.params.meeting ?? ""
+        const found = this.meetings().find((m) => m.session.sessionId === id)
+        if (!found) return dailyError(404, "not-found", `meeting ${id} not found`)
+        return jsonRes(200, meetingSummary(found.room, found.session))
+      },
     })
     this.service = createService({
       document,
@@ -317,6 +414,59 @@ export class DailyAPI implements FetchAPI {
       selected = index < 0 ? [] : before !== null ? rooms.slice(index + 1) : rooms.slice(0, index)
     }
     return jsonRes(200, { total_count: rooms.length, data: selected.slice(0, limit).map(roomView) })
+  }
+
+  /** Every ended session, newest first. */
+  private meetings(): { room: string; session: SessionRecord }[] {
+    return this.rooms()
+      .flatMap((room) => room.sessions.map((session) => ({ room: room.name, session })))
+      .sort((a, b) => Date.parse(b.session.endedAt) - Date.parse(a.session.endedAt))
+  }
+
+  private listMeetings(context: OperationContext): Response {
+    const query = context.url.searchParams
+    const rawLimit = query.get("limit")
+    const limit = rawLimit === null ? 100 : Number(rawLimit)
+    if (!Number.isSafeInteger(limit) || limit < 1)
+      return invalid("limit must be a positive integer")
+    const bound = (name: string) => {
+      const raw = query.get(name)
+      if (raw === null) return undefined
+      const value = Number(raw)
+      return Number.isSafeInteger(value) ? value : Number.NaN
+    }
+    const start = bound("timeframe_start")
+    const end = bound("timeframe_end")
+    if (Number.isNaN(start) || Number.isNaN(end)) return invalid("timeframes must be unix seconds")
+    const before = query.get("ending_before")
+    const after = query.get("starting_after")
+    if (before !== null && after !== null) return invalid("provide only one meeting cursor")
+    const rooms = query.getAll("room")
+    const ongoing = query.get("ongoing")
+    let matching = this.meetings().filter(({ room, session }) => {
+      if (rooms.length > 0 && !rooms.includes(room)) return false
+      const startTime = meetingSummary(room, session).start_time
+      if (start !== undefined && startTime < start) return false
+      if (end !== undefined && startTime > end) return false
+      // Every emulated meeting has ended: `ongoing=true` matches none.
+      return ongoing !== "true"
+    })
+    const total = matching.length
+    const cursor = before ?? after
+    if (cursor !== null) {
+      const index = matching.findIndex((m) => m.session.sessionId === cursor)
+      matching =
+        index < 0 ? [] : before !== null ? matching.slice(index + 1) : matching.slice(0, index)
+    }
+    const withParticipants = query.get("no_participants") !== "true"
+    return jsonRes(200, {
+      total_count: total,
+      data: matching
+        .slice(0, limit)
+        .map(({ room, session }) =>
+          withParticipants ? meetingView(room, session) : meetingSummary(room, session),
+        ),
+    })
   }
 
   private updateRoom(context: OperationContext): Response | Promise<Response> {
@@ -533,53 +683,120 @@ export class DailyAPI implements FetchAPI {
   }
 
   /**
-   * End a call: write the transcript to S3 at `{room}/{session}.json`, then emit
-   * `transcription.stopped` (and `recording.ready-to-download`). The transcript text is
-   * never kept in the mock's state.
+   * Post a Daily-shaped webhook event (`{version, type, event, id, event_ts, payload}`) to the
+   * configured receivers; `POST /__admin/events` exposes it for any event type.
+   */
+  emit(type: string, payload: Record<string, unknown>, version = "1.0.0"): DailyWebhook {
+    const event: DailyWebhook = {
+      version,
+      type,
+      event: type,
+      id: `evt_${this.state.nextUuid("event")}`,
+      event_ts: Math.floor(this.now() / 1000),
+      payload,
+    }
+    this.onWebhook?.(event)
+    return event
+  }
+
+  /**
+   * End a call: write the transcript to S3, then emit the transcript event (and
+   * `recording.ready-to-download`). The `json` format writes `{room}/{session}.json` and emits
+   * `transcription.stopped`; `vtt` writes Daily's WebVTT at `{domain}/{room}/{epochMs}.vtt`
+   * and emits `transcript.ready-to-download`, or `transcript.error` with no file when
+   * `transcriptError` is set. The transcript text is never kept in the mock's state.
    */
   async endSession(name: string, input: SessionInput): Promise<SessionResult | undefined> {
     const room = this.state.rooms.get(name)
     if (!room) return undefined
+    const format = input.transcriptFormat ?? this.transcriptFormat
     const sessionId = input.sessionId ?? this.state.nextUuid("session")
-    const pattern = this.transcripts?.keyPattern ?? DEFAULT_KEY_PATTERN
-    const s3Key = pattern.replace("{roomName}", name).replace("{sessionId}", sessionId)
+    const endedAt = this.now()
+    const startedAt = endedAt - input.durationSec * 1000
+    const pattern =
+      this.transcripts?.keyPattern ??
+      (format === "vtt" ? DEFAULT_VTT_KEY_PATTERN : DEFAULT_KEY_PATTERN)
+    const domain = domainName(this.state.current().roomUrlBase)
+    const s3Key = pattern
+      .replace("{roomName}", name)
+      .replace("{sessionId}", sessionId)
+      .replace("{domain}", domain)
+      .replace("{epochMs}", String(startedAt))
     const transcript =
       input.transcript ?? synthesizeTranscript(input.participants, input.durationSec)
+    const failed = format === "vtt" && input.transcriptError !== undefined
     let uri: string | null = null
-    if (this.transcripts) {
-      uri = await putObject(this.transcripts, s3Key, JSON.stringify(transcript), "application/json")
+    if (this.transcripts && !failed) {
+      uri =
+        format === "vtt"
+          ? await putObject(this.transcripts, s3Key, transcriptToVtt(transcript), "text/vtt")
+          : await putObject(this.transcripts, s3Key, JSON.stringify(transcript), "application/json")
     }
-    const endedAt = this.now()
     const events: string[] = []
-    const emit = (type: string, payload: Record<string, unknown>) => {
+    const emit = (type: string, payload: Record<string, unknown>, version?: string) => {
       events.push(type)
-      this.onWebhook?.({
-        version: "1.0.0",
-        type,
-        event: type,
-        id: `evt_${this.state.nextUuid("event")}`,
-        event_ts: Math.floor(endedAt / 1000),
-        payload,
+      this.emit(type, payload, version)
+    }
+    if (format === "vtt") {
+      const minutes = (input.durationSec * input.participants.length) / 60
+      const common = {
+        id: this.state.nextUuid("transcript"),
+        room_id: room.id,
+        room_name: name,
+        mtg_session_id: sessionId,
+        duration: input.durationSec,
+        participant_minutes: minutes,
+        out_params: {
+          s3: {
+            key: s3Key,
+            bucket: this.transcripts?.bucket ?? null,
+            region: this.transcripts?.region ?? "us-east-1",
+          },
+        },
+      }
+      if (failed) {
+        emit(
+          "transcript.error",
+          {
+            ...common,
+            info: {
+              instanceId: this.state.nextUuid("instance"),
+              startTs: seconds(startedAt),
+              endTs: seconds(endedAt),
+            },
+            max_participants: input.participants.length,
+            status: "t_error",
+            error: input.transcriptError,
+          },
+          "1.1.0",
+        )
+      } else {
+        emit(
+          "transcript.ready-to-download",
+          { ...common, status: "t_finished", domain_id: this.state.current().domainId },
+          "1.1.0",
+        )
+      }
+    } else {
+      emit("transcription.stopped", {
+        room_name: name,
+        session_id: sessionId,
+        duration: input.durationSec,
+        s3_key: s3Key,
+        instance_id: this.state.nextUuid("instance"),
       })
     }
-    emit("transcription.stopped", {
-      room_name: name,
-      session_id: sessionId,
-      duration: input.durationSec,
-      s3_key: s3Key,
-      instance_id: this.state.nextUuid("instance"),
-    })
     if (input.recording !== false) {
       emit("recording.ready-to-download", {
         type: "cloud",
         recording_id: this.state.nextUuid("recording"),
         room_name: name,
         session_id: sessionId,
-        start_ts: Math.floor(endedAt / 1000) - input.durationSec,
+        start_ts: seconds(endedAt) - input.durationSec,
         status: "finished",
         max_participants: input.participants.length,
         duration: input.durationSec,
-        s3_key: s3Key.replace(/\.json$/, ".mp4"),
+        s3_key: s3Key.replace(/\.(json|vtt)$/, ".mp4"),
       })
     }
     this.state.rooms.update(name, {
@@ -591,6 +808,11 @@ export class DailyAPI implements FetchAPI {
           sessionId,
           durationSec: input.durationSec,
           participants: input.participants.length,
+          participantList: input.participants.map((p) => ({
+            participantId: this.state.nextUuid("participant"),
+            userId: p.userId,
+            userName: p.userName ?? null,
+          })),
           transcript: uri,
           endedAt: new Date(endedAt).toISOString(),
         },
@@ -620,5 +842,11 @@ export const synthesizeTranscript = (
   }))
 }
 
-export type { DailyRuntime, DailyRuntimeOptions } from "./runtime.js"
-export { createRuntime, DAILY_PRESETS, dailyWebhookSigner, WEBHOOK_PATH } from "./runtime.js"
+export type { DailyRuntime, DailyRuntimeOptions, DailyWebhookSignature } from "./runtime.js"
+export {
+  createRuntime,
+  DAILY_PRESETS,
+  dailyDocumentedWebhookSigner,
+  dailyWebhookSigner,
+  WEBHOOK_PATH,
+} from "./runtime.js"

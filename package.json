@@ -12,6 +12,7 @@
     "packages/testing",
     "packages/ui",
     "packages/admin-ui",
+    "packages/runtime",
     "packages/sqlite",
     "packages/webhook-collector",
     "packages/notifications",
