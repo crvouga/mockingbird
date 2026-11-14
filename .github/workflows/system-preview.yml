@@ -1,0 +1,86 @@
+name: System preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: system-preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - name: Build static system
+        if: github.event.action != 'closed'
+        run: bunx turbo run preview:build --filter=@crvouga/mockingbird-example-medical-testing
+      - uses: actions/upload-artifact@v4
+        if: github.event.action != 'closed'
+        with:
+          name: lab-system-preview
+          path: packages/examples/medical-testing/preview-dist
+          if-no-files-found: error
+      # Forks receive the static artifact, never credentials.
+      - name: Publish or remove PR Worker
+        id: deploy
+        shell: bash
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        working-directory: packages/examples/medical-testing
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_ACTION: ${{ github.event.action }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::notice::Hosting needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets. The static preview is available as an artifact."
+            exit 0
+          fi
+          if [ "$PR_ACTION" = "closed" ]; then
+            bunx wrangler@4.50.0 delete --name "mockingbird-lab-pr-$PR_NUMBER" --force
+          else
+            bunx wrangler@4.50.0 deploy --name "mockingbird-lab-pr-$PR_NUMBER" > "$RUNNER_TEMP/worker-deploy.log" 2>&1 || {
+              cat "$RUNNER_TEMP/worker-deploy.log"
+              exit 1
+            }
+            cat "$RUNNER_TEMP/worker-deploy.log"
+            PREVIEW_URL=$(grep -Eo "https://mockingbird-lab-pr-${PR_NUMBER}\.[a-z0-9-]+\.workers\.dev" "$RUNNER_TEMP/worker-deploy.log" | tail -1)
+            test -n "$PREVIEW_URL"
+            curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 "$PREVIEW_URL/" -o "$RUNNER_TEMP/preview.html"
+            grep -q 'id="system"' "$RUNNER_TEMP/preview.html"
+            echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
+            echo "[Open system preview]($PREVIEW_URL)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Put preview links at the top of the PR
+        if: steps.deploy.outputs.url != ''
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = context.issue.number;
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            const start = '<!-- system-preview:start -->';
+            const end = '<!-- system-preview:end -->';
+            const url = process.env.PREVIEW_URL;
+            const links = [
+              `[Lab preview](${url}/?surface=app)`,
+              `[System](${url}/?surface=system)`,
+              `[Emulators](${url}/?surface=emulators)`,
+              `[Notifications](${url}/?surface=notifications)`,
+            ].join(' · ');
+            const body = (pr.body || '').replace(/<!-- system-preview:start -->[\s\S]*?<!-- system-preview:end -->\s*/g, '').trimStart();
+            const next = `${start}\n${links}\n${end}\n\n${body}`;
+            if (pr.body !== next) {
+              await github.rest.pulls.update({ owner, repo, pull_number, body: next });
+            }

@@ -60,7 +60,9 @@ const workspace = (
 })
 
 const tab = (page: Person, name: "app" | "emulators" | "notifications") =>
-  page.click(`[data-testid="dashboard-tab"][data-tab="${name}"]`)
+  page
+    .click(`[data-testid="system-switcher"]`)
+    .then(() => page.click(`nav button[data-surface="${name}"]`))
 
 /** The Example tab: the app, signed out. */
 export const Example: StoryObj = workspace()
@@ -76,7 +78,13 @@ export const Notifications: StoryObj = workspace(async (page) => {
   await page.type('[data-testid="sign-in-email"]', "ada@example.test")
   await page.click('[data-testid="sign-in-email-submit"]')
   await page.click('[data-testid="open-inbox"]')
-  await page.find('[data-testid="dashboard-panel"][data-tab="notifications"]:not([hidden])')
+  await page.find('section[data-surface="notifications"]:not([hidden])')
 })
 
 export const OnAPhone: StoryObj = workspace(undefined, { globals: phone })
+
+export const System: StoryObj = workspace(async (page) => {
+  await page.click('[data-testid="system-switcher"]')
+  await page.click('nav button[data-surface="system"]')
+  await page.find(".msh-home")
+})

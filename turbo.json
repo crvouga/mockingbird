@@ -332,6 +332,10 @@
       ],
       "cache": false,
       "inputs": ["scripts/performance/**", "package.json", "bun.lock"]
+    },
+    "preview:build": {
+      "dependsOn": ["^build"],
+      "outputs": ["preview-dist/**"]
     }
   }
 }
