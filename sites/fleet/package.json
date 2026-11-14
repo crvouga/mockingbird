@@ -93,6 +93,7 @@
     "@crvouga/mockingbird-service-oauth": "workspace:*",
     "@crvouga/mockingbird-service-odx": "workspace:*",
     "@crvouga/mockingbird-service-okta": "workspace:*",
+    "@crvouga/mockingbird-service-open-wearables": "workspace:*",
     "@crvouga/mockingbird-service-openai": "workspace:*",
     "@crvouga/mockingbird-service-opensearch": "workspace:*",
     "@crvouga/mockingbird-service-otel": "workspace:*",

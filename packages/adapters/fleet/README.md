@@ -197,3 +197,73 @@ artifacts, installs them outside the monorepo, then uses Node to start, discover
 export and import that fleet. It asserts Stripe and private helper packages are absent. The
 neutral CLI is also exercised from outside the consumer project and resolves installed services
 from its consumer root. Run `bunx turbo run test --filter=@crvouga/mockingbird-fleet` in a checkout.
+
+## Listener-free fleet host
+
+`@crvouga/mockingbird-fleet/in-process` exports `createFleet` without Node imports,
+listeners or a package discovery scan. Register only the installed services needed:
+
+```ts
+import { createFleet } from "@crvouga/mockingbird-fleet/in-process"
+import { createRuntime } from "@crvouga/mockingbird-service-twilio"
+
+const fleet = createFleet({
+  services: {
+    twilio: { version: "fixture-v1", create: () => createRuntime() },
+  },
+})
+const response = await fleet.fetch("twilio", new Request("http://twilio.test/__admin/health"))
+await response.text() // Consume or cancel every response before requesting an archive.
+const archive = await fleet.export()
+await fleet.import(archive)
+```
+
+This implementation is a **best guess, not oracle-verified**, for the listener-free host
+requested in #783. Each factory is invoked lazily and once per owned runtime; its failure
+is isolated and visible in `status()`. Factories receive an injected `fetch` transport;
+forward it to service webhook options when outbound delivery must remain in-process.
+All application traffic must enter `fleet.fetch(service, request)`. Do not retain or mutate
+the underlying runtime independently.
+
+`control(Request)` supports these `/__admin/fleet` paths:
+
+- `GET /status`, `GET /namespaces`.
+- `POST /namespaces/:namespace` and `DELETE /namespaces/:namespace`.
+- `POST /namespaces/:namespace/reset`.
+- `GET|POST /clock?namespace=default`; POST accepts `set`, `advance`, `freeze`.
+- `GET|POST /namespaces/:namespace/snapshots`; creation accepts `label` (an identifier).
+- `POST /namespaces/:namespace/snapshots/:id/restore`.
+- `POST /archives/export` and `POST /archives/import {archive}`.
+
+Mutating namespace, clock and snapshot controls accept `services: [name, ...]`;
+unknown services or fields reject before application. Explicit controls may create lazy
+runtimes. Snapshots are stored in each runtime's native snapshot registry, not a parallel
+fleet map; a shared identifier coordinates capture/restore. Reset uses native boot state
+and clears named snapshots as the runtime normally does. Namespace names are 1–64 ASCII
+letters, digits, dots, underscores or hyphens. The default namespace cannot be forgotten:
+its DELETE has the native runtime's reset behavior.
+
+The serial admission barrier covers routed requests, including response consumption, and
+archive/control operations. An unread stream intentionally blocks a later archive until
+consumed or cancelled. Recursively delivering a webhook into the same fleet while its
+initiating request awaits delivery would deadlock; arrange delivery after the request or
+use a separate destination. The barrier cannot pause arbitrary timers, external databases,
+or direct access to retained runtime references.
+
+Archives use the distinct `mockingbird.in-process/v1` format with exact configured service
+versions. They contain runtime portable namespace state, not sockets, named snapshot
+history or arbitrary external resources. Import validates versions and stages fresh owned
+runtimes; a codec or restore failure leaves live runtimes and their boot status unchanged.
+Only after all staging succeeds are the owned runtimes swapped. Factories must return a new
+runtime each time. Factories owning timers, background webhook delivery or other resources
+must provide `dispose(runtime)` to stop and release them; omitting it declares a passive
+runtime. Disposal runs for rejected staging and retired runtimes. A disposal failure after
+commit is returned as `{committed: true, cleanupErrors}` and retained as `cleanupError` in
+status; it is not reported as a successful rollback. Factory side effects outside their
+owned runtime cannot be rolled back.
+
+Explicitly unsupported: Node fleet archive compatibility, the fleet dashboard, raw
+PostgreSQL/Redis wire-protocol adapters, dynamic service installation, and all controller
+routes not listed above (HTTP 501 `mockingbird_unsupported`). This entry does not claim
+that those portions of #783 have been implemented. Service-specific fetch APIs may still
+be registered when their runtime satisfies the in-process contract.

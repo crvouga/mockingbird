@@ -573,6 +573,14 @@ export class LiveKitAPI {
     return this.error("unimplemented", `${service}.${method} is not implemented`, 501)
   }
   async fetch(request: Request) {
+    const path = new URL(request.url).pathname
+    if (path === "/rtc" || path === "/rtc/validate") {
+      return this.error(
+        "unimplemented",
+        "Mockingbird emulator limitation: LiveKit signaling and WebRTC transport are unsupported; use the Twirp APIs and synthetic participant controls",
+        501,
+      )
+    }
     if (request.method !== "POST")
       return this.error("bad_route", "Twirp endpoints require POST", 404)
     const match = new URL(request.url).pathname.match(

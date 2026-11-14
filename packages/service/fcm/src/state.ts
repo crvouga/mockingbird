@@ -43,6 +43,8 @@ export type TokenRecord = {
 }
 
 export type MessageRecord = {
+  upstream?: boolean
+  sentForReal?: boolean
   id: string
   name: string
   project: string

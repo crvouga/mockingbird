@@ -216,6 +216,7 @@ export {
   defineMock,
   STANDARD_ADMIN_ROUTES,
 } from "./surface.js"
+export type { UpstreamOptions, UpstreamState } from "./upstream.js"
 export type { BodyIssue, UnsupportedMediaType } from "./validation.js"
 export { bodyIssues, issuesByField, recordedIssues, unsupportedMediaType } from "./validation.js"
 export { PACKAGE_VERSION, UNRELEASED_VERSION } from "./version.js"

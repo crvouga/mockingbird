@@ -26,6 +26,10 @@
     "./admin": {
       "types": "./dist/admin.d.ts",
       "default": "./dist/admin.js"
+    },
+    "./admin-fetch": {
+      "types": "./dist/admin-fetch.d.ts",
+      "default": "./dist/admin-fetch.js"
     }
   },
   "bin": {

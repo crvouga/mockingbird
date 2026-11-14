@@ -6,6 +6,7 @@ import {
   type MockControls,
   type RequestLog,
   type ServiceRuntime,
+  type UpstreamOptions,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { rpcBody } from "./errors.js"
@@ -85,6 +86,7 @@ export const FCM_PRESETS: Record<string, FaultPreset> = {
 }
 
 export type FcmRuntimeOptions = {
+  upstream?: UpstreamOptions
   sqlite?: SqliteClient
   clock?: Clock
   seed?: number | string
@@ -315,6 +317,11 @@ export const createRuntime = (options: FcmRuntimeOptions = {}): FcmRuntime => {
   const settings = options.settings
   return createServiceRuntime<FcmAPI>({
     name: FCM_NAMESPACE,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    canForward: (request) =>
+      request.method === "POST" &&
+      /^\/v1\/projects\/[^/]+\/messages:send$/.test(new URL(request.url).pathname),
+    onForwardResponse: (api, request, response) => api.recordForwarded(request, response),
     document,
     state: [{ name: "tokens" }, { name: "messages" }, { name: "scripts" }, { name: "settings" }],
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),

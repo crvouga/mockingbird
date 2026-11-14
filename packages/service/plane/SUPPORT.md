@@ -2,12 +2,16 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **16**
-- supported by the emulator: **16**
-- parity enabled: **16**
+- operations in spec: **20**
+- supported by the emulator: **20**
+- parity enabled: **20**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
+| `ListAttachments` | `GET /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/attachments/` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `CreateAttachment` | `POST /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/attachments/` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `ConfirmAttachment` | `PATCH /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/attachments/{asset_id}/` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `UploadAttachment` | `POST /__admin/blobs/plane/uploads` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `ListWorkItems` | `GET /api/v1/workspaces/{slug}/projects/{project_id}/work-items/` | ✅ supported | ✅ |  |
 | `CreateWorkItem` | `POST /api/v1/workspaces/{slug}/projects/{project_id}/work-items/` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetWorkItem` | `GET /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/` | ✅ supported | ✅ |  |

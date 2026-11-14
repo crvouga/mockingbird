@@ -21,6 +21,26 @@ const API = "/api/v1/workspaces/"
  * and 8 s (three attempts) and never retries writes: use `count` to fail only some attempts.
  */
 export const PLANE_PRESETS: Record<string, FaultPreset> = {
+  attachment_slot_malformed: {
+    description: "Attachment slot omits upload_data",
+    rules: [{ pathPrefix: API, method: "POST", effect: "attachment_slot_malformed" }],
+  },
+  attachment_upload_denied: {
+    description: "Attachment storage rejects the upload",
+    rules: [
+      {
+        pathPrefix: "/__admin/blobs/plane/uploads",
+        method: "POST",
+        status: 403,
+        body: "<Error><Code>AccessDenied</Code></Error>",
+        headers: { "content-type": "application/xml" },
+      },
+    ],
+  },
+  attachment_confirm_failed: {
+    description: "Attachment confirmation fails",
+    rules: [{ pathPrefix: API, method: "PATCH", effect: "attachment_confirm_failed" }],
+  },
   rate_limited: {
     description:
       "Every call answers 429 Request was throttled (pass count: 2 to recover on the 3rd GET)",
@@ -104,6 +124,7 @@ export type PlaneRuntime = ServiceRuntime<PlaneAPI>
 
 /** Shown in the admin UI even when a collection has no rows yet. */
 const PLANE_STATE: readonly StateDeclaration[] = [
+  { name: "attachments", label: "Attachments" },
   {
     name: "projects",
     label: "Projects",
@@ -141,6 +162,20 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
 const adminRoutes = (runtime: ServiceRuntime<PlaneAPI>): AdminRoutes => ({
+  "GET /work-items/:id/attachments": ({ params, namespace }) =>
+    json(
+      200,
+      runtime
+        .instance(namespace)
+        .attachmentsOf(params.id as string)
+        .map((a) => ({
+          asset_id: a.id,
+          ...a.attributes,
+          is_uploaded: a.is_uploaded,
+          byte_length: a.bytes?.length ?? 0,
+          sha256: a.sha256,
+        })),
+    ),
   "POST /work-item-types": ({ body, namespace }) => {
     if (
       !isRecord(body) ||
@@ -254,10 +289,12 @@ export const createRuntime = (options: PlaneRuntimeOptions = {}): PlaneRuntime =
         },
       ],
     },
-    create: ({ sqlite, namespace, clock }) =>
+    create: ({ sqlite, namespace, clock, publicNamespace, adminPrefix }) =>
       new PlaneAPI({
         sqlite,
         namespace,
+        publicNamespace,
+        adminPrefix,
         now: clock.now,
         ...(options.settings ? { settings: options.settings } : {}),
       }),

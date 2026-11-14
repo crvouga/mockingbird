@@ -142,8 +142,8 @@ export const ADMIN_CONTROL_PAGES: readonly {
   {
     page: "reference",
     title: "Reference",
-    routes: ["/", "/health"],
-    headers: [CONTROL_HEADERS.adminKey],
+    routes: ["/", "/health", "/upstream"],
+    headers: [CONTROL_HEADERS.adminKey, CONTROL_HEADERS.upstream],
   },
 ]
 
@@ -242,6 +242,7 @@ export type ControlContext = {
   /** Extra fields for `GET /__admin/health`, such as the loaded corpus version. */
   describe(): Record<string, unknown>
   routes: AdminRoutes
+  upstream?: { get: NonNullable<AdminRoutes[string]>; set: NonNullable<AdminRoutes[string]> }
   adminPrefix?: string
   adminKey: string | undefined
   /** Reported by `GET /__admin`. */
@@ -466,6 +467,17 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
       })
     },
 
+    // Non-HTTP adapters share the index but cannot relay vendor requests.
+    "GET /upstream": context.upstream?.get ?? (() => json(200, { mode: "emulated" })),
+    "PUT /upstream":
+      context.upstream?.set ??
+      (() =>
+        json(501, {
+          error: {
+            type: "mockingbird_unsupported",
+            message: "This adapter does not support HTTP forwarding",
+          },
+        })),
     "GET /controls": ({ namespace }) => json(200, describe(namespace)),
     "PUT /controls": ({ body, namespace }) =>
       guard(() => {

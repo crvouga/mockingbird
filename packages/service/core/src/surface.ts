@@ -131,6 +131,8 @@ export type MockClockState = ClockState
  * `docs/ADMIN_CONTROLS.md` is checked against it.
  */
 export const ADMIN_ROUTE_REFERENCE = {
+  "GET /upstream": "Read this namespace’s emulated or forward mode and upstream base URL.",
+  "PUT /upstream": "Set upstream mode or base URL; forward requires an injected transport.",
   "GET /": "This index: every route and control header, with a one-line summary each.",
   "GET /health": "Readiness. Never needs the admin key or a vendor credential.",
   "GET /controls":

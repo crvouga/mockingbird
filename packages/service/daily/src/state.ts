@@ -8,6 +8,9 @@ export type PresenceRecord = {
   userName: string
   /** Mock-clock epoch ms the participant joined. */
   joinedAtMs: number
+  video?: boolean
+  audio?: boolean
+  owner?: boolean
 }
 
 /** One participant of an ended session, as `GET /v1/meetings` reports it. */
@@ -52,6 +55,8 @@ export type WarningRecord = {
 
 /** Per-namespace knobs, set through `PUT /__admin/settings`; cleared on reset. */
 export type Settings = {
+  /** One-shot browser join error, configured through the admin control. */
+  nextJoinError?: string | null
   /** Accepted `DAILY_API_KEY`s. Empty: any bearer key is accepted. */
   apiKeys: string[]
   /** `DAILY_API_DOMAIN_ID`, stamped as `d` in minted tokens and checked in decoded ones. */

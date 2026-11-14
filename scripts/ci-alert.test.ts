@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { actionFor, failureReport, issueTitle, LABEL, newIssueBody, type Run } from "./ci-alert.ts"
+import {
+  actionFor,
+  failureReport,
+  issueLookupArgs,
+  issueTitle,
+  LABEL,
+  newIssueBody,
+  type Run,
+} from "./ci-alert.ts"
 
 const run: Run = {
   workflow: "Release",
@@ -13,6 +21,14 @@ const run: Run = {
 }
 
 describe("ci-alert", () => {
+  test("finds reports even after their label is removed, across all open issue pages", () => {
+    expect(issueLookupArgs("owner/repo")).toEqual([
+      "api",
+      "--paginate",
+      "--slurp",
+      "repos/owner/repo/issues?state=open&per_page=100",
+    ])
+  })
   test("only failures report and only success resolves", () => {
     expect(actionFor("failure")).toBe("report")
     expect(actionFor("timed_out")).toBe("report")

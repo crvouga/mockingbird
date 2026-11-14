@@ -5,7 +5,15 @@
  * Bundles the real runtime (`@crvouga/mockingbird-service`, built) the way bundle-service.ts does.
  */
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { build } from "esbuild"
@@ -155,4 +163,20 @@ test("bundleServiceJs rejects a static import of the admin client", async () => 
       platform: "neutral",
     }),
   ).rejects.toThrow(/imported statically/)
+})
+
+test("admin client isolation survives a symlinked build directory", async () => {
+  const actual = fixture("symlink-target", SERVICE)
+  const alias = join(work, "symlink-alias")
+  symlinkSync(actual, alias, "dir")
+  await bundleServiceJs({
+    absWorkingDir: alias,
+    outdir: "dist",
+    entryPoints: { index: "src/index.js" },
+    platform: "neutral",
+  })
+  const dist = join(actual, "dist")
+  expect(
+    jsFiles(dist).filter((file) => readFileSync(join(dist, file), "utf8").includes(ADMIN_STRING)),
+  ).toEqual([`${ADMIN_CLIENT_ENTRY}.js`])
 })

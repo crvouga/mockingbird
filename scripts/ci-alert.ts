@@ -118,23 +118,18 @@ function failedJobs(repo: string, runId: string): FailedJob[] {
     })
 }
 
+export function issueLookupArgs(repo: string): string[] {
+  // Labels may be removed independently; the exact title is the workflow identity.
+  return ["api", "--paginate", "--slurp", `repos/${repo}/issues?state=open&per_page=100`]
+}
+
 function openIssue(repo: string, title: string): number | undefined {
-  const issues = JSON.parse(
-    gh([
-      "issue",
-      "list",
-      "--repo",
-      repo,
-      "--label",
-      LABEL,
-      "--state",
-      "open",
-      "--limit",
-      "100",
-      "--json",
-      "number,title",
-    ]),
-  ) as { number: number; title: string }[]
+  const pages = JSON.parse(gh(issueLookupArgs(repo))) as {
+    number: number
+    title: string
+    pull_request?: unknown
+  }[][]
+  const issues = pages.flat().filter((issue) => !issue.pull_request)
   return issues.find((issue) => issue.title === title)?.number
 }
 

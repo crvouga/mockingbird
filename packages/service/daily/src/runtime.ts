@@ -202,6 +202,123 @@ const adminRoutes = (runtime: ServiceRuntime<DailyAPI>): AdminRoutes => ({
     const room = runtime.instance(namespace).state.rooms.get(params.name as string)
     return room ? json(200, room) : adminError(404, `no room ${params.name}`)
   },
+  "POST /call-fault": ({ body, namespace }) => {
+    if (
+      !isRecord(body) ||
+      typeof body.type !== "string" ||
+      !["ejected", "exp-token", "no-room", "exp-room", "nbf-room", "room-full"].includes(body.type)
+    )
+      return adminError(400, "expected supported join error type")
+    runtime.instance(namespace).state.update({ nextJoinError: body.type })
+    return json(200, { type: body.type })
+  },
+  "GET /rooms/:name/participants": ({ params, namespace }) => {
+    const room = runtime.instance(namespace).state.rooms.get(params.name as string)
+    return room ? json(200, room.presence) : adminError(404, "no room")
+  },
+  "POST /rooms/:name/participants": async ({ params, body, namespace }) => {
+    const api = runtime.instance(namespace)
+    const name = params.name as string
+    const fail = (type: string) => json(400, { error: { type }, errorMsg: type })
+    let room = api.state.rooms.get(name)
+    if (!room) return fail("no-room")
+    if (!isRecord(body)) return adminError(400, "expected participant object")
+    if (body.browser === true && room.privacy === "private" && typeof body.token !== "string")
+      return fail("ejected")
+    if (body.browser === true && api.state.current().nextJoinError) {
+      const type = api.state.current().nextJoinError as string
+      api.state.update({ nextJoinError: null })
+      return fail(type)
+    }
+    let owner = body.owner === true
+    let userId = typeof body.user_id === "string" ? body.user_id : ""
+    let userName = typeof body.user_name === "string" ? body.user_name : "Guest"
+    if (body.token !== undefined) {
+      if (typeof body.token !== "string") return fail("ejected")
+      const inspection = await api.inspectToken(body.token)
+      if (
+        inspection.signatureValid !== true ||
+        (inspection.claims?.r && inspection.claims.r !== name)
+      )
+        return fail("ejected")
+      if (!inspection.joinable) {
+        const problem = inspection.problems.join(" ")
+        return fail(
+          problem.includes("token expired")
+            ? "exp-token"
+            : problem.includes("room expired")
+              ? "exp-room"
+              : problem.includes("room not yet")
+                ? "nbf-room"
+                : "ejected",
+        )
+      }
+      owner = inspection.claims?.o === true
+      userId = typeof inspection.claims?.ud === "string" ? inspection.claims.ud : userId
+      userName = typeof inspection.claims?.u === "string" ? inspection.claims.u : userName
+    }
+    // Re-read after async signature verification so simultaneous joins cannot overwrite one another.
+    room = api.state.rooms.get(name)
+    if (!room) return fail("no-room")
+    const seconds = runtime.clock.now() / 1000
+    const asSeconds = (n: unknown) =>
+      typeof n === "number" ? (n >= 1e11 ? n / 1000 : n) : undefined
+    const exp = asSeconds(room.config.exp)
+    const nbf = asSeconds(room.config.nbf)
+    if (exp !== undefined && exp <= seconds) return fail("exp-room")
+    if (nbf !== undefined && nbf > seconds && !owner) return fail("nbf-room")
+    if (
+      typeof room.config.max_participants === "number" &&
+      room.presence.length >= room.config.max_participants
+    )
+      return fail("room-full")
+    const participant = {
+      id: api.state.nextUuid("participant"),
+      userId,
+      userName,
+      joinedAtMs: runtime.clock.now(),
+      video: body.video !== false,
+      audio: body.audio !== false,
+      owner,
+    }
+    api.state.rooms.update(name, { ...room, presence: [...room.presence, participant] })
+    if (room.presence.length === 0) api.emit("meeting.started", { room: name })
+    api.emit("participant.joined", { room: name, participant })
+    return json(200, participant)
+  },
+  "PATCH /rooms/:name/participants/:id": ({ params, body, namespace }) => {
+    const api = runtime.instance(namespace)
+    const room = api.state.rooms.get(params.name as string)
+    const current = room?.presence.find((p) => p.id === params.id)
+    if (!room || !current) return adminError(404, "no participant")
+    if (
+      !isRecord(body) ||
+      (body.video !== undefined && typeof body.video !== "boolean") ||
+      (body.audio !== undefined && typeof body.audio !== "boolean")
+    )
+      return adminError(400, "expected audio/video booleans")
+    const participant = {
+      ...current,
+      ...(typeof body.video === "boolean" ? { video: body.video } : {}),
+      ...(typeof body.audio === "boolean" ? { audio: body.audio } : {}),
+    }
+    api.state.rooms.update(room.name, {
+      ...room,
+      presence: room.presence.map((p) => (p.id === current.id ? participant : p)),
+    })
+    return json(200, participant)
+  },
+  "DELETE /rooms/:name/participants/:id": ({ params, namespace }) => {
+    const api = runtime.instance(namespace)
+    const room = api.state.rooms.get(params.name as string)
+    const participant = room?.presence.find((p) => p.id === params.id)
+    if (!room || !participant) return adminError(404, "no participant")
+    const presence = room.presence.filter((p) => p.id !== participant.id)
+    api.state.rooms.update(room.name, { ...room, presence })
+    api.emit("participant.left", { room: room.name, participant })
+    if (presence.length === 0) api.emit("meeting.ended", { room: room.name })
+    return json(200, { deleted: true })
+  },
   "PUT /rooms/:name/presence": ({ params, body, namespace }) => {
     const participants = parseParticipants(isRecord(body) ? body.participants : undefined)
     if (!participants) {

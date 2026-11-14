@@ -38,6 +38,7 @@ The admin page does not attach control headers to a vendor request. Set the head
 | `x-mockingbird-delay` | `<duration>` | request | Hold this response back, on top of the namespace's latency | [Latency and timeouts](LATENCY_AND_TIMEOUTS.md) |
 | `x-mockingbird-timeout` | `<duration>` | request | Never answer: hold this long, then drop the connection | [Latency and timeouts](LATENCY_AND_TIMEOUTS.md#timeouts) |
 | `x-mockingbird-fault` | status, `drop`, preset, pairs or JSON | request | Fault this request only | [Faults](FAULTS.md#request-header) |
+| `x-mockingbird-upstream` | `emulated \| forward` | request | Override upstream mode for this request | [Reference](REFERENCE.md#forwarding) |
 | `x-mockingbird-snapshot` | `<name>` | namespace | Snapshot after the request; the response echoes the name | [Snapshot and restore](SNAPSHOT_AND_RESTORE.md) |
 | `x-mockingbird-admin-key` | `<key>` | | Required with any header above except the three `select` ones, when the emulator has an admin key | [Reference](REFERENCE.md#access) |
 
@@ -112,6 +113,7 @@ const response = await fetch("http://localhost:8787/v1/charges", {
 | `delay` | `x-mockingbird-delay` | duration |
 | `timeout` | `x-mockingbird-timeout` | duration |
 | `fault` | `x-mockingbird-fault` | a status, `"drop"`, a preset name, or a fault rule |
+| `upstream` | `x-mockingbird-upstream` | `emulated` or `forward` |
 | `snapshot` | `x-mockingbird-snapshot` | string |
 | `adminKey` | `x-mockingbird-admin-key` | string |
 

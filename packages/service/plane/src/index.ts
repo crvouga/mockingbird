@@ -19,6 +19,7 @@ import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
 import {
   DEFAULT_STATES,
+  type PlaneAttachment,
   type PlaneCommentRecord,
   type PlaneCycleRecord,
   type PlaneLabelRecord,
@@ -56,6 +57,8 @@ export { DEFAULT_STATES, uuidFrom } from "./state.js"
 export const PLANE_NAMESPACE = "plane"
 
 export type PlaneAPIOptions = APIOptions & {
+  adminPrefix?: string
+  publicNamespace?: string
   /** Initial per-namespace settings (API keys, rate limit, fixed projects). */
   settings?: Partial<Settings>
 }
@@ -94,15 +97,30 @@ export class PlaneAPI implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
   readonly state: PlaneState
+  private readonly adminPrefix: string
+  private readonly publicNamespace: string
+  private readonly multipart = new WeakMap<Request, FormData>()
   private readonly service: Service
   private readonly now: () => number
 
   constructor(options: PlaneAPIOptions = {}) {
+    this.adminPrefix = options.adminPrefix ?? "/__admin"
+    this.publicNamespace = options.publicNamespace ?? ""
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? PLANE_NAMESPACE
     this.now = options.now ?? (() => Date.now())
     this.state = new PlaneState(sqlite, namespace, options.settings ?? {})
     const handlers = defineOperations<SupportedOperationId>({
+      CreateAttachment: (context) => this.createAttachment(context),
+      UploadAttachment: (context) => this.uploadAttachment(context),
+      ConfirmAttachment: (context) => this.confirmAttachment(context),
+      ListAttachments: (context) =>
+        jsonRes(
+          200,
+          this.attachmentsOf(this.item(context).id)
+            .filter((a) => a.is_uploaded)
+            .map((a) => this.publicAttachment(a)),
+        ),
       ListWorkItems: (context) => this.listWorkItems(context),
       CreateWorkItem: (context) => this.createWorkItem(context),
       GetWorkItem: (context) => {
@@ -155,6 +173,7 @@ export class PlaneAPI implements FetchAPI {
         throw error
       },
       before: (context) => {
+        if (context.operation.operationId === "UploadAttachment") return undefined
         const key = apiKeyCredential(context.request)
         if (!key) return jsonRes(401, { detail: "Authentication credentials were not provided." })
         const settings = this.state.current()
@@ -183,7 +202,17 @@ export class PlaneAPI implements FetchAPI {
     this.sqlite = this.service.sqlite
   }
 
-  fetch(request: Request): Promise<Response> {
+  async fetch(request: Request): Promise<Response> {
+    if (
+      new URL(request.url).pathname === "/__admin/blobs/plane/uploads" &&
+      request.method === "POST"
+    ) {
+      try {
+        this.multipart.set(request, await request.clone().formData())
+      } catch {
+        return jsonRes(400, { error: "Malformed multipart upload" })
+      }
+    }
     return this.service.fetch(request)
   }
 
@@ -342,6 +371,20 @@ export class PlaneAPI implements FetchAPI {
 
   private listWorkItems(context: OperationContext): Response {
     const project = this.project(context)
+    if (context.query.external_source && context.query.external_id) {
+      const matches = this.state.items
+        .list({
+          where: (i) =>
+            i.project === project.id &&
+            i.external_source === context.query.external_source &&
+            i.external_id === context.query.external_id,
+        })
+        .map((r) => r.value)
+      if (!matches.length) throw new HttpError(404, NOT_FOUND)
+      if (matches.length > 1)
+        return jsonRes(500, { error: "Multiple work items match the external identity." })
+      return jsonRes(200, matches[0])
+    }
     const orderBy =
       typeof context.query.order_by === "string" ? context.query.order_by : "-created_at"
     const descending = orderBy.startsWith("-")
@@ -581,6 +624,126 @@ export class PlaneAPI implements FetchAPI {
     return out
   }
 
+  attachmentsOf(id: string): PlaneAttachment[] {
+    return this.state.attachments.list({ where: (a) => a.issue === id }).map((r) => r.value)
+  }
+
+  private publicAttachment(a: PlaneAttachment) {
+    return { id: a.id, attributes: a.attributes, is_uploaded: a.is_uploaded, issue: a.issue }
+  }
+
+  private createAttachment(context: OperationContext): Response {
+    const item = this.item(context)
+    const body = this.body(context)
+    const size = Math.trunc(Number(body.size))
+    if (typeof body.name !== "string" || !body.name.trim() || !Number.isFinite(size) || size <= 0) {
+      return jsonRes(400, { error: "Invalid request.", status: false })
+    }
+    if (
+      typeof body.type !== "string" ||
+      ![
+        "image/png",
+        "image/jpeg",
+        "image/webp",
+        "image/gif",
+        "application/pdf",
+        "text/plain",
+      ].includes(body.type)
+    ) {
+      return jsonRes(400, { error: "Invalid file type.", status: false })
+    }
+    const id = this.state.uuid("attachment")
+    const fields = {
+      "Content-Type": body.type,
+      key: id,
+      policy: `mockingbird-policy-${id}`,
+      "x-amz-signature": `mockingbird-signature-${id}`,
+    }
+    const attachment: PlaneAttachment = {
+      id,
+      issue: item.id,
+      attributes: { name: body.name, type: body.type, size: Math.min(size, 5 * 1024 * 1024) },
+      fields,
+      bytes: null,
+      sha256: null,
+      is_uploaded: false,
+    }
+    this.state.attachments.insert(id, attachment)
+    const origin = new URL(context.request.url).origin
+    if (faultEffect(context.request, "attachment_slot_malformed") !== undefined)
+      return jsonRes(200, { asset_id: id })
+    return jsonRes(200, {
+      asset_id: id,
+      upload_data: {
+        url: `${origin}${this.adminPrefix}/blobs/plane/uploads?${new URLSearchParams({ namespace: this.publicNamespace })}`,
+        fields,
+      },
+      attachment: this.publicAttachment(attachment),
+      asset_url: `${origin}/__storage/plane/assets/${id}`,
+    })
+  }
+
+  private async uploadAttachment(context: OperationContext): Promise<Response> {
+    const deny = () =>
+      new Response("<Error><Code>AccessDenied</Code></Error>", {
+        status: 403,
+        headers: { "content-type": "application/xml" },
+      })
+    const form = this.multipart.get(context.request)
+    if (!form) return deny()
+    const asset = this.state.attachments.get(String(form.get("key") ?? ""))
+    if (!asset) return deny()
+    const entries = [...form.entries()]
+    const file = form.get("file")
+    if (
+      !(file instanceof Blob) ||
+      entries.at(-1)?.[0] !== "file" ||
+      entries.length !== Object.keys(asset.fields).length + 1
+    )
+      return deny()
+    for (const [key, value] of Object.entries(asset.fields)) {
+      if (form.getAll(key).length !== 1 || form.get(key) !== value) return deny()
+    }
+    if (!file.size || file.size > asset.attributes.size) return deny()
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const hash = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))
+    this.state.attachments.update(asset.id, {
+      ...asset,
+      bytes: [...bytes],
+      sha256: [...hash].map((b) => b.toString(16).padStart(2, "0")).join(""),
+    })
+    return new Response(null, { status: 204 })
+  }
+
+  private confirmAttachment(context: OperationContext): Response {
+    const item = this.item(context)
+    if (faultEffect(context.request, "attachment_confirm_failed") !== undefined)
+      return jsonRes(500, { error: "Attachment confirmation failed" })
+    const asset = this.state.attachments.get(context.params.asset_id ?? "")
+    if (!asset || asset.issue !== item.id) throw new HttpError(404, NOT_FOUND)
+    const body = this.body(context)
+    if (body.is_uploaded !== true || !asset.bytes)
+      return jsonRes(400, { error: "Upload the file before confirming.", status: false })
+    this.state.attachments.update(asset.id, { ...asset, is_uploaded: true })
+    return new Response(null, { status: 204 })
+  }
+
+  private checkExternal(project: string, source: unknown, id: unknown, exclude?: string): void {
+    if (!source || !id) return
+    const existing = this.state.items.list({
+      where: (i) =>
+        i.project === project &&
+        i.id !== exclude &&
+        i.external_source === source &&
+        i.external_id === id,
+    })[0]?.value
+    if (existing)
+      throw new HttpError(409, {
+        error: "Issue with the same external id and external source already exists",
+        id: existing.id,
+      })
+  }
+
   private createWorkItem(context: OperationContext): Response {
     const project = this.project(context)
     const body = this.body(context)
@@ -591,7 +754,10 @@ export class PlaneAPI implements FetchAPI {
     const html = typeof body.description_html === "string" ? body.description_html : "<p></p>"
     const typeId =
       refs.typeId ?? this.typesOf(project.id).find((type) => type.is_default)?.id ?? null
+    this.checkExternal(project.id, body.external_source, body.external_id)
     const item: PlaneWorkItemRecord = {
+      external_source: typeof body.external_source === "string" ? body.external_source : null,
+      external_id: typeof body.external_id === "string" ? body.external_id : null,
       id: this.state.uuid("work_item"),
       sequence_id: project.nextSequence,
       name: String(body.name).trim(),
@@ -627,7 +793,17 @@ export class PlaneAPI implements FetchAPI {
     const project = this.project(context)
     const body = this.body(context)
     const refs = this.references(project, body)
+    this.checkExternal(
+      project.id,
+      body.external_source === undefined ? item.external_source : body.external_source,
+      body.external_id === undefined ? item.external_id : body.external_id,
+      item.id,
+    )
     const next = this.applyPatch(item, {
+      ...(body.external_source !== undefined
+        ? { external_source: body.external_source as string | null }
+        : {}),
+      ...(body.external_id !== undefined ? { external_id: body.external_id as string | null } : {}),
       ...(typeof body.name === "string" ? { name: body.name.trim() } : {}),
       ...(typeof body.description_html === "string"
         ? {

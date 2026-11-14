@@ -29,7 +29,7 @@ const ADMIN_BUNDLE_MODULE = join(ADMIN_UI_DIST, "bundle.js")
 
 /** A file's key in an esbuild metafile built from `absWorkingDir`. */
 const metafileKey = (absWorkingDir: string, path: string): string =>
-  relative(absWorkingDir, realpathSync(path)).replaceAll("\\", "/")
+  relative(realpathSync(absWorkingDir), realpathSync(path)).replaceAll("\\", "/")
 
 /**
  * Output files (metafile keys) that hold the admin client's bundle but are not the admin
@@ -65,7 +65,9 @@ export type ServiceJsOptions = Pick<
 }
 
 export async function bundleServiceJs(options: ServiceJsOptions): Promise<Metafile> {
-  const { absWorkingDir, outdir, entryPoints } = options
+  const { outdir, entryPoints } = options
+  // esbuild resolves symlinks (notably macOS /var -> /private/var) in metafile paths.
+  const absWorkingDir = realpathSync(options.absWorkingDir)
   if (ADMIN_CLIENT_ENTRY in entryPoints)
     throw new Error(`the entry name "${ADMIN_CLIENT_ENTRY}" is reserved for the admin client`)
   const once = async (extra: Record<string, string>) => {

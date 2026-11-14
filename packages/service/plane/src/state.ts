@@ -31,6 +31,8 @@ export type PlaneLabelRecord = {
 }
 
 export type PlaneWorkItemRecord = {
+  external_source: string | null
+  external_id: string | null
   id: string
   sequence_id: number
   name: string
@@ -169,7 +171,18 @@ export const uuidFrom = (input: string): string => {
   return `${s.slice(0, 8)}-${s.slice(8, 12)}-${s.slice(12, 16)}-${s.slice(16, 20)}-${s.slice(20)}`
 }
 
+export type PlaneAttachment = {
+  id: string
+  issue: string
+  attributes: { name: string; type: string; size: number }
+  is_uploaded: boolean
+  fields: Record<string, string>
+  bytes: number[] | null
+  sha256: string | null
+}
+
 export class PlaneState {
+  readonly attachments: Collection<PlaneAttachment>
   readonly projects: Collection<ProjectRecord>
   readonly states: Collection<PlaneStateRecord>
   readonly labels: Collection<PlaneLabelRecord>
@@ -188,6 +201,7 @@ export class PlaneState {
     namespace: string,
     private readonly seed: Partial<Settings>,
   ) {
+    this.attachments = new Collection(sqlite, namespace, "attachments")
     this.projects = new Collection(sqlite, namespace, "projects")
     this.states = new Collection(sqlite, namespace, "states")
     this.labels = new Collection(sqlite, namespace, "labels")

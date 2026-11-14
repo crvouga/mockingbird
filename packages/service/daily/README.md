@@ -86,6 +86,54 @@ await fetch(`${server.url}/__admin/rooms/${room.name}/session`, {
 await server.close()
 ```
 
+### Browser call-object stand-in
+
+Import `createCallObject` from `@crvouga/mockingbird-service-daily/browser` and
+inject it as the application's Daily factory:
+
+```ts
+import { createCallObject } from "@crvouga/mockingbird-service-daily/browser"
+
+// Supply a room URL and meeting token created by the emulator REST API.
+async function previewCall(roomUrl: string, token: string) {
+  const call = createCallObject({
+    baseUrl: "http://localhost:8800",
+    // Optional: fetch: request => runtime.fetch(request), for a worker transport.
+  })
+  call.on("participant-joined", ({ participant }) => console.log(participant))
+  await call.join({ url: roomUrl, token })
+  await call.setLocalVideo(false)
+  await call.leave()
+  await call.destroy()
+}
+```
+
+This is a **best guess, not oracle-verified**, based on Daily's
+[lifecycle events](https://docs.daily.co/reference/daily-js/events/lifecycle-events)
+and [participants](https://docs.daily.co/reference/daily-js/instance-methods/participants)
+reference. It implements `join`, `leave`, `destroy`, `on`, `off`, `meetingState`,
+`participants`, `setLocalAudio`, and `setLocalVideo`; inject the factory in place of
+Daily's factory. It does not intercept an already-created daily-js call or load the CDN.
+Signed joins require `settings.apiKeys` to contain the key used to mint the meeting token.
+`headers` carries namespace and admin authentication headers; this is a test-only admin
+transport and must not be exposed as a production authorization boundary.
+
+Presence shares room state, namespaces, snapshots and reset with the REST API. Peers
+poll every 100 ms (`pollIntervalMs` overrides it); `refresh()` lets tests advance
+observation explicitly. A removed participant or deleted room emits `left-meeting`.
+`getUserMedia` obtains local tracks; inject it for deterministic permission/media tests.
+Permission refusal emits `camera-error`. Remote tracks report `loading` until disabled
+(`off`); remote audio/video transport and placeholder media are not implemented.
+The error labels and polling timing are emulator choices, not verified Daily wire parity.
+The complete DailyCall interface and unmodified SDK/Chromium compatibility are not claimed.
+
+Synthetic peers use `POST /__admin/rooms/:name/participants` with
+`{user_name, owner?, video?, audio?}`. List with `GET` on that route, and update or
+remove a session using `PATCH` (`{video?, audio?}`) or `DELETE` on
+`/__admin/rooms/:name/participants/:id`. Joins and leaves through these routes emit
+`participant.joined` / `participant.left`, plus `meeting.started` / `meeting.ended`
+when entering an empty room or removing its last participant.
+
 ### Routes
 
 | Route | Behaviour |
@@ -178,8 +226,8 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `room_
 ### Deliberately not modelled
 
 - The media plane: SFU, WebRTC, knocking/admission, recording and transcription themselves.
-  daily-js loads Daily's CDN bundle; member-app UI tests should inject a fake `DailyCallLike`
-  through `useCallProviderLogic(createCallObject)`.
+  daily-js loads Daily's CDN bundle; inject the browser stand-in factory described above
+  for the supported call lifecycle subset.
 - The room page at `https://<domain>.daily.co/<room>?t=` (the URL is produced, not served).
 - Daily's webhook registration API (`/v1/webhooks`): receivers are configured on the emulator.
 - Ongoing meetings in `GET /v1/meetings` and `GET /v1/meetings/:meeting/participants`.
@@ -204,3 +252,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `room_
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8800. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+For a one-shot join failure, `POST /__admin/call-fault {type}` accepts `ejected`,
+`exp-token`, `no-room`, `exp-room`, `nbf-room`, or `room-full`. The next browser join
+in that namespace consumes it without adding a participant.

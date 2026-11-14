@@ -135,3 +135,45 @@ firebase-admin maps `error.details[].errorCode` when `@type` is `type.googleapis
 | `createAdminTransport` (`./admin`) | Node | `{ origin, token? }` → `{ credential, agent, port, close }`. `agent` is an `https.Agent` aimed at the emulator. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+### Hosts without sockets
+
+`@crvouga/mockingbird-service-fcm/admin-fetch` exports `createAdminCredential({ token? })`,
+`fcmHosts`, and `routeAdminRequest(runtime)`. This entry has no Node imports. Pass the credential
+and an explicit `projectId` to `initializeApp`; it returns a local fixture token with a 3600-second
+lifetime without contacting OAuth. For strict mode, register that token under
+`PUT /__admin/settings` → `credentials: { "fixture-token": { project: "demo-project" } }`.
+
+The host must supply firebase-admin's HTTP implementation: changing global `fetch` alone does
+not replace the SDK's Node HTTP transport. Route its outgoing requests through
+`routeAdminRequest(runtime)`; an unmatched request returns `undefined`. The matched surface is
+`POST https://fcm.googleapis.com/v1/projects/{projectId}/messages:send`. In firebase-admin 12.7.0
+and 13.5.0, `sendEach` and `sendEachForMulticast` send individual requests to this same path,
+not the retired batch endpoint. Call `enableLegacyHttpTransport()` for these batch helpers.
+The default HTTP/2 transport needs a host-provided HTTP/2 adapter and is not supplied here.
+These helpers do not make firebase-admin itself a browser-native SDK.
+
+The credential, routing, strict authentication and outbox behavior are tested in-process;
+a browser host's HTTP shim remains that host's responsibility, not verified SDK parity.
+
+### Forwarding real HTTP v1 sends
+
+`createRuntime({ upstream: { baseUrl: "https://fcm.googleapis.com", fetch, rewriteAuth? } })`
+accepts a host-owned transport. It starts emulated; `PUT /__admin/upstream` with
+`{ "mode": "forward" }` switches the calling namespace, and `{ "mode": "emulated" }`
+switches it back. `x-mockingbird-upstream: forward` selects one request. The host's optional
+`rewriteAuth(Request)` replaces fixture authentication and returns the outgoing Request.
+No credential acquisition, provider account or billing integration is included.
+
+Forwarding supports only `POST /v1/projects/{project}/messages:send`; other vendor paths
+return 501 before network activity. Admin routes remain local. Successful real sends enter
+the existing outbox with `upstream: true` and `sentForReal: true`, without delivering to a
+fixture device or changing its token state. Validation-only sends create no message.
+Faults and latency precede the upstream call; transport rejection behaves like network loss.
+The journal records status and an upstream marker, never rewritten authentication. Reset
+restores the boot mode; named snapshots preserve mode/base URL, never the injected functions.
+
+This first forwarding surface is FCM plus the shared runtime infrastructure. Other messaging
+packages and declarative Node fleet settings do not expose forwarding yet: attempting to set
+forward mode without an injected transport returns 409 and changes no mode. Live vendor parity
+has not been asserted; tests use an injected fixture upstream.

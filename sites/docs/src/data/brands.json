@@ -1047,6 +1047,19 @@
     "logo": "/brands/okta.svg",
     "logoSource": "simple-icons"
   },
+  "open-wearables": {
+    "vendor": "Open Wearables",
+    "website": "https://github.com/the-momentum/open-wearables",
+    "docs": "https://github.com/the-momentum/open-wearables/tree/main/backend/app/api/routes/v1",
+    "description": "Self-hosted platform to unify wearable health data through one AI-ready API. - the-momentum/open-wearables",
+    "input": {
+      "website": "https://github.com/the-momentum/open-wearables",
+      "docs": "https://github.com/the-momentum/open-wearables/tree/main/backend/app/api/routes/v1"
+    },
+    "color": "#1E2327",
+    "logo": "/brands/open-wearables.svg",
+    "logoSource": "site"
+  },
   "openai": {
     "vendor": "OpenAI",
     "website": "https://openai.com",

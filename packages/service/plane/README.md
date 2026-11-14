@@ -118,7 +118,7 @@ never retried.
 
 ### Deliberately not modelled
 
-- Plane webhooks (our app polls), cycle editing/deletion and non-UTC project timezones, modules, pages, intake, attachments, members,
+- Plane webhooks (our app polls), cycle editing/deletion and non-UTC project timezones, modules, pages, intake, members,
   estimates, worklogs, and `expand=`.
 - Deleting work items, comments, links or labels; archiving.
 - Vendor work-item type administration, custom type schemas, epics and cross-project type sharing. Seed types with the admin control for this list/assignment surface.
@@ -139,3 +139,30 @@ never retried.
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--api-key`, `--rate-limit`); port 8821. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+### External identities and attachments
+
+Work items retain `external_source` and `external_id`. Supplying both nonempty query
+parameters returns one object (404 if absent, 500 for duplicate seeded identities).
+Create and patch reject a conflicting pair within the project with 409 before changing
+state or consuming a sequence number. Partial identities remain unrestricted.
+
+Attachments use `POST work-items/:id/attachments/`, the returned multipart upload URL,
+then `PATCH attachments/:asset_id/` with `is_uploaded: true`. Only uploaded and confirmed
+assets appear in the list. Send each returned form field once, then `file` last; storage
+needs no API key. Slots and file bytes participate in namespace snapshots and reset.
+`GET /__admin/work-items/:id/attachments` exposes all slots, byte lengths and SHA-256.
+The `attachment_slot_malformed`, `attachment_upload_denied`, and
+`attachment_confirm_failed` presets exercise failure handling without changing other routes.
+
+This is a **best guess, not oracle-verified**, based on
+[Plane's pinned server source](https://github.com/makeplane/plane/blob/c7a5afee6afd15f16038ebda1ec1489ebd8af67d/apps/api/plane/api/views/issue.py).
+No live Plane credentials were used. The deterministic storage protocol is an emulator
+contract: fields are synthetic (not AWS credentials), file bytes must fit the declared
+size capped at 5 MiB, and confirmation before upload is rejected. Allowed MIME types
+are PNG, JPEG, WebP, GIF, PDF and plain text; other MIME types are not modelled.
+Storage signatures, expiry, download URLs, legacy attachment aliases and the full
+vendor MIME allowlist are not modelled. The returned asset URL identifies the slot;
+inspect received bytes via the admin hash rather than downloading it. Source inspection
+shows size metadata is capped too, and missing/invalid name or size yields
+`{error: "Invalid request.", status: false}` rather than the older example wording.

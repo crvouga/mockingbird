@@ -72,6 +72,7 @@ import type { createRuntime as createNotion } from "@crvouga/mockingbird-service
 import type { createRuntime as createOauth } from "@crvouga/mockingbird-service-oauth"
 import type { createRuntime as createOdx } from "@crvouga/mockingbird-service-odx"
 import type { createRuntime as createOkta } from "@crvouga/mockingbird-service-okta"
+import type { createRuntime as createOpenWearables } from "@crvouga/mockingbird-service-open-wearables"
 import type { createRuntime as createOpenAI } from "@crvouga/mockingbird-service-openai"
 import type { createRuntime as createOpensearch } from "@crvouga/mockingbird-service-opensearch"
 import type { createRuntime as createOtel } from "@crvouga/mockingbird-service-otel"
@@ -248,6 +249,7 @@ export type SurfaceProof = [
   Assert<typeof createApigateway>,
   Assert<typeof createSts>,
   Assert<typeof createAcm>,
+  Assert<typeof createOpenWearables>,
   Assert<typeof createEc2>,
   Assert<typeof createResourceGroups>,
   Assert<typeof createRoute53>,

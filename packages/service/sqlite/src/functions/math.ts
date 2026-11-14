@@ -1,5 +1,5 @@
 import { SqliteError } from "../errors/index.ts";
-import { asSqlReal, coerceToNumber, type SqlValue } from "../types/value.ts";
+import { asSqlReal, coerceToNumber, type SqlValue, storageClassOf } from "../types/value.ts";
 import type { FunctionContext, ScalarFunction } from "./registry.ts";
 
 function requireArgs(name: string, args: SqlValue[], min: number, max = min): void {
@@ -172,6 +172,23 @@ export const mathFunctions: Readonly<Record<string, ScalarFunction>> = {
     const n = num(args[0]!);
     if (n === null) return null;
     return decodeIeee754(n).exponent;
+  },
+  ieee754_to_int(args) {
+    requireArgs("ieee754_to_int", args, 1);
+    const value = args[0]!;
+    // SQLite 3.54's bit casts require the exact storage class, not numeric coercion.
+    if (storageClassOf(value) !== "real") return null;
+    const view = new DataView(new ArrayBuffer(8));
+    view.setFloat64(0, coerceToNumber(value)!, false);
+    return view.getBigInt64(0, false);
+  },
+  ieee754_from_int(args) {
+    requireArgs("ieee754_from_int", args, 1);
+    const value = args[0]!;
+    if (storageClassOf(value) !== "integer") return null;
+    const view = new DataView(new ArrayBuffer(8));
+    view.setBigInt64(0, typeof value === "bigint" ? value : BigInt(coerceToNumber(value)!), false);
+    return realOrNull(view.getFloat64(0, false));
   },
   ieee754_to_blob(args) {
     requireArgs("ieee754_to_blob", args, 1);
