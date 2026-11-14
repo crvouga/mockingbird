@@ -123,6 +123,7 @@
     "parity:localstack": "bun scripts/localstack-parity.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*"
   },
   "devDependencies": {

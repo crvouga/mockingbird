@@ -1444,6 +1444,20 @@
     "logo": "/brands/ses.png",
     "logoSource": "site"
   },
+  "shopify": {
+    "vendor": "Shopify",
+    "website": "https://www.shopify.com",
+    "docs": "https://shopify.dev/docs/api/admin-graphql",
+    "description": "Commerce platform whose Admin API manages a store's orders, products and webhooks.",
+    "input": {
+      "website": "https://www.shopify.com",
+      "docs": "https://shopify.dev/docs/api/admin-graphql",
+      "description": "Commerce platform whose Admin API manages a store's orders, products and webhooks."
+    },
+    "color": "#7AB55C",
+    "logo": "/brands/shopify.svg",
+    "logoSource": "simple-icons"
+  },
   "slack": {
     "vendor": "Slack",
     "website": "https://slack.com",

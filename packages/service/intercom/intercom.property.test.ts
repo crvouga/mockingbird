@@ -10,52 +10,59 @@ const now = () => 1_700_000_000_000
 const auth = { authorization: "Bearer ic-parity", "intercom-version": "2.11" }
 
 describe("IntercomAPI", () => {
-  test(
-    "self-parity: independent instances agree on every random walk and conform to the spec",
-    async () => {
-      const reference = new IntercomAPI({ now })
-      const report = await parity({
-        provider: "intercom",
-        spec: document,
-        real: {
-          baseUrl: `https://${MOCK_HOST}`,
-          allowedHosts: [MOCK_HOST],
-          headers: () => auth,
-          fetch: (request) => reference.fetch(request),
-        },
-        mock: {
-          create: () => new IntercomAPI({ now }),
-          baseUrl: `https://${MOCK_HOST}`,
-          headers: () => auth,
-        },
-        cleanup: async () => {
-          await reference.reset()
-        },
-        includeUnsafe: true,
-        numRuns: Math.max(params.numRuns ?? 150, 150),
-        maxCommands: 20,
-        // Conversation operations need a contact, then a conversation, from earlier in the walk.
-        weights: {
-          CreateContact: 2,
-          CreateConversation: 3,
-          ReplyConversation: 3,
-          ManageConversation: 3,
-          GetConversation: 2,
-          UpdateConversation: 2,
-        },
-        coverageBias: 3,
-        latencyToleranceMs: 1_000,
-        ...(params.seed === undefined ? {} : { seed: params.seed }),
-        env: process.env,
-        sleep: async () => {},
-        log: () => {},
-      })
-      expect(report.walks).toBeGreaterThan(0)
-      // Every operation, including replies and state changes, is reached by the walks.
-      expect(Object.keys(report.exercised).sort()).toEqual([...supportedOperationIds].sort())
-    },
-    { timeout: 120_000 },
-  )
+  // Random walks can legitimately omit an operation. Keep a reproducible coverage
+  // corpus as well as a fresh random run; both still compare and validate responses.
+  for (const coverageRun of [true, false]) {
+    test(
+      coverageRun
+        ? "self-parity: the coverage corpus exercises every supported operation"
+        : "self-parity: independent instances agree on every random walk and conform to the spec",
+      async () => {
+        const reference = new IntercomAPI({ now })
+        const report = await parity({
+          provider: "intercom",
+          spec: document,
+          real: {
+            baseUrl: `https://${MOCK_HOST}`,
+            allowedHosts: [MOCK_HOST],
+            headers: () => auth,
+            fetch: (request) => reference.fetch(request),
+          },
+          mock: {
+            create: () => new IntercomAPI({ now }),
+            baseUrl: `https://${MOCK_HOST}`,
+            headers: () => auth,
+          },
+          cleanup: async () => {
+            await reference.reset()
+          },
+          includeUnsafe: true,
+          numRuns: Math.max(params.numRuns ?? 150, 150),
+          maxCommands: 20,
+          // Conversation operations need a contact, then a conversation, from earlier in the walk.
+          weights: {
+            CreateContact: 2,
+            CreateConversation: 3,
+            ReplyConversation: 3,
+            ManageConversation: 3,
+            GetConversation: 2,
+            UpdateConversation: 2,
+          },
+          coverageBias: 3,
+          latencyToleranceMs: 1_000,
+          ...(coverageRun ? { seed: 42 } : params.seed === undefined ? {} : { seed: params.seed }),
+          env: process.env,
+          sleep: async () => {},
+          log: () => {},
+        })
+        expect(report.walks).toBeGreaterThan(0)
+        if (coverageRun) {
+          expect(Object.keys(report.exercised).sort()).toEqual([...supportedOperationIds].sort())
+        }
+      },
+      { timeout: 120_000 },
+    )
+  }
 
   test(
     "a deliberately divergent instance is caught and shrunk",

@@ -99,6 +99,7 @@
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "buffer": "6.0.3",
     "@noble/hashes": "2.4.0",

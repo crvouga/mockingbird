@@ -12,7 +12,9 @@
  * (./dist/x.js ← src/x.ts). A bin gets no declarations, and keeps its `#!` line. The admin
  * page's browser client is the exception to inlining it all in the entries' graph: it is emitted
  * as `dist/admin-ui.js` and loaded with a dynamic `import()` only when the page is first served
- * (scripts/bundle-service-js.ts).
+ * (scripts/bundle-service-js.ts). A package that depends on `@crvouga/mockingbird-runtime` (every
+ * service) imports the helpers that package ships from it instead of inlining them, so
+ * emulators share one runtime (scripts/bundle-service-runtime.ts).
  *
  *   bun ../../../scripts/bundle-service.ts
  */
@@ -23,6 +25,11 @@ import { rollup } from "rollup"
 import { dts } from "rollup-plugin-dts"
 import { adminBrandDefine } from "./admin-brand.ts"
 import { bundleServiceJs } from "./bundle-service-js.ts"
+import {
+  RUNTIME_PACKAGE,
+  sharedRuntimeLeaks,
+  sharedRuntimePlugin,
+} from "./bundle-service-runtime.ts"
 import { VERSION_PLACEHOLDER } from "./bundle-service-version.ts"
 
 const pkgDir = process.cwd()
@@ -68,6 +75,8 @@ for (const e of entries) {
   if (!existsSync(join(pkgDir, e.src))) throw new Error(`${pkg.name}: missing entry ${e.src}`)
 }
 
+const sharesRuntime = external.includes(RUNTIME_PACKAGE)
+
 // Code splitting is always on, so the admin page's client stays in `dist/admin-ui.js`, loaded
 // only by the runtime's dynamic import (scripts/bundle-service-js.ts).
 const metafile = await bundleServiceJs({
@@ -84,11 +93,19 @@ const metafile = await bundleServiceJs({
     ...adminBrandDefine(pkgDir),
   },
   external: [...external, "node:*", "bun", "bun:*"],
+  ...(sharesRuntime ? { plugins: [sharedRuntimePlugin()] } : {}),
   importsAdminUi:
     "@crvouga/mockingbird-admin-ui" in { ...pkg.dependencies, ...pkg.devDependencies },
 }).catch((error: unknown) => {
   throw new Error(`${pkg.name}: ${error instanceof Error ? error.message : String(error)}`)
 })
+if (sharesRuntime) {
+  const leaks = sharedRuntimeLeaks(metafile, pkgDir)
+  if (leaks.length > 0)
+    throw new Error(
+      `${pkg.name}: depends on ${RUNTIME_PACKAGE} but inlines code it ships:\n  ${leaks.join("\n  ")}`,
+    )
+}
 const kept = new Set(
   Object.values(metafile.outputs).flatMap((o) =>
     o.imports.filter((i) => i.external).map((i) => i.path),

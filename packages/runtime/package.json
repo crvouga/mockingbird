@@ -1,0 +1,119 @@
+{
+  "name": "@crvouga/mockingbird-runtime",
+  "version": "0.0.0-development",
+  "description": "The shared Mockingbird runtime every emulator service depends on: router, admin API and page, snapshots, faults and clock, installed once however many emulators an application uses.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "default": "./dist/core.js"
+    },
+    "./openapi": {
+      "types": "./dist/openapi.d.ts",
+      "default": "./dist/openapi.js"
+    },
+    "./openapi-metadata": {
+      "types": "./dist/openapi-metadata.d.ts",
+      "default": "./dist/openapi-metadata.js"
+    },
+    "./http-codec": {
+      "types": "./dist/http-codec.d.ts",
+      "default": "./dist/http-codec.js"
+    },
+    "./http-provider": {
+      "types": "./dist/http-provider.d.ts",
+      "default": "./dist/http-provider.js"
+    },
+    "./mqtt-broker": {
+      "types": "./dist/mqtt-broker.d.ts",
+      "default": "./dist/mqtt-broker.js"
+    },
+    "./mqtt-broker/node": {
+      "types": "./dist/mqtt-broker/node.d.ts",
+      "default": "./dist/mqtt-broker/node.js"
+    },
+    "./ui": {
+      "types": "./dist/ui.d.ts",
+      "default": "./dist/ui.js"
+    },
+    "./sqlite": {
+      "types": "./dist/sqlite.d.ts",
+      "default": "./dist/sqlite.js"
+    },
+    "./service": {
+      "types": "./dist/service.d.ts",
+      "default": "./dist/service.js"
+    },
+    "./service/admin": {
+      "types": "./dist/service/admin.d.ts",
+      "default": "./dist/service/admin.js"
+    },
+    "./adapter-node": {
+      "types": "./dist/adapter-node.d.ts",
+      "default": "./dist/adapter-node.js"
+    }
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/runtime"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/runtime#readme",
+  "keywords": [
+    "mockingbird",
+    "emulator",
+    "runtime"
+  ],
+  "mockingbird": {
+    "runtime": "portable",
+    "entries": {
+      "adapter-node": "node",
+      "mqtt-broker/node": "node"
+    },
+    "layer": "runtime"
+  },
+  "scripts": {
+    "build": "bun ../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "portability": "bun ../../scripts/portability.ts",
+    "pack:check": "bun ../../scripts/pack-check.ts"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@noble/hashes": "2.4.0",
+    "buffer": "6.0.3",
+    "graphql": "17.0.0",
+    "hono": "4.13.11",
+    "jose": "6.2.2"
+  },
+  "devDependencies": {
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-http-provider": "workspace:*",
+    "@crvouga/mockingbird-mqtt-broker": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-ui": "workspace:*"
+  }
+}

@@ -4,6 +4,7 @@ import { createRuntime, META_PRESETS } from "./src/index.js"
 import { createServer } from "./src/server.js"
 import {
   type ConversionEvent,
+  type Fetch,
   getMarketingObject,
   listInsights,
   MetaGraphError,
@@ -123,6 +124,136 @@ describe("Meta acceptance", () => {
     expect(second.data.map((row) => row.date_start)).toEqual(["2026-01-03"])
   })
 
+  // Issue #764: the remaining Insights parameters and rate-limit envelopes. Best guess from
+  // Meta's Insights and Graph error documentation, not oracle-verified.
+  const insights = async (fetchImpl: Fetch, query: Record<string, string>) => {
+    const response = await fetchImpl(
+      `${API}/v26.0/act_mockingbird/insights?${new URLSearchParams({ access_token: TOKEN, ...query })}`,
+    )
+    return {
+      status: response.status,
+      body: (await response.json()) as {
+        data: Array<Record<string, unknown>>
+        paging: { cursors: { after: string }; next?: string }
+        error?: { code: number; type: string }
+      },
+    }
+  }
+  const window = JSON.stringify({ since: "2026-01-01", until: "2026-01-03" })
+
+  test("insights roll up by level and time_increment and return only the requested fields", async () => {
+    const { fetchImpl } = harness()
+    const total = await insights(fetchImpl, {
+      level: "account",
+      time_increment: "all_days",
+      time_range: window,
+      fields: "account_id,spend,impressions,actions,website_purchase_roas",
+    })
+    expect(total.status).toBe(200)
+    expect(total.body.data).toEqual([
+      {
+        account_id: "act_mockingbird",
+        spend: "75",
+        impressions: "600",
+        actions: [{ action_type: "purchase", value: "6" }],
+        website_purchase_roas: [{ action_type: "purchase", value: "4" }],
+        date_start: "2026-01-01",
+        date_stop: "2026-01-03",
+      },
+    ])
+    const twoDay = await insights(fetchImpl, {
+      level: "ad",
+      time_increment: "2",
+      time_range: window,
+      fields: "ad_id,ad_name,adset_id,clicks",
+    })
+    expect(twoDay.body.data).toEqual([
+      {
+        adset_id: "set_mockingbird",
+        ad_id: "ad_mockingbird",
+        ad_name: "Synthetic creative",
+        date_start: "2026-01-01",
+        date_stop: "2026-01-02",
+        clicks: "30",
+      },
+      {
+        adset_id: "set_mockingbird",
+        ad_id: "ad_mockingbird",
+        ad_name: "Synthetic creative",
+        date_start: "2026-01-03",
+        date_stop: "2026-01-03",
+        clicks: "30",
+      },
+    ])
+    const daily = await insights(fetchImpl, {
+      level: "campaign",
+      time_increment: "1",
+      time_range: window,
+      fields: "campaign_id,spend",
+      limit: "1",
+    })
+    expect(daily.body.data).toEqual([
+      {
+        campaign_id: "cmp_mockingbird",
+        spend: "12.5",
+        date_start: "2026-01-01",
+        date_stop: "2026-01-01",
+      },
+    ])
+    expect(daily.body.paging.cursors.after).toBe("1")
+    expect(daily.body.paging.next).toContain("after=1")
+    expect(daily.body.paging.next).toContain("time_increment=1")
+  })
+
+  test("invalid level, time_increment and fields answer Graph error 100", async () => {
+    const { fetchImpl } = harness()
+    for (const query of [
+      { level: "creative" },
+      { time_increment: "91" },
+      { fields: "spend,reach" },
+    ]) {
+      const result = await insights(fetchImpl, query)
+      expect(result.status).toBe(400)
+      expect(result.body.error).toMatchObject({ code: 100 })
+    }
+  })
+
+  test("CAPI rejects an event without event_time or user_data", async () => {
+    const { runtime, send } = harness()
+    const { event_time: _time, ...noTime } = event({ event_id: "no_time" })
+    const { user_data: _user, ...noUser } = event({ event_id: "no_user" })
+    for (const invalid of [noTime, noUser]) {
+      await expect(send([invalid as ConversionEvent])).rejects.toMatchObject({
+        status: 400,
+        code: 100,
+      })
+    }
+    expect(runtime.instance().events()).toHaveLength(0)
+  })
+
+  test("rate-limit presets answer codes 17 and 80004 and an expired token carries its subcode", async () => {
+    const { runtime, fetchImpl } = harness()
+    const read = async () =>
+      (await (await fetchImpl(`${API}/v26.0/cmp_mockingbird?access_token=${TOKEN}`)).json()) as {
+        error: Record<string, unknown>
+      }
+    runtime.applyPreset("user_request_limit", "default", { count: 1 })
+    expect((await read()).error).toMatchObject({
+      type: "OAuthException",
+      code: 17,
+      error_subcode: 2446079,
+      fbtrace_id: expect.any(String),
+    })
+    runtime.applyPreset("ad_account_rate_limit", "default", { count: 1 })
+    expect((await read()).error).toMatchObject({ code: 80004, error_subcode: 2446079 })
+    runtime.applyPreset("expired_token", "default", { count: 1 })
+    expect((await read()).error).toMatchObject({
+      type: "OAuthException",
+      code: 190,
+      error_subcode: 463,
+    })
+  })
+
   test("campaign reads and namespaces are isolated", async () => {
     const { runtime, fetchImpl, send } = harness()
     expect(
@@ -167,6 +298,8 @@ describe("Meta acceptance", () => {
         "rate_limited",
         "server_error",
         "accepted_then_drop",
+        "user_request_limit",
+        "ad_account_rate_limit",
       ]),
     )
     const server = await createServer({ clock: createClock(() => NOW * 1000) })

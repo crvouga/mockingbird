@@ -16,7 +16,7 @@ import {
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
-import { type Insight, type MetaEvent, type MetaSettings, MetaState } from "./state.js"
+import { type Insight, type MetaEvent, type MetaSettings, MetaState, OAUTH_CODES } from "./state.js"
 
 export type { FetchAPI } from "@crvouga/mockingbird-core"
 export type { SqliteClient } from "@crvouga/mockingbird-sqlite"
@@ -24,7 +24,7 @@ export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 export { createRuntime, META_PRESETS } from "./runtime.js"
 export type { Insight, MarketingObject, MetaEvent, MetaSettings } from "./state.js"
-export { DEFAULT_SETTINGS, MetaState } from "./state.js"
+export { DEFAULT_SETTINGS, MetaState, OAUTH_CODES } from "./state.js"
 
 export const META_NAMESPACE = "meta"
 
@@ -62,6 +62,166 @@ const invalidHash = (userData: Record<string, unknown>): string | undefined => {
     if (values.some((value) => typeof value !== "string" || !sha256.test(value))) return name
   }
   return undefined
+}
+
+type InsightRow = Partial<Omit<Insight, "id">> & { date_start: string; date_stop: string }
+
+const INSIGHT_LEVELS = ["ad", "adset", "campaign", "account"] as const
+type InsightLevel = (typeof INSIGHT_LEVELS)[number]
+const isInsightLevel = (value: string): value is InsightLevel =>
+  (INSIGHT_LEVELS as readonly string[]).includes(value)
+
+/** Every insight field the emulator can return; any other `fields` entry is rejected. */
+const INSIGHT_FIELDS = new Set([
+  "account_id",
+  "campaign_id",
+  "campaign_name",
+  "adset_id",
+  "adset_name",
+  "ad_id",
+  "ad_name",
+  "date_start",
+  "date_stop",
+  "impressions",
+  "clicks",
+  "spend",
+  "actions",
+  "action_values",
+  "website_purchase_roas",
+])
+
+/** `all_days`, `monthly` or a day count from 1 to 90; `undefined` when absent, `null` when invalid. */
+const parseTimeIncrement = (raw: unknown): number | "all_days" | "monthly" | undefined | null => {
+  if (raw === undefined) return undefined
+  if (raw === "all_days" || raw === "monthly") return raw
+  const days = Number(raw)
+  return typeof raw === "string" && /^\d+$/.test(raw) && days >= 1 && days <= 90 ? days : null
+}
+
+const DAY_MS = 86_400_000
+const dayOf = (date: string) => Date.parse(`${date}T00:00:00Z`)
+const dateOf = (ms: number) => new Date(ms).toISOString().slice(0, 10)
+const money = (value: number) => String(Math.round(value * 100) / 100)
+
+const sumStats = (
+  rows: Insight[],
+  pick: (row: Insight) => Array<{ action_type: string; value: string }>,
+) => {
+  const totals = new Map<string, number>()
+  for (const row of rows)
+    for (const stat of pick(row))
+      totals.set(stat.action_type, (totals.get(stat.action_type) ?? 0) + Number(stat.value))
+  return [...totals].map(([action_type, value]) => ({ action_type, value: money(value) }))
+}
+
+/** The reporting window a row falls into for a `time_increment`. */
+const bucketOf = (
+  date: string,
+  increment: number | "all_days" | "monthly",
+  since: string,
+  until: string,
+): { start: string; stop: string } => {
+  if (increment === "all_days") return { start: since, stop: until }
+  if (increment === "monthly") {
+    const month = date.slice(0, 7)
+    const last = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0))
+    const start = `${month}-01` < since ? since : `${month}-01`
+    const end = dateOf(last.getTime())
+    return { start, stop: end > until ? until : end }
+  }
+  const index = Math.floor((dayOf(date) - dayOf(since)) / (increment * DAY_MS))
+  const start = dateOf(dayOf(since) + index * increment * DAY_MS)
+  const end = dateOf(dayOf(start) + (increment - 1) * DAY_MS)
+  return { start, stop: end > until ? until : end }
+}
+
+/**
+ * Roll stored daily rows up to a `level` and `time_increment`, the way Insights reports them:
+ * counts and spend are summed, action lists are summed per `action_type`, and purchase ROAS is
+ * recomputed from the summed purchase value over the summed spend.
+ */
+const aggregateInsights = (
+  rows: Insight[],
+  options: {
+    level: InsightLevel
+    increment: number | "all_days" | "monthly"
+    since: string | undefined
+    until: string | undefined
+    country: boolean
+  },
+): InsightRow[] => {
+  if (rows.length === 0) return []
+  const since = options.since ?? rows[0]?.date_start ?? ""
+  const until =
+    options.until ?? rows.reduce((max, row) => (row.date_stop > max ? row.date_stop : max), "")
+  const groups = new Map<string, { bucket: { start: string; stop: string }; rows: Insight[] }>()
+  for (const row of rows) {
+    if (options.level === "adset" && !row.adset_id) continue
+    if (options.level === "ad" && !row.ad_id) continue
+    const object =
+      options.level === "account"
+        ? row.account_id
+        : options.level === "campaign"
+          ? row.campaign_id
+          : options.level === "adset"
+            ? (row.adset_id ?? "")
+            : (row.ad_id ?? "")
+    const bucket = bucketOf(row.date_start, options.increment, since, until)
+    const key = `${bucket.start}|${object}|${options.country ? (row.country ?? "") : ""}`
+    const group = groups.get(key) ?? { bucket, rows: [] }
+    group.rows.push(row)
+    groups.set(key, group)
+  }
+  return [...groups.values()].map(({ bucket, rows: members }) => {
+    const first = members[0] as Insight
+    const spend = members.reduce((total, row) => total + Number(row.spend), 0)
+    const actionValues = sumStats(members, (row) => row.action_values)
+    const purchaseValue = Number(
+      actionValues.find((stat) => stat.action_type === "purchase")?.value ?? 0,
+    )
+    const level = options.level
+    return {
+      account_id: first.account_id,
+      ...(level !== "account"
+        ? { campaign_id: first.campaign_id, campaign_name: first.campaign_name }
+        : {}),
+      ...(level === "adset" || level === "ad"
+        ? {
+            ...(first.adset_id ? { adset_id: first.adset_id } : {}),
+            ...(first.adset_name ? { adset_name: first.adset_name } : {}),
+          }
+        : {}),
+      ...(level === "ad"
+        ? {
+            ...(first.ad_id ? { ad_id: first.ad_id } : {}),
+            ...(first.ad_name ? { ad_name: first.ad_name } : {}),
+          }
+        : {}),
+      date_start: bucket.start,
+      date_stop: bucket.stop,
+      impressions: String(members.reduce((total, row) => total + Number(row.impressions), 0)),
+      clicks: String(members.reduce((total, row) => total + Number(row.clicks), 0)),
+      spend: money(spend),
+      actions: sumStats(members, (row) => row.actions),
+      action_values: actionValues,
+      website_purchase_roas:
+        spend > 0 ? [{ action_type: "purchase", value: money(purchaseValue / spend) }] : [],
+      ...(options.country && first.country ? { country: first.country } : {}),
+    }
+  })
+}
+
+/** Graph returns only the requested `fields`, plus the reporting window and breakdowns. */
+const selectFields = (
+  row: InsightRow,
+  fields: string[] | undefined,
+  country: boolean,
+): InsightRow => {
+  if (fields === undefined) return row
+  const keep = new Set([...fields, "date_start", "date_stop", ...(country ? ["country"] : [])])
+  return Object.fromEntries(
+    Object.entries(row).filter(([key]) => keep.has(key)),
+  ) as unknown as InsightRow
 }
 
 /** Stateful subset of Meta Graph v26 used by marketing reporting and CAPI clients. */
@@ -132,7 +292,7 @@ export class MetaAPI implements FetchAPI {
     return jsonRes(status, {
       error: {
         message,
-        type: code === 190 ? "OAuthException" : "GraphMethodException",
+        type: OAUTH_CODES.has(code) ? "OAuthException" : "GraphMethodException",
         code,
         ...(errorSubcode === undefined ? {} : { error_subcode: errorSubcode }),
         is_transient: transient,
@@ -217,7 +377,34 @@ export class MetaAPI implements FetchAPI {
         return this.error(400, "Invalid parameter: time_range.", 100)
       }
     }
-    const rows = this.state.insights
+    const level = typeof context.query.level === "string" ? context.query.level : undefined
+    if (level !== undefined && !isInsightLevel(level)) {
+      return this.error(
+        400,
+        `(#100) level must be one of the following values: ${INSIGHT_LEVELS.join(", ")}`,
+        100,
+      )
+    }
+    const increment = parseTimeIncrement(context.query.time_increment)
+    if (increment === null) {
+      return this.error(
+        400,
+        "(#100) time_increment must be all_days, monthly, or an integer between 1 and 90",
+        100,
+      )
+    }
+    const fields =
+      typeof context.query.fields === "string" && context.query.fields.trim() !== ""
+        ? context.query.fields.split(",").map((name) => name.trim())
+        : undefined
+    const unknownField = fields?.find((name) => !INSIGHT_FIELDS.has(name))
+    if (unknownField !== undefined) {
+      return this.error(400, `(#100) ${unknownField} is not valid for fields param.`, 100)
+    }
+    const country =
+      typeof context.query.breakdowns === "string" &&
+      context.query.breakdowns.split(",").includes("country")
+    const stored = this.state.insights
       .list({
         where: (row) =>
           row.account_id === accountId &&
@@ -226,6 +413,16 @@ export class MetaAPI implements FetchAPI {
       })
       .map((entry) => entry.value)
       .sort((left, right) => left.date_start.localeCompare(right.date_start))
+    const rows =
+      level === undefined && increment === undefined
+        ? stored.map((row) => this.renderInsight(row, country))
+        : aggregateInsights(stored, {
+            level: level ?? "campaign",
+            increment: increment ?? 1,
+            since,
+            until,
+            country,
+          })
     const start = typeof context.query.after === "string" ? Number(context.query.after) : 0
     if (!Number.isInteger(start) || start < 0) return this.error(400, "Invalid cursor.", 100)
     const limit = Math.min(100, Math.max(1, Number(context.query.limit ?? 25)))
@@ -238,14 +435,22 @@ export class MetaAPI implements FetchAPI {
       next.searchParams.set("after", String(nextOffset))
       paging.next = next.toString()
     }
-    return jsonRes(200, { data: page.map((row) => this.renderInsight(row, context)), paging })
+    return jsonRes(200, {
+      data: page.map((row) => selectFields(row, fields, country)),
+      paging,
+    })
   }
 
-  private renderInsight(row: Insight, context: OperationContext): Omit<Insight, "id"> {
-    const { id: _id, country, ...rest } = row
-    const wantsCountry =
-      typeof context.query.breakdowns === "string" &&
-      context.query.breakdowns.split(",").includes("country")
+  private renderInsight(row: Insight, wantsCountry: boolean): InsightRow {
+    const {
+      id: _id,
+      country,
+      adset_id: _adsetId,
+      adset_name: _adsetName,
+      ad_id: _adId,
+      ad_name: _adName,
+      ...rest
+    } = row
     return { ...rest, ...(wantsCountry && country ? { country } : {}) }
   }
 

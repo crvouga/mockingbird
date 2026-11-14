@@ -50,7 +50,7 @@ await server.close()
 | Route | Behaviour |
 | --- | --- |
 | `POST /v26.0/:pixelId/events` | Accepts CAPI `data[]` and `test_event_code`; keeps event name/time/id, action source, source URL, hashed user data and custom data. Repeated `event_id` values are acknowledged without a second stored event. Events older than seven days, future events, malformed hashes and invalid bodies receive Graph error envelopes. |
-| `GET /v26.0/:accountId/insights` | Filters seeded or admin-inserted insight rows by inclusive JSON `time_range`, paginates with `limit`/`after`, and includes `country` when requested as a breakdown. |
+| `GET /v26.0/:accountId/insights` | Filters seeded or admin-inserted insight rows by inclusive JSON `time_range` and paginates with `limit`/`after` (`paging.cursors.after`, and `paging.next` while rows remain). `level` (`account`, `campaign`, `adset`, `ad`) and `time_increment` (`all_days`, `monthly`, or 1–90 days) roll the daily rows up: counts, spend and per-`action_type` actions are summed and purchase ROAS is recomputed. `fields` returns only the listed fields plus `date_start`/`date_stop`; a field outside the insight schema, an unknown `level` or an out-of-range `time_increment` answers Graph error 100. `country` is included when requested as a breakdown. |
 | `GET /v26.0/:objectId` | Reads seeded/admin-inserted campaign, ad-set, or ad records. |
 
 Seed fixtures are `act_mockingbird`, `cmp_mockingbird`, `set_mockingbird`, and `ad_mockingbird`,
@@ -62,8 +62,11 @@ with three dated insight rows from 2026-01-01 through 2026-01-03.
 /__admin/settings` controls `accessTokens` and `maxEventAgeSeconds`. Standard `/__admin/state`
 routes seed or edit `events`, `objects`, and `insights` directly.
 
-Presets: `expired_token`, `rate_limited`, `server_error`, `partial_event_acceptance`,
-`accepted_then_drop`, and `slow`. The ambiguous-write preset persists the event before dropping the
+Presets: `expired_token` (code 190, subcode 463), `rate_limited` (code 4, HTTP 429),
+`user_request_limit` (code 17, subcode 2446079), `ad_account_rate_limit` (code 80004, subcode
+2446079), `server_error`, `partial_event_acceptance`, `accepted_then_drop`, and `slow`. Every
+Graph error is `{"error": {message, type, code, error_subcode?, is_transient, fbtrace_id}}`;
+token and rate-limit codes are typed `OAuthException`. The ambiguous-write preset persists the event before dropping the
 connection; retrying the same `event_id` remains deduplicated.
 
 Namespaces use `x-mockingbird-namespace`, `/__admin/ns/<name>/…`, or credential mapping through
@@ -72,7 +75,7 @@ Namespaces use `x-mockingbird-namespace`, `/__admin/ns/<name>/…`, or credentia
 ## API
 
 The main entry exports `MetaAPI`, `MetaState`, `createRuntime`, `META_NAMESPACE`, `META_PRESETS`,
-`DEFAULT_SETTINGS`, `accessTokenCredential`, the generated `document`, `operationIds`,
+`DEFAULT_SETTINGS`, `OAUTH_CODES`, `accessTokenCredential`, the generated `document`, `operationIds`,
 `supportedOperationIds`, and their public option/state/event/insight types.
 `@crvouga/mockingbird-service-meta/server` exports
 `createServer`, `serveTarget`, `DEFAULT_PORT`, and server option/result types.
@@ -81,5 +84,10 @@ The main entry exports `MetaAPI`, `MetaState`, `createRuntime`, `META_NAMESPACE`
 
 - Real ad delivery, attribution calculation, hashing of plaintext PII, app-secret proof, or OAuth.
 - Campaign/ad-set/ad mutation, creatives, audiences, pixels configuration, dashboards, or billing.
-- The complete Insights fields/breakdowns matrix and asynchronous report jobs.
+- The complete Insights fields/breakdowns matrix and asynchronous report jobs. Without `level` or
+  `time_increment` the emulator returns the stored daily campaign rows; Meta's own defaults
+  (`level` = the queried object, `time_increment` = `all_days`) apply only when a client sends
+  them. The `level`/`time_increment` roll-up and the HTTP 400 status of codes 17 and 80004 are a
+  best guess from Meta's documentation, not oracle-verified.
+- Graph versions other than `v26.0`.
 - Meta-side probabilistic matching: the emulator records only the supplied synthetic hashed fields.

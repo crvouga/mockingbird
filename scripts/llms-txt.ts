@@ -40,6 +40,12 @@ for (const pkg of pkgs) {
     )
     continue
   }
+  if (pkg.name === "@crvouga/mockingbird-runtime" && manifest.mockingbird?.layer === "runtime") {
+    toolingLines.push(
+      `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): The runtime every emulator service depends on (router, admin API and page, snapshots, faults, clock), installed once however many emulators an application uses. Installed with each emulator; nothing to import from it directly.`,
+    )
+    continue
+  }
   if (pkg.name === "@crvouga/mockingbird-notifications" && manifest.mockingbird?.layer === "tool") {
     toolingLines.push(
       `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): Notification test harness that reads a fleet's Twilio, Resend, FCM, SES, SNS, Customer.io, Mailosaur, Slack and Cognito emulators and shows every SMS, WhatsApp message, email, push and chat message on phone, mail and chat screens, with a JSON API for tests. \`mockingbird-fleet serve --dashboard\` already serves it; install it separately only to run it on its own. This is tooling, not a vendor emulator.`,
