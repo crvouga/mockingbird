@@ -118,7 +118,7 @@ const admin = (runtime: ServiceRuntime<KillBillAPI>): AdminRoutes => ({
     const { gatewayErrorCode: _code, gatewayErrorMsg: _message, ...base } = failed
     const transaction = {
       ...base,
-      transactionId: api.state.ids.next("txn-", 32),
+      transactionId: api.newId("txn-"),
       effectiveDate: new Date(api.now()).toISOString(),
       status: "SUCCESS" as const,
     }
@@ -132,7 +132,7 @@ const admin = (runtime: ServiceRuntime<KillBillAPI>): AdminRoutes => ({
       paymentAttempts: [
         ...payment.paymentAttempts,
         {
-          paymentAttemptId: api.state.ids.next("attempt-", 24),
+          paymentAttemptId: api.newId("attempt-"),
           transactionId: transaction.transactionId,
           stateName: "SUCCESS",
         },
@@ -190,6 +190,8 @@ export const createRuntime = (options: KillBillRuntimeOptions = {}): KillBillRun
         ...(options.notificationDelayMs !== undefined
           ? { notificationDelayMs: options.notificationDelayMs }
           : {}),
+        // Tenant push-notification callbacks share the webhook transport (issue #739).
+        ...(options.webhooks?.fetch ? { fetch: options.webhooks.fetch } : {}),
         onEvent: (event) => hub.publish({ namespace, type: event.eventType, body: event }),
       }),
     admin,
