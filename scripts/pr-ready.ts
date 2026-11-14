@@ -2,8 +2,9 @@
 /**
  * Agentic PR-ready engine. Mechanical git/GitHub work for the /pr-ready command
  * (see .agents/commands/pr-ready.md); the agent only supplies judgment: commit
- * message, conflict resolution, PR title/body, and CI root-cause fixes. It never
- * merges: a human lands the PR once `ready` reports it green.
+ * message, conflict resolution, PR title/body, and CI root-cause fixes. Auto-merge is the
+ * default: `pr` enables it (merge commit) on every open, non-draft PR it creates or finds, so the
+ * PR lands itself once the required checks pass. `ready` only verifies; it never merges.
  *
  *   bun scripts/pr-ready.ts <command> [flags]   # or: bun run pr:ready <command>
  *
@@ -54,7 +55,8 @@ commands:
   commit    validate + stage + commit   (-m|--message-file, --amend, --path)
   publish   push the branch             (-u when new, --force-with-lease)
   sync      merge remote head and base (--continue after resolving conflicts)
-  pr        view or create the PR       (--title, --body|--body-file, --ready)
+  pr        view or create the PR and enable auto-merge on it unless it is a draft
+            (--title, --body|--body-file, --ready)
   comments  unresolved review threads and recent PR comments
   reply     reply to a review thread   (--thread, --body|--body-file)
   resolve   mark an addressed thread resolved (--thread)
@@ -64,7 +66,8 @@ commands:
   rerun     re-run a failed check       (<check>, --name)
   ruleset   verify/apply merge gate     (--apply)
   repo      verify/apply repo settings  (--apply)
-  ready     verify the PR is pushed, synced, every check green and mergeable (never merges)
+  ready     verify the PR is pushed, synced, every check green and mergeable, or already
+            merged at HEAD by auto-merge (never merges itself)
 
 common flags:
   --base <branch>   trunk branch (${TRUNK_BRANCH}); any other value is rejected`
@@ -497,6 +500,7 @@ type PrView = {
   baseRefName?: string
   headRefName?: string
   headRefOid?: string
+  autoMergeRequest?: unknown
 }
 
 type Check = { name: string; state: string; bucket: string; link: string; workflow?: string }
@@ -623,14 +627,17 @@ async function prHeadSha(branch: string): Promise<string> {
   return pr.headRefOid
 }
 
-async function readPr(branch: string): Promise<PrView | null> {
+const PR_FIELDS =
+  "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName,headRefOid,autoMergeRequest"
+
+async function readPr(branch: string, state: "open" | "merged" = "open"): Promise<PrView | null> {
   // A reused task branch may still resolve to its previous merged/closed PR with `pr view`.
   // Only an open PR against trunk can represent the current batch.
   const res = await gh([
     "pr",
     "list",
     "--state",
-    "open",
+    state,
     "--head",
     branch,
     "--base",
@@ -638,7 +645,7 @@ async function readPr(branch: string): Promise<PrView | null> {
     "--limit",
     "1",
     "--json",
-    "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName,headRefOid",
+    PR_FIELDS,
   ])
   if (res.code !== 0) return null
   return (JSON.parse(res.stdout) as PrView[])[0] ?? null
@@ -827,8 +834,9 @@ async function cmdAdvance(): Promise<void> {
       title,
       ...(bodyFile ? ["--body-file", bodyFile] : ["--body", body]),
     ])
-  } else if (existing.isDraft) {
-    await step("pr", ["--ready"])
+  } else {
+    // Marks a draft ready and enables auto-merge on it (idempotent for a ready PR).
+    await step("pr", existing.isDraft ? ["--ready"] : [])
   }
 
   await step("checks", ["--timeout", opt("--timeout") ?? "1800"])
@@ -1128,6 +1136,22 @@ async function cmdSync(): Promise<void> {
   })
 }
 
+/**
+ * Auto-merge is the default for every PR: enable it with the only allowed method (merge commit)
+ * on an open, non-draft PR. Idempotent: an existing auto-merge request is left alone. When the
+ * PR is already clean, `gh pr merge --auto` merges it immediately, which is intended.
+ */
+async function enableAutoMerge(
+  branch: string,
+  pr: PrView,
+): Promise<{ autoMerge: boolean; autoMergeError?: string }> {
+  if (pr.isDraft || pr.state !== "OPEN") return { autoMerge: false }
+  if (pr.autoMergeRequest) return { autoMerge: true }
+  const merged = await gh(["pr", "merge", branch, "--auto", `--${ALLOWED_MERGE_METHODS[0]}`])
+  if (merged.code === 0) return { autoMerge: true }
+  return { autoMerge: false, autoMergeError: merged.stderr || merged.stdout }
+}
+
 async function cmdPr(): Promise<void> {
   if (!(await ghAvailable())) die(EXIT.usage, { error: "gh not authenticated" })
   const branch = await currentBranch()
@@ -1141,7 +1165,7 @@ async function cmdPr(): Promise<void> {
       const ready = await gh(["pr", "ready", branch])
       if (ready.code === 0) pr = { ...existing, isDraft: false }
     }
-    emit({ ok: true, created: false, ...pr })
+    emit({ ok: true, created: false, ...pr, ...(await enableAutoMerge(branch, pr)) })
     return
   }
 
@@ -1187,6 +1211,7 @@ async function cmdPr(): Promise<void> {
   emit({
     ok: true,
     created: true,
+    ...(pr ? await enableAutoMerge(branch, pr) : { autoMerge: false }),
     number: pr?.number ?? null,
     url: pr?.url ?? created.stdout,
     baseRefName: pr?.baseRefName ?? base,
@@ -1478,7 +1503,15 @@ async function cmdReady(): Promise<void> {
   const base = await baseBranch()
   requireTrunk(base)
   const existing = await readPr(branch)
-  if (!existing) die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+  if (!existing) {
+    // Auto-merge may already have landed the PR once its checks passed.
+    const merged = await readPr(branch, "merged")
+    if (merged && merged.headRefOid === (await headSha())) {
+      emit({ ok: true, ready: true, merged: true, number: merged.number, url: merged.url })
+      return
+    }
+    die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+  }
 
   const { blockers, pending, mergeStateStatus } = await mergeReadiness(branch, base, existing)
   if (blockers.length > 0)
