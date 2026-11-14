@@ -1,3 +1,6 @@
+import { clockMicros } from "../runtime/clock.ts";
+import { withoutStatementTimeout } from "../runtime/statement-timeout.ts";
+import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
 import { type CursorData, copyCursors } from "../executor/cursors.ts";
 import { type BindValue, bindValueToTyped } from "../api/bind.ts";
 import type { Database } from "../api/database.ts";
@@ -11,7 +14,7 @@ import { EngineCtx } from "../expressions/context.ts";
 import { parse as parseSql } from "../parser/index.ts";
 import { setDatabaseCatalogContext } from "../runtime/database-context.ts";
 import { datumText, typeOid, UTC_OUTPUT } from "../types/value.ts";
-import { type Cluster, LockWait, type Session } from "./cluster.ts";
+import { type Cluster, LockWait, type Session, type SocketAddresses } from "./cluster.ts";
 import { lockedMutationQuery } from "./lock-probe.ts";
 import { binaryEncodable, binaryResult, decodeBinaryParam } from "./binary.ts";
 import { type DurableCommit, storageFailure } from "./durable.ts";
@@ -50,6 +53,8 @@ type LoggedStatement =
   | { kind: "copy"; stmt: CopyStmt; data: string };
 type TransactionWorkspace = {
   xid: number;
+  /** When BEGIN ran: now() for every statement of the block, and for its replays (PG-epoch UTC micros). */
+  start: bigint;
   statements: LoggedStatement[];
   savepoints: Array<{ name: string; statementCount: number }>;
 };
@@ -131,6 +136,8 @@ export type ConnectionOptions = {
    * Unset accepts any database name.
    */
   database?: string;
+  /** Both ends of the client's TCP socket; null (or absent) without one. */
+  addresses?: SocketAddresses | null;
 };
 
 const TX_CONTROL = /^(begin|start\s+transaction|commit|end|rollback|abort|savepoint|release)\b/i;
@@ -140,6 +147,9 @@ const UNLISTEN = /^unlisten\s+(\*|"?[A-Za-z_][\w$]*"?)\s*$/i;
 const NOTIFY = /^notify\s+("?)([A-Za-z_][\w$]*)\1\s*(?:,\s*'((?:[^']|'')*)')?\s*$/i;
 const RETURNS_ROWS = /^(select|with|values|show|table|explain|fetch)\b/i;
 const CLUSTER_DDL = /^(create|drop|alter)\s+database\b/i;
+/** `ALTER DATABASE d SET / RESET`: the database's defaults, which the engine records (pg_db_role_setting). */
+const ALTER_DATABASE_SETTING = /^alter\s+database\s+(?:"(?:[^"]|"")+"|[A-Za-z_][A-Za-z0-9_$]*)\s+(?:set|reset)\b/i;
+const isClusterDdl = (text: string): boolean => CLUSTER_DDL.test(text) && !ALTER_DATABASE_SETTING.test(text);
 const IDENT = '(?:"((?:[^"]|"")+)"|([A-Za-z_][A-Za-z0-9_$]*))';
 const CREATE_DATABASE = new RegExp(
   `^create\\s+database\\s+${IDENT}(?:\\s+with)?(?:\\s+template\\s*(?:=\\s*)?${IDENT})?\\s*$`,
@@ -495,6 +505,10 @@ export class Connection implements Session {
     return this.settings.get("application_name") ?? "";
   }
 
+  socketAddresses(): SocketAddresses | null {
+    return this.options.addresses ?? null;
+  }
+
   // --- startup ------------------------------------------------------------------------------
 
   private async handle(message: FrontendMessage): Promise<void> {
@@ -757,7 +771,7 @@ export class Connection implements Session {
       if (!this.inTransaction) this.flushNotifies();
       return command("NOTIFY");
     }
-    if (CLUSTER_DDL.test(text)) {
+    if (isClusterDdl(text)) {
       return this.cluster.durability ? this.durableClusterDdl(text) : this.executeClusterDdl(text);
     }
     for (;;) {
@@ -972,7 +986,12 @@ export class Connection implements Session {
     switch (stmt.action) {
       case "begin":
         if (!this.transaction) {
-          this.transaction = { statements: [], savepoints: [], xid: this.database.state.allocateXid() };
+          this.transaction = {
+            statements: [],
+            savepoints: [],
+            xid: this.database.state.allocateXid(),
+            start: clockMicros(this.database.state.clock) + UNIX_EPOCH_MICROS_FROM_PG,
+          };
           // BEGIN READ ONLY / ISOLATION LEVEL ...: the workspace replays them as SET TRANSACTION
           if (stmt.modes?.length) {
             this.transaction.statements.push({
@@ -990,6 +1009,7 @@ export class Connection implements Session {
           this.inSession(this.database, () =>
             this.database.transaction(() => {
               this.database.state.transactionXid = transaction.xid;
+              this.database.state.transactionStart = transaction.start;
               for (const logged of transaction.statements) this.replay(this.database, logged);
             }),
           );
@@ -1043,6 +1063,7 @@ export class Connection implements Session {
     workspace.state.settingDefaults = this.settingDefaults;
     workspace.transactions.begin();
     workspace.state.transactionXid = this.transaction?.xid ?? null;
+    workspace.state.transactionStart = this.transaction?.start ?? null;
     for (const logged of this.transaction?.statements ?? []) {
       this.replay(workspace, logged);
     }
@@ -1050,6 +1071,11 @@ export class Connection implements Session {
   }
 
   private replay(db: Database, logged: LoggedStatement): void {
+    // a replay re-runs work already done (and timed) once: statement_timeout is for the new statement
+    withoutStatementTimeout(db.state, () => this.replayStatement(db, logged));
+  }
+
+  private replayStatement(db: Database, logged: LoggedStatement): void {
     this.cluster.as(this, () => {
       if (logged.kind === "sql") db.prepare(logged.sql).textResult(...logged.params);
       else {
@@ -1485,7 +1511,7 @@ export class Connection implements Session {
     try {
       if (text !== "" && !LISTEN.test(text) && !UNLISTEN.test(text) && !NOTIFY.test(text) && !TX_CONTROL.test(text)) {
         // Syntax is checked now (a parse error belongs to Parse), the statement runs at Execute.
-        if (!CLUSTER_DDL.test(text)) this.database.prepare(text);
+        if (!isClusterDdl(text)) this.database.prepare(text);
       }
       if (name !== "" && this.prepared.has(name)) {
         throw pgError("internal", `prepared statement "${name}" already exists`, "42P05");

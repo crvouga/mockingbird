@@ -21,7 +21,12 @@ const initiateAuth = (runtime: ReturnType<typeof createRuntime>, body: unknown) 
 
 describe("Cognito REFRESH_TOKEN_AUTH client binding", () => {
   test("a refresh token works only for the app client it was issued to", async () => {
-    const runtime = createRuntime({ users: [user], poolId, clientId })
+    const runtime = createRuntime({
+      users: [user],
+      poolId,
+      clientId,
+      appClients: [{ clientId: "other-client", callbackUrls: [] }],
+    })
     const signIn = await initiateAuth(runtime, {
       AuthFlow: "USER_PASSWORD_AUTH",
       ClientId: clientId,

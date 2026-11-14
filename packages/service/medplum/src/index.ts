@@ -12,6 +12,7 @@ export {
   SUPER_ADMIN_EMAIL,
   SUPER_ADMIN_PASSWORD,
 } from "./api.js"
+export type { MedplumBotContext, MedplumBotHandler } from "./bots.js"
 export type { OperationId, SupportedOperationId } from "./generated/openapi.js"
 export { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
 export type { MedplumRuntime, MedplumRuntimeOptions } from "./runtime.js"

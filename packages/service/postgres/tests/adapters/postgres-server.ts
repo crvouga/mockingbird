@@ -19,6 +19,7 @@ import type { CellValue, ContractDb, ContractStatement, QueryResult, SqlValue } 
 const RESET_SQL = `
 RESET ROLE;
 CLOSE ALL;
+DISCARD TEMP;
 DO $$
 DECLARE e text;
 BEGIN

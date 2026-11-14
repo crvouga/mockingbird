@@ -2639,6 +2639,7 @@
         "@crvouga/mockingbird-service": "workspace:*",
         "@crvouga/mockingbird-ui": "workspace:*",
         "@electric-sql/pglite": "^0.5.8",
+        "@electric-sql/pglite-pgvector": "0.0.9",
         "@types/bun": "latest",
         "@types/pg": "^8.23.1",
         "embedded-postgres": "18.3.0-beta.17",
@@ -4838,6 +4839,8 @@
     "@customerio/cdp-analytics-node": ["@customerio/cdp-analytics-node@0.5.6", "", { "dependencies": { "@customerio/cdp-analytics-core": "0.5.6", "@lukeed/uuid": "^2.0.0", "buffer": "^6.0.3", "node-fetch": "^2.6.7", "tslib": "^2.4.1", "uuid": "^9.0.0" } }, "sha512-ev0Dsx66zDpISEZPKM/zverIRFOjYbrt5oP6NRATu9HnqAnUvoVMdeuoTk1oI0kDHYiHs8rtnlGWFITOc0fDBg=="],
 
     "@electric-sql/pglite": ["@electric-sql/pglite@0.5.8", "", {}, "sha512-n9tsbUOhwx2epK1V0ZG9Ar4SHWUju04dhmzZXiSBXwBoleOvIfals33NAaWgagQVAL4Rbvx/Ptsu3P+pA09f6Q=="],
+
+    "@electric-sql/pglite-pgvector": ["@electric-sql/pglite-pgvector@0.0.9", "", { "peerDependencies": { "@electric-sql/pglite": "0.5.8" } }, "sha512-ue4iBW651gDQwBwn97Ekv1lYGPvXa1ymHbRbTCSL0Ib286PRDD1VDOwzwEoekZuO/wctMbTzKzlwdgDwYrqZ8A=="],
 
     "@embedded-postgres/darwin-arm64": ["@embedded-postgres/darwin-arm64@18.3.0-beta.17", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Pvrej3Xz5flfyVc9mchVfekrKoTJyvPtM3U0vjuXamZkRKmi+inP2zRmnmzYecIVbr7Zhu82xbsCENMXrwMp9Q=="],
 

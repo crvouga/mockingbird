@@ -1,6 +1,16 @@
+import {
+  BITS_WRITES,
+  cmdBitcount,
+  cmdGetbit,
+  cmdPfadd,
+  cmdPfcount,
+  cmdPfmerge,
+  cmdSetbit,
+} from "./bits.ts"
 import { fromLatin1, globMatch, intReply, latin1, parseI64, utf8, utf8Text } from "./bytes.ts"
 import { type RedisClock, wallClock } from "./clock.ts"
 import { EXTRA_WRITES, type ExtraHost, extraCommand, moveList } from "./extra.ts"
+import { FunctionRegistry } from "./functions.ts"
 import {
   type AclUser,
   cmdAcl,
@@ -21,10 +31,29 @@ import {
   LuaTable,
   type LuaValue,
   raiseError,
+  runFunction,
   runScript as runLuaScript,
   ScriptFailure,
   statusTable,
 } from "./lua.ts"
+import {
+  commandEvents,
+  formatNotifyFlags,
+  type KeyEvent,
+  type KeyState,
+  moveEvents,
+  NOTIFIED,
+  NOTIFY_EVICTED,
+  NOTIFY_EXPIRED,
+  NOTIFY_GENERIC,
+  NOTIFY_KEYEVENT,
+  NOTIFY_KEYSPACE,
+  NOTIFY_LIST,
+  NOTIFY_NEW,
+  NOTIFY_ZSET,
+  notifiedKeys,
+  parseNotifyFlags,
+} from "./notify.ts"
 import { assertPortableDatabase, decodePortable, encodePortable } from "./portable.ts"
 import {
   arityError,
@@ -74,6 +103,18 @@ import {
   type StreamEntry,
   type Value,
 } from "./store.ts"
+import {
+  cmdZalgebra,
+  cmdZintercard,
+  cmdZlex,
+  cmdZrandmember,
+  cmdZrange,
+  ordered,
+  scoredReply,
+  scoreReply,
+  ZSET_WRITES,
+  type ZsetContext,
+} from "./zset.ts"
 
 export type { RedisClock } from "./clock.ts"
 export type { Reply } from "./protocol.ts"
@@ -134,6 +175,8 @@ interface Session {
   watching: Array<{ db: number; key: string; gen: number }>
   channels: Set<string>
   patterns: Set<string>
+  /** Sharded pub/sub channels (`SSUBSCRIBE`). One node owns every slot. */
+  shards: Set<string>
   dead: boolean
   quit: boolean
   inExec: boolean
@@ -191,6 +234,8 @@ const IMMEDIATE = new Set([
   "unsubscribe",
   "psubscribe",
   "punsubscribe",
+  "ssubscribe",
+  "sunsubscribe",
 ])
 const WRITES = new Set([
   "set",
@@ -228,6 +273,8 @@ const WRITES = new Set([
   "hsetnx",
   "lpush",
   "rpush",
+  "lpushx",
+  "rpushx",
   "lpop",
   "rpop",
   "lset",
@@ -242,6 +289,9 @@ const WRITES = new Set([
   "srem",
   "spop",
   "smove",
+  "sinterstore",
+  "sunionstore",
+  "sdiffstore",
   "zadd",
   "zrem",
   "zincrby",
@@ -261,7 +311,10 @@ const WRITES = new Set([
   "xautoclaim",
   "eval",
   "evalsha",
+  "fcall",
   ...EXTRA_WRITES,
+  ...ZSET_WRITES,
+  ...BITS_WRITES,
 ])
 /** Script runners: a script cannot start another one. */
 const SCRIPT_DENIED_TEXT = (scriptDenied() as { v: string }).v
@@ -281,11 +334,23 @@ const SCRIPT_BLOCKED = new Set([
   "unsubscribe",
   "psubscribe",
   "punsubscribe",
+  "ssubscribe",
+  "sunsubscribe",
   "shutdown",
   "monitor",
+  "wait",
+  "function",
 ])
 
 const VERSION = "7.2.4"
+/** What `CONFIG GET` knows, in the order it lists them. */
+const CONFIG_PARAMETERS = [
+  "maxmemory",
+  "maxmemory-policy",
+  "notify-keyspace-events",
+  "timeout",
+  "databases",
+]
 const I64_MAX = 9223372036854775807n
 /** Nominal figures for what a real server measures from its process and host. */
 const BASE_MEMORY = 1_048_576
@@ -451,8 +516,18 @@ export class Redis {
   private nextClientId = 1
   private waiters: Waiter[] = []
   private channelSubs = new Map<string, Set<Session>>()
+  private shardSubs = new Map<string, Set<Session>>()
   private patternSubs = new Map<string, Set<Session>>()
   private scripts = new Map<string, string>()
+  private readonly functions = new FunctionRegistry()
+  /** `notify-keyspace-events` as Redis's flag bits; 0 publishes nothing. */
+  private notifyFlags = 0
+  private expiryTimer: ReturnType<typeof setInterval> | undefined
+  private notifyDepth = 0
+  private readonly deferredEvents: Array<{ db: number; events: KeyEvent[] }> = []
+  private readonly unsubscribeClock: () => void
+  /** Set while an `EVAL_RO` / `EVALSHA_RO` script or a `no-writes` function runs. */
+  private scriptReadOnly = false
   private invoked = ""
   private scriptDepth = 0
   private commandCount = 0
@@ -480,7 +555,13 @@ export class Redis {
   constructor(options: RedisOptions = {}) {
     this.clock = options.clock ?? wallClock()
     const count = options.databases ?? 16
-    this.dbs = Array.from({ length: count }, () => new Database(this.clock))
+    this.dbs = Array.from({ length: count }, (_, index) => {
+      const database = new Database(this.clock)
+      database.onExpired = (key) => this.notify(index, NOTIFY_EXPIRED, "expired", key)
+      return database
+    })
+    // Active expiry: when the injected clock moves, keys it expired announce themselves at once.
+    this.unsubscribeClock = this.clock.subscribe(() => this.activeExpire())
     this.password = options.password
     this.users = options.users ?? []
     this.authRequired = options.password !== undefined || this.users.length > 0
@@ -657,6 +738,9 @@ export class Redis {
     this.rngState = this.initialRngState
     for (const database of this.dbs) database.clear()
     this.scripts.clear()
+    this.functions.clear()
+    this.notifyFlags = 0
+    this.syncExpiryTimer()
     this.faultValue = null
     this.clock.reset()
     this.startedAt = this.clock.now()
@@ -675,6 +759,9 @@ export class Redis {
 
   close(): void {
     this.closed = true
+    this.unsubscribeClock()
+    this.notifyFlags = 0
+    this.syncExpiryTimer()
     for (const cancel of [...this.pendingLatency]) cancel()
     for (const waiter of [...this.waiters]) {
       this.failWaiter(waiter, new RedisConnectionError("Connection is closed"))
@@ -703,6 +790,7 @@ export class Redis {
       watching: [],
       channels: new Set(),
       patterns: new Set(),
+      shards: new Set(),
       dead: false,
       quit: false,
       inExec: false,
@@ -826,7 +914,7 @@ export class Redis {
     this.commandCount++
     this.commandStats.set(command, (this.commandStats.get(command) ?? 0) + 1)
     if (this.authRequired && !session.authenticated && !PREAUTH.has(command)) return noAuth()
-    if (session.channels.size + session.patterns.size > 0 && !PUBSUB_OK.has(command)) {
+    if (this.subscriptions(session) > 0 && !PUBSUB_OK.has(command)) {
       return pubsubOnly(command)
     }
     if (this.faultValue === "busy" && command !== "script" && command !== "shutdown")
@@ -870,10 +958,10 @@ export class Redis {
     apply: boolean,
     raw: string = command,
   ): Reply | Promise<Reply> {
-    if (!apply || !this.monitoring()) return this.execCommand(session, command, args, apply)
-    const early = this.scriptDepth === 0 && (command === "eval" || command === "evalsha")
+    if (!apply || !this.monitoring()) return this.execNotified(session, command, args, apply)
+    const early = this.scriptDepth === 0 && SCRIPT_NESTED.has(command)
     if (early) this.feedMonitors(session, command, args, raw)
-    const reply = this.execCommand(session, command, args, apply)
+    const reply = this.execNotified(session, command, args, apply)
     if (early) return reply
     if (reply instanceof Promise) this.feedMonitors(session, command, args, raw)
     else if (!monitorSkips(reply)) this.feedMonitors(session, command, args, raw)
@@ -887,13 +975,132 @@ export class Redis {
 
   private feedMonitors(session: Session, command: string, args: Uint8Array[], raw: string): void {
     const flags = commandFlags(command)
-    // EVAL and EVALSHA are `skip_monitor` only because Redis feeds monitors itself, before the script runs.
-    const scripted = command === "eval" || command === "evalsha"
+    // Script runners (EVAL, FCALL, ...) are `skip_monitor` only because Redis feeds monitors
+    // itself, before the script runs.
+    const scripted = SCRIPT_NESTED.has(command)
     if (command === "monitor" || flags.includes("admin")) return
     if (flags.includes("skip_monitor") && !scripted) return
     const origin = this.scriptDepth > 0 ? "lua" : (session.remoteAddr ?? `127.0.0.1:${session.id}`)
     const line = monitorLine(this.clock.now(), session.db, origin, raw, monitorArgs(command, args))
     for (const other of this.sessions) if (other.monitor && !other.dead) other.onPush(simple(line))
+  }
+
+  /** Runs a command and publishes the keyspace events its effects call for. */
+  private execNotified(
+    session: Session,
+    command: string,
+    args: Uint8Array[],
+    apply: boolean,
+  ): Reply | Promise<Reply> {
+    const tracked = apply && this.notifyFlags !== 0 && (NOTIFIED.has(command) || command === "copy")
+    if (!tracked) return this.execCommand(session, command, args, apply)
+    // A blocked client the command serves pops after it, as Redis serves it after the command.
+    this.notifyDepth++
+    try {
+      return this.execTracked(session, command, args)
+    } finally {
+      this.notifyDepth--
+      if (this.notifyDepth === 0) {
+        const deferred = this.deferredEvents.splice(0)
+        for (const batch of deferred) this.publishEvents(batch.db, batch.events)
+      }
+    }
+  }
+
+  private execTracked(
+    session: Session,
+    command: string,
+    args: Uint8Array[],
+  ): Reply | Promise<Reply> {
+    const apply = true
+    const db = session.db
+    if (command === "copy") return this.execCopy(session, args)
+    const keys = notifiedKeys(command, args)
+    const before = new Map<string, KeyState>()
+    for (const key of keys) before.set(key, this.keyState(db, key))
+    const reply = this.execCommand(session, command, args, apply)
+    if (reply instanceof Promise || reply.t === "error") return reply
+    const after = new Map<string, KeyState>()
+    const state = (map: Map<string, KeyState>, key: string) =>
+      map.get(key) ?? { exists: false, gen: 0, size: 0 }
+    for (const key of keys) after.set(key, this.keyState(db, key))
+    const events = commandEvents(
+      command,
+      args,
+      reply,
+      (key) => state(before, key),
+      (key) => state(after, key),
+    )
+    this.publishEvents(db, events)
+    return reply
+  }
+
+  private keyState(db: number, key: string): KeyState {
+    const database = this.database(db)
+    const gen = database.generation(key)
+    const value = database.peek(key)
+    return {
+      exists: value !== undefined,
+      gen,
+      size: value?.kind === "stream" ? value.stream.entries.length : 0,
+    }
+  }
+
+  /** `COPY` publishes `copy_to` (and `new`) in the destination database. */
+  private execCopy(session: Session, args: Uint8Array[]): Reply | Promise<Reply> {
+    let destDb = session.db
+    for (let i = 2; i < args.length - 1; i++) {
+      const index = Number(text(args[i + 1]))
+      if (
+        upper(args[i]) === "DB" &&
+        Number.isInteger(index) &&
+        index >= 0 &&
+        index < this.dbs.length
+      )
+        destDb = index
+    }
+    const dest = text(args[1])
+    const existed = this.keyState(destDb, dest).exists
+    const reply = this.execCommand(session, "copy", args, true)
+    if (reply instanceof Promise || reply.t !== "int" || Number(reply.v) !== 1) return reply
+    if (!existed) this.notify(destDb, NOTIFY_NEW, "new", dest)
+    this.notify(destDb, NOTIFY_GENERIC, "copy_to", dest)
+    return reply
+  }
+
+  private publishEvents(db: number, events: KeyEvent[]): void {
+    for (const event of events) this.notify(db, event.cls, event.event, event.key)
+  }
+
+  /** Publish one keyspace event on `__keyspace@<db>__:<key>` and `__keyevent@<db>__:<event>`. */
+  private notify(db: number, cls: number, event: string, key: string): void {
+    const flags = this.notifyFlags
+    if (!(flags & cls) || !(flags & (NOTIFY_KEYSPACE | NOTIFY_KEYEVENT))) return
+    if (flags & NOTIFY_KEYSPACE) this.deliver(`__keyspace@${db}__:${key}`, fromLatin1(event))
+    if (flags & NOTIFY_KEYEVENT) this.deliver(`__keyevent@${db}__:${event}`, fromLatin1(key))
+  }
+
+  /** Expire every key whose time has passed, so `expired` events need no further command. */
+  private activeExpire(): void {
+    if (this.closed || !(this.notifyFlags & NOTIFY_EXPIRED)) return
+    for (const database of this.dbs) database.keys()
+  }
+
+  /** With a wall clock, nothing moves the clock: poll for expired keys like Redis's `hz` cycle. */
+  private syncExpiryTimer(): void {
+    const wanted =
+      !this.closed &&
+      !this.clock.manual &&
+      (this.notifyFlags & NOTIFY_EXPIRED) !== 0 &&
+      (this.notifyFlags & (NOTIFY_KEYSPACE | NOTIFY_KEYEVENT)) !== 0
+    if (wanted && this.expiryTimer === undefined) {
+      this.expiryTimer = setInterval(() => this.activeExpire(), 100)
+      const timer = this.expiryTimer as { unref?: () => void }
+      timer.unref?.()
+    } else if (!wanted && this.expiryTimer !== undefined) {
+      clearInterval(this.expiryTimer)
+      this.expiryTimer = undefined
+    }
   }
 
   private execCommand(
@@ -973,7 +1180,7 @@ export class Redis {
       case "acl":
         return cmdAcl(this.aclUsers(), session.username, args)
       case "config":
-        return this.cmdConfig(args, apply)
+        return this.cmdConfig(session, args, apply)
       case "dbsize":
         return int(this.database(session.db).keys().length)
       case "flushdb":
@@ -994,6 +1201,22 @@ export class Redis {
         return this.cmdType(session, args)
       case "exists":
         return this.cmdExists(session, args)
+      case "setbit":
+        return cmdSetbit(this.database(session.db), args, apply)
+      case "getbit":
+        return cmdGetbit(this.database(session.db), args)
+      case "bitcount":
+        return cmdBitcount(this.database(session.db), args)
+      case "pfadd":
+        return cmdPfadd(this.database(session.db), args, apply)
+      case "pfcount":
+        return cmdPfcount(this.database(session.db), args)
+      case "pfmerge":
+        return cmdPfmerge(this.database(session.db), args, apply)
+      case "touch":
+        return this.cmdTouch(session, args)
+      case "wait":
+        return this.cmdWait(args)
       case "del":
       case "unlink":
         return this.cmdDel(session, args, apply)
@@ -1081,6 +1304,8 @@ export class Redis {
         return this.cmdHash(session, command, args, apply)
       case "lpush":
       case "rpush":
+      case "lpushx":
+      case "rpushx":
       case "lpop":
       case "rpop":
       case "llen":
@@ -1109,6 +1334,10 @@ export class Redis {
       case "sinter":
       case "sunion":
       case "sdiff":
+      case "sinterstore":
+      case "sunionstore":
+      case "sdiffstore":
+      case "sintercard":
       case "smove":
         return this.cmdSetFamily(session, command, args, apply)
       case "zadd":
@@ -1118,10 +1347,6 @@ export class Redis {
       case "zmscore":
       case "zrank":
       case "zrevrank":
-      case "zrange":
-      case "zrevrange":
-      case "zrangebyscore":
-      case "zrevrangebyscore":
       case "zcount":
       case "zpopmin":
       case "zpopmax":
@@ -1129,6 +1354,28 @@ export class Redis {
       case "zremrangebyscore":
       case "zremrangebyrank":
         return this.cmdZset(session, command, args, apply)
+      case "zrange":
+      case "zrevrange":
+      case "zrangebyscore":
+      case "zrevrangebyscore":
+      case "zrangebylex":
+      case "zrevrangebylex":
+      case "zrangestore":
+        return cmdZrange(this.zsetContext(session, apply), command, args)
+      case "zlexcount":
+      case "zremrangebylex":
+        return cmdZlex(this.zsetContext(session, apply), command, args)
+      case "zunionstore":
+      case "zinterstore":
+      case "zdiffstore":
+      case "zunion":
+      case "zinter":
+      case "zdiff":
+        return cmdZalgebra(this.zsetContext(session, apply), command, args)
+      case "zintercard":
+        return cmdZintercard(this.zsetContext(session, apply), args)
+      case "zrandmember":
+        return cmdZrandmember(this.zsetContext(session, apply), args)
       case "bzpopmin":
         return this.cmdBlockingZset(session, args, apply, false)
       case "bzpopmax":
@@ -1153,8 +1400,13 @@ export class Redis {
       case "psubscribe":
       case "punsubscribe":
         return this.cmdSub(session, command, args)
+      case "ssubscribe":
+      case "sunsubscribe":
+        return this.cmdShardSub(session, command, args)
       case "publish":
         return this.cmdPublish(args)
+      case "spublish":
+        return this.cmdSpublish(args)
       case "pubsub":
         return this.cmdPubsub(args)
       case "multi":
@@ -1173,7 +1425,14 @@ export class Redis {
         return ok()
       case "eval":
       case "evalsha":
+      case "eval_ro":
+      case "evalsha_ro":
         return this.cmdEval(session, command, args, apply)
+      case "fcall":
+      case "fcall_ro":
+        return this.cmdFcall(session, command, args, apply)
+      case "function":
+        return this.functions.command(args, apply)
       case "script":
         return this.cmdScript(args, apply)
       case "shutdown":
@@ -1233,8 +1492,10 @@ export class Redis {
     if (this.maxmemory > 0 && this.policy === "allkeys-lru") {
       while (this.memory() > this.maxmemory) {
         let evicted = false
-        for (const database of this.dbs) {
-          if (database.evictLru()) {
+        for (const [index, database] of this.dbs.entries()) {
+          const key = database.evictLru()
+          if (key !== null) {
+            this.notify(index, NOTIFY_EVICTED, "evicted", key)
             evicted = true
             break
           }
@@ -1247,7 +1508,7 @@ export class Redis {
 
   private cmdPing(session: Session, args: Uint8Array[]): Reply {
     if (args.length > 1) return arityError("ping")
-    if (session.channels.size + session.patterns.size > 0) {
+    if (this.subscriptions(session) > 0) {
       return push([bulk("pong"), args[0] ? { t: "bulk", v: args[0] } : bulk("")])
     }
     if (args.length === 1) return { t: "bulk", v: args[0] ?? null }
@@ -1486,40 +1747,65 @@ export class Redis {
     return arr([bulk(String(seconds)), bulk(String(micros))])
   }
 
-  private cmdConfig(args: Uint8Array[], apply: boolean): Reply {
+  private configValue(name: string): string {
+    switch (name) {
+      case "maxmemory":
+        return String(this.maxmemory)
+      case "maxmemory-policy":
+        return this.policy
+      case "notify-keyspace-events":
+        return formatNotifyFlags(this.notifyFlags)
+      case "timeout":
+        return "0"
+      default:
+        return String(this.dbs.length)
+    }
+  }
+
+  private cmdConfig(session: Session, args: Uint8Array[], apply: boolean): Reply {
     const sub = upper(args[0])
     if (sub === "GET") {
-      if (args.length !== 2) return arityError("config|get")
-      const key = text(args[1]).toLowerCase()
-      const value =
-        key === "maxmemory"
-          ? String(this.maxmemory)
-          : key === "maxmemory-policy"
-            ? this.policy
-            : key === "timeout"
-              ? "0"
-              : key === "databases"
-                ? String(this.dbs.length)
-                : null
-      if (value === null) return arr([])
-      return arr([bulk(key), bulk(value)])
+      if (args.length < 2) return arityError("config|get")
+      const rows: Array<[Reply, Reply]> = []
+      for (const name of CONFIG_PARAMETERS) {
+        if (!args.slice(1).some((arg) => globMatch(text(arg).toLowerCase(), name))) continue
+        rows.push([bulk(name), bulk(this.configValue(name))])
+      }
+      // A map in RESP3, flat name/value pairs in RESP2 and scripts.
+      return this.proto(session) === 3 ? map(rows) : arr(rows.flat())
     }
     if (sub === "SET") {
-      if (args.length !== 3) return arityError("config|set")
+      if (args.length < 3 || args.length % 2 === 0) return arityError("config|set")
+      const failed = (name: string, reason: string) =>
+        err(`ERR CONFIG SET failed (possibly related to argument '${name}') - ${reason}`)
+      const changes: Array<() => void> = []
+      const seen = new Set<string>()
+      for (let i = 1; i < args.length; i += 2) {
+        const key = text(args[i]).toLowerCase()
+        const value = text(args[i + 1])
+        if (seen.has(key)) return failed(key, "duplicate parameter")
+        seen.add(key)
+        if (key === "maxmemory") {
+          const parsed = Number(value)
+          if (!Number.isFinite(parsed) || parsed < 0) return err("ERR Invalid argument")
+        } else if (key === "maxmemory-policy") {
+          if (value !== "noeviction" && value !== "allkeys-lru") return err("ERR Invalid argument")
+          changes.push(() => {
+            this.policy = value
+          })
+        } else if (key === "notify-keyspace-events") {
+          const flags = parseNotifyFlags(value)
+          if (flags === null)
+            return failed(key, "Invalid event class character. Use 'Ag$lshzxeKEtmdn'.")
+          changes.push(() => {
+            this.notifyFlags = flags
+            this.syncExpiryTimer()
+          })
+        } else return err("ERR Unsupported CONFIG parameter")
+      }
       if (!apply) return queued()
-      const key = text(args[1]).toLowerCase()
-      const value = text(args[2])
-      if (key === "maxmemory") {
-        const parsed = Number(value)
-        if (!Number.isFinite(parsed) || parsed < 0) return err("ERR Invalid argument")
-        return ok()
-      }
-      if (key === "maxmemory-policy") {
-        if (value !== "noeviction" && value !== "allkeys-lru") return err("ERR Invalid argument")
-        this.policy = value
-        return ok()
-      }
-      return err("ERR Unsupported CONFIG parameter")
+      for (const change of changes) change()
+      return ok()
     }
     return arityError("config")
   }
@@ -1578,6 +1864,23 @@ export class Redis {
     if (args.length !== 1) return arityError("type")
     const value = this.database(session.db).get(text(args[0]))
     return simple(value?.kind ?? "none")
+  }
+
+  /** `TOUCH`: the number of the given keys that exist; each counts as an access. */
+  private cmdTouch(session: Session, args: Uint8Array[]): Reply {
+    if (args.length < 1) return arityError("touch")
+    const database = this.database(session.db)
+    return int(args.filter((arg) => database.has(text(arg))).length)
+  }
+
+  /** `WAIT`: a standalone node has no replicas to wait for, so it answers 0 at once. */
+  private cmdWait(args: Uint8Array[]): Reply {
+    if (args.length !== 2) return arityError("wait")
+    const replicas = parseI64(args[0] ?? utf8(""))
+    const timeout = parseI64(args[1] ?? utf8(""))
+    if (replicas === null || timeout === null) return notInteger()
+    if (timeout < 0n) return err("ERR timeout is negative")
+    return int(0)
   }
 
   private cmdExists(session: Session, args: Uint8Array[]): Reply {
@@ -1987,8 +2290,17 @@ export class Redis {
     if (command === "hkeys" || command === "hvals" || command === "hgetall") {
       if (args.length !== 1) return arityError(command)
       const hash = this.requireHash(database, key, false)
-      if (hash === null) return arr([])
+      // RESP3 answers HGETALL with a map (empty for a missing key); RESP2 and scripts get pairs.
+      const asMap = command === "hgetall" && this.proto(session) === 3
+      if (hash === null) return asMap ? map([]) : arr([])
       if (!("fields" in hash)) return hash
+      if (asMap)
+        return map(
+          [...hash.fields].map(([field, value]) => [
+            { t: "bulk", v: fromLatin1(field) },
+            { t: "bulk", v: value },
+          ]),
+        )
       const items: Reply[] = []
       for (const [field, value] of hash.fields) {
         if (command !== "hvals") items.push({ t: "bulk", v: fromLatin1(field) })
@@ -2104,15 +2416,21 @@ export class Redis {
           : int(positions[0])
         : arr(positions.map(int))
     }
-    if (command === "lpush" || command === "rpush") {
+    if (
+      command === "lpush" ||
+      command === "rpush" ||
+      command === "lpushx" ||
+      command === "rpushx"
+    ) {
       if (args.length < 2) return arityError(command)
       const existing = this.requireList(database, key, false)
       if (existing && !("items" in existing)) return existing
       if (!apply) return queued()
+      if (command.endsWith("x") && existing === null) return int(0)
       const list = this.requireList(database, key, true)
       if (!list || !("items" in list)) return list ?? wrongType()
       const items = args.slice(1)
-      if (command === "lpush") for (const item of items) list.items.unshift(item)
+      if (command.startsWith("l")) for (const item of items) list.items.unshift(item)
       else for (const item of items) list.items.push(item)
       database.put(key, list)
       const length = list.items.length
@@ -2424,26 +2742,42 @@ export class Redis {
       if (count === null) return picked[0] ? { t: "bulk", v: picked[0] } : nil()
       return arr(picked.map((member) => ({ t: "bulk" as const, v: member })))
     }
-    if (command === "sinter" || command === "sunion" || command === "sdiff") {
-      if (args.length < 1) return arityError(command)
+    if (command === "sintercard") return this.cmdSintercard(database, args)
+    if (
+      command === "sinter" ||
+      command === "sunion" ||
+      command === "sdiff" ||
+      command === "sinterstore" ||
+      command === "sunionstore" ||
+      command === "sdiffstore"
+    ) {
+      const stored = command.endsWith("store")
+      if (args.length < (stored ? 2 : 1)) return arityError(command)
       const sets = []
-      for (const arg of args) {
+      for (const arg of stored ? args.slice(1) : args) {
         const set = this.requireSet(database, text(arg), false)
         if (set && !("members" in set)) return set
         sets.push(set && "members" in set ? set : null)
       }
       const [first, ...rest] = sets
       let members = new Map(first?.members ?? [])
-      if (command === "sinter") {
+      if (command.startsWith("sinter")) {
         for (const set of rest) {
           members = new Map([...members].filter(([member]) => set?.members.has(member)))
         }
-      } else if (command === "sunion") {
+      } else if (command.startsWith("sunion")) {
         for (const set of rest)
           for (const [member, bytes] of set?.members ?? []) members.set(member, bytes)
       } else {
         for (const set of rest)
           for (const member of set?.members.keys() ?? []) members.delete(member)
+      }
+      if (stored) {
+        if (!apply) return queued()
+        database.delete(key)
+        if (members.size === 0) return int(0)
+        database.put(key, { kind: "set", members })
+        return int(members.size)
       }
       const ordered = [...members.values()].sort((a, b) => compareBytes(a, b))
       return arr(ordered.map((member) => ({ t: "bulk" as const, v: member })))
@@ -2469,6 +2803,36 @@ export class Redis {
       return int(1)
     }
     return unknownCommand(command, args)
+  }
+
+  private cmdSintercard(database: Database, args: Uint8Array[]): Reply {
+    if (args.length < 2) return arityError("sintercard")
+    const numkeys = parseI64(args[0] ?? utf8(""))
+    if (numkeys === null || numkeys < 1n) return err("ERR numkeys should be greater than 0")
+    if (numkeys > BigInt(args.length - 1))
+      return err("ERR Number of keys can't be greater than number of args")
+    const count = Number(numkeys)
+    let limit = 0n
+    for (let i = 1 + count; i < args.length; i++) {
+      if (upper(args[i]) !== "LIMIT" || i + 1 >= args.length) return syntaxError()
+      const parsed = parseI64(args[++i] ?? utf8(""))
+      if (parsed === null || parsed < 0n) return err("ERR LIMIT can't be negative")
+      limit = parsed
+    }
+    const sets = []
+    for (const arg of args.slice(1, 1 + count)) {
+      const set = this.requireSet(database, text(arg), false)
+      if (set && !("members" in set)) return set
+      sets.push(set && "members" in set ? set : null)
+    }
+    const [first, ...rest] = sets
+    let found = 0
+    for (const member of first?.members.keys() ?? []) {
+      if (!rest.every((set) => set?.members.has(member))) continue
+      found++
+      if (limit > 0n && BigInt(found) >= limit) break
+    }
+    return int(found)
   }
 
   private requireZset(database: Database, key: string, create: boolean) {
@@ -2513,7 +2877,7 @@ export class Redis {
       if (zset && !("members" in zset)) return zset
       const scores = args.slice(1).map((arg) => {
         const member = zset && "members" in zset ? zset.members.get(memberKey(arg)) : undefined
-        return member ? bulk(scoreText(member.score)) : nil()
+        return member ? scoreReply(member.score, this.proto(session)) : nil()
       })
       return command === "zscore" ? (scores[0] ?? nil()) : arr(scores)
     }
@@ -2530,27 +2894,23 @@ export class Redis {
       zset.members.set(memberKey(member), { member, score })
       database.put(key, zset)
       this.wake(session.db, key)
-      return bulk(scoreText(score))
+      return scoreReply(score, this.proto(session))
     }
     if (command === "zrank" || command === "zrevrank") {
-      if (args.length !== 2) return arityError(command)
+      if (args.length !== 2 && args.length !== 3) return arityError(command)
+      const withScore = args.length === 3
+      if (withScore && upper(args[2]) !== "WITHSCORE") return syntaxError()
       const zset = this.requireZset(database, key, false)
-      if (zset === null) return nil()
+      if (zset === null) return withScore ? nilArray() : nil()
       if (!("members" in zset)) return zset
-      const ordered = database.zsetOrdered(zset)
-      const at = ordered.findIndex(
+      const sorted = ordered(zset)
+      const at = sorted.findIndex(
         (item) => memberKey(item.member) === memberKey(args[1] ?? utf8("")),
       )
-      if (at < 0) return nil()
-      return int(command === "zrevrank" ? ordered.length - 1 - at : at)
-    }
-    if (
-      command === "zrange" ||
-      command === "zrevrange" ||
-      command === "zrangebyscore" ||
-      command === "zrevrangebyscore"
-    ) {
-      return this.cmdZrange(database, command, args)
+      if (at < 0) return withScore ? nilArray() : nil()
+      const rank = int(command === "zrevrank" ? sorted.length - 1 - at : at)
+      const score = sorted[at]?.score ?? 0
+      return withScore ? arr([rank, scoreReply(score, this.proto(session))]) : rank
     }
     if (command === "zcount") {
       if (args.length !== 3) return arityError("zcount")
@@ -2568,7 +2928,7 @@ export class Redis {
       if (zset === null) return arr([])
       if (!("members" in zset)) return zset
       const count = args.length === 2 ? parseI64(args[1] ?? utf8("")) : 1n
-      if (count === null || count < 0n) return notInteger()
+      if (count === null || count < 0n) return err("ERR value is out of range, must be positive")
       if (!apply) return queued()
       const ordered = database.zsetOrdered(zset)
       const picked =
@@ -2578,12 +2938,13 @@ export class Redis {
       for (const item of picked) zset.members.delete(memberKey(item.member))
       database.dropIfEmpty(key)
       if (database.has(key)) database.put(key, zset)
-      return arr(
-        picked.flatMap((item) => [
-          { t: "bulk" as const, v: item.member },
-          bulk(scoreText(item.score)),
-        ]),
-      )
+      const proto = this.proto(session)
+      // Without COUNT a pop is one flat pair even in RESP3; with COUNT, RESP3 nests the pairs.
+      if (args.length === 1) {
+        const item = picked[0]
+        return item ? arr([{ t: "bulk", v: item.member }, scoreReply(item.score, proto)]) : arr([])
+      }
+      return scoredReply(picked, true, proto)
     }
     if (command === "zremrangebyscore" || command === "zremrangebyrank") {
       if (args.length !== 3) return arityError(command)
@@ -2647,79 +3008,50 @@ export class Redis {
     const key = text(args[0])
     const existing = this.requireZset(database, key, false)
     if (existing && !("members" in existing)) return existing
+    for (let i = index; i < args.length; i += 2) if (parseScore(args[i]) === null) return notFloat()
     if (!apply) return queued()
-    const zset = this.requireZset(database, key, true)
-    if (!zset || !("members" in zset)) return zset ?? wrongType()
-    let changed = 0
+    const zset: Extract<Value, { kind: "zset" }> = existing ?? { kind: "zset", members: new Map() }
     let added = 0
     let updatedScore = 0
+    let incremented: number | null = null
     for (let i = index; i < args.length; i += 2) {
-      const score = parseScore(args[i])
-      if (score === null) return notFloat()
+      const score = parseScore(args[i]) ?? 0
       const member = args[i + 1] ?? utf8("")
       const current = zset.members.get(memberKey(member))
       if (nx && current) continue
       if ((xx || gt || lt) && !current) continue
-      if (gt && current && score <= current.score) continue
-      if (lt && current && score >= current.score) continue
       const next = incr ? (current?.score ?? 0) + score : score
+      if (Number.isNaN(next)) return err("ERR resulting score is not a number (NaN)")
+      if (gt && current && next <= current.score) continue
+      if (lt && current && next >= current.score) continue
+      if (incr) incremented = next
       if (!current) added++
       else if (current.score !== next) updatedScore++
+      else continue
       zset.members.set(memberKey(member), { member, score: next })
-      if (incr) {
-        database.put(key, zset)
-        this.wake(session.db, key)
-        return bulk(scoreText(next))
-      }
     }
-    changed = ch ? added + updatedScore : added
-    database.put(key, zset)
-    this.wake(session.db, key)
-    return int(changed)
+    // Like Redis, an unchanged sorted set is not written (no WATCH bump, no keyspace event).
+    if (added + updatedScore > 0) {
+      database.put(key, zset)
+      this.wake(session.db, key)
+    }
+    if (incr) return incremented === null ? nil() : scoreReply(incremented, this.proto(session))
+    return int(ch ? added + updatedScore : added)
   }
 
-  private cmdZrange(database: Database, command: string, args: Uint8Array[]): Reply {
-    if (args.length < 3) return arityError(command)
-    const zset = this.requireZset(database, text(args[0]), false)
-    if (zset === null) return arr([])
-    if (!("members" in zset)) return zset
-    let byScore = command === "zrangebyscore" || command === "zrevrangebyscore"
-    let rev = command === "zrevrange" || command === "zrevrangebyscore"
-    let withScores = false
-    let limit: { offset: number; count: number } | null = null
-    const rest = args.slice(3)
-    for (let i = 0; i < rest.length; i++) {
-      const option = upper(rest[i])
-      if (option === "BYSCORE") byScore = true
-      else if (option === "REV") rev = true
-      else if (option === "WITHSCORES") withScores = true
-      else if (option === "LIMIT") {
-        const offset = parseI64(rest[++i] ?? utf8(""))
-        const count = parseI64(rest[++i] ?? utf8(""))
-        if (offset === null || count === null) return notInteger()
-        limit = { offset: Number(offset), count: Number(count) }
-      } else return syntaxError()
+  /** Replies are RESP2 inside a script (Redis's default `redis.setresp(2)`), else the connection's. */
+  private proto(session: Session): 2 | 3 {
+    return this.scriptDepth > 0 ? 2 : session.protocol
+  }
+
+  private zsetContext(session: Session, apply: boolean): ZsetContext {
+    return {
+      database: this.database(session.db),
+      proto: this.proto(session),
+      apply,
+      random: () => this.random(),
+      wake: (key) => this.wake(session.db, key),
     }
-    let ordered = database.zsetOrdered(zset)
-    if (byScore) {
-      const left = parseBound(text(args[1]))
-      const right = parseBound(text(args[2]))
-      if (!left || !right) return notFloat()
-      const min = rev ? right : left
-      const max = rev ? left : right
-      ordered = ordered.filter((item) => inBound(item.score, min, max))
-    } else {
-      const [start, end] = indexes(ordered.length, args[1], args[2])
-      ordered = start > end ? [] : ordered.slice(start, end + 1)
-    }
-    if (rev) ordered.reverse()
-    if (limit) ordered = ordered.slice(limit.offset, limit.offset + limit.count)
-    return arr(
-      ordered.flatMap((item) => {
-        const member = { t: "bulk" as const, v: item.member }
-        return withScores ? [member, bulk(scoreText(item.score))] : [member]
-      }),
-    )
   }
 
   private cmdBlockingZset(
@@ -2738,7 +3070,7 @@ export class Redis {
       if (value && value.kind !== "zset") return wrongType()
     }
     if (!apply) return queued()
-    const immediate = this.takeZset(session.db, keys, max)
+    const immediate = this.takeZset(session.db, keys, max, this.proto(session))
     if (immediate) return immediate
     if (session.inExec || this.scriptDepth > 0) return nilArray()
     return this.block({
@@ -2753,7 +3085,7 @@ export class Redis {
     })
   }
 
-  private takeZset(dbIndex: number, keys: string[], max: boolean): Reply | null {
+  private takeZset(dbIndex: number, keys: string[], max: boolean, proto: 2 | 3): Reply | null {
     if (this.consumersPaused) return null
     const database = this.database(dbIndex)
     for (const key of keys) {
@@ -2766,7 +3098,7 @@ export class Redis {
       value.members.delete(memberKey(member.member))
       database.dropIfEmpty(key)
       if (database.has(key)) database.put(key, value)
-      return arr([bulk(key), { t: "bulk", v: member.member }, bulk(scoreText(member.score))])
+      return arr([bulk(key), { t: "bulk", v: member.member }, scoreReply(member.score, proto)])
     }
     return null
   }
@@ -2889,26 +3221,33 @@ export class Redis {
     return `${parsed.ms}-${parsed.seq}`
   }
 
+  /** `XRANGE key start end` and `XREVRANGE key end start`, with `(` exclusive and incomplete IDs. */
   private cmdXrange(session: Session, command: string, args: Uint8Array[]): Reply {
     if (args.length < 3) return arityError(command)
+    const rev = command === "xrevrange"
+    const startRaw = text(rev ? args[2] : args[1])
+    const endRaw = text(rev ? args[1] : args[2])
+    let count: bigint | null = null
+    for (let i = 3; i < args.length; i++) {
+      if (upper(args[i]) !== "COUNT" || i + 1 >= args.length) return syntaxError()
+      const parsed = parseI64(args[++i] ?? utf8(""))
+      if (parsed === null) return notInteger()
+      count = parsed < 0n ? 0n : parsed
+    }
+    const start = parseRangeId(startRaw, "start")
+    if (typeof start === "string") return err(start)
+    const end = parseRangeId(endRaw, "end")
+    if (typeof end === "string") return err(end)
+    if (count === 0n) return nilArray()
     const stream = this.stream(session, text(args[0]), false)
     if (stream === null) return arr([])
     if (!("entries" in stream)) return stream
-    const start = text(args[1])
-    const end = text(args[2])
-    let count = Infinity
-    if (upper(args[3]) === "COUNT") {
-      const parsed = parseI64(args[4] ?? utf8(""))
-      if (parsed === null) return syntaxError()
-      count = Number(parsed)
-    }
-    let entries = stream.entries.filter((entry) => {
-      const afterStart = start === "-" || cmpId(entry.id, start) >= 0
-      const beforeEnd = end === "+" || cmpId(entry.id, end) <= 0
-      return afterStart && beforeEnd
-    })
-    if (command === "xrevrange") entries = entries.slice().reverse()
-    return arr(entries.slice(0, count).map((entry) => entryFields(entry)))
+    const within = (entry: StreamEntry) =>
+      compareId(entry, start) >= 0 && compareId(entry, end) <= 0
+    let entries = stream.entries.filter(within)
+    if (rev) entries = entries.slice().reverse()
+    if (count !== null) entries = entries.slice(0, Number(count))
+    return arr(entries.map((entry) => entryFields(entry)))
   }
 
   private cmdXdel(session: Session, args: Uint8Array[], apply: boolean): Reply {
@@ -3398,10 +3737,55 @@ export class Redis {
     return last
   }
 
-  private cmdPublish(args: Uint8Array[]): Reply {
-    if (args.length !== 2) return arityError("publish")
+  private subscriptions(session: Session): number {
+    return session.channels.size + session.patterns.size + session.shards.size
+  }
+
+  /** `SSUBSCRIBE` / `SUNSUBSCRIBE`. The count in each reply is the shard channels only, as Redis. */
+  private cmdShardSub(session: Session, command: string, args: Uint8Array[]): Reply {
+    const leaving = command === "sunsubscribe"
+    const names = args.map((arg) => text(arg))
+    if (!leaving && names.length === 0) return arityError(command)
+    const targets = names.length > 0 ? names : [...session.shards]
+    if (targets.length === 0) return push([bulk(command), nil(), int(0)])
+    let last: Reply = ok()
+    targets.forEach((name, index) => {
+      if (leaving) {
+        session.shards.delete(name)
+        this.shardSubs.get(name)?.delete(session)
+        if (this.shardSubs.get(name)?.size === 0) this.shardSubs.delete(name)
+      } else {
+        session.shards.add(name)
+        const set = this.shardSubs.get(name) ?? new Set()
+        set.add(session)
+        this.shardSubs.set(name, set)
+      }
+      const reply = push([bulk(command), bulk(name), int(session.shards.size)])
+      if (index < targets.length - 1) session.onPush(reply)
+      else last = reply
+    })
+    return last
+  }
+
+  private cmdSpublish(args: Uint8Array[]): Reply {
+    if (args.length !== 2) return arityError("spublish")
     const channel = text(args[0])
     const message = args[1] ?? utf8("")
+    let delivered = 0
+    for (const session of this.shardSubs.get(channel) ?? []) {
+      session.onPush(push([bulk("smessage"), bulk(channel), { t: "bulk", v: message }]))
+      delivered++
+    }
+    return int(delivered)
+  }
+
+  private cmdPublish(args: Uint8Array[]): Reply {
+    if (args.length !== 2) return arityError("publish")
+    return int(this.deliver(text(args[0]), args[1] ?? utf8("")))
+  }
+
+  /** Deliver `message` to `channel`'s subscribers and matching patterns; returns the receivers. */
+  private deliver(channel: string, message: Uint8Array): number {
     let delivered = 0
     for (const session of this.channelSubs.get(channel) ?? []) {
       session.onPush(push([bulk("message"), bulk(channel), { t: "bulk", v: message }]))
@@ -3416,7 +3800,7 @@ export class Redis {
         delivered++
       }
     }
-    return int(delivered)
+    return delivered
   }
 
   private cmdPubsub(args: Uint8Array[]): Reply {
@@ -3437,6 +3821,20 @@ export class Redis {
       )
     }
     if (sub === "NUMPAT") return int(this.patternSubs.size)
+    if (sub === "SHARDCHANNELS") {
+      const pattern = args[1] ? text(args[1]) : "*"
+      return arr(
+        [...this.shardSubs.keys()]
+          .filter((channel) => globMatch(pattern, channel))
+          .map((channel) => bulk(channel)),
+      )
+    }
+    if (sub === "SHARDNUMSUB") {
+      const rows: Reply[] = []
+      for (const arg of args.slice(1))
+        rows.push(bulk(text(arg)), int(this.shardSubs.get(text(arg))?.size ?? 0))
+      return arr(rows)
+    }
     return arityError("pubsub")
   }
 
@@ -3484,14 +3882,15 @@ export class Redis {
   }
 
   private cmdEval(session: Session, command: string, args: Uint8Array[], apply: boolean): Reply {
-    if (command === "evalsha" && this.faultValue === "noscript") {
+    const bySha = command.startsWith("evalsha")
+    if (bySha && this.faultValue === "noscript") {
       this.faultValue = null
       return err("NOSCRIPT No matching script. Please use EVAL.")
     }
     if (args.length < 2) return arityError(command)
-    const digest = command === "eval" ? sha1Hex(args[0] ?? utf8("")) : text(args[0]).toLowerCase()
-    const source = command === "eval" ? latin1(args[0] ?? utf8("")) : this.scripts.get(digest)
-    if (command === "evalsha" && source === undefined) return noScript()
+    const digest = bySha ? text(args[0]).toLowerCase() : sha1Hex(args[0] ?? utf8(""))
+    const source = bySha ? this.scripts.get(digest) : latin1(args[0] ?? utf8(""))
+    if (bySha && source === undefined) return noScript()
     const numkeys = parseI64(args[1] ?? utf8(""))
     if (numkeys === null) return notInteger()
     if (numkeys < 0n) return err("ERR Number of keys can't be negative")
@@ -3501,10 +3900,44 @@ export class Redis {
     if (!apply || source === undefined) return queued()
     const keys = args.slice(2, 2 + Number(numkeys))
     const argv = args.slice(2 + Number(numkeys))
-    const result = this.runScript(session, source, digest, keys, argv)
+    const result = this.runScript(session, source, digest, keys, argv, command.endsWith("_ro"))
     if (!(result.t === "error" && result.v.includes("Error compiling script")))
       this.scripts.set(digest, source)
     return result
+  }
+
+  /** `FCALL` / `FCALL_RO`: run a function a library registered with `FUNCTION LOAD`. */
+  private cmdFcall(session: Session, command: string, args: Uint8Array[], apply: boolean): Reply {
+    if (args.length < 2) return arityError(command)
+    const fn = this.functions.find(latin1(args[0] ?? utf8("")))
+    if (!fn) return err("ERR Function not found")
+    const numkeys = parseI64(args[1] ?? utf8(""))
+    if (numkeys === null) return err("ERR Bad number of keys provided")
+    if (numkeys < 0n) return err("ERR Number of keys can't be negative")
+    if (numkeys > BigInt(args.length - 2))
+      return err("ERR Number of keys can't be greater than number of args")
+    const readOnly = fn.flags.includes("no-writes")
+    if (command === "fcall_ro" && !readOnly)
+      return err("ERR Can not execute a script with write flag using *_ro command.")
+    if (!apply) return queued()
+    const keys = args.slice(2, 2 + Number(numkeys)).map(latin1)
+    const argv = args.slice(2 + Number(numkeys)).map(latin1)
+    const host = {
+      call: (callArgs: LuaValue[], raise: boolean) => this.luaDispatch(session, callArgs, raise),
+    }
+    const wasReadOnly = this.scriptReadOnly
+    this.scriptDepth++
+    this.scriptReadOnly = readOnly
+    try {
+      return luaToReply(runFunction(fn, keys, argv, host, VERSION))
+    } catch (error) {
+      if (error instanceof ScriptFailure) return err(error.message)
+      const message = error instanceof Error ? error.message : String(error)
+      return err(`ERR Error running script: ${message}`)
+    } finally {
+      this.scriptDepth--
+      this.scriptReadOnly = wasReadOnly
+    }
   }
 
   private cmdScript(args: Uint8Array[], apply: boolean): Reply {
@@ -3545,11 +3978,14 @@ export class Redis {
     digest: string,
     keys: Uint8Array[],
     argv: Uint8Array[],
+    readOnly = false,
   ): Reply {
     const host = {
       call: (callArgs: LuaValue[], raise: boolean) => this.luaDispatch(session, callArgs, raise),
     }
+    const wasReadOnly = this.scriptReadOnly
     this.scriptDepth++
+    this.scriptReadOnly = readOnly
     try {
       const value = runLuaScript(source, digest, keys.map(latin1), argv.map(latin1), host, VERSION)
       return luaToReply(value)
@@ -3559,6 +3995,7 @@ export class Redis {
       return err(`ERR Error running script: ${message}`)
     } finally {
       this.scriptDepth--
+      this.scriptReadOnly = wasReadOnly
     }
   }
 
@@ -3580,6 +4017,8 @@ export class Redis {
       throw error
     }
     if (SCRIPT_NESTED.has(name)) return fail("ERR This Redis command is not allowed from script")
+    if (this.scriptReadOnly && commandFlags(name).includes("write"))
+      return fail("ERR Write commands are not allowed from read-only scripts.")
     const reply = this.execCmd(session, name, bytes, true, head)
     if (reply instanceof Promise) return fail("ERR This Redis command is not allowed from script")
     if (reply.t === "error") {
@@ -3653,14 +4092,20 @@ export class Redis {
     for (const waiter of [...this.waiters]) {
       if (waiter.settled || waiter.db !== dbIndex || !waiter.keys.includes(key)) continue
       const reply = this.satisfy(waiter)
-      if (reply) this.finishWaiter(waiter, reply)
+      if (reply) {
+        this.waiterEvents(waiter, reply)
+        this.finishWaiter(waiter, reply)
+      }
     }
   }
 
   private wakeAll(): void {
     for (const waiter of [...this.waiters]) {
       const reply = this.satisfy(waiter)
-      if (reply) this.finishWaiter(waiter, reply)
+      if (reply) {
+        this.waiterEvents(waiter, reply)
+        this.finishWaiter(waiter, reply)
+      }
     }
   }
 
@@ -3678,7 +4123,8 @@ export class Redis {
         waiter.destSide ?? "left",
       )
     if (waiter.kind === "list") return this.takeList(waiter.db, waiter.keys, waiter.side)
-    if (waiter.kind === "zset") return this.takeZset(waiter.db, waiter.keys, waiter.max === true)
+    if (waiter.kind === "zset")
+      return this.takeZset(waiter.db, waiter.keys, waiter.max === true, session.protocol)
     const reply = this.readStreams(
       session,
       waiter.keys,
@@ -3692,6 +4138,40 @@ export class Redis {
     if (reply.t === "array" && reply.v && reply.v.length > 0) return reply
     if (reply.t === "error") return reply
     return null
+  }
+
+  /** Keyspace events of a blocked pop or move that an arriving element completed. */
+  private waiterEvents(waiter: Waiter, reply: Reply): void {
+    if (this.notifyFlags === 0 || reply.t === "error") return
+    const gone = (key: string) => this.database(waiter.db).peek(key) === undefined
+    if (waiter.kind === "list" && waiter.destKey !== undefined) {
+      const src = waiter.keys[0] ?? ""
+      if (reply.t !== "bulk" || reply.v === null) return
+      const events = moveEvents(
+        src,
+        waiter.destKey,
+        waiter.side,
+        waiter.destSide ?? "left",
+        gone(src),
+      )
+      this.publishWaiterEvents(waiter.db, events)
+      return
+    }
+    if (waiter.kind === "stream" || reply.t !== "array" || !reply.v) return
+    const head = reply.v[0]
+    const key = head?.t === "bulk" && head.v ? latin1(head.v) : ""
+    const event =
+      waiter.kind === "list"
+        ? { cls: NOTIFY_LIST, event: waiter.side === "left" ? "lpop" : "rpop", key }
+        : { cls: NOTIFY_ZSET, event: waiter.max ? "zpopmax" : "zpopmin", key }
+    const events: KeyEvent[] = [event]
+    if (gone(key)) events.push({ cls: NOTIFY_GENERIC, event: "del", key })
+    this.publishWaiterEvents(waiter.db, events)
+  }
+
+  private publishWaiterEvents(db: number, events: KeyEvent[]): void {
+    if (this.notifyDepth > 0) this.deferredEvents.push({ db, events })
+    else this.publishEvents(db, events)
   }
 
   private finishWaiter(waiter: Waiter, reply: Reply): void {
@@ -3717,8 +4197,13 @@ export class Redis {
   private leavePubsub(session: Session): void {
     for (const channel of session.channels) this.channelSubs.get(channel)?.delete(session)
     for (const pattern of session.patterns) this.patternSubs.get(pattern)?.delete(session)
+    for (const shard of session.shards) {
+      this.shardSubs.get(shard)?.delete(session)
+      if (this.shardSubs.get(shard)?.size === 0) this.shardSubs.delete(shard)
+    }
     session.channels.clear()
     session.patterns.clear()
+    session.shards.clear()
   }
 }
 
@@ -3763,6 +4248,41 @@ function listIndex(length: number, raw: Uint8Array | undefined): number | null {
   if (index < 0) index = length + index
   if (index < 0 || index >= length) return null
   return index
+}
+
+const ID_MAX = 18446744073709551615n
+const INVALID_ID = "ERR Invalid stream ID specified as stream command argument"
+
+/**
+ * One end of an `XRANGE` interval: `-` / `+`, a full or incomplete (`ms`) ID, optionally `(`
+ * exclusive. An incomplete start is `ms-0` and an incomplete end `ms-<max>`, as in Redis.
+ */
+function parseRangeId(raw: string, side: "start" | "end"): { ms: bigint; seq: bigint } | string {
+  const exclusive = raw.startsWith("(")
+  const body = exclusive ? raw.slice(1) : raw
+  let id: { ms: bigint; seq: bigint } | null
+  if (body === "-" || body === "+") {
+    if (exclusive) return INVALID_ID
+    id = body === "-" ? { ms: 0n, seq: 0n } : { ms: ID_MAX, seq: ID_MAX }
+  } else if (/^\d+$/.test(body)) {
+    id = { ms: BigInt(body), seq: side === "start" ? 0n : ID_MAX }
+  } else id = parseStreamId(body)
+  if (!id || id.ms > ID_MAX || id.seq > ID_MAX) return INVALID_ID
+  if (!exclusive) return id
+  if (side === "start") {
+    if (id.seq < ID_MAX) return { ms: id.ms, seq: id.seq + 1n }
+    if (id.ms < ID_MAX) return { ms: id.ms + 1n, seq: 0n }
+    return "ERR invalid start ID for the interval"
+  }
+  if (id.seq > 0n) return { ms: id.ms, seq: id.seq - 1n }
+  if (id.ms > 0n) return { ms: id.ms - 1n, seq: ID_MAX }
+  return "ERR invalid end ID for the interval"
+}
+
+function compareId(entry: StreamEntry, id: { ms: bigint; seq: bigint }): number {
+  if (entry.ms !== id.ms) return entry.ms < id.ms ? -1 : 1
+  if (entry.seq !== id.seq) return entry.seq < id.seq ? -1 : 1
+  return 0
 }
 
 interface Bound {

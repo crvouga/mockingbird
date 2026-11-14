@@ -15,7 +15,21 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { document } from "./generated/openapi.js"
 import type { HealthieEvent } from "./graph.js"
 import { apiKeyOf, HEALTHIE_NAMESPACE, HealthieAPI, healthieTimestamp } from "./index.js"
-import type { BillingItemRecord, Settings, UserRecord } from "./state.js"
+import { type BillingItemRecord, type Settings, stateCode, type UserRecord } from "./state.js"
+
+/** `["AZ", "ca"]` → `["AZ", "CA"]`, or the first entry that is not a state code. */
+const parseStates = (value: unknown): { states: string[] } | { bad: string } => {
+  if (value === undefined) return { states: [] }
+  if (!Array.isArray(value)) return { bad: String(value) }
+  const states: string[] = []
+  for (const entry of value) {
+    const raw = isRecord(entry) ? entry.state : entry
+    const code = stateCode(raw)
+    if (!code) return { bad: String(raw) }
+    if (!states.includes(code)) states.push(code)
+  }
+  return { states }
+}
 
 /**
  * Which of our backend's receivers each Healthie event type goes to (the routes
@@ -163,8 +177,16 @@ const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
       if (api.state.userByEmail(body.email as string)) {
         return adminError(409, `a user with email ${body.email} already exists`)
       }
+      const licenses = parseStates(body.state_licenses)
+      if ("bad" in licenses) {
+        return adminError(
+          400,
+          `state_licenses: "${licenses.bad}" is not a two-letter US state code`,
+        )
+      }
       const role = body.role === "provider" ? "provider" : "patient"
       const user = api.state.addUser({
+        state_licenses: licenses.states,
         role,
         email: body.email as string,
         password: body.password as string,
@@ -191,6 +213,36 @@ const adminRoutes = (runtime: ServiceRuntime<HealthieAPI>): AdminRoutes => {
       return user
         ? json(201, { api_key: issueKey(api, user) })
         : adminError(404, `no user ${params.id}`)
+    },
+    "POST /users/:id/state-licenses": ({ params, body, namespace }) => {
+      const state = isRecord(body) ? stateCode(body.state) : undefined
+      if (!state) return adminError(400, 'expected {"state": "<two-letter US state code>"}')
+      const user = runtime.instance(namespace).state.addStateLicense(params.id as string, state)
+      return user ? json(201, publicUser(user)) : adminError(404, `no user ${params.id}`)
+    },
+    "GET /user-groups": ({ namespace }) =>
+      json(200, {
+        user_groups: runtime
+          .instance(namespace)
+          .state.userGroups.list({ order: "oldest" })
+          .map((row) => row.value),
+      }),
+    "POST /user-groups": ({ body, namespace }) => {
+      if (!isRecord(body) || !text(body.name)) {
+        return adminError(400, 'expected {"name", "user_ids"?, "invite_code"?, "owner_id"?}')
+      }
+      const api = runtime.instance(namespace)
+      const userIds = Array.isArray(body.user_ids) ? body.user_ids.map(String) : []
+      for (const id of [...userIds, ...(text(body.owner_id) ? [body.owner_id as string] : [])]) {
+        if (!api.state.users.get(id)) return adminError(404, `no user ${id}`)
+      }
+      const group = api.state.addUserGroup({
+        name: body.name as string,
+        invite_code: text(body.invite_code) ?? null,
+        owner_id: text(body.owner_id) ?? null,
+        user_ids: userIds,
+      })
+      return json(201, { ...group, user_ids: userIds })
     },
     "POST /users/:id/archive": ({ params, namespace }) =>
       setActive(runtime.instance(namespace), params.id as string, false, at(namespace)),

@@ -7,7 +7,15 @@ import { document, FirstPromoterAPI, supportedOperationIds } from "./src/index.j
 const params = fcParameters(process.env)
 const MOCK_HOST = "mock.firstpromoter.local"
 const now = () => 1_700_000_000_000
-const headers = () => ({ authorization: "Bearer fp_parity", "account-id": "acc_parity" })
+// The v1 routes authenticate with X-API-KEY; v2 ignores it, so every walk sends both.
+const headers = () => ({
+  authorization: "Bearer fp_parity",
+  "account-id": "acc_parity",
+  "x-api-key": "fp_parity_v1",
+})
+// The legacy v1 routes are parity-disabled for the live oracle (no v1 credentials) but are still
+// walked here, so self-parity and response-schema checks cover them.
+const V1_OPERATIONS = supportedOperationIds.filter((id) => id.startsWith("V1"))
 
 describe("FirstPromoterAPI", () => {
   test(
@@ -32,6 +40,7 @@ describe("FirstPromoterAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
+        forceInclude: V1_OPERATIONS,
         numRuns: params.numRuns ?? 25,
         maxCommands: 20,
         latencyToleranceMs: 10_000,

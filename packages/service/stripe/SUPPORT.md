@@ -2,13 +2,12 @@
 
 Generated from `openapi.yaml`; do not edit by hand.
 
-- operations in spec: **126**
-- supported by the emulator: **122**
-- parity enabled: **114**
+- operations in spec: **140**
+- supported by the emulator: **130**
+- parity enabled: **120**
 
 | operationId | route | emulator | parity | notes |
 | --- | --- | --- | --- | --- |
-| `PostCustomerSessions` | `POST /v1/customer_sessions` | ✅ supported | ❌ disabled | Covered by the pinned package oracle; no independent live evidence yet. |
 | `PostThreeDSecureAuthenticate` | `POST /c/3ds/{intent}/authenticate` | ✅ supported | ❌ disabled | the 3-D Secure challenge the Stripe.js stand-in completes has no public API |
 | `GetCheckoutPage` | `GET /c/pay/{session}` | ✅ supported | ❌ disabled | the hosted Checkout page is HTML served by the emulator in place of checkout.stripe.com |
 | `PostCheckoutPage` | `POST /c/pay/{session}` | ✅ supported | ❌ disabled | the hosted Checkout page form post is served by the emulator in place of checkout.stripe.com |
@@ -26,7 +25,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetCharges` | `GET /v1/charges` | ✅ supported | ✅ |  |
 | `PostCharges` | `POST /v1/charges` | ❌ unsupported | — | charges are always created through PaymentIntents |
 | `GetChargesCharge` | `GET /v1/charges/{charge}` | ✅ supported | ✅ |  |
-| `PostChargesCharge` | `POST /v1/charges/{charge}` | ❌ unsupported | — | charges are only read in the e2e path |
+| `PostChargesCharge` | `POST /v1/charges/{charge}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetCheckoutSessions` | `GET /v1/checkout/sessions` | ✅ supported | ✅ |  |
 | `PostCheckoutSessions` | `POST /v1/checkout/sessions` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetCheckoutSessionsSession` | `GET /v1/checkout/sessions/{session}` | ✅ supported | ✅ |  |
@@ -38,6 +37,15 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetCouponsCoupon` | `GET /v1/coupons/{coupon}` | ✅ supported | ✅ |  |
 | `PostCouponsCoupon` | `POST /v1/coupons/{coupon}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `DeleteCouponsCoupon` | `DELETE /v1/coupons/{coupon}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `GetCreditNotes` | `GET /v1/credit_notes` | ❌ unsupported | — | credit notes are not modelled |
+| `PostCreditNotes` | `POST /v1/credit_notes` | ❌ unsupported | — | credit notes are not modelled |
+| `GetCreditNotesCreditNoteLines` | `GET /v1/credit_notes/{credit_note}/lines` | ❌ unsupported | — | credit notes are not modelled |
+| `GetCreditNotesId` | `GET /v1/credit_notes/{id}` | ❌ unsupported | — | credit notes are not modelled |
+| `PostCreditNotesId` | `POST /v1/credit_notes/{id}` | ❌ unsupported | — | credit notes are not modelled |
+| `PostCreditNotesIdVoid` | `POST /v1/credit_notes/{id}/void` | ❌ unsupported | — | credit notes are not modelled |
+| `GetCreditNotesPreview` | `GET /v1/credit_notes/preview` | ❌ unsupported | — | credit notes are not modelled |
+| `GetCreditNotesPreviewLines` | `GET /v1/credit_notes/preview/lines` | ❌ unsupported | — | credit notes are not modelled |
+| `PostCustomerSessions` | `POST /v1/customer_sessions` | ✅ supported | ❌ disabled | Covered by the pinned package oracle; no independent live evidence yet. |
 | `GetCustomers` | `GET /v1/customers` | ✅ supported | ✅ |  |
 | `PostCustomers` | `POST /v1/customers` | ✅ supported | ✅ |  |
 | `GetCustomersCustomer` | `GET /v1/customers/{customer}` | ✅ supported | ✅ |  |
@@ -45,10 +53,12 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `DeleteCustomersCustomer` | `DELETE /v1/customers/{customer}` | ✅ supported | ✅ |  |
 | `GetCustomersCustomerBalanceTransactions` | `GET /v1/customers/{customer}/balance_transactions` | ✅ supported | ✅ |  |
 | `PostCustomersCustomerBalanceTransactions` | `POST /v1/customers/{customer}/balance_transactions` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `DeleteCustomersCustomerDiscount` | `DELETE /v1/customers/{customer}/discount` | ✅ supported | ✅ |  |
 | `GetCustomersSearch` | `GET /v1/customers/search` | ✅ supported | ✅ |  |
 | `GetDisputes` | `GET /v1/disputes` | ✅ supported | ✅ |  |
 | `GetDisputesDispute` | `GET /v1/disputes/{dispute}` | ✅ supported | ✅ |  |
-| `PostDisputesDispute` | `POST /v1/disputes/{dispute}` | ❌ unsupported | — | the emulator never creates or mutates disputes |
+| `PostDisputesDispute` | `POST /v1/disputes/{dispute}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `PostDisputesDisputeClose` | `POST /v1/disputes/{dispute}/close` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetEvents` | `GET /v1/events` | ✅ supported | ✅ |  |
 | `GetEventsId` | `GET /v1/events/{id}` | ✅ supported | ✅ |  |
 | `GetInvoicePayments` | `GET /v1/invoice_payments` | ✅ supported | ✅ |  |
@@ -65,9 +75,12 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `DeleteInvoicesInvoice` | `DELETE /v1/invoices/{invoice}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `PostInvoicesInvoiceFinalize` | `POST /v1/invoices/{invoice}/finalize` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetInvoicesInvoiceLines` | `GET /v1/invoices/{invoice}/lines` | ✅ supported | ✅ |  |
+| `PostInvoicesInvoiceMarkUncollectible` | `POST /v1/invoices/{invoice}/mark_uncollectible` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `PostInvoicesInvoicePay` | `POST /v1/invoices/{invoice}/pay` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `PostInvoicesInvoiceVoid` | `POST /v1/invoices/{invoice}/void` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `PostInvoicesCreatePreview` | `POST /v1/invoices/create_preview` | ✅ supported | ❌ disabled | previews model a subset of Stripe's preview parameters (best guess, not oracle-verified); unmodelled ones are refused |
 | `GetInvoicesUpcoming` | `GET /v1/invoices/upcoming` | ✅ supported | ❌ disabled | route is absent from the pinned upstream spec (2026-08-26.dahlia previews invoices instead); the e2e SDK still calls it |
+| `GetInvoicesUpcomingLines` | `GET /v1/invoices/upcoming/lines` | ✅ supported | ❌ disabled | route is absent from the pinned upstream spec (2026-08-26.dahlia previews invoices instead); stripe-node 16 still calls it |
 | `GetPaymentIntents` | `GET /v1/payment_intents` | ✅ supported | ✅ |  |
 | `PostPaymentIntents` | `POST /v1/payment_intents` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetPaymentIntentsIntent` | `GET /v1/payment_intents/{intent}` | ✅ supported | ✅ |  |
@@ -122,6 +135,7 @@ Generated from `openapi.yaml`; do not edit by hand.
 | `GetSubscriptionsSubscriptionExposedId` | `GET /v1/subscriptions/{subscription_exposed_id}` | ✅ supported | ✅ |  |
 | `PostSubscriptionsSubscriptionExposedId` | `POST /v1/subscriptions/{subscription_exposed_id}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `DeleteSubscriptionsSubscriptionExposedId` | `DELETE /v1/subscriptions/{subscription_exposed_id}` | ✅ supported | ⚠️ unsafe (opt-in) |  |
+| `DeleteSubscriptionsSubscriptionExposedIdDiscount` | `DELETE /v1/subscriptions/{subscription_exposed_id}/discount` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `PostSubscriptionsSubscriptionResume` | `POST /v1/subscriptions/{subscription}/resume` | ✅ supported | ⚠️ unsafe (opt-in) |  |
 | `GetTestHelpersTestClocks` | `GET /v1/test_helpers/test_clocks` | ✅ supported | ✅ |  |
 | `PostTestHelpersTestClocks` | `POST /v1/test_helpers/test_clocks` | ✅ supported | ⚠️ unsafe (opt-in) |  |

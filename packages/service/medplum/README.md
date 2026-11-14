@@ -10,8 +10,11 @@ for test suites. It covers:
   `_revinclude`, `_sort`, `_total`, `_summary`, `_elements`, offset and cursor paging).
 - **Operations**: batch and transaction bundles, `$validate`, `$expunge`, `Patient/$everything`,
   GraphQL, and Binary storage with signed attachment URLs.
-- **Auth**: OAuth2 password login with PKCE, authorization code, client credentials, refresh
-  tokens with rotation, and Basic auth, all as ES384 JWTs with a JWKS.
+- **Auth**: OAuth2 password login with PKCE, Google sign-in, authorization code, client
+  credentials, refresh tokens with rotation, and Basic auth, all as ES384 JWTs with a JWKS;
+  password change and reset, `User/$update-email`, and `X-Medplum-On-Behalf-Of`.
+- **Bots**: `Bot/$execute` and `Bot/<id>` subscription endpoints run the suite's own `bots`
+  handler in place of deployed bot code.
 - **Access control and admin**: access policies, and the project admin API (invite, clients,
   members).
 
@@ -218,6 +221,104 @@ email and the `<appBaseUrl>setpassword/<id>/<secret>` link; not called for `send
 `api.securityRequests()`, or `GET /__admin/medplum/security-requests`. Not modelled: reCAPTCHA
 (the server enforces it only when a secret key is configured) and the breached-password lookup.
 
+### Account changes
+
+`POST /auth/changepassword {oldPassword, newPassword}` (auth/changepassword.ts) changes the
+signed-in user's password and revokes all their logins, so existing tokens stop working. A wrong
+old password answers `Incorrect password` (`oldPassword`). The new password must be 8 characters
+to 72 bytes.
+
+`POST /fhir/R4/User/{id}/$update-email {email, updateProfileTelecom?, skipEmailVerification?}`
+(fhir/operations/update-user-email.ts; a plain object or a `Parameters` resource) is for project
+admins and super admins. It sets the login email, marks it unverified, and creates a
+`verify-email` `UserSecurityRequest`. That request is handed to `onSecurityRequest` with an
+`<appBaseUrl>verifyemail/<id>/<secret>` link, unless `skipEmailVerification` is set. With
+`updateProfileTelecom`, the member's profile gains a `work` email and its old email becomes
+`old`. As on the server, the answer is the User as the system repository wrote it, including
+`passwordHash` and the full `meta`.
+
+### Google sign-in
+
+`POST /auth/google {googleClientId, googleCredential, clientId?, projectId?, createUser?, …}`
+follows auth/google.ts. `googleClientId` must be the server's own (the `googleClientId` option)
+or a project's `site[].googleClientId`; otherwise the answer is `Invalid googleClientId`. The
+credential is verified as an RS256 JWT from `https://accounts.google.com` for that audience,
+against Google's keys at `https://www.googleapis.com/oauth2/v3/certs`, fetched through
+`externalFetch`. A suite signs its own credentials and serves its own key set there. The answer is
+the password login's (`{login, code}` or the memberships), with scope `openid offline_access` by
+default. An unknown email answers `User not found` unless `createUser` is set. A domain with an
+external-auth `DomainConfiguration` answers `{domain, authorizeUrl}`.
+
+The JWT error texts are jose's (`unexpected "aud" claim value`, `signature verification failed`,
+`Invalid Compact JWS`, …). `Invalid Compact JWS` and the client-id errors were checked against the
+oracle. The other texts and the success path are **best guesses, not oracle-verified**, because
+only Google can sign a credential the real server accepts.
+
+### On behalf of another member
+
+A project admin (or super admin) may send `X-Medplum-On-Behalf-Of: <Profile>/<id>` or
+`ProjectMembership/<id>`. The behaviour follows `tryAddOnBehalfOf` (oauth/utils.ts) and was
+checked against the oracle:
+
+- Writes keep the caller in `meta.author` and record the member in `meta.onBehalfOf`.
+- The member's access policy applies.
+- `Bot/$execute` sees the member as the requester.
+
+A non-admin caller, or a profile with no membership in the project, answers 400
+`Authentication error` with diagnostics `OperationOutcomeError: Forbidden`. An unknown
+membership has diagnostics `OperationOutcomeError: Not found`.
+
+### Bots
+
+The server runs a Bot's deployed JavaScript, which the emulator cannot do. Pass `bots` instead:
+
+```ts
+import { createRuntime } from "@crvouga/mockingbird-service-medplum"
+
+const medplum = createRuntime({
+  project: { features: ["bots"] },
+  bots: async (bot, input, context) => {
+    if (bot.name === "echo") return { echo: input }
+    // context: contentType, requester, runAs, baseUrl, accessToken (a token for runAs),
+    // secrets, headers, traceId, and subscription/interaction for subscription runs
+  },
+})
+```
+
+It is called for `GET|POST /fhir/R4/Bot/{id}/$execute` and for
+`/fhir/R4/Bot/$execute?identifier=system|value` (fhir/operations/execute.ts):
+
+- The bot is read as the caller (404 if missing).
+- Its project needs the `bots` feature (`Bots not enabled`).
+- `input` is the parsed body: JSON, a form, or a text or HL7 string. For a GET it is the query.
+- The answer follows `sendBotResponse`. A resource is sent as FHIR JSON, and no return value is All
+  OK. Text and HL7 requests are answered as text, anything else as JSON. A thrown error, or a
+  returned error `OperationOutcome`, is sent as an OperationOutcome (400 for a throw).
+- The handler runs after the namespace lock is released. It can call back into the emulator with
+  `context.accessToken`, a token for the bot's membership (or the caller's, for `runAsUser` bots
+  or bots without a membership), as a deployed bot's `medplum` client would.
+
+A `rest-hook` Subscription whose `channel.endpoint` is `Bot/<id>` calls the handler instead of
+POSTing (workers/subscription.ts `execBot`):
+
+- `input` is the resource, or `{deletedResource}` on delete.
+- `context.requester` is the resource's `meta.author`.
+- `context.headers` holds the rest-hook headers.
+- As on the server, a bot with no ProjectMembership in the project never runs. Create one for it
+  (`putResource({resourceType: "ProjectMembership", project, user: botRef, profile: botRef})`).
+- Handler errors never fail the write.
+
+Inputs, requesters, interactions and authorship of subscription runs were checked against the
+oracle, as were the `$execute` errors (unknown bot or identifier, no id, thrown error, bots not
+enabled). The local oracle answers every successful `$execute` with a 500 from inside Express, so
+the success-path response rules come from `sendBotResponse` and the server's own `execute.test.ts`.
+
+Without `bots`, `$execute` answers 400 ("Bot execution is not emulated: pass a `bots` handler to
+the emulator"), and Bot subscriptions are inert. This is an emulator limitation, not a server error.
+`Prefer: respond-async` answers an explicit not-emulated 400. Not modelled: streaming
+(`text/event-stream`), bot AuditEvents, input archiving, `Bot/$deploy`, `Bot/$init`, and
+`POST /admin/projects/{id}/bot`.
+
 ### Rest-hook subscriptions
 
 Active, project-scoped `Subscription` resources with `channel.type: "rest-hook"` deliver a POST
@@ -250,7 +351,7 @@ These answer the server's 404 (or are stored but inert):
 
 - terminology operations (`ValueSet/$expand`, `CodeSystem/$lookup`, …)
 - bulk `$export`
-- bots (`Bot/$execute`)
+- running deployed bot code (`bots` runs the suite's own handler instead; see [Bots](#bots))
 - subscription channels other than `rest-hook`, server-scoped subscriptions, and webhook retries
 - email (password-reset and verification mail is replaced by `onSecurityRequest`)
 - self-registration (`/auth/newuser`)
@@ -267,6 +368,7 @@ emulated.
 | `createRuntime` | `(options?: MedplumRuntimeOptions) => MedplumRuntime` — the served emulator with the Mockingbird service contract. |
 | `MEDPLUM_PRESETS` | The fault presets above, as `Record<string, FaultPreset>`. |
 | `MEDPLUM_NAMESPACE` | `"medplum"` — the service name and default namespace. |
+| `MedplumBotHandler` / `MedplumBotContext` | Types of the `bots` option and its context argument. |
 | `document` | The vendored OpenAPI contract (`openapi.yaml`). |
 | `operationIds` / `supportedOperationIds` | Every operation id in the contract / the ones the emulator serves. |
 | `DEFINITIONS_VERSION` | The `@medplum/definitions` release the embedded FHIR definitions come from. |
@@ -304,11 +406,13 @@ type MedplumAPIOptions = {
   seed?: number | string    // seeds generated ids and secrets; default the namespace
   sqlite?: SqliteClient     // default @crvouga/mockingbird-service-sqlite
   superAdmin?: { email?, password?, clientId?, clientSecret? }
-  project?: false | { id?, name?, clientId?, clientSecret?, clientAdmin?, users?: MedplumUserFixture[] }
+  project?: false | { id?, name?, clientId?, clientSecret?, clientAdmin?, features?, users?: MedplumUserFixture[] }
   resources?: Resource[]    // seeded as the system after the users; ids kept; meta.project defaults to the default project
   appBaseUrl?: string       // host of password-reset links; default "http://localhost:3000/"
   onSecurityRequest?: (request: MedplumSecurityRequest) => void  // the password-reset "email"
-  externalFetch?: (input: string, init?: RequestInit) => Promise<Response>  // token-exchange userinfo calls; default fetch
+  externalFetch?: (input: string, init?: RequestInit) => Promise<Response>  // token-exchange userinfo and Google key calls; default fetch
+  googleClientId?: string   // the server's own Google client id for /auth/google
+  bots?: (bot: Bot, input: unknown, context: MedplumBotContext) => unknown  // runs bots; see Bots
   maxSearchOffset?: number  // largest _offset accepted; default unlimited, as on the server
 }
 type MedplumUserFixture = { email; password; firstName?; lastName?; profileType?: "Practitioner" | "Patient" | "RelatedPerson"; profileId?; profile?: Partial<Practitioner | Patient | RelatedPerson>; admin? }

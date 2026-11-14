@@ -17,6 +17,8 @@ import {
 } from "../types/value.ts";
 import { deparseExpr } from "./deparse.ts";
 import { quoteIdentifier } from "./keywords.ts";
+import { unsupported } from "../errors/error.ts";
+import { SQLJSON_INTERNAL } from "../parser/sqljson.ts";
 
 /**
  * Expression deparsing the way PostgreSQL's ruleutils.c prints a stored expression
@@ -84,7 +86,9 @@ export function formatType(scope: RuleScope, type: TypeId, mod: ColumnType["mod"
   // `character` is how char(n) prints; without a length the type goes by its internal name
   if (!mod || mod.a === undefined) return type === "bpchar" ? "bpchar" : base;
   if (type === "numeric") return mod.b === undefined ? `${base}(${mod.a})` : `${base}(${mod.a},${mod.b})`;
-  if (type === "varchar" || type === "bpchar" || type === "bit" || type === "varbit") return `${base}(${mod.a})`;
+  if (type === "varchar" || type === "bpchar" || type === "bit" || type === "varbit" || type === "vector") {
+    return `${base}(${mod.a})`;
+  }
   if (type === "timestamp" || type === "time") return `${base.replace(" ", `(${mod.a}) `)}`;
   if (type === "timestamptz" || type === "timetz") return `${base.replace(" ", `(${mod.a}) `)}`;
   return base;
@@ -405,6 +409,15 @@ class Analyzer {
         // SQL value functions (CURRENT_USER, SESSION_USER, ...) print back as their keyword
         if (e.name.length === 2 && e.name[0] === "pg_catalog" && e.args.length === 0 && SQL_VALUE_KEYWORDS.has(name)) {
           return { k: "form", parts: [name.toUpperCase()], type: "name" };
+        }
+        // `x IS JSON ...` reaches here as an internal call; JSON_VALUE / JSON_QUERY / JSON_EXISTS are not deparsed
+        if (e.name.length === 1 && name === "__is_json" && e.args[1]?.type === "string_lit") {
+          const [kind, unique] = e.args[1].value.split(":");
+          const test = `IS JSON${kind === "value" ? "" : ` ${kind!.toUpperCase()}`}${unique === "unique" ? " WITH UNIQUE KEYS" : ""}`;
+          return { k: "booltest", arg: this.coerce(this.analyze(e.args[0]!), TEXT), test };
+        }
+        if (e.name.length === 1 && name in SQLJSON_INTERNAL) {
+          throw unsupported(`the definition of an expression using ${SQLJSON_INTERNAL[name]!.toUpperCase()}`);
         }
         const args = e.args.map((arg) => this.analyze(arg));
         // `x op ANY (array)` / `x op ALL (array)` reach here as an internal call

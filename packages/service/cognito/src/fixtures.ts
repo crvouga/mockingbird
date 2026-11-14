@@ -143,6 +143,7 @@ const appClientFields = new Set([
   "callbackUrls",
   "identityProviders",
   "scopes",
+  "preventUserExistenceErrors",
 ])
 /** A hosted-UI app client; callback URLs must be absolute and fragment-free, as in Cognito. */
 export function validateAppClient(value: unknown, path: string): CognitoAppClient {
@@ -167,6 +168,11 @@ export function validateAppClient(value: unknown, path: string): CognitoAppClien
     for (const [i, entry] of (value[key] as unknown[]).entries())
       string(entry, `${path}.${key}[${i}]`)
   }
+  if (
+    value.preventUserExistenceErrors !== undefined &&
+    typeof value.preventUserExistenceErrors !== "boolean"
+  )
+    fail(`${path}.preventUserExistenceErrors`, "expected a boolean")
   return structuredClone(value) as CognitoAppClient
 }
 /** App-client admin responses never include the secret. */

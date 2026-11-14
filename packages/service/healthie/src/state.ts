@@ -28,6 +28,8 @@ export type UserRecord = {
   last_conversation_id: string | null
   seen_welcome: boolean
   seen_onboarding_complete_page: boolean
+  /** Two-letter state codes the user is licensed in (`User.state_licenses`). */
+  state_licenses: StateLicenseRecord[]
   stripe_customer_detail: {
     id: string
     card_type: string
@@ -38,6 +40,84 @@ export type UserRecord = {
   } | null
   created_at: string
   updated_at: string
+}
+
+export type StateLicenseRecord = { id: string; state: string }
+
+/** A Healthie user group; patients belong to one through `user_group_id`. */
+export type UserGroupRecord = {
+  id: string
+  name: string
+  invite_code: string | null
+  owner_id: string | null
+  created_at: string
+}
+
+/** USPS codes Healthie's `StateLicense.state` takes, with `full_state_name`. */
+export const US_STATES: Readonly<Record<string, string>> = {
+  AL: "Alabama",
+  AK: "Alaska",
+  AZ: "Arizona",
+  AR: "Arkansas",
+  CA: "California",
+  CO: "Colorado",
+  CT: "Connecticut",
+  DE: "Delaware",
+  DC: "District of Columbia",
+  FL: "Florida",
+  GA: "Georgia",
+  HI: "Hawaii",
+  ID: "Idaho",
+  IL: "Illinois",
+  IN: "Indiana",
+  IA: "Iowa",
+  KS: "Kansas",
+  KY: "Kentucky",
+  LA: "Louisiana",
+  ME: "Maine",
+  MD: "Maryland",
+  MA: "Massachusetts",
+  MI: "Michigan",
+  MN: "Minnesota",
+  MS: "Mississippi",
+  MO: "Missouri",
+  MT: "Montana",
+  NE: "Nebraska",
+  NV: "Nevada",
+  NH: "New Hampshire",
+  NJ: "New Jersey",
+  NM: "New Mexico",
+  NY: "New York",
+  NC: "North Carolina",
+  ND: "North Dakota",
+  OH: "Ohio",
+  OK: "Oklahoma",
+  OR: "Oregon",
+  PA: "Pennsylvania",
+  RI: "Rhode Island",
+  SC: "South Carolina",
+  SD: "South Dakota",
+  TN: "Tennessee",
+  TX: "Texas",
+  UT: "Utah",
+  VT: "Vermont",
+  VA: "Virginia",
+  WA: "Washington",
+  WV: "West Virginia",
+  WI: "Wisconsin",
+  WY: "Wyoming",
+  PR: "Puerto Rico",
+  GU: "Guam",
+  VI: "U.S. Virgin Islands",
+  AS: "American Samoa",
+  MP: "Northern Mariana Islands",
+}
+
+/** `"az"` → `"AZ"`; anything that is not a known two-letter code → undefined. */
+export const stateCode = (value: unknown): string | undefined => {
+  if (typeof value !== "string") return undefined
+  const code = value.trim().toUpperCase()
+  return Object.hasOwn(US_STATES, code) ? code : undefined
 }
 
 export type ApiKeyRecord = { key: string; user_id: string; created_at: string }
@@ -188,6 +268,7 @@ export class HealthieState {
   readonly requestedForms: Collection<RequestedFormRecord>
   readonly offerings: Collection<OfferingRecord>
   readonly billingItems: Collection<BillingItemRecord>
+  readonly userGroups: Collection<UserGroupRecord>
   readonly settings: Collection<Settings>
   private readonly counters: Collection<number>
 
@@ -207,6 +288,7 @@ export class HealthieState {
     this.requestedForms = new Collection(sqlite, namespace, "requested_forms")
     this.offerings = new Collection(sqlite, namespace, "offerings")
     this.billingItems = new Collection(sqlite, namespace, "billing_items")
+    this.userGroups = new Collection(sqlite, namespace, "user_groups")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.counters = new Collection(sqlite, namespace, "counters")
     this.ensureSeeded()
@@ -215,7 +297,8 @@ export class HealthieState {
   /**
    * Healthie ids are numeric strings. Each kind counts from its own base (users 100001…,
    * offerings 200001…, forms 300001…, billing items 400001…, folders 500001…, documents
-   * 600001…, locations 700001…, form answer groups 800001…, requested forms 900001…).
+   * 600001…, locations 700001…, form answer groups 800001…, requested forms 900001…, user
+   * groups 1200001…, state licenses 1300001…).
    */
   nextId(kind: keyof typeof ID_BASES): string {
     const next = (this.counters.get(kind) ?? 0) + 1
@@ -313,6 +396,8 @@ export class HealthieState {
     phone_number?: string
     dob?: string
     gender?: string
+    /** Validated two-letter codes (see {@link stateCode}). */
+    state_licenses?: string[]
   }): UserRecord {
     const at = this.seed.timestamp()
     const user: UserRecord = {
@@ -338,12 +423,52 @@ export class HealthieState {
       last_conversation_id: null,
       seen_welcome: false,
       seen_onboarding_complete_page: false,
+      state_licenses: (input.state_licenses ?? []).map((state) => ({
+        id: this.nextId("state_license"),
+        state,
+      })),
       stripe_customer_detail: null,
       created_at: at,
       updated_at: at,
     }
     this.users.insert(user.id, user)
     return user
+  }
+
+  /** Add a state license to a user (a code already held is not duplicated). */
+  addStateLicense(userId: string, state: string): UserRecord | undefined {
+    const user = this.users.get(userId)
+    if (!user) return undefined
+    if (user.state_licenses.some((license) => license.state === state)) return user
+    const next = {
+      ...user,
+      state_licenses: [...user.state_licenses, { id: this.nextId("state_license"), state }],
+      updated_at: this.seed.timestamp(),
+    }
+    this.users.update(userId, next)
+    return next
+  }
+
+  /** Create a user group and move the given users into it (`user_group_id`). */
+  addUserGroup(input: {
+    name: string
+    invite_code?: string | null
+    owner_id?: string | null
+    user_ids?: string[]
+  }): UserGroupRecord {
+    const group: UserGroupRecord = {
+      id: this.nextId("user_group"),
+      name: input.name,
+      invite_code: input.invite_code ?? null,
+      owner_id: input.owner_id ?? null,
+      created_at: this.seed.timestamp(),
+    }
+    this.userGroups.insert(group.id, group)
+    for (const id of input.user_ids ?? []) {
+      const user = this.users.get(id)
+      if (user) this.users.update(id, { ...user, user_group_id: group.id })
+    }
+    return group
   }
 
   userByEmail(email: string): UserRecord | undefined {
@@ -375,5 +500,7 @@ const ID_BASES = {
   requested_form: 900_000,
   file: 1_000_000,
   form_answer: 1_100_000,
+  user_group: 1_200_000,
+  state_license: 1_300_000,
   api_key: 0,
 } as const

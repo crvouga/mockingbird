@@ -1,3 +1,4 @@
+import { checkStatementTimeout } from "../runtime/statement-timeout.ts";
 import type {
   ArrayCtor,
   BetweenExpr,
@@ -12,7 +13,7 @@ import type {
   SubscriptExpr,
   TypeName,
 } from "../ast/nodes.ts";
-import { pgError, unsupported } from "../errors/error.ts";
+import { PostgresError, pgError, unsupported } from "../errors/error.ts";
 import { extractDatePart } from "../functions/datetime-fns.ts";
 import { callScalarFunction, hasScalarFunction } from "../functions/scalar.ts";
 import { castTo, isTextType, UTC_CAST_ENV as UTC_LIT_ENV, unifyTypes } from "../types/cast.ts";
@@ -31,10 +32,12 @@ import {
   isPgArray,
   type JsonbWrap,
   makeArray,
+  parseBitString,
   type PgArray,
   type PgRecord,
   type TypedValue,
   type TypeId,
+  TYPE_OIDS,
   tv,
   typeDisplayName,
   UNKNOWN,
@@ -43,6 +46,7 @@ import {
 import type { EngineCtx } from "./context.ts";
 import { evalBinary, evalUnary } from "./operators.ts";
 import { likeToRegex, similarToRegex } from "./pattern.ts";
+import { evalIsJson, evalSqlJsonFunction } from "./sqljson.ts";
 
 /**
  * Environment the executor provides for expression evaluation: column
@@ -76,6 +80,7 @@ export interface EvalScope {
 }
 
 export function evalExpr(ctx: EngineCtx, scope: EvalScope, e: Expr): TypedValue {
+  checkStatementTimeout(ctx.state);
   if (scope.exprOverride) {
     const o = scope.exprOverride(e);
     if (o !== undefined) return o;
@@ -243,21 +248,8 @@ export function numberLitValue(raw: string): TypedValue {
 }
 
 function bitstringValue(value: string): TypedValue {
-  const kind = value[0]!.toLowerCase();
-  const digits = value.slice(1);
-  if (kind === "b") {
-    if (!/^[01]*$/.test(digits))
-      throw pgError("invalid_text_representation", `"${digits}" is not a valid binary digit`);
-    return tv("bit", digits);
-  }
-  // hex: expand each digit into 4 bits
-  let bits = "";
-  for (const c of digits) {
-    const n = Number.parseInt(c, 16);
-    if (Number.isNaN(n)) throw pgError("invalid_text_representation", `"${c}" is not a valid hexadecimal digit`);
-    bits += n.toString(2).padStart(4, "0");
-  }
-  return tv("bit", bits);
+  // the lexer keeps the b/x prefix, which is exactly what bit_in reads
+  return tv("bit", parseBitString(value));
 }
 
 // --- boolean logic --------------------------------------------------------------
@@ -893,6 +885,11 @@ function evalLike(ctx: EngineCtx, scope: EvalScope, e: LikeExpr): TypedValue {
 
 const LAZY_FUNCS = new Set(["coalesce", "nullif", "greatest", "least"]);
 
+/** built-in types whose name, called as a function, casts (pseudo-types are not callable) */
+const FUNCTION_STYLE_CAST_TYPES: ReadonlySet<string> = new Set(
+  Object.keys(TYPE_OIDS).filter((name) => !["record", "unknown", "void"].includes(name)),
+);
+
 function evalFuncCall(ctx: EngineCtx, scope: EvalScope, e: FuncCall): TypedValue {
   const agg = scope.aggValue?.(e);
   if (agg !== undefined) return agg;
@@ -916,6 +913,11 @@ function evalFuncCall(ctx: EngineCtx, scope: EvalScope, e: FuncCall): TypedValue
   if (bare === "__overlaps") {
     return evalOverlaps(ctx, scope, e.args);
   }
+  // parser-desugared SQL/JSON: `x IS JSON ...`, JSON_VALUE / JSON_QUERY / JSON_EXISTS
+  if (bare === "__is_json") return evalIsJson(e.args, (x) => evalExpr(ctx, scope, x));
+  if (bare === "__json_value" || bare === "__json_query" || bare === "__json_exists") {
+    return evalSqlJsonFunction(ctx, e.args, (x) => evalExpr(ctx, scope, x));
+  }
 
   let args = e.args.map((a) => evalExpr(ctx, scope, a));
   if (e.argNames && bare !== null) args = reorderNamedArgs(bare, args, e.argNames);
@@ -930,6 +932,16 @@ function evalFuncCall(ctx: EngineCtx, scope: EvalScope, e: FuncCall): TypedValue
 
   if (bare !== null && hasScalarFunction(bare)) {
     return callScalarFunction(ctx, bare, args);
+  }
+
+  // a type name called with one argument is a cast: `date(ts)`, `int4('5')`
+  if (bare !== null && args.length === 1 && !e.argNames && FUNCTION_STYLE_CAST_TYPES.has(bare)) {
+    try {
+      return castTo(ctx, args[0]!, bare, { explicit: true });
+    } catch (err) {
+      // no cast between the types: there is no such function either
+      if (!(err instanceof PostgresError && err.sqlState === "42846")) throw err;
+    }
   }
 
   throw pgError(

@@ -10,8 +10,10 @@ import type {
   LocationRecord,
   OfferingRecord,
   RequestedFormRecord,
+  UserGroupRecord,
   UserRecord,
 } from "./state.js"
+import { stateCode, US_STATES } from "./state.js"
 
 /** A webhook Healthie would send: `{resource_id, resource_id_type, event_type}`. */
 export type HealthieEvent = {
@@ -72,6 +74,10 @@ export const parseShareUsers = (value: unknown): string[] =>
     .split(",")
     .map((part) => part.trim().replace(/^user-/, ""))
     .filter((id) => /^\d+$/.test(id))
+
+const GROUP_ORDER_KEYS = new Set(
+  ["INVITE_CODE", "CREATED_AT", "NAME", "USERS_COUNT"].flatMap((k) => [`${k}_ASC`, `${k}_DESC`]),
+)
 
 const SHARING_FILTERS = new Set(["all", "shared", "own", "owned", "uploaded"])
 
@@ -183,6 +189,15 @@ export class HealthieGraph {
       providers,
       other_provider_ids: user.other_provider_ids,
       user_group_id: user.user_group_id,
+      user_group: () =>
+        this.userGroupView(
+          user.user_group_id ? state.userGroups.get(user.user_group_id) : undefined,
+        ),
+      state_licenses: user.state_licenses.map((license) => ({
+        id: license.id,
+        state: license.state,
+        full_state_name: US_STATES[license.state] ?? null,
+      })),
       qualifications: user.qualifications,
       is_patient: user.role === "patient",
       location: () =>
@@ -205,6 +220,36 @@ export class HealthieGraph {
       skipped_email: false,
       created_at: user.created_at,
       updated_at: user.updated_at,
+    }
+  }
+
+  private groupMembers(group: UserGroupRecord): UserRecord[] {
+    return this.state.users
+      .list({ where: (u) => u.user_group_id === group.id, order: "oldest" })
+      .map((row) => row.value)
+  }
+
+  userGroupView(group: UserGroupRecord | undefined) {
+    if (!group) return null
+    return {
+      id: group.id,
+      name: group.name,
+      created_at: group.created_at,
+      invite_code: group.invite_code,
+      user: () => (group.owner_id ? this.userView(this.state.users.get(group.owner_id)) : null),
+      user_ids: () => this.groupMembers(group).map((u) => u.id),
+      users_count: () => this.groupMembers(group).length,
+      users: (args: Args) => {
+        const status = str(args.active_status)
+        const rows = this.groupMembers(group)
+          .filter((u) => u.role === "patient" && canSeeUser(this.ctx.viewer, u))
+          .filter((u) => status !== "active" || u.active)
+          .filter((u) => status !== "inactive" || !u.active)
+        if (args.should_sort !== false) {
+          rows.sort((a, b) => a.last_name.localeCompare(b.last_name) || Number(a.id) - Number(b.id))
+        }
+        return rows.map((u) => this.userView(u))
+      },
     }
   }
 
@@ -379,6 +424,42 @@ export class HealthieGraph {
           )
         return this.paginate(rows, args).map((u) => this.userView(u))
       },
+      userGroups: (args) => {
+        if (!isProvider(this.ctx.viewer)) return []
+        // "Search over user group name. Blank values are ignored."
+        const keywords = (str(args.keywords) ?? "").trim().toLowerCase()
+        const rows = this.state.userGroups
+          .list({ order: "oldest" })
+          .map((row) => row.value)
+          .filter((g) => keywords === "" || g.name.toLowerCase().includes(keywords))
+        const sorted = this.sortGroups(rows, args)
+        // "Page offset, applied when should_paginate is true."
+        const page = args.should_paginate === true ? this.paginate(sorted, { ...args }) : sorted
+        return page.map((g) => this.userGroupView(g))
+      },
+      organizationMembers: (args) => {
+        if (!isProvider(this.ctx.viewer)) return []
+        const keywords = (str(args.keywords) ?? "").trim().toLowerCase()
+        const licensed = str(args.licensed_in_state)
+        const state = licensed === undefined ? undefined : stateCode(licensed)
+        if (licensed !== undefined && licensed.trim() !== "" && state === undefined) return []
+        const rows = this.state.users
+          .list({ where: (u) => u.role === "provider", order: "oldest" })
+          .map((row) => row.value)
+          .filter((u) => state === undefined || u.state_licenses.some((l) => l.state === state))
+          .filter(
+            (u) =>
+              keywords === "" ||
+              [u.email, u.first_name, u.last_name, `${u.first_name} ${u.last_name}`].some((field) =>
+                field.toLowerCase().includes(keywords),
+              ),
+          )
+        // "The number of organization members to return (Max 100)."
+        const size = typeof args.page_size === "number" ? Math.min(args.page_size, 100) : 10
+        return this.paginate(rows, { offset: args.offset, page_size: size }).map((u) =>
+          this.userView(u),
+        )
+      },
       location: (args) => {
         const location = str(args.id) ? this.state.locations.get(str(args.id) as string) : undefined
         if (!location || !this.ctx.viewer) return null
@@ -510,6 +591,26 @@ export class HealthieGraph {
   }
 
   /** `should_paginate` (default true) pages by 10 from `offset`, as Healthie's default page. */
+  /** `order_by`, overridden by a `sort_by` that names an order key (others are ignored). */
+  private sortGroups(rows: UserGroupRecord[], args: Args): UserGroupRecord[] {
+    const sortBy = (str(args.sort_by) ?? "").toUpperCase()
+    const key = GROUP_ORDER_KEYS.has(sortBy) ? sortBy : (str(args.order_by) ?? "")
+    const count = (g: UserGroupRecord) => this.groupMembers(g).length
+    const created = (a: UserGroupRecord, b: UserGroupRecord) =>
+      a.created_at.localeCompare(b.created_at) || Number(a.id) - Number(b.id)
+    const compare: Record<string, (a: UserGroupRecord, b: UserGroupRecord) => number> = {
+      INVITE_CODE: (a, b) => (a.invite_code ?? "").localeCompare(b.invite_code ?? ""),
+      CREATED_AT: created,
+      NAME: (a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }),
+      USERS_COUNT: (a, b) => count(a) - count(b),
+    }
+    const match = /^(.*)_(ASC|DESC)$/.exec(key)
+    const by = match ? compare[match[1] as string] : undefined
+    if (!match || !by) return rows
+    const sign = match[2] === "DESC" ? -1 : 1
+    return [...rows].sort((a, b) => sign * by(a, b) || Number(a.id) - Number(b.id))
+  }
+
   private paginate<T>(rows: T[], args: Args): T[] {
     if (args.should_paginate === false) return rows
     const offset = typeof args.offset === "number" ? args.offset : 0

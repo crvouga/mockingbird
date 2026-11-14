@@ -198,7 +198,7 @@ describe("Cognito hosted UI (#700)", () => {
   test("4: a federated sign-in follows the pool's linking state", async () => {
     const runtime = setup()
     const sub = (await (await rpc(runtime, "AdminGetUser", { Username: "ada" }, true)).json())
-      .Attributes[0].Value
+      .UserAttributes[0].Value
     // Unlinked: the same email gets a separate Google_<sub> user.
     const unlinked = await exchange(
       runtime,
@@ -210,7 +210,7 @@ describe("Cognito hosted UI (#700)", () => {
     // Linked with AdminLinkProviderForUser: the provider subject signs in as the native user.
     const runtime2 = setup()
     const sub2 = (await (await rpc(runtime2, "AdminGetUser", { Username: "ada" }, true)).json())
-      .Attributes[0].Value
+      .UserAttributes[0].Value
     const link = await rpc(
       runtime2,
       "AdminLinkProviderForUser",

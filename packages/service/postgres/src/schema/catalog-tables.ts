@@ -10,6 +10,8 @@ import type { DatabaseState, IndexMeta, SequenceData, TableData } from "../stora
 import { UNIX_EPOCH_MICROS_FROM_PG } from "../types/datetime.ts";
 import {
   type Datum,
+  EXTENSION_ARRAY_OIDS,
+  EXTENSION_TYPE_OIDS,
   isArrayType,
   isCompositeType,
   isEnumType,
@@ -43,7 +45,9 @@ import {
   typeIdOid,
 } from "./reg-types.ts";
 import { ACCESS_METHODS, indexAttributeCount, indexMethod, isKeyConstraint } from "./index-catalog.ts";
+import { PGVECTOR_ACCESS_METHODS, pgvectorSchema } from "../functions/pgvector.ts";
 import { extensionCatalogRelation } from "./catalog-extensions.ts";
+import { catalogRelation725 } from "./catalog-725.ts";
 import { catalogRelation692, extendPgClass } from "./catalog-692.ts";
 import { attrdefOid, columnDefaults, systemCatalogRelation } from "./catalog-system.ts";
 import { type Persistence, relPersistence } from "./persistence.ts";
@@ -117,6 +121,8 @@ function pgNamespace(state: DatabaseState): Relation {
 
 /** position of `relam` in a pg_class row */
 const RELAM = 5;
+/** position of `reloptions` in a pg_class row */
+const RELOPTIONS = 28;
 
 function pgClass(ctx: EngineCtx): Relation {
   const state = ctx.state;
@@ -202,7 +208,15 @@ function pgClass(ctx: EngineCtx): Relation {
         relPersistence(state.schemas.get(i.schema)?.tables.get(i.table) ?? { temp: false }),
       );
       // relam: the index's own access method (push assumes btree)
-      rows[rows.length - 1]![RELAM] = ACCESS_METHODS.get(indexMethod(i))?.[0] ?? 403;
+      rows[rows.length - 1]![RELAM] =
+        ACCESS_METHODS.get(indexMethod(i))?.[0] ?? PGVECTOR_ACCESS_METHODS.get(indexMethod(i)) ?? 403;
+      // reloptions: the index's storage parameters as `name=value`
+      if (i.options && i.options.length > 0) {
+        rows[rows.length - 1]![RELOPTIONS] = makeArray(
+          "text",
+          i.options.map((o) => `${o.name}=${o.value}`),
+        );
+      }
     }
   }
   extendPgClass(ctx, rows);
@@ -338,6 +352,14 @@ function pgType(ctx: EngineCtx): Relation {
       rows.push([d.oid, d.name, namespaceOid(ctx.state, d.schema), "d", "S", 0, 0, typeOid(d.baseType.id), 0, -1]);
     }
   }
+  // pgvector's vector and its array type, while the extension is installed
+  const vectorSchema = pgvectorSchema(ctx.state);
+  if (vectorSchema !== null) {
+    const ns = namespaceOid(ctx.state, vectorSchema);
+    const [vector, array] = [EXTENSION_TYPE_OIDS.vector!, EXTENSION_ARRAY_OIDS.vector!];
+    rows.push([vector, "vector", ns, "b", "U", 0, array, 0, 0, -1]);
+    rows.push([array, "_vector", ns, "b", "A", vector, 0, 0, 0, -1]);
+  }
   for (const c of ctx.state.catalogExt.composites.values()) {
     const ns = namespaceOid(ctx.state, c.schema);
     rows.push([c.oid, c.name, ns, "c", "C", 0, c.arrayOid, 0, c.relOid, -1]);
@@ -367,7 +389,7 @@ function pgProc(ctx: EngineCtx): Relation {
   const rows: Datum[][] = [];
   for (const p of builtinProcs()) {
     // the engine does not model builtin signatures: no return type, argument count -1
-    rows.push([p.oid, p.name, NS_PG_CATALOG, p.kind, p.retset, -1, 10, 12, 0, false, false, "v", null]);
+    rows.push([p.oid, p.name, NS_PG_CATALOG, p.kind, p.retset, -1, 10, 12, 0, false, false, "v", null, null]);
   }
   for (const schema of ctx.state.schemas.values()) {
     for (const fns of schema.functions.values()) {
@@ -387,6 +409,13 @@ function pgProc(ctx: EngineCtx): Relation {
           f.strict,
           f.volatility === "immutable" ? "i" : f.volatility === "stable" ? "s" : "v",
           f.rawBody,
+          // CREATE FUNCTION ... SET name = value, as `name=value` in declaration order
+          f.settings && Object.keys(f.settings).length > 0
+            ? makeArray(
+                "text",
+                Object.entries(f.settings).map(([k, v]) => `${k}=${v}`),
+              )
+            : null,
         ]);
       }
     }
@@ -406,6 +435,7 @@ function pgProc(ctx: EngineCtx): Relation {
       ["proisstrict", "bool"],
       ["provolatile", "bpchar"],
       ["prosrc", "text"],
+      ["proconfig", "text[]"],
     ],
     rows,
     "pg_proc",
@@ -587,14 +617,18 @@ function pgIndex(ctx: EngineCtx): Relation {
   );
 }
 
-function pgAm(): Relation {
+function pgAm(ctx: EngineCtx): Relation {
+  const rows: Datum[][] = [...ACCESS_METHODS].map(([name, [oid, type]]) => [oid, name, type]);
+  if (pgvectorSchema(ctx.state) !== null) {
+    for (const [name, oid] of PGVECTOR_ACCESS_METHODS) rows.push([oid, name, "i"]);
+  }
   return rel(
     [
       ["oid", "oid"],
       ["amname", "name"],
       ["amtype", "bpchar"],
     ],
-    [...ACCESS_METHODS].map(([name, [oid, type]]) => [oid, name, type]),
+    rows,
     "pg_am",
   );
 }
@@ -1122,8 +1156,13 @@ function infoColumns(ctx: EngineCtx): Relation {
       const id = c.type.id;
       const isNumeric = id === "numeric";
       const isIntish = id === "int2" || id === "int4" || id === "int8";
-      const charMax = (id === "varchar" || id === "bpchar") && c.type.mod?.a !== undefined ? c.type.mod.a : null;
-      const dataType = isArrayType(id) ? "ARRAY" : isEnumType(id) ? "USER-DEFINED" : typeDisplayName(id);
+      const charMax =
+        (id === "varchar" || id === "bpchar" || id === "bit" || id === "varbit") && c.type.mod?.a !== undefined
+          ? c.type.mod.a
+          : null;
+      // an extension's type (pgvector's vector) is user-defined too
+      const userDefined = isEnumType(id) || EXTENSION_TYPE_OIDS[id] !== undefined;
+      const dataType = isArrayType(id) ? "ARRAY" : userDefined ? "USER-DEFINED" : typeDisplayName(id);
       const udt = isArrayType(id) ? `_${arrayUdt(id)}` : isEnumType(id) ? id.slice(5).split(".").pop()! : id;
       rows.push([
         catalog,
@@ -1502,7 +1541,7 @@ function infoRoutines(ctx: EngineCtx): Relation {
 // --- dispatch ----------------------------------------------------------------
 
 function buildCatalogRelation(ctx: EngineCtx, schema: string, name: string): Relation | null {
-  const extended = catalogRelation692(ctx, schema, name);
+  const extended = catalogRelation692(ctx, schema, name) ?? catalogRelation725(ctx, schema, name);
   if (extended) return extended;
   if (schema === "pg_catalog") {
     switch (name) {
@@ -1523,7 +1562,7 @@ function buildCatalogRelation(ctx: EngineCtx, schema: string, name: string): Rel
       case "pg_index":
         return pgIndex(ctx);
       case "pg_am":
-        return pgAm();
+        return pgAm(ctx);
       case "pg_description":
         return pgDescription(ctx);
       case "pg_stat_user_tables":
