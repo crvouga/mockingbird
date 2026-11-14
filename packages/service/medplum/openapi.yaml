@@ -128,6 +128,33 @@ paths:
         "200": { description: Password changed, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
         "400": { description: Invalid request, used request, wrong secret or weak password, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
         "404": { description: Unknown security request, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+  /auth/changepassword:
+    post:
+      operationId: PostAuthChangePassword
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Changes the caller's password and revokes their logins; verified against the oracle by hand, covered by the account acceptance tests." }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/ChangePasswordRequest" } } }
+      responses:
+        "200": { description: Password changed; every login of the user is revoked, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "400": { description: Missing or wrong old password, or a weak new one, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "401": { description: Unauthenticated, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+  /auth/google:
+    post:
+      operationId: PostAuthGoogle
+      security: []
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Needs a credential signed by Google; validation and client-id errors verified against the oracle by hand, sign-in covered by the account acceptance tests." }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/GoogleLoginRequest" } } }
+      responses:
+        "200": { description: A login code (or the memberships to choose from), or the domain's external identity provider, content: { application/json: { schema: { $ref: "#/components/schemas/LoginResponse" } } } }
+        "400": { description: Invalid request, Google client id or credential, or unknown user, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "404": { description: Unknown client, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
   /auth/me:
     get:
       operationId: GetAuthMe
@@ -439,6 +466,57 @@ paths:
       responses:
         "200": { description: The patient compartment, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/Bundle" } } } }
         "404": { description: Not found, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+  /fhir/R4/User/{id}/$update-email:
+    post:
+      operationId: FhirUserUpdateEmail
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Rewrites a login email; verified against the oracle by hand, covered by the account acceptance tests." }
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody:
+        required: true
+        content: { application/fhir+json: { schema: { $ref: "#/components/schemas/UpdateEmailRequest" } } }
+      responses:
+        "200": { description: The updated User, content: { application/fhir+json: { schema: { type: object } } } }
+        "400": { description: Missing email, or a profile update for a server-scoped user, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "403": { description: Not a project admin, or the user is in another project, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+  /fhir/R4/Bot/$execute:
+    get:
+      operationId: BotExecuteByIdentifierGet
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests." }
+      parameters: [{ name: identifier, in: query, required: false, schema: { type: string } }]
+      responses: &botExecuteResponses
+        "200": { description: The bot's return value, content: { application/json: { schema: {} } } }
+        "400": { description: No bot named, bots not enabled, no bots handler, or the bot failed, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+        "404": { description: Unknown bot, content: { application/fhir+json: { schema: { $ref: "#/components/schemas/OperationOutcome" } } } }
+    post:
+      operationId: BotExecuteByIdentifier
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests." }
+      parameters: [{ name: identifier, in: query, required: false, schema: { type: string } }]
+      requestBody:
+        content: { application/json: { schema: {} } }
+      responses: *botExecuteResponses
+  /fhir/R4/Bot/{id}/$execute:
+    get:
+      operationId: BotExecuteGet
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests." }
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      responses: *botExecuteResponses
+    post:
+      operationId: BotExecute
+      x-mockingbird:
+        supported: true
+        parity: { enabled: false, safe: false, reason: "Runs the suite's bots handler in place of deployed code; covered by the bot acceptance tests." }
+      parameters: [{ $ref: "#/components/parameters/id" }]
+      requestBody:
+        content: { application/json: { schema: {} } }
+      responses: *botExecuteResponses
   /fhir/R4/{resourceType}:
     get:
       operationId: FhirSearch
@@ -650,6 +728,34 @@ components:
         id: { type: string }
         secret: { type: string }
         password: { type: string }
+    ChangePasswordRequest:
+      type: object
+      required: [oldPassword, newPassword]
+      properties:
+        oldPassword: { type: string }
+        newPassword: { type: string }
+    GoogleLoginRequest:
+      type: object
+      required: [googleClientId, googleCredential]
+      properties:
+        googleClientId: { type: string }
+        googleCredential: { type: string }
+        clientId: { type: string }
+        projectId: { type: string }
+        resourceType: { type: string }
+        scope: { type: string }
+        nonce: { type: string }
+        codeChallenge: { type: string }
+        codeChallengeMethod: { type: string }
+        createUser: { type: boolean }
+    UpdateEmailRequest:
+      type: object
+      description: The operation's parameters as a plain object, or a Parameters resource.
+      properties:
+        resourceType: { type: string }
+        email: { type: string }
+        updateProfileTelecom: { type: boolean }
+        skipEmailVerification: { type: boolean }
     LoginResponse:
       type: object
       required: [login]
