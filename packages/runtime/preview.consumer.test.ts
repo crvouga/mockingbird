@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { existsSync } from "node:fs"
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -114,6 +115,12 @@ test("packed runtime exposes harness UI and shared worker previews outside the w
     `,
     )
     await run(["node", "build.mjs"], app)
+    if (!existsSync(chromium.executablePath())) {
+      await run(
+        ["bunx", "playwright", "install", ...(process.env.CI ? ["--with-deps"] : []), "chromium"],
+        import.meta.dir,
+      )
+    }
     const browser = await chromium.launch()
     try {
       const page = await browser.newPage()
