@@ -109,6 +109,7 @@
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "hono": "4.13.11",
     "libphonenumber-js": "1.13.4",

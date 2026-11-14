@@ -19,13 +19,22 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
   try {
     const tarballs: string[] = []
     let sqliteTarball = ""
+    let runtimeTarball = ""
     let notificationsTarball = ""
-    for (const name of ["sqlite", "postgres", "redis", "cognito", "notifications", "fleet"]) {
+    for (const name of [
+      "sqlite",
+      "runtime",
+      "postgres",
+      "redis",
+      "cognito",
+      "notifications",
+      "fleet",
+    ]) {
       const source =
         name === "fleet"
           ? import.meta.dir
-          : name === "notifications"
-            ? resolve(import.meta.dir, "../../notifications")
+          : name === "notifications" || name === "runtime"
+            ? resolve(import.meta.dir, "../..", name)
             : resolve(import.meta.dir, "../../service", name)
       const stage = join(work, "pack", name)
       await mkdir(stage, { recursive: true })
@@ -36,6 +45,9 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       manifest.version = "0.0.0-smoke"
       if (manifest.dependencies?.["@crvouga/mockingbird-service-sqlite"])
         manifest.dependencies["@crvouga/mockingbird-service-sqlite"] = `file:${sqliteTarball}`
+      // Every service shares the packed runtime.
+      if (manifest.dependencies?.["@crvouga/mockingbird-runtime"])
+        manifest.dependencies["@crvouga/mockingbird-runtime"] = `file:${runtimeTarball}`
       // The dashboard (`serve --dashboard`) comes with the fleet: no second install.
       if (manifest.dependencies?.["@crvouga/mockingbird-notifications"])
         manifest.dependencies["@crvouga/mockingbird-notifications"] = `file:${notificationsTarball}`
@@ -46,6 +58,7 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       const tarball = join(work, packed[0]?.filename ?? "missing")
       tarballs.push(tarball)
       if (name === "sqlite") sqliteTarball = tarball
+      if (name === "runtime") runtimeTarball = tarball
       if (name === "notifications") notificationsTarball = tarball
     }
     const app = join(work, "app")

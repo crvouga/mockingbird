@@ -117,6 +117,7 @@
     "verify": "bun src/cli.ts verify"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "hono": "4.13.11"
   },
