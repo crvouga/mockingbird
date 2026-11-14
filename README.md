@@ -4,9 +4,9 @@
 
 <h1>🐦‍⬛ Mockingbird</h1>
 
-**Local emulators. Real API contracts.**
+**Your whole system. In the browser.**
 
-Run the APIs and databases your application depends on, inside your own process. Deterministic state, vendor-compatible requests, and explicit coverage.
+Run your entire application system in the browser for pull-request previews, backed by local emulators with real API contracts. Inspect apps, services, databases and notifications in one harness.
 
 [![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-2563eb)](#license)
 
@@ -14,7 +14,7 @@ Run the APIs and databases your application depends on, inside your own process.
 
 </div>
 
-Mockingbird provides stateful emulators for third-party APIs and SQL databases. Use vendor-compatible request and response shapes, persistent in-memory state, and deterministic controls in Node, Bun, browsers, and Workers.
+Run entire application systems in the browser for pull-request previews. Mockingbird supplies the third-party APIs and SQL databases behind them, with vendor-compatible contracts and deterministic controls. A shared harness puts apps, emulator inspectors and notifications one switch away.
 
 Each emulator is its own npm package. The catalog — names, parity, and what each one covers — is on the [docs site](https://mockingbird.chrisvouga.dev/services).
 

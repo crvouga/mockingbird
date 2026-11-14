@@ -11,7 +11,7 @@ bun test        # no secrets
 bun run check   # every CI gate, no secrets
 ```
 
-Secrets are only involved in two places, and both run on GitHub with the repo's own
+Secrets are used by the workflows below, running on GitHub with the repo's own
 Actions secrets. Anyone with **write access** to `crvouga/mockingbird` can use them without
 seeing a value (GitHub never returns a secret's value, to anyone):
 
@@ -19,6 +19,7 @@ seeing a value (GitHub never returns a secret's value, to anyone):
 | --- | --- | --- |
 | [Parity](../.github/workflows/parity.yml) | the `<SERVICE>_*` keys its live-parity step maps | `bun run parity:remote -- <service…>`, `-- --all` or `-- --tier=warm`; by [tier](TESTING.md#parity-tiers) also on each PR that changes a hot service ([Advisory](../.github/workflows/advisory.yml), non-blocking, not for forks) and weekly for warm services |
 | [Verify](../.github/workflows/verify.yml) | `JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
+| [System preview](../.github/workflows/system-preview.yml) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | optional static lab PR hosting on Cloudflare Workers; same-repository PRs only; without credentials the workflow only produces a downloadable artifact |
 
 ## Live parity
 

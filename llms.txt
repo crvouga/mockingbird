@@ -1,6 +1,6 @@
 # mockingbird
 
-> Local emulators. Real API contracts. Mockingbird provides stateful emulators for third-party APIs and SQL databases. Use vendor-compatible request and response shapes, persistent in-memory state, and deterministic controls in Node, Bun, browsers, and Workers. Every HTTP emulator is a Fetch handler (`createRuntime().fetch(request) → Promise<Response>`) published to npm as `@crvouga/mockingbird-service-<name>`. Every emulator is isomorphic and runs in Node >= 22, Bun >= 1.2, browsers, and Workers.
+> Local emulators. Real API contracts. Run entire application systems in the browser for pull-request previews. Mockingbird supplies the third-party APIs and SQL databases behind them, with vendor-compatible contracts and deterministic controls. A shared harness puts apps, emulator inspectors and notifications one switch away. Every HTTP emulator is a Fetch handler (`createRuntime().fetch(request) → Promise<Response>`) published to npm as `@crvouga/mockingbird-service-<name>`. Every emulator is isomorphic and runs in Node >= 22, Bun >= 1.2, browsers, and Workers.
 
 ## Quick start: run a fleet
 

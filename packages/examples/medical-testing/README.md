@@ -7,12 +7,48 @@ step sends the messages a real product would: email through Resend, SMS, WhatsAp
 codes through Twilio, push through FCM, and staff alerts through Slack. State lives in a Postgres-dialect database in one
 process. Both run modes use the same frontend, HTTP routes, permissions, and repositories.
 
-It also runs as a self-contained, in-browser component — see `/examples/medical-testing` on the
-docs site, where the entire app (client, server, and database) is mounted and runs inside a
-reusable fullscreen example view, no server to start. That view is the shared dashboard from
-`@crvouga/mockingbird-notifications/ui` (`mountDashboard`) with three tabs: **Example** (the app),
-**Emulators** (one admin UI for every emulator) and **Notifications** (every message the app sent,
-on a phone, a mailbox and a chat window).
+The primary preview runs the entire system in one browser tab: the lab workspace, backend,
+database, vendor emulators and notifications. One app fills the screen. Drag the small **Switch
+apps** button along the screen edges; release a drag to snap to the nearest edge. Click it (or focus
+it and press Enter/Space) to switch immediately to the next app, with no menu.
+**System** is always available as the launch hub. The System hub links directly to each app. Opened apps remain
+mounted, so drafts and emulator selections survive switching.
+
+The docs example at `/examples/medical-testing` and the standalone static preview share this
+implementation. No application backend or vendor account is needed.
+
+## Static PR preview on Cloudflare Workers
+
+From the repository root, after `bun run setup`:
+
+```sh
+bunx turbo run preview:build --filter=@crvouga/mockingbird-example-medical-testing
+```
+
+The output is `packages/examples/medical-testing/preview-dist`. Serve it with any static host.
+This build includes the [browser runtime adapter](../../adapters/browser/README.md): shared virtual
+files, Node library polyfills and browser-local Node/Bun/Deno servers. See its compatibility table
+for supported APIs and explicit limits; this does not turn the browser into a complete host OS.
+The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets; Cloudflare only
+serves files, while all application requests execute inside the browser. To publish a distinct
+PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` from this package
+directory. Deployment requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Actions
+repository secrets. No deployment is performed by the build command. The System preview workflow builds a downloadable
+artifact for every PR, deploys same-repository PRs when these secrets exist, and deletes their Worker
+when the PR closes. Successful deployments put Lab preview, System, Emulators and Notifications
+links at the top of the PR description, preserving the rest of its content. Fork PRs only receive artifacts. The docs site's existing fleet deployment remains separate.
+
+Standalone links use `?surface=app`, `?surface=system`, `?surface=emulators` or
+`?surface=notifications`; browser back/forward restores the selected surface. A reload starts a
+fresh demonstration world. URLs do not contain patient data or session state.
+
+The reusable, framework-free `mountSystemHarness` export in `@crvouga/mockingbird-ui` accepts
+`{ id, label, mount(host, signal) }` entries. A mount resolves with a disposer when ready and
+rejects on failure (the shell offers Retry). Use dynamic imports inside mount for optional UI.
+An adapter may mount a client, an iframe, or a controller/inspector for a non-client service.
+Abort cancels pending work on teardown, and late mount results are disposed. The host owns the
+system's topology and transports; the shell never imports application or emulator code.
+The current lab client has module-scoped ports and supports one system per document.
 
 ## Ports and adapters
 
@@ -86,7 +122,7 @@ intake, provider report ingestion, and persistent infrastructure.
 ## Notifications
 
 Everything below goes through the `Notifier` and `PhoneVerifier` ports and shows up in the
-Notifications tab (or `/notifications/` on the standalone server).
+Notifications app (or `/notifications/` on the standalone server).
 
 | Flow | Channel | Emulator |
 | --- | --- | --- |
@@ -121,7 +157,7 @@ Notifications tab (or `/notifications/` on the standalone server).
   to switch off.
 - **Finding the message.** Wherever the app says "we sent you…", an **Open Notifications** button
   opens that recipient on that device. `src/client/inbox.ts` is the seam: a new tab on the
-  standalone server, a tab switch in the dashboard.
+  standalone server, a surface switch in the harness.
 
 `notifications.test.ts` drives all of it through the HTTP app and reads the messages back with the
 harness (`waitFor`, `NotificationClient.waitForCode`), including expiry, reuse, attempt limits,
@@ -129,16 +165,10 @@ the resend cooldown and preferences.
 
 ## Run it
 
-**In the browser, no server:** visit `/examples/medical-testing` on the docs site and click
-"Launch the app". The fullscreen view is one dashboard: the example, one shared emulator admin, and
-the notifications it sent, each on its own tab. A
-global selector switches that admin between Google, Apple, Stripe, Junction, Twilio, Resend, FCM, Slack, and Postgres while
-each independent admin API remains directly composable and operates on the same in-process state
-the app uses. The selected emulator, admin screen, namespace, and local UI state remain mounted when
-switching tabs. Every administration screen uses prebuilt Ant Design tables, forms,
-dialogs, navigation, and feedback. Postgres includes the SQL table explorer and query runner alongside state,
-clock, faults, journal, and routes. SQL changes appear in the app immediately; checkpoint and
-restore operate on this same database. New services and data sources join the same admin tab registry.
+**In the browser, no server:** visit `/examples/medical-testing` and click "Launch the app",
+or open the standalone static preview. Use **Switch apps** to open System, Lab workspace,
+Emulators or Notifications. These surfaces share the same running database and emulators.
+The emulator inspector includes SQL queries, state, clock, faults, journal and routes.
 
 **As a standalone dev server:**
 
@@ -150,7 +180,7 @@ bun run dev                      # http://localhost:4300, notifications at /noti
 
 or from the repo root: `bunx turbo run dev --filter=@crvouga/mockingbird-example-medical-testing`.
 
-Pick a demo account and choose **Email me a sign-in code** (the code is in the Notifications tab),
+Pick a demo account and choose **Email me a sign-in code** (the code is in the Notifications app),
 or click **Continue with Google** or **Continue with Apple**, pick the seeded account and approve
 consent. Then pick a test or two, pay with `4242 4242 4242 4242` (or `4000 0000 0000 0002` to see a
 decline), then watch **Orders** — the order fulfills and settles into results on its own, no

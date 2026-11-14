@@ -27,7 +27,7 @@ export const IDENTITY = {
   name: "Mockingbird",
   icon: "🐦‍⬛",
   tagline: "Local emulators. Real API contracts.",
-  note: "Run the APIs and databases your application depends on, inside your own process. Deterministic state, vendor-compatible requests, and explicit coverage.",
+  note: "Run your entire application system in the browser for pull-request previews, backed by local emulators with real API contracts. Inspect apps, services, databases and notifications in one harness.",
   guide: `${HOME}/blob/main/docs/DESIGN.md`,
   home: HOME,
   /** Public docs site, including the service catalog at `/services`. */
@@ -58,12 +58,12 @@ export const RISK_DISCLAIMER = {
 }
 
 export const HEADLINE = {
-  lead: "Local emulators.",
-  accent: "Real API contracts.",
+  lead: "Your whole system.",
+  accent: "In the browser.",
 }
 
 export const PITCH =
-  "Mockingbird provides stateful emulators for third-party APIs and SQL databases. Use vendor-compatible request and response shapes, persistent in-memory state, and deterministic controls in Node, Bun, browsers, and Workers."
+  "Run entire application systems in the browser for pull-request previews. Mockingbird supplies the third-party APIs and SQL databases behind them, with vendor-compatible contracts and deterministic controls. A shared harness puts apps, emulator inspectors and notifications one switch away."
 
 export const FEATURES = [
   {
