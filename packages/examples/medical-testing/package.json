@@ -42,10 +42,12 @@
     "htm": "3.1.1",
     "oauth4webapi": "3.8.8",
     "preact": "10.24.3",
-    "@crvouga/mockingbird-ui": "workspace:*"
+    "@crvouga/mockingbird-ui": "workspace:*",
+    "@crvouga/mockingbird-adapter-browser": "workspace:*"
   },
   "devDependencies": {
     "@crvouga/mockingbird-admin-ui": "workspace:*",
-    "@types/bun": "1.4.0"
+    "@types/bun": "1.4.0",
+    "esbuild": "0.28.2"
   }
 }

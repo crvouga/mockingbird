@@ -9,8 +9,9 @@ process. Both run modes use the same frontend, HTTP routes, permissions, and rep
 
 The primary preview runs the entire system in one browser tab: the lab workspace, backend,
 database, vendor emulators and notifications. One app fills the screen. Drag the small **Switch
-apps** button anywhere in the stage; click it (or focus it and press Enter) to choose an app.
-**System** is always available as the launch hub. Escape closes the switcher. Opened apps remain
+apps** button along the screen edges; release a drag to snap to the nearest edge. Click it (or focus
+it and press Enter/Space) to switch immediately to the next app, with no menu.
+**System** is always available as the launch hub. The System hub links directly to each app. Opened apps remain
 mounted, so drafts and emulator selections survive switching.
 
 The docs example at `/examples/medical-testing` and the standalone static preview share this
@@ -25,6 +26,9 @@ bunx turbo run preview:build --filter=@crvouga/mockingbird-example-medical-testi
 ```
 
 The output is `packages/examples/medical-testing/preview-dist`. Serve it with any static host.
+This build includes the [browser runtime adapter](../../adapters/browser/README.md): shared virtual
+files, Node library polyfills and browser-local Node/Bun/Deno servers. See its compatibility table
+for supported APIs and explicit limits; this does not turn the browser into a complete host OS.
 The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets; Cloudflare only
 serves files, while all application requests execute inside the browser. To publish a distinct
 PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` from this package

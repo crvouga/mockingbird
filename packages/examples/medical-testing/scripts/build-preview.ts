@@ -1,19 +1,25 @@
 import { mkdir, rm } from "node:fs/promises"
 import { resolve } from "node:path"
+import { browserRuntimeBuildOptions } from "@crvouga/mockingbird-adapter-browser/build"
+import { build } from "esbuild"
 
 const root = resolve(import.meta.dir, "..")
 const outdir = resolve(root, "preview-dist")
 await rm(outdir, { recursive: true, force: true })
 await mkdir(outdir, { recursive: true })
-const result = await Bun.build({
-  entrypoints: [resolve(root, "src/preview.ts")],
+await build({
+  ...browserRuntimeBuildOptions(),
+  bundle: true,
+  format: "esm",
+  entryPoints: [resolve(root, "src/preview.ts")],
   outdir,
-  target: "browser",
+  target: "es2022",
   splitting: true,
   minify: true,
-  naming: { entry: "[name].[ext]", chunk: "[name]-[hash].[ext]", asset: "[name]-[hash].[ext]" },
+  entryNames: "[name]",
+  chunkNames: "[name]-[hash]",
+  assetNames: "[name]-[hash]",
 })
-if (!result.success) throw new AggregateError(result.logs, "Preview build failed")
 await Bun.write(
   resolve(outdir, "index.html"),
   `<!doctype html>

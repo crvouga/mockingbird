@@ -50,12 +50,14 @@ export const Switching: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     const open = async (name: string) => {
-      await userEvent.click(page.getByRole("button", { name: "Switch apps" }))
-      await userEvent.click(within(page.getByRole("navigation")).getByRole("button", { name }))
+      for (let step = 0; step < 4; step++) {
+        const current = canvasElement.querySelector("section[data-surface]:not([hidden])")
+        if (current?.getAttribute("aria-label") === name) return
+        await userEvent.click(page.getByRole("button", { name: "Switch apps" }))
+      }
+      throw new Error(`Could not cycle to ${name}`)
     }
-    await userEvent.click(page.getByRole("button", { name: "Switch apps" }))
-    await userEvent.keyboard("{Escape}")
-    await expect(page.getByRole("button", { name: "Switch apps" })).toHaveFocus()
+    await expect(canvasElement.querySelector("nav")).toBeNull()
     await open("Editor")
     await userEvent.type(await page.findByRole("textbox", { name: "Draft" }), "Keep this draft")
     await open("System")

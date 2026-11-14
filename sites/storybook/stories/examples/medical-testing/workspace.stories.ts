@@ -59,10 +59,13 @@ const workspace = (
   },
 })
 
-const tab = (page: Person, name: "app" | "emulators" | "notifications") =>
-  page
-    .click(`[data-testid="system-switcher"]`)
-    .then(() => page.click(`nav button[data-surface="${name}"]`))
+const tab = async (page: Person, name: "app" | "emulators" | "notifications" | "system") => {
+  const order = ["app", "emulators", "notifications", "system"]
+  for (const id of order.slice(1)) {
+    await page.click('[data-testid="system-switcher"]')
+    if (id === name) return
+  }
+}
 
 /** The Example tab: the app, signed out. */
 export const Example: StoryObj = workspace()
@@ -85,6 +88,7 @@ export const OnAPhone: StoryObj = workspace(undefined, { globals: phone })
 
 export const System: StoryObj = workspace(async (page) => {
   await page.click('[data-testid="system-switcher"]')
-  await page.click('nav button[data-surface="system"]')
+  await page.click('[data-testid="system-switcher"]')
+  await page.click('[data-testid="system-switcher"]')
   await page.find(".msh-home")
 })

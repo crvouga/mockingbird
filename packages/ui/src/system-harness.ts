@@ -38,10 +38,8 @@ export function mountSystemHarness(
 .msh-panel{height:100%;overflow:auto}.msh [hidden]{display:none!important}
 .msh-chrome{position:absolute;inset:0;pointer-events:none;z-index:1000}
 .msh-handle{position:absolute;pointer-events:auto;touch-action:none;width:44px;height:44px;border-radius:50%;border:1px solid #777;background:#17212f;color:white;box-shadow:0 2px 12px #0004;cursor:grab;font:20px system-ui}
-.msh-menu{position:absolute;right:12px;bottom:64px;max-height:70%;overflow:auto;width:min(280px,calc(100% - 24px));padding:8px;border:1px solid #888;border-radius:12px;background:Canvas;box-shadow:0 4px 20px #0004;pointer-events:auto}
-.msh-menu button,.msh-home button,.msh-status button{display:block;padding:12px;width:100%;text-align:left;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.msh-menu button:hover,.msh-menu button:focus-visible,.msh-home button:hover{background:#8883}
-.msh-menu button[aria-current=true]{font-weight:bold;background:#8882}
+.msh-home button,.msh-status button{display:block;padding:12px;width:100%;text-align:left;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
+.msh-home button:hover{background:#8883}
 .msh-home,.msh-status{max-width:640px;padding:32px;margin:auto}
 .msh :focus-visible{outline:2px solid #477bff;outline-offset:2px}
 `
@@ -52,14 +50,9 @@ export function mountSystemHarness(
   handle.className = "msh-handle"
   handle.textContent = "▦"
   handle.setAttribute("aria-label", "Switch apps")
-  handle.setAttribute("aria-expanded", "false")
   handle.dataset.testid = "system-switcher"
   handle.hidden = surfaces.length === 0
-  const menu = doc.createElement("nav")
-  menu.className = "msh-menu"
-  menu.setAttribute("aria-label", "System apps")
-  menu.hidden = true
-  chrome.append(menu, handle)
+  chrome.append(handle)
   shell.append(style, chrome)
   host.append(shell)
   let destroyed = false
@@ -68,15 +61,10 @@ export function mountSystemHarness(
   type Entry = {
     spec: SystemSurface
     panel: HTMLElement
-    button: HTMLButtonElement
     pending?: Promise<void> | undefined
     dispose?: (() => void) | undefined
   }
   const entries: Entry[] = []
-  const closeMenu = () => {
-    menu.hidden = true
-    handle.setAttribute("aria-expanded", "false")
-  }
   const all: SystemSurface[] = [
     {
       id: "system",
@@ -111,17 +99,8 @@ export function mountSystemHarness(
     panel.setAttribute("aria-label", spec.label)
     panel.tabIndex = -1
     panel.hidden = true
-    const button = doc.createElement("button")
-    button.type = "button"
-    button.textContent = spec.label
-    button.dataset.surface = spec.id
-    button.onclick = () => {
-      void show(spec.id)
-      entries.find((e) => e.spec.id === spec.id)?.panel.focus()
-    }
-    menu.append(button)
     shell.insertBefore(panel, chrome)
-    entries.push({ spec, panel, button })
+    entries.push({ spec, panel })
   }
   function load(entry: Entry): Promise<void> {
     if (entry.pending) return entry.pending
@@ -163,12 +142,13 @@ export function mountSystemHarness(
     const entry = entries.find((e) => e.spec.id === id) ?? entries[0]
     if (!entry) return
     current = entry.spec.id
+    const next = entries[(entries.indexOf(entry) + 1) % entries.length]
+    handle.title = `Switch to ${next?.spec.label ?? "System"}`
+    handle.setAttribute("aria-description", handle.title)
     for (const candidate of entries) {
       candidate.panel.hidden = candidate !== entry
       candidate.panel.inert = candidate !== entry
-      candidate.button.setAttribute("aria-current", String(candidate === entry))
     }
-    closeMenu()
     if (
       entries.some(
         (candidate) => candidate.panel.hidden && candidate.panel.contains(doc.activeElement),
@@ -188,19 +168,10 @@ export function mountSystemHarness(
       dragged = false
       return
     }
-    menu.hidden = !menu.hidden
-    handle.setAttribute("aria-expanded", String(!menu.hidden))
-    if (!menu.hidden) entries.find((e) => e.spec.id === current)?.button.focus()
+    const next =
+      entries[(entries.findIndex((entry) => entry.spec.id === current) + 1) % entries.length]
+    if (next) void show(next.spec.id)
   }
-  const key = (event: KeyboardEvent) => {
-    if (event.key === "Escape" && !menu.hidden) {
-      event.stopPropagation()
-      event.preventDefault()
-      closeMenu()
-      handle.focus()
-    }
-  }
-  shell.addEventListener("keydown", key)
   let x = Infinity
   let y = Infinity
   const position = () => {
@@ -208,16 +179,31 @@ export function mountSystemHarness(
     y = Math.max(0, Math.min(y, shell.clientHeight - 52))
     handle.style.left = `${x}px`
     handle.style.top = `${y}px`
-    const below = y < shell.clientHeight / 2
-    menu.style.top = below ? `${y + 48}px` : "auto"
-    menu.style.bottom = below ? "auto" : `${Math.max(8, shell.clientHeight - y)}px`
-    menu.style.maxHeight = `${Math.max(80, below ? shell.clientHeight - y - 56 : y - 8)}px`
+  }
+  const snap = () => {
+    const maxX = Math.max(0, shell.clientWidth - 52)
+    const maxY = Math.max(0, shell.clientHeight - 52)
+    const minX = Math.min(8, maxX)
+    const minY = Math.min(8, maxY)
+    x = Math.max(minX, Math.min(x, maxX))
+    y = Math.max(minY, Math.min(y, maxY))
+    const distances = [x - minX, maxX - x, y - minY, maxY - y]
+    const edge = distances.indexOf(Math.min(...distances))
+    if (edge === 0) x = minX
+    else if (edge === 1) x = maxX
+    else if (edge === 2) y = minY
+    else y = maxY
+    handle.style.transition = win.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ? "none"
+      : "left 160ms ease-out, top 160ms ease-out"
+    position()
   }
   let drag: { x: number; y: number; left: number; top: number } | undefined
   let dragged = false
   handle.onpointerdown = (event) => {
     if (event.button !== 0) return
     dragged = false
+    handle.style.transition = "none"
     drag = { x: event.clientX, y: event.clientY, left: x, top: y }
     handle.setPointerCapture(event.pointerId)
   }
@@ -233,15 +219,18 @@ export function mountSystemHarness(
   }
   handle.onpointerup = () => {
     drag = undefined
+    snap()
   }
   handle.onpointercancel = () => {
     drag = undefined
     dragged = false
+    snap()
   }
   handle.onlostpointercapture = () => {
     drag = undefined
+    snap()
   }
-  const resize = new ResizeObserver(position)
+  const resize = new ResizeObserver(snap)
   resize.observe(shell)
   const fromUrl = () =>
     new URL(win.location.href).searchParams.get("surface") ?? options.initial ?? "system"
