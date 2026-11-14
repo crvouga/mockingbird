@@ -302,10 +302,20 @@ export function maxBump(bumps: (Bump | null)[]): Bump | null {
 }
 
 export function bumpVersion(version: string, bump: Bump): string {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number)
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.exec(version)
+  if (!match) throw new Error(`Invalid release version: ${version}`)
+  const [major = 0, minor = 0, patch = 0] = match.slice(1, 4).map(Number)
   if (bump === "major") return `${major + 1}.0.0`
   if (bump === "minor") return `${major}.${minor + 1}.0`
   return `${major}.${minor}.${patch + 1}`
+}
+
+/** Name reservations contain no code and must not change the first release version. */
+export function firstReleaseVersion(published: readonly string[]): string {
+  const latest = published
+    .filter((version) => version !== RESERVED_VERSION)
+    .sort((a, b) => Bun.semver.order(b, a))[0]
+  return latest ? bumpVersion(latest, "patch") : INITIAL_VERSION
 }
 
 // ── npm ────────────────────────────────────────────────────────────
@@ -475,8 +485,7 @@ export async function computePlan(): Promise<Plan> {
       // seed), release the next patch above them so provenance builds win.
       const published = await npmVersions(pkg.name)
       if (!Array.isArray(published)) throw new Error(`npm view ${pkg.name}: ${published.error}`)
-      const latest = published.sort((a, b) => Bun.semver.order(b, a))[0]
-      const version = latest ? bumpVersion(latest, "patch") : INITIAL_VERSION
+      const version = firstReleaseVersion(published)
       releases.set(pkg.name, {
         pkg,
         previous: null,

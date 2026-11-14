@@ -19,4 +19,8 @@ export const RUNTIME_SUBPATHS = [
   "service",
   "service/admin",
   "adapter-node",
+  "preview/bridge",
+  "preview/host",
+  "preview/artifacts",
+  "preview/harness",
 ] as const

@@ -419,6 +419,7 @@
         "@crvouga/mockingbird-service": "workspace:*",
         "@crvouga/mockingbird-sqlite": "workspace:*",
         "@crvouga/mockingbird-ui": "workspace:*",
+        "@playwright/test": "1.65.0",
       },
     },
     "packages/service/acm": {
