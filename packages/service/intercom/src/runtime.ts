@@ -17,8 +17,8 @@ import {
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { document } from "./generated/openapi.js"
 import { INTERCOM_NAMESPACE, IntercomAPI, IntercomError } from "./index.js"
-import { toHtml } from "./query.js"
-import type { AdminRecord, Settings } from "./state.js"
+import { toHtml, toPlaintext } from "./query.js"
+import type { AdminRecord, CallRecord, MacroRecord, Settings, TeamRecord } from "./state.js"
 
 /** The header Intercom signs webhooks with (our receivers read it lower-cased). */
 export const HUB_SIGNATURE_HEADER = "X-Hub-Signature"
@@ -145,6 +145,20 @@ const adminError = (status: number, message: string) =>
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
+/** Replace a seeded collection's rows (`PUT /__admin/teams`, `/macros`, `/calls`). */
+const replaceAll = <T extends { id: string }>(
+  collection: {
+    list(): { id: string }[]
+    delete(id: string): unknown
+    insert(id: string, value: T): unknown
+  },
+  rows: T[],
+): T[] => {
+  for (const row of collection.list()) collection.delete(row.id)
+  for (const row of rows) collection.insert(row.id, row)
+  return rows
+}
+
 const guard = (run: () => Response): Response => {
   try {
     return run()
@@ -249,6 +263,85 @@ const adminRoutes = (runtime: ServiceRuntime<IntercomAPI>): AdminRoutes => {
         })
       }
       return json(200, { admins: state.admins.list({ order: "oldest" }).map((row) => row.value) })
+    },
+    "PUT /teams": ({ body, namespace }) => {
+      const list = isRecord(body) ? body.teams : body
+      if (
+        !Array.isArray(list) ||
+        !list.every((t) => isRecord(t) && typeof t.id === "string" && typeof t.name === "string")
+      ) {
+        return adminError(400, 'expected {"teams": [{id, name, admin_ids?}]}')
+      }
+      const teams: TeamRecord[] = (list as Record<string, unknown>[]).map((each) => ({
+        type: "team",
+        id: each.id as string,
+        name: each.name as string,
+        admin_ids: Array.isArray(each.admin_ids) ? each.admin_ids.map(Number) : [],
+        admin_priority_level: { primary_admin_ids: [], secondary_admin_ids: [] },
+      }))
+      return json(200, { teams: replaceAll(api(namespace).state.teams, teams) })
+    },
+    "PUT /macros": ({ body, namespace }) => {
+      const list = isRecord(body) ? body.macros : body
+      if (
+        !Array.isArray(list) ||
+        !list.every(
+          (m) =>
+            isRecord(m) &&
+            typeof m.id === "string" &&
+            typeof m.name === "string" &&
+            typeof m.body === "string",
+        )
+      ) {
+        return adminError(400, 'expected {"macros": [{id, name, body (HTML)}]}')
+      }
+      const now = Math.floor(runtime.clock.now() / 1000)
+      const macros: MacroRecord[] = (list as Record<string, unknown>[]).map((each) => ({
+        type: "macro",
+        id: each.id as string,
+        name: each.name as string,
+        body: each.body as string,
+        body_text: toPlaintext(each.body as string) ?? "",
+        created_at: now,
+        updated_at: now,
+        visible_to: Array.isArray(each.visible_to_team_ids) ? "specific_teams" : "everyone",
+        visible_to_team_ids: Array.isArray(each.visible_to_team_ids)
+          ? each.visible_to_team_ids.map(String)
+          : [],
+        available_on: Array.isArray(each.available_on)
+          ? each.available_on.map(String)
+          : ["inbox", "messenger"],
+      }))
+      return json(200, { macros: replaceAll(api(namespace).state.macros, macros) })
+    },
+    "PUT /calls": ({ body, namespace }) => {
+      const list = isRecord(body) ? body.calls : body
+      if (!Array.isArray(list) || !list.every((c) => isRecord(c) && typeof c.id === "string")) {
+        return adminError(
+          400,
+          'expected {"calls": [{id, conversation_id?, recording_url?, transcript?, …}]}',
+        )
+      }
+      const text = (value: unknown) => (typeof value === "string" ? value : null)
+      const calls: CallRecord[] = (list as Record<string, unknown>[]).map((each) => ({
+        type: "call",
+        id: each.id as string,
+        conversation_id: text(each.conversation_id),
+        admin_id: text(each.admin_id),
+        contact_id: text(each.contact_id),
+        state: text(each.state) ?? "completed",
+        initiated_at: typeof each.initiated_at === "number" ? each.initiated_at : null,
+        recording_url: text(each.recording_url),
+        transcription_url: text(each.transcription_url),
+        call_type: text(each.call_type) ?? "phone",
+        direction: text(each.direction) ?? "inbound",
+        ended_reason: text(each.ended_reason),
+        phone: text(each.phone),
+        transcript: Array.isArray(each.transcript) ? each.transcript : [],
+        transcript_status:
+          text(each.transcript_status) ?? (Array.isArray(each.transcript) ? "completed" : null),
+      }))
+      return json(200, { calls: replaceAll(api(namespace).state.calls, calls) })
     },
     "GET /settings": ({ namespace }) => json(200, api(namespace).state.current()),
     "PUT /settings": ({ body, namespace }) => {

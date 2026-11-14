@@ -49,6 +49,9 @@ export type PartRecord = {
   redacted: false
 }
 
+/** A tag applied to a conversation: who applied it and when. */
+export type AppliedTag = { id: string; applied_at: number; applied_by: string }
+
 export type ConversationRecord = {
   id: string
   contactId: string
@@ -64,6 +67,8 @@ export type ConversationRecord = {
   /** Admins who took part, for `teammates`. */
   teammates: string[]
   custom_attributes: Record<string, unknown>
+  /** Tags attached with `POST /conversations/{id}/tags`; absent on records stored before tags. */
+  tags?: AppliedTag[]
   source: {
     type: "conversation"
     id: string
@@ -113,6 +118,49 @@ export type AdminRecord = {
   team_ids: number[]
 }
 
+export type TagRecord = { type: "tag"; id: string; name: string }
+
+export type TeamRecord = {
+  type: "team"
+  id: string
+  name: string
+  admin_ids: number[]
+  admin_priority_level: { primary_admin_ids: number[]; secondary_admin_ids: number[] }
+}
+
+/** A saved reply (`GET /macros`); `body` is HTML, `body_text` its plain text. */
+export type MacroRecord = {
+  type: "macro"
+  id: string
+  name: string
+  body: string
+  body_text: string
+  created_at: number
+  updated_at: number
+  visible_to: "everyone" | "specific_teams"
+  visible_to_team_ids: string[]
+  available_on: string[]
+}
+
+/** A phone call (`POST /calls/search`), seeded with `PUT /__admin/calls`. */
+export type CallRecord = {
+  type: "call"
+  id: string
+  conversation_id: string | null
+  admin_id: string | null
+  contact_id: string | null
+  state: string
+  initiated_at: number | null
+  recording_url: string | null
+  transcription_url: string | null
+  call_type: string
+  direction: string
+  ended_reason: string | null
+  phone: string | null
+  transcript: unknown[]
+  transcript_status: string | null
+}
+
 /** Per-namespace knobs, set through `PUT /__admin/settings`; cleared on reset. */
 export type Settings = {
   /** Only these access tokens are accepted; empty means any non-empty token is. */
@@ -158,6 +206,10 @@ export class IntercomState {
   readonly contacts: Collection<ContactRecord>
   readonly conversations: Collection<ConversationRecord>
   readonly admins: Collection<AdminRecord>
+  readonly tags: Collection<TagRecord>
+  readonly teams: Collection<TeamRecord>
+  readonly macros: Collection<MacroRecord>
+  readonly calls: Collection<CallRecord>
   readonly settings: Collection<Settings>
   readonly counters: Collection<number>
   readonly outbox: OutboxStore<OutboxRecord>
@@ -171,6 +223,10 @@ export class IntercomState {
     this.contacts = new Collection(sqlite, namespace, "contacts")
     this.conversations = new Collection(sqlite, namespace, "conversations")
     this.admins = new Collection(sqlite, namespace, "admins")
+    this.tags = new Collection(sqlite, namespace, "tags")
+    this.teams = new Collection(sqlite, namespace, "teams")
+    this.macros = new Collection(sqlite, namespace, "macros")
+    this.calls = new Collection(sqlite, namespace, "calls")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.counters = new Collection(sqlite, namespace, "counters")
     this.outbox = new OutboxStore<OutboxRecord>(sqlite, namespace, "outbox")
@@ -220,6 +276,11 @@ export class IntercomState {
 
   nextMessageId(): string {
     return String(40_000_000_000 + this.next("message"))
+  }
+
+  /** A numeric-string tag id, like Intercom's. */
+  nextTagId(): string {
+    return String(7_500_000 + this.next("tag"))
   }
 
   nextRequestId(): string {

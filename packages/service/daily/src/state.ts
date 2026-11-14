@@ -10,10 +10,19 @@ export type PresenceRecord = {
   joinedAtMs: number
 }
 
+/** One participant of an ended session, as `GET /v1/meetings` reports it. */
+export type SessionParticipant = {
+  participantId: string
+  userId: string
+  userName: string | null
+}
+
 export type SessionRecord = {
   sessionId: string
   durationSec: number
   participants: number
+  /** Who took part (sessions recorded before this field existed have none). */
+  participantList?: SessionParticipant[]
   /** `s3://bucket/key` of the transcript, when S3 is configured. */
   transcript: string | null
   endedAt: string
