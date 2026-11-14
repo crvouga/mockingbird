@@ -79,6 +79,14 @@ switch (args[1]) {
     prs.find(pr => pr.state === "OPEN").isDraft = false
     writeFileSync(statePath, JSON.stringify(prs))
     break
+  case "merge": {
+    if (!args.includes("--auto") || !args.includes("--merge")) throw new Error("unexpected merge")
+    const pr = prs.find(pr => pr.state === "OPEN" && pr.headRefName === args[2])
+    if (!pr || pr.isDraft) throw new Error("cannot enable auto-merge")
+    pr.autoMergeRequest = { mergeMethod: "MERGE" }
+    writeFileSync(statePath, JSON.stringify(prs))
+    break
+  }
   default: throw new Error("unexpected gh command")
 }
 `,
@@ -104,7 +112,12 @@ switch (args[1]) {
         process.exited,
       ])
       expect({ code, stderr }).toEqual({ code: 0, stderr: "" })
-      return JSON.parse(stdout) as { created: boolean; number: number; isDraft?: boolean }
+      return JSON.parse(stdout) as {
+        created: boolean
+        number: number
+        isDraft?: boolean
+        autoMerge: boolean
+      }
     },
     async calls() {
       return (await readFile(callsPath, "utf8"))
@@ -121,24 +134,44 @@ for (const previousState of ["MERGED", "CLOSED"] as const) {
     const sandbox = await fixture(previousState)
     try {
       const args = ["--title", "fix: next batch", "--body", "Batch evidence"]
-      expect(await sandbox.pr(...args)).toMatchObject({ created: true, number: 2 })
-      expect(await sandbox.pr(...args)).toMatchObject({ created: false, number: 2 })
+      expect(await sandbox.pr(...args)).toMatchObject({ created: true, number: 2, autoMerge: true })
+      expect(await sandbox.pr(...args)).toMatchObject({
+        created: false,
+        number: 2,
+        autoMerge: true,
+      })
       const calls = await sandbox.calls()
       expect(calls.filter((args) => args[0] === "pr" && args[1] === "create")).toHaveLength(1)
+      // Enabled once on create; the second run sees the existing request and skips it.
+      expect(calls.filter((args) => args[0] === "pr" && args[1] === "merge")).toEqual([
+        ["pr", "merge", branch, "--auto", "--merge"],
+      ])
     } finally {
       await sandbox.cleanup()
     }
   })
 }
 
-test("reuses the existing open batch draft and can mark it ready", async () => {
+test("reuses the existing open batch draft and enables auto-merge once it is ready", async () => {
   const sandbox = await fixture("OPEN")
   try {
-    expect(await sandbox.pr()).toMatchObject({ created: false, number: 1, isDraft: true })
-    expect(await sandbox.pr("--ready")).toMatchObject({ created: false, number: 1, isDraft: false })
+    expect(await sandbox.pr()).toMatchObject({
+      created: false,
+      number: 1,
+      isDraft: true,
+      autoMerge: false,
+    })
+    expect(await sandbox.pr("--ready")).toMatchObject({
+      created: false,
+      number: 1,
+      isDraft: false,
+      autoMerge: true,
+    })
+    expect(await sandbox.pr()).toMatchObject({ created: false, number: 1, autoMerge: true })
     const calls = await sandbox.calls()
     expect(calls.filter((args) => args[0] === "pr" && args[1] === "create")).toHaveLength(0)
     expect(calls.filter((args) => args[0] === "pr" && args[1] === "ready")).toHaveLength(1)
+    expect(calls.filter((args) => args[0] === "pr" && args[1] === "merge")).toHaveLength(1)
   } finally {
     await sandbox.cleanup()
   }

@@ -2,8 +2,9 @@
 # Start with `bun github:resolve-issues [<issue>…]`, which securely hands over the caller's
 # credentials. The coordinator prioritizes native subagents for independent issue groups;
 # every subagent shares the existing worktree and never creates a branch or PR.
-# The coordinator runs /pr-ready once after integrating the batch. It never merges, approves,
-# or enables auto-merge, and reports each issue's evidence or precise blocker.
+# The coordinator runs /pr-ready once after integrating the batch, which enables auto-merge so the
+# PR lands itself once the required checks pass. It never approves or merges around the gate, and
+# reports each issue's evidence or precise blocker.
 #
 # Credentials are the developer's, not the repo's, and each is bounded:
 #   - GitHub: a token the command mints for this run from the repo's GitHub App (device flow,
@@ -190,7 +191,8 @@ jobs:
           undefined-behavior error per /resolve-issues. Never claim unobserved vendor parity.
           Run /pr-ready after integrating the batch until \`bun run pr:ready ready\` reports
           \`ready: true\`. Include a separate Fixes line for every fully resolved issue; do not
-          close blocked issues with the PR. Never merge the PR, enable auto-merge, or approve it.
+          close blocked issues with the PR. Leave auto-merge (enabled by /pr-ready) to land it;
+          never merge around a check or approve it.
           Wherever the commands say to stop and tell the human (a required non-oracle secret,
           a credential to rotate, or a check you cannot fix in-repo),
           comment on the affected issue with what is needed and a link to $RUN_URL, then continue
