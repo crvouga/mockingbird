@@ -116,6 +116,7 @@
     "portability": "bun ../../../scripts/portability.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "hono": "4.13.11"
   },

@@ -8,7 +8,7 @@ import {
 } from "@crvouga/mockingbird-core"
 import { listOperations, type OpenAPIDocument } from "@crvouga/mockingbird-openapi"
 import { clearNamespace, type SqliteClient } from "@crvouga/mockingbird-sqlite"
-import { adminUiRoutes } from "./admin-ui.js"
+import { type AdminBrand, adminUiRoutes } from "./admin-ui.js"
 import {
   type Clock,
   type ClockState,
@@ -170,6 +170,12 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   journalSize?: number
   /** Reported in the `x-mockingbird` header. Default: the bundled package's version. */
   version?: string
+  /**
+   * The vendor chip `GET <adminPrefix>/ui/brands.json` serves. Default: the brand bundled into
+   * this build; a service built on the shared `@crvouga/mockingbird-runtime` passes its own
+   * (scripts/bundle-service-runtime.ts).
+   */
+  adminBrand?: AdminBrand
   /**
    * The vendor credential a request carries (API key, token, account SID, AWS access key
    * id), for SDKs that cannot send `x-mockingbird-namespace`: a suite maps credentials to
@@ -1636,7 +1642,7 @@ export const createRuntime = <T extends ServiceInstance>(
           checkpoint(namespace, "main")
         },
       }),
-      ...adminUiRoutes(options.name, options.adminUi, adminPrefix),
+      ...adminUiRoutes(options.name, options.adminUi, adminPrefix, options.adminBrand),
     },
     adminPrefix,
     adminKey: options.adminKey,

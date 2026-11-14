@@ -25,6 +25,7 @@
         "!README.md",
         "$TURBO_ROOT$/scripts/bundle-service.ts",
         "$TURBO_ROOT$/scripts/bundle-service-js.ts",
+        "$TURBO_ROOT$/scripts/bundle-service-runtime.ts",
         "$TURBO_ROOT$/scripts/admin-brand.ts",
         "$TURBO_ROOT$/sites/docs/src/data/brands.json",
         "$TURBO_ROOT$/sites/docs/public/brands/**"
@@ -204,6 +205,7 @@
       ],
       "dependsOn": [
         "@crvouga/mockingbird-service#build",
+        "@crvouga/mockingbird-runtime#build",
         "@crvouga/mockingbird-service-sqlite#build",
         "@crvouga/mockingbird-service-postgres#build"
       ]
