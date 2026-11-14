@@ -20,6 +20,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
+    },
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"

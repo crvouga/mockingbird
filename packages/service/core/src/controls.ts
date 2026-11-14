@@ -1,4 +1,5 @@
 import type { FaultRule } from "./faults.js"
+import { upstreamState } from "./upstream.js"
 
 /**
  * The admin controls every mock shares, as one document.
@@ -111,6 +112,7 @@ export const SNAPSHOT_FORMAT = "mockingbird.snapshot/v1"
  * `records` are required, so a hand-written seed file is a valid snapshot.
  */
 export type SnapshotDocument = {
+  upstream?: import("./upstream.js").UpstreamState
   format: typeof SNAPSHOT_FORMAT
   /** The service that wrote it. A snapshot is rejected by any other service. */
   service?: string
@@ -257,6 +259,15 @@ export const assertSnapshotDocument = (value: unknown, label = "snapshot"): Snap
   if (!isRecord(value)) throw new ControlError(`${label}: expected a snapshot document`)
   if (value.format !== SNAPSHOT_FORMAT)
     throw new ControlError(`${label}.format: expected ${JSON.stringify(SNAPSHOT_FORMAT)}`)
+  if (value.upstream !== undefined) {
+    try {
+      upstreamState(value.upstream)
+    } catch (error) {
+      throw new ControlError(
+        `${label}.upstream: ${error instanceof Error ? error.message : "invalid settings"}`,
+      )
+    }
+  }
   if (!Array.isArray(value.records)) throw new ControlError(`${label}.records: expected a list`)
   value.records.forEach((row: unknown, index: number) => {
     if (
@@ -366,6 +377,7 @@ export const CONTROL_HEADERS = {
   branch: "x-mockingbird-branch",
   at: "x-mockingbird-at",
   reset: "x-mockingbird-reset",
+  upstream: "x-mockingbird-upstream",
   restore: "x-mockingbird-restore",
   seed: "x-mockingbird-seed",
   time: "x-mockingbird-time",
@@ -392,6 +404,14 @@ export const CONTROL_HEADER_REFERENCE: readonly {
   guarded: boolean
   summary: string
 }[] = [
+  {
+    header: CONTROL_HEADERS.upstream,
+    value: "emulated | forward",
+    scope: "request",
+    guarded: true,
+    summary:
+      "Select the injected upstream or emulator for one request; requires configured upstream transport for forward.",
+  },
   {
     header: CONTROL_HEADERS.namespace,
     value: "<key>",
@@ -488,6 +508,7 @@ export const CONTROL_HEADER_REFERENCE: readonly {
 
 /** The controls one request carries in its headers, parsed and checked. */
 export type RequestControls = {
+  upstream?: "emulated" | "forward"
   reset?: true
   restore?: string
   seed?: number | string
@@ -593,6 +614,12 @@ export const parseControlHeaders = (headers: Headers): RequestControls | undefin
   if (!hasGuardedControlHeader(headers)) return undefined
   const controls: RequestControls = {}
   const read = (key: ControlHeaderName) => headers.get(CONTROL_HEADERS[key])
+  const upstream = read("upstream")
+  if (upstream !== null) {
+    if (upstream !== "emulated" && upstream !== "forward")
+      throw new ControlError("x-mockingbird-upstream: expected emulated or forward")
+    controls.upstream = upstream
+  }
   const reset = read("reset")
   if (reset !== null && flag(reset, CONTROL_HEADERS.reset)) controls.reset = true
   const restore = read("restore")
@@ -618,6 +645,7 @@ export const parseControlHeaders = (headers: Headers): RequestControls | undefin
 
 /** What {@link controlHeaders} turns into request headers. */
 export type ControlHeaderInput = {
+  upstream?: "emulated" | "forward"
   namespace?: string
   adminKey?: string
   branch?: string
@@ -643,6 +671,11 @@ export const controlHeaders = (input: ControlHeaderInput): Record<string, string
   const headers: Record<string, string> = {}
   const set = (key: ControlHeaderName, value: string) => {
     headers[CONTROL_HEADERS[key]] = value
+  }
+  if (input.upstream !== undefined) {
+    if (input.upstream !== "emulated" && input.upstream !== "forward")
+      throw new ControlError("upstream: expected emulated or forward")
+    set("upstream", input.upstream)
   }
   if (input.namespace !== undefined) set("namespace", name(input.namespace, "namespace"))
   if (input.adminKey !== undefined) set("adminKey", input.adminKey)

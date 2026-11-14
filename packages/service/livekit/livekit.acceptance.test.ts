@@ -30,3 +30,20 @@ describe("LiveKit contract", () => {
     expect(runtime.instance("default").state.rooms.list()).toHaveLength(0)
   })
 })
+
+test("unsupported signaling fails explicitly without mutating room state", async () => {
+  const runtime = createRuntime()
+  const api = runtime.instance("default")
+  for (const path of ["/rtc?access_token=fixture-not-a-token", "/rtc/validate"]) {
+    const response = await runtime.fetch(new Request(`http://mock${path}`))
+    expect(response.status).toBe(501)
+    expect(await response.json()).toEqual({
+      code: "unimplemented",
+      msg: "Mockingbird emulator limitation: LiveKit signaling and WebRTC transport are unsupported; use the Twirp APIs and synthetic participant controls",
+      meta: {},
+    })
+  }
+  expect(api.state.rooms.list()).toEqual([])
+  expect(api.state.participants.list()).toEqual([])
+  expect(api.state.inbox.list()).toEqual([])
+})

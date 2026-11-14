@@ -88,6 +88,12 @@ import {
   stateAdminRoutes,
 } from "./state-view.js"
 import { type AdminUi, assertAdminUi, defineMock, type MockSurface } from "./surface.js"
+import {
+  type UpstreamOptions,
+  type UpstreamState,
+  upstreamRequest,
+  upstreamState,
+} from "./upstream.js"
 import { PACKAGE_VERSION } from "./version.js"
 import { type WebhookHub, webhookAdminRoutes } from "./webhooks.js"
 
@@ -123,6 +129,11 @@ export type InstanceContext = {
 }
 
 export type RuntimeOptions<T extends ServiceInstance> = {
+  upstream?: UpstreamOptions
+  /** Capture an accepted real send without invoking an emulated handler. */
+  onForwardResponse?: (instance: T, request: Request, response: Response) => Promise<void>
+  /** Reject unsupported forwarding surfaces before any network request. */
+  canForward?: (request: Request) => boolean
   /** Service name, e.g. `"junction"`. Also the default namespace's storage key. */
   name: string
   /** Build the instance backing one namespace. Called once per namespace, on first use. */
@@ -438,6 +449,7 @@ const truncateResponse = (response: Response, bytes: number): Response => {
 
 /** What a snapshot holds for one namespace. Only `records` is always there. */
 type Kept = {
+  upstream?: UpstreamState | undefined
   records: NamespaceSnapshot
   clock?: { now: number; frozen: boolean; pinned?: boolean }
   /** Where the service's own random stream stands. */
@@ -524,6 +536,14 @@ export const createRuntime = <T extends ServiceInstance>(
   const monotonicNow = options.io?.monotonicNow ?? (() => performance.now())
   const sleep = options.io?.sleep ?? realSleep
   const metrics = createMetrics()
+  const upstreamModes = new Map<string, UpstreamState>()
+  const bootUpstream = options.upstream
+    ? upstreamState({
+        mode: options.upstream.mode ?? "emulated",
+        baseUrl: options.upstream.baseUrl,
+      })
+    : undefined
+  const getUpstream = (namespace: string) => upstreamModes.get(namespace) ?? bootUpstream
   const journal = createJournal(options.journalSize ?? DEFAULT_JOURNAL_SIZE)
   const version = options.version ?? PACKAGE_VERSION
   const instances = new Map<string, T>()
@@ -787,6 +807,7 @@ export const createRuntime = <T extends ServiceInstance>(
 
   const reset = async (name: string = DEFAULT_NAMESPACE): Promise<void> => {
     if (name === "*") {
+      upstreamModes.clear()
       options.webhooks?.clear()
       for (const each of instances.values()) await each.reset()
       timelines.clear()
@@ -810,6 +831,7 @@ export const createRuntime = <T extends ServiceInstance>(
       for (const each of new Set([DEFAULT_NAMESPACE, ...publicNamespaces])) controls.ensure(each)
       return
     }
+    upstreamModes.delete(name)
     options.webhooks?.clear(name)
     const target = instances.get(name)
     if (target) await target.reset()
@@ -855,6 +877,7 @@ export const createRuntime = <T extends ServiceInstance>(
       rngState: state.rngState,
       controls: controls.snapshot(namespace),
       webhooks: options.webhooks?.snapshot(namespace),
+      upstream: getUpstream(namespace),
     }
   }
 
@@ -862,6 +885,8 @@ export const createRuntime = <T extends ServiceInstance>(
   const restoreAll = (namespace: string, point: Kept, scope: BootScope = "all"): void => {
     instance(namespace)
     if (scope === "all") {
+      if (point.upstream) upstreamModes.set(namespace, point.upstream)
+      else upstreamModes.delete(namespace)
       restoreStorage(namespace, point.records)
       captured.set(namespace, point.records)
     }
@@ -879,6 +904,7 @@ export const createRuntime = <T extends ServiceInstance>(
     const { settings, streams, faults: rules, latency: waits } = point.controls
     return {
       format: SNAPSHOT_FORMAT,
+      ...(point.upstream ? { upstream: point.upstream } : {}),
       service: options.name,
       records: point.records.records.map((row) => {
         // A Collection row is stored as `{seq, value}`; anything else travels as its raw text.
@@ -1032,6 +1058,7 @@ export const createRuntime = <T extends ServiceInstance>(
       held.latency = normalizeLatency(document.latency, "snapshot.latency")
     return {
       records: stored,
+      ...(document.upstream ? { upstream: upstreamState(document.upstream) } : {}),
       ...(document.clock
         ? { clock: { now: document.clock.now, frozen: document.clock.frozen } }
         : {}),
@@ -1308,6 +1335,7 @@ export const createRuntime = <T extends ServiceInstance>(
       const started = monotonicNow()
       const url = new URL(request.url)
       const operationId = operationIdFor(request, url.pathname)
+      let forwarded = false
       let accepted: ServiceCheckpoint | undefined
       let acceptedNotes: ResponseNotes | undefined
       // Injected wait this request spent: latency, fault delays, a timeout.
@@ -1330,6 +1358,7 @@ export const createRuntime = <T extends ServiceInstance>(
         const rejected = status >= 400 && faultId === undefined
         const entry: RequestLog = {
           service: options.name,
+          ...(forwarded ? { upstream: true } : {}),
           namespace,
           operationId,
           method: request.method,
@@ -1514,6 +1543,34 @@ export const createRuntime = <T extends ServiceInstance>(
         log(final.response.status, final.id)
         return finish(final.response)
       }
+      const upstream = getUpstream(namespace)
+      const wantsForward = (requested?.upstream ?? upstream?.mode) === "forward"
+      if (wantsForward) {
+        if (!options.upstream || !upstream)
+          return refuse(409, "an upstream fetch and baseUrl are required")
+        if (options.canForward && !options.canForward(request))
+          return refuse(501, "forwarding this operation is not supported")
+        const captureRequest = options.onForwardResponse ? request.clone() : undefined
+        forwarded = true
+        let response: Response
+        try {
+          let outgoing = upstreamRequest(request, upstream.baseUrl)
+          if (options.upstream.rewriteAuth) outgoing = await options.upstream.rewriteAuth(outgoing)
+          response = await options.upstream.fetch(outgoing)
+        } catch {
+          log(0, hits[0]?.id)
+          throw new DroppedConnectionError("drop")
+        }
+        if (captureRequest && response.ok && options.onForwardResponse) {
+          await options.onForwardResponse(
+            instanceFor(storage, namespace),
+            captureRequest,
+            response.clone(),
+          )
+        }
+        log(response.status, hits[0]?.id, response)
+        return finish(response)
+      }
       const fired = hits.filter((hit) => hit.effect !== undefined)
       if (fired.length > 0)
         effects.set(
@@ -1632,6 +1689,24 @@ export const createRuntime = <T extends ServiceInstance>(
       },
     },
     describe: options.describe ?? (() => ({})),
+    upstream: {
+      get: ({ namespace }) => adminJson(200, getUpstream(namespace) ?? { mode: "emulated" }),
+      set: ({ namespace, body }) => {
+        if (!isRecord(body)) return adminFail(400, "expected upstream settings")
+        if (body.mode === "forward" && !options.upstream)
+          return adminFail(409, "an upstream fetch is required")
+        try {
+          const state = upstreamState({ ...getUpstream(namespace), ...body })
+          upstreamModes.set(namespace, state)
+          return adminJson(200, state)
+        } catch (error) {
+          return adminFail(
+            400,
+            error instanceof Error ? error.message : "invalid upstream settings",
+          )
+        }
+      },
+    },
     routes: {
       ...credentialRoutes(credentials),
       ...(options.webhooks ? webhookAdminRoutes(options.webhooks) : {}),

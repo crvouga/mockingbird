@@ -59,11 +59,13 @@ export const sonicSession = (
 ): ReadableStream<Uint8Array> => {
   let controller!: ReadableStreamDefaultController<Uint8Array>
   let closed = false
+  const cancellation = new AbortController()
   const output = new ReadableStream<Uint8Array>({
     start(c) {
       controller = c
     },
     cancel() {
+      cancellation.abort()
       closed = true
     },
   })
@@ -362,7 +364,7 @@ export const sonicSession = (
   void (async () => {
     let ended = false
     try {
-      for await (const raw of readFrames(request.body)) {
+      for await (const raw of readFrames(request.body, cancellation.signal)) {
         const frame = unwrapSigned(raw)
         if (frame === null) break
         if (headerString(frame, ":event-type") !== "chunk") continue

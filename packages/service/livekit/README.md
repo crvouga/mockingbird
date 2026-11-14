@@ -62,3 +62,20 @@ Webhooks cover room, participant, track, egress, and SIP transitions. Each raw b
 Real agent worker registration, job execution, publisher dispatch, restart/deployment policies, WebRTC media transport, signaling sockets, transcoding, PSTN calls, production scaling, billing, and dashboards are not modelled. The deterministic server API and lifecycle contract is the initial fidelity boundary.
 
 Official oracles: [LiveKit RoomService API](https://docs.livekit.io/reference/other/roomservice-api/) and [AgentDispatchService API](https://docs.livekit.io/reference/agents/agent-dispatch-service-api/).
+
+### Explicit signaling limitation (#781)
+
+Requests to `/rtc` and `/rtc/validate` return HTTP 501 with the emulator's Twirp-style
+`{code: "unimplemented", msg, meta: {}}` error. The message identifies this as a
+Mockingbird limitation, **not an observed LiveKit vendor response**. The handler does
+not create rooms, participants, tracks, inbox messages or webhooks, and never reports
+that a client connected. This is an explicitly unsupported resolution, not live parity.
+
+A real `livekit-client` connection, including a data-only session, needs protobuf
+signaling and negotiated WebRTC peer connections/data channels. Those transports are
+absent from this emulator; returning a synthetic join response would not establish them.
+The requested future scope remains: Node WebSocket upgrade and injectable worker message
+streams, token validation, real peer negotiation, reconnect, scripted remote participant
+updates, data/transcription/text-stream delivery, and optionally audio transport. Existing
+synthetic participants and Twirp APIs remain useful for backend tests but do not satisfy
+that browser SDK flow.

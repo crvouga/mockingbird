@@ -664,6 +664,15 @@ export const CATALOG: readonly CatalogEntry[] = [
     "docs": "https://developer.okta.com/docs/reference/"
   },
   {
+    "target": "open-wearables",
+    "package": "@crvouga/mockingbird-service-open-wearables",
+    "displayName": "Open Wearables",
+    "category": "health",
+    "description": "Portable work-in-progress Open Wearables API emulator: users, provider settings, connections and sync tasks.",
+    "website": "https://github.com/the-momentum/open-wearables",
+    "docs": "https://github.com/the-momentum/open-wearables/tree/main/backend/app/api/routes/v1"
+  },
+  {
     "target": "openai",
     "package": "@crvouga/mockingbird-service-openai",
     "displayName": "OpenAI",
@@ -1186,6 +1195,7 @@ export const LOADERS: Record<string, () => Promise<{ serveTarget?: unknown }>> =
   "oauth": () => import("@crvouga/mockingbird-service-oauth/server"),
   "odx": () => import("@crvouga/mockingbird-service-odx/server"),
   "okta": () => import("@crvouga/mockingbird-service-okta/server"),
+  "open-wearables": () => import("@crvouga/mockingbird-service-open-wearables/server"),
   "openai": () => import("@crvouga/mockingbird-service-openai/server"),
   "opensearch": () => import("@crvouga/mockingbird-service-opensearch/server"),
   "otel": () => import("@crvouga/mockingbird-service-otel/server"),

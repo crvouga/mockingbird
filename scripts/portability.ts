@@ -102,9 +102,11 @@ let scanned = 0
 
 function checkEntry(rel: string, text: string, runtimes: Set<string>): void {
   scanned++
+  // esbuild file markers and source-map URLs are comments, not global API accesses.
+  const code = text.replace(/^\/\/(?: src\/|# sourceMappingURL=).*$/gm, "")
   for (const claim of runtimes) {
     for (const pattern of forbiddenByRuntime[claim] ?? []) {
-      if (pattern.test(text)) {
+      if (pattern.test(code)) {
         fail(`${name}: ${rel} is not ${claim}-portable (uses ${pattern.label})`)
         return
       }

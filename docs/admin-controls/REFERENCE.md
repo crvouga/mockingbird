@@ -194,3 +194,19 @@ Set one with `adminKey` on `createRuntime` or `createServer`, `--admin-key <key>
 HTTP emulators have every control in this guide, and a conformance suite runs the same checks against each of them. The PostgreSQL and SQLite engines answer the same `/__admin` routes for reset, snapshots, checkpoints, branches and state; they have no HTTP request to delay or fault, and their snapshots stay in the process. Redis is controlled through its fleet endpoint. A fleet adds one aggregate control listener that resets, snapshots and moves the clock across every service at once; see [Fleets](../FLEETS.md).
 
 The Node server and the CLI destroy the socket for a `drop`, a `timeout` or a `truncate`. `Bun.serve` cannot close a connection from a handler, so the Bun adapter answers `500` for a drop.
+
+## Forwarding
+
+`GET /__admin/upstream` returns the calling namespace's `{mode, baseUrl?}`.
+`PUT /__admin/upstream` accepts `{mode: "emulated" | "forward", baseUrl?}`. Forward requires
+a boot-injected `upstream.fetch` and explicit HTTP base URL; otherwise it returns 409 without
+changing the mode. Invalid modes or base URLs return 400. Base URLs cannot contain credentials,
+queries or fragments. `x-mockingbird-upstream` with `emulated` or `forward` overrides just one request,
+requires the admin key when configured, and rejects any other value.
+
+FCM HTTP v1 send is the first exposed forwarding surface. Other FCM vendor routes return 501.
+Other messaging packages and declarative fleet upstream settings are not implemented.
+Faults/latency still apply, admin requests stay local, and upstream errors drop the connection.
+The journal stores status and an `upstream` marker without rewritten credentials. Named
+snapshots preserve mode/base URL, and reset restores boot mode. FCM real sends appear in its
+existing outbox with `upstream` and `sentForReal`; they are never delivered to fixture devices.

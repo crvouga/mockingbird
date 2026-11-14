@@ -15,6 +15,124 @@ servers:
 security:
 - apiKey: []
 paths:
+  /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/attachments/:
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+    - $ref: '#/components/parameters/WorkItemId'
+    get:
+      operationId: ListAttachments
+      x-mockingbird:
+        supported: true
+        notes: "Best guess, not oracle-verified; see README attachment contract."
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Upload denied
+        '404':
+          description: Not found
+        '429':
+          description: Rate limited
+        '500':
+          description: Injected failure
+        '200':
+          description: Attachment response
+    post:
+      operationId: CreateAttachment
+      x-mockingbird:
+        supported: true
+        notes: "Best guess, not oracle-verified; see README attachment contract."
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Upload denied
+        '404':
+          description: Not found
+        '429':
+          description: Rate limited
+        '500':
+          description: Injected failure
+        '200':
+          description: Attachment response
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+  /api/v1/workspaces/{slug}/projects/{project_id}/work-items/{work_item_id}/attachments/{asset_id}/:
+    parameters:
+    - $ref: '#/components/parameters/Slug'
+    - $ref: '#/components/parameters/ProjectId'
+    - $ref: '#/components/parameters/WorkItemId'
+    - name: asset_id
+      in: path
+      required: true
+      schema: {type: string}
+    patch:
+      operationId: ConfirmAttachment
+      x-mockingbird:
+        supported: true
+        notes: "Best guess, not oracle-verified; see README attachment contract."
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Upload denied
+        '404':
+          description: Not found
+        '429':
+          description: Rate limited
+        '500':
+          description: Injected failure
+        '204':
+          description: Attachment response
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+  /__admin/blobs/plane/uploads:
+    x-mockingbird-internal: true
+    post:
+      operationId: UploadAttachment
+      x-mockingbird:
+        supported: true
+        notes: "Best guess, not oracle-verified; see README attachment contract."
+        parity:
+          enabled: true
+          safe: false
+      responses:
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthenticated
+        '403':
+          description: Upload denied
+        '404':
+          description: Not found
+        '429':
+          description: Rate limited
+        '500':
+          description: Injected failure
+        '204':
+          description: Attachment response
   /api/v1/workspaces/{slug}/projects/{project_id}/work-items/:
     get:
       operationId: ListWorkItems
@@ -30,7 +148,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/WorkItemPage'
+                oneOf:
+                - $ref: '#/components/schemas/WorkItemPage'
+                - $ref: '#/components/schemas/WorkItem'
         '400':
           description: Invalid cursor
           content:
@@ -48,6 +168,12 @@ paths:
         $ref: '#/components/parameters/PerPage'
       - &id006
         $ref: '#/components/parameters/Cursor'
+      - name: external_source
+        in: query
+        schema: {type: string}
+      - name: external_id
+        in: query
+        schema: {type: string}
       - $ref: '#/components/parameters/OrderBy'
     post:
       operationId: CreateWorkItem
@@ -58,6 +184,8 @@ paths:
           enabled: true
           safe: false
       responses:
+        '409':
+          description: External identity already exists
         '201':
           description: Created
           content:
@@ -114,6 +242,8 @@ paths:
           enabled: true
           safe: false
       responses:
+        '409':
+          description: External identity already exists
         '200':
           description: Updated
           content:
@@ -613,6 +743,10 @@ components:
       - project
       - workspace
       properties:
+        external_source:
+          type: [string, "null"]
+        external_id:
+          type: [string, "null"]
         type_id:
           type:
             - string
@@ -1081,6 +1215,10 @@ components:
       required:
       - name
       properties:
+        external_source:
+          type: [string, "null"]
+        external_id:
+          type: [string, "null"]
         type_id:
           type:
             - string
@@ -1122,6 +1260,10 @@ components:
     UpdateWorkItemBody:
       type: object
       properties:
+        external_source:
+          type: [string, "null"]
+        external_id:
+          type: [string, "null"]
         type_id:
           type:
             - string

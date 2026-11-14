@@ -326,10 +326,16 @@ export const payloadJson = (message: EventStreamMessage): unknown => {
 /** An async iterator over the frames of a byte stream (a request or response body). */
 export async function* readFrames(
   body: ReadableStream<Uint8Array> | null,
+  signal?: AbortSignal,
 ): AsyncGenerator<EventStreamMessage> {
   if (!body) return
   const reader = new FrameReader()
   const stream = body.getReader()
+  const cancel = () => {
+    void stream.cancel().catch(() => undefined)
+  }
+  signal?.addEventListener("abort", cancel, { once: true })
+  if (signal?.aborted) cancel()
   try {
     for (;;) {
       const { done, value } = await stream.read()
@@ -337,7 +343,9 @@ export async function* readFrames(
       for (const frame of reader.push(value)) yield frame
     }
   } finally {
+    signal?.removeEventListener("abort", cancel)
     stream.releaseLock()
   }
-  if (reader.pending > 0) throw new EventStreamError("stream ended inside a frame")
+  if (!signal?.aborted && reader.pending > 0)
+    throw new EventStreamError("stream ended inside a frame")
 }

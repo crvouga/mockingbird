@@ -494,7 +494,9 @@ export class SpeechAPI implements FetchAPI {
     const streamFault = injected?.type.startsWith("polly_stream_") ? injected : undefined
     let characters = 0
     let audioBytes = 0
+    const cancellation = new AbortController()
     const body = new ReadableStream<Uint8Array>({
+      cancel: () => cancellation.abort(),
       start: (controller) => {
         void (async () => {
           const exception = (type: string, message: string) =>
@@ -514,7 +516,7 @@ export class SpeechAPI implements FetchAPI {
           const planned = streamFault ? failure[streamFault.type] : undefined
           let events = 0
           try {
-            for await (const raw of readFrames(request.body)) {
+            for await (const raw of readFrames(request.body, cancellation.signal)) {
               const frame = unwrapSigned(raw)
               if (frame === null) break
               const type = headerString(frame, ":event-type")
@@ -640,7 +642,9 @@ export class SpeechAPI implements FetchAPI {
         },
       })
     }
+    const cancellation = new AbortController()
     const body = new ReadableStream<Uint8Array>({
+      cancel: () => cancellation.abort(),
       start: (controller) => {
         void (async () => {
           let emitted = 0
@@ -658,7 +662,7 @@ export class SpeechAPI implements FetchAPI {
             return true
           }
           try {
-            for await (const raw of readFrames(request.body)) {
+            for await (const raw of readFrames(request.body, cancellation.signal)) {
               const frame = unwrapSigned(raw)
               if (frame === null) break
               if (headerString(frame, ":event-type") !== "AudioEvent") continue

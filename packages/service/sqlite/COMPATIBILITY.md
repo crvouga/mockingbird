@@ -8,7 +8,7 @@ bun run test:sqlite-compat
 
 See [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the latest evidence-based audit report.
 
-Reference oracle: **SQLite 3.51.0** (`bun:sqlite`; Linux/Windows bun may report **3.53.0** — see 𝔇 `oracle-platform-sqlite-version`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Divergences: [`compat/divergences.json`](compat/divergences.json). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
+Reference oracle: **SQLite 3.51.0** (`bun:sqlite`; platform Bun builds may report **3.53.0**, **3.53.2**, or **3.54.0** — see 𝔇 `oracle-platform-sqlite-version`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Divergences: [`compat/divergences.json`](compat/divergences.json). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
 
 ## Proof surface (Phase 1)
 
@@ -100,3 +100,14 @@ bun run build && bun run verify-package  # ESM browser build + isomorphic pack g
 Do not treat isolated unit tests of internal modules as proof of SQLite compatibility. The differential matrix runner is authoritative for SQL behavior; `test:sqlite-compat` is the release gate.
 
 **Parity claim:** Verified against **SQLite 3.51.0** (`bun:sqlite`). Features marked **VERIFIED** are oracle-proven. **PARTIALLY VERIFIED** rows must not be marketed as complete. **NOT APPLICABLE** is the only allowed permanent omission from the SQL drop-in claim.
+
+SQLite 3.54.0 adds `ieee754_from_int` and `ieee754_to_int`. Both are implemented
+and differentially tested against Bun 1.4.0/macOS SQLite 3.54.0, including signed
+bit patterns, infinities, NaN-to-NULL, exact storage-class requirements and arity
+errors. The name inventory remains fail-closed for all core oracle functions.
+
+The same SQLite 3.54.0 build enables `median`, `percentile`, `percentile_cont`
+and `percentile_disc`. These aggregates now include oracle-checked interpolation,
+discrete selection, NULL handling, grouped/window use, numeric storage-class
+validation, fraction bounds/consistency and error messages. Older platform builds
+without these optional extensions still run captured-result regression assertions.

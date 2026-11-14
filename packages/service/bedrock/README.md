@@ -274,3 +274,13 @@ cannot add headers, so map each worker's access key id:
 | `createServer`, `serveTarget`, `DEFAULT_PORT`, `listenH2c` (`./server`) | Node | Serve h2c + HTTP/1.1 on one port; the `serve` CLI target; port 8796; the dual-protocol listener for any Fetch handler. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+### In-process duplex streams
+
+`createRuntime().fetch(request)` accepts a streaming `ReadableStream<Uint8Array>` body for
+the duplex event-stream routes. It returns response headers and events while input remains
+open; no HTTP/2 listener is involved. Use `duplex: "half"` when constructing a streaming
+Request on hosts that require it. The HTTP/1.1-only limitation applies to a plain HTTP/1.1
+listener, not an in-process Fetch call. Cancelling the response body cancels the pending
+request-body reader. The host is responsible for adapting an AWS SDK HTTP/2 transport to
+Fetch; no SDK transport adapter is supplied by this guarantee.

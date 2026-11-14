@@ -137,6 +137,26 @@ export class FcmAPI implements FetchAPI {
     return this.now() + this.state.ensure().clockOffsetMs
   }
 
+  /** Capture only a successful real send; never deliver to fixture devices or change tokens. */
+  async recordForwarded(request: Request, response: Response): Promise<void> {
+    const payload: unknown = await request.json().catch(() => undefined)
+    if (!isRecord(payload) || payload.validate_only || !isRecord(payload.message)) return
+    const result: unknown = await response.json().catch(() => undefined)
+    if (!isRecord(result) || typeof result.name !== "string") return
+    const project = decodeURIComponent(new URL(request.url).pathname.split("/")[3] ?? "")
+    const id = result.name.split("/").at(-1) as string
+    const token = String(payload.message.token ?? "")
+    const message = this.buildMessage(
+      `upstream:${id}`,
+      result.name,
+      project,
+      token,
+      "unknown",
+      payload.message,
+    )
+    this.state.messages.insert(message.id, { ...message, upstream: true, sentForReal: true })
+  }
+
   outbox(query: OutboxQuery = {}): MessageRecord[] {
     return this.state.messages
       .list({
@@ -215,7 +235,9 @@ export class FcmAPI implements FetchAPI {
     const pending = this.state.messages.list({
       order: "oldest",
       where: (message) =>
-        message.state === "accepted" && (onlyId === undefined || message.id === onlyId),
+        !message.upstream &&
+        message.state === "accepted" &&
+        (onlyId === undefined || message.id === onlyId),
     })
     const delivered: string[] = []
     const expired: string[] = []
@@ -260,6 +282,7 @@ export class FcmAPI implements FetchAPI {
   duplicateMessage(id: string): MessageRecord | string {
     const message = this.state.messages.get(id)
     if (!message) return "no message"
+    if (message.upstream) return "cannot duplicate a real upstream send"
     if (
       message.state === "dropped" ||
       message.state === "expired" ||
@@ -383,7 +406,7 @@ export class FcmAPI implements FetchAPI {
     name: string,
     project: string,
     token: string,
-    platform: Platform,
+    platform: Platform | "unknown",
     message: Record<string, unknown>,
   ): MessageRecord {
     const notification = notificationOf(message.notification)

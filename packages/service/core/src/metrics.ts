@@ -15,6 +15,7 @@ export type RejectedRequest = {
 
 /** One handled request, as the structured log sees it. */
 export type RequestLog = {
+  upstream?: boolean
   service: string
   namespace: string
   operationId: string | undefined

@@ -39,6 +39,7 @@ Each control has its own page. That page is the interface: every route, body fie
 | Get the same ids and outcomes every run | [Seed and determinism](admin-controls/SEED_AND_DETERMINISM.md) | `--seed 7` |
 | Set several controls in one call | [Control document](admin-controls/CONTROL_DOCUMENT.md) | `PUT /__admin/controls` |
 | Start an emulator already configured | [Boot](admin-controls/BOOT.md) | `adminControls` · `serve --clock … --fault …` |
+| Forward supported requests through an injected transport | [Forwarding](admin-controls/REFERENCE.md#forwarding) | `GET /__admin/upstream` · `PUT /__admin/upstream` |
 | Control one request without any setup | [Request headers](admin-controls/REQUEST_HEADERS.md) | `x-mockingbird-fault: 503` |
 
 ### Inspect

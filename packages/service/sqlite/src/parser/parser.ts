@@ -206,6 +206,10 @@ const IDENT_KEYWORDS: ReadonlySet<TokenKind> = new Set<TokenKind>([
 ]);
 
 const AGGREGATE_FUNCTIONS = new Set([
+  "MEDIAN",
+  "PERCENTILE",
+  "PERCENTILE_CONT",
+  "PERCENTILE_DISC",
   "AVG",
   "COUNT",
   "GROUP_CONCAT",

@@ -18,6 +18,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    },
+    "./in-process": {
+      "types": "./dist/in-process.d.ts",
+      "default": "./dist/in-process.js"
     }
   },
   "bin": {
@@ -41,7 +45,10 @@
   ],
   "mockingbird": {
     "runtime": "node",
-    "layer": "adapter"
+    "layer": "adapter",
+    "entries": {
+      "in-process": "portable"
+    }
   },
   "scripts": {
     "build": "bun ../../../scripts/bundle-service.ts",
