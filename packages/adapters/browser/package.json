@@ -1,0 +1,44 @@
+{
+  "name": "@crvouga/mockingbird-adapter-browser",
+  "version": "0.0.0-development",
+  "private": true,
+  "description": "Browser runtime compatibility for whole-system previews: Node libraries, virtual files, Bun and Deno Fetch servers.",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    }
+  },
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "adapter",
+    "entries": {
+      "build": "node"
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "memfs": "4.80.1",
+    "node-stdlib-browser": "1.3.1",
+    "buffer": "6.0.3",
+    "process": "0.11.10"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@playwright/test": "1.65.0"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.28.0"
+  }
+}

@@ -23,3 +23,5 @@ packages/service/*/CHANGELOG.md
 
 # Automated local performance reports and CPU profiles.
 .performance/
+packages/examples/medical-testing/preview-dist/
+.wrangler/

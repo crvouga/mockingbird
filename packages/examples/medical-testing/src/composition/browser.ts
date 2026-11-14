@@ -1,43 +1,22 @@
-import { mountDashboard } from "@crvouga/mockingbird-notifications/ui"
+import { mountSystemHarness } from "@crvouga/mockingbird-ui"
 import { setFetcher } from "../client/api.js"
 import { setInboxOpener } from "../client/inbox.js"
 import { mountApp } from "../client/main.js"
 import { STYLES } from "../client/theme.js"
 import { buildDemo } from "./build.js"
-import { mountEmulatorsPanel } from "./emulatorsPanel.js"
 import { createInProcessFetcher } from "./inProcessFetcher.js"
 
 export { createInProcessFetcher }
 
 const NO_CLIENT_ASSETS = { html: "", js: "" }
 
-/** The dashboard's tab bar follows the page's `<html data-theme>` (the docs site sets it). */
-const followPageTheme = (host: HTMLElement): (() => void) => {
-  const root = document.documentElement
-  const apply = (): void => {
-    const theme = root.dataset.theme
-    host.setAttribute("data-theme", theme === "light" || theme === "dark" ? theme : "auto")
-  }
-  apply()
-  const observer = new MutationObserver(apply)
-  observer.observe(root, { attributes: true, attributeFilter: ["data-theme"] })
-  return () => observer.disconnect()
-}
-
-/**
- * Boots a fresh in-process instance of the whole app and mounts it into
- * `host` as one dashboard with three tabs: the app itself (Example), the
- * admin UI of every emulator it talks to (Emulators), and every email, text,
- * push and staff chat message it sent (Notifications). Everything runs in
- * this JS heap: no server to start and no network call to any provider.
- *
- * Tabs and panels carry `data-testid="dashboard-tab"` / `"dashboard-panel"`
- * with `data-tab="app" | "emulators" | "notifications"`.
- *
- * `setFetcher` and `setInboxOpener` are module-level, so only mount one
- * instance of this app on a page at a time.
+/** Mount one browser-local system. Only one lab instance may be mounted per document:
+ * the existing client's fetch and inbox ports are module-scoped.
  */
-export const mount = async (host: HTMLElement): Promise<() => void> => {
+export const mount = async (
+  host: HTMLElement,
+  options: { syncUrl?: boolean } = {},
+): Promise<() => void> => {
   const demo = await buildDemo(NO_CLIENT_ASSETS)
   setFetcher(createInProcessFetcher(demo.app))
 
@@ -49,31 +28,50 @@ export const mount = async (host: HTMLElement): Promise<() => void> => {
     document.head.appendChild(style)
   }
 
-  const dashboard = mountDashboard(host, {
-    tabs: [
+  let notifications: import("@crvouga/mockingbird-notifications/ui").AppHandle | undefined
+  const dashboard = mountSystemHarness(
+    host,
+    [
       {
         id: "app",
-        label: "Example",
+        label: "Lab workspace",
         mount: (panel) => {
           const root = document.createElement("div")
           panel.append(root)
           return mountApp(root, true)
         },
       },
+      {
+        id: "emulators",
+        label: "Emulators",
+        mount: async (panel) => {
+          const { mountEmulatorsPanel } = await import("./emulatorsPanel.js")
+          return mountEmulatorsPanel(panel, demo.admin)
+        },
+      },
+      {
+        id: "notifications",
+        label: "Notifications",
+        mount: async (panel) => {
+          const { mountNotifications } = await import("@crvouga/mockingbird-notifications/ui")
+          notifications = mountNotifications(panel, {
+            harness: demo.notifications,
+            title: "Cove notifications",
+          })
+          return () => notifications?.destroy()
+        },
+      },
     ],
-    emulators: { mount: (panel) => mountEmulatorsPanel(panel, demo.admin) },
-    notifications: { harness: demo.notifications, title: "Cove notifications" },
-  })
-  const unfollowTheme = followPageTheme(host)
-  // "Open Notifications" in the app switches tabs and lands on the message's device.
+    { initial: "app", syncUrl: options.syncUrl ?? false },
+  )
   setInboxOpener((target) => {
-    dashboard.show("notifications")
-    dashboard.notifications?.show(target)
+    void dashboard.show("notifications").then(() => notifications?.show(target))
   })
 
   return () => {
-    unfollowTheme()
     dashboard.destroy()
     demo.notifications.close()
+    setInboxOpener(() => {})
+    setFetcher((path, init) => fetch(path, init))
   }
 }
