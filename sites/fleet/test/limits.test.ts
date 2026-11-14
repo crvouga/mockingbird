@@ -649,6 +649,12 @@ test("preflight explains object-store failures by cause", async () => {
   }
   expect(await code(careless)).toBe("object_store_no_conditional_writes")
 
+  // Another replica probing at the same time keeps its probe object until it finishes.
+  const shared = memoryObjectStore()
+  shared.objects.set("preflight/other-replica.txt", new TextEncoder().encode("probe"))
+  expect(await checkObjectStore(shared, config)).toBeUndefined()
+  expect([...shared.objects.keys()]).toEqual(["preflight/other-replica.txt"])
+
   // Against a real S3 API the probe passes and cleans up after itself.
   const s3 = (await (
     await loadTarget("s3")
