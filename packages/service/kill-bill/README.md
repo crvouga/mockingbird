@@ -83,7 +83,9 @@ every alignment at Kill Bill's defaults. All of them matched Kill Bill 0.24.16 (
 Geviti runs in production) on 2026-11-06. Scenario `bundle-keys-tags-fields` (the catalog read back, a
 `bundleExternalKey` and the bundle lookups by key, a second base subscription on the bundle,
 subscription custom fields, a `WRITTEN_OFF` invoice tag and invoices by number) matched it on
-2026-11-13.
+2026-11-13. So did the changes between a semiannual and an annual plan both ways (`change-immediate-*`;
+an upgrade also after a billing-day write on the period end, under a copy of the plan-change catalog
+with SUBSCRIPTION billing alignment), on 2026-11-14.
 
 ## Controls
 
@@ -147,7 +149,10 @@ exact vendor errors, account-specific permissions, proration and billing transit
   from the first new billing day on. Semiannual and annual plans follow the same rules over their
   longer periods. Changes stack, each taking over from its own effective date (a later change with
   the same date replaces it; parity scenario `bcd-twice`), and a `billCycleDayLocal` sent when the
-  subscription is created is its BCD from the start. A billing hold from the period end, released
+  subscription is created is its BCD from the start. No period runs past the first new billing day
+  of a later change, and periods from that day fall in its months: an annual plan billed from 01-01
+  with BCD 1 written from 07-01 bills 01-01..07-01 at 181/365, then full years from 07-01 (parity
+  scenario `change-immediate-biannual-to-annual-keeping-billing-day`). A billing hold from the period end, released
   on a later day with the BCD moved to that day, renews a full period from it (parity scenario
   `move-renewal-day-annual`). Retroactive changes return `UNSUPPORTED_BCD`.
 - Account bill-cycle day (Kill Bill 0.24.10, issues #643–#645): month-based plans follow the
@@ -171,7 +176,9 @@ exact vendor errors, account-specific permissions, proration and billing transit
   the new plan from that day to its next billing day, the period now falling in that day's month
   (an annual plan changed on 04-11 bills 04-11..next 04-01 at 355/365), and a `REPAIR_ADJ` for the
   unused share of the old plan's billed period, then pays the difference as automatic payment
-  would. `priceOverrides` sent with the change replace the subscription's. Each change is a
+  would. When that invoice comes to less than nothing (a move now to a cheaper plan), a `CBA_ADJ`
+  turns the difference into account credit, which the next invoice uses (parity scenario
+  `change-immediate-annual-to-biannual`). `priceOverrides` sent with the change replace the subscription's. Each change is a
   `CHANGE` event from the request on (dated the request instant when immediate), `prices` lists
   every plan the subscription has had or is changing to, and events report the plan in effect
   when they happen. Cancelling drops a change scheduled on or after the cancellation;

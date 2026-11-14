@@ -99,6 +99,13 @@ export const TIERS_CATALOG_XML = `<?xml version="1.0" encoding="UTF-8"?>
   <priceLists><defaultPriceList name="DEFAULT"><plans><plan>${LOW}</plan><plan>${HIGH}</plan><plan>${LOW_HALF}</plan><plan>${HIGH_HALF}</plan></plans></defaultPriceList></priceLists>
 </catalog>`
 
+/** The same tiers with base plans billed on their own subscription's day (SUBSCRIPTION alignment). */
+export const SUBSCRIPTION_ALIGNED_TIERS_CATALOG_XML = TIERS_CATALOG_XML.replace(
+  "</rules>",
+  `  <billingAlignment><billingAlignmentCase><alignment>SUBSCRIPTION</alignment></billingAlignmentCase></billingAlignment>
+  </rules>`,
+)
+
 type Client = {
   /** True against a real Kill Bill, whose invoicing is asynchronous. */
   settles: boolean
@@ -834,6 +841,88 @@ const SCENARIOS: Record<string, (kb: Client) => Promise<void>> = {
       undefined,
       TIERS,
     ),
+  /** Billing console upgrade now from a semiannual plan to an annual one, on the day it started. */
+  "change-immediate-biannual-to-annual": (kb) =>
+    billingOverTime(
+      kb,
+      LOW_HALF,
+      [
+        "2030-01-01T12:00:00Z",
+        change(kb, HIGH, "billingPolicy=IMMEDIATE"),
+        { read: "after the upgrade" },
+        readSubscription(kb, "the upgraded subscription"),
+        "2030-07-02",
+        "2031-07-02",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /** The same upgrade two months into the semiannual period. */
+  "change-immediate-biannual-to-annual-mid-period": (kb) =>
+    billingOverTime(
+      kb,
+      LOW_HALF,
+      [
+        "2030-03-01T12:00:00Z",
+        change(kb, HIGH, "billingPolicy=IMMEDIATE"),
+        { read: "after the upgrade" },
+        "2030-07-02",
+        "2031-07-02",
+      ],
+      undefined,
+      TIERS,
+    ),
+  /**
+   * A backend's upgrade now from a semiannual plan to an annual one under SUBSCRIPTION alignment:
+   * it first writes the billing day on the period end so the change keeps it, on the start day.
+   */
+  "change-immediate-biannual-to-annual-keeping-billing-day": (kb) =>
+    billingOverTime(
+      kb,
+      LOW_HALF,
+      [
+        "2030-01-01T12:00:00Z",
+        bcd(kb, 1, "2030-07-01"),
+        change(kb, HIGH, "billingPolicy=IMMEDIATE"),
+        { read: "after the upgrade" },
+        readSubscription(kb, "the upgraded subscription"),
+        "2030-07-02",
+        "2031-07-02",
+      ],
+      undefined,
+      SUBSCRIPTION_ALIGNED_TIERS,
+    ),
+  /** The same upgrade two months into the semiannual period. */
+  "change-immediate-biannual-to-annual-keeping-billing-day-mid-period": (kb) =>
+    billingOverTime(
+      kb,
+      LOW_HALF,
+      [
+        "2030-03-01T12:00:00Z",
+        bcd(kb, 1, "2030-07-01"),
+        change(kb, HIGH, "billingPolicy=IMMEDIATE"),
+        { read: "after the upgrade" },
+        "2030-07-02",
+        "2031-07-02",
+      ],
+      undefined,
+      SUBSCRIPTION_ALIGNED_TIERS,
+    ),
+  /** A move now from an annual plan to a semiannual one, a quarter into the annual period. */
+  "change-immediate-annual-to-biannual": (kb) =>
+    billingOverTime(
+      kb,
+      HIGH,
+      [
+        "2030-04-01T12:00:00Z",
+        change(kb, LOW_HALF, "billingPolicy=IMMEDIATE"),
+        { read: "after the move" },
+        "2030-07-02",
+        "2031-01-02",
+      ],
+      undefined,
+      TIERS,
+    ),
   /** A move at the period end (billingPolicy=END_OF_TERM), then a cancellation at the period end. */
   "change-end-of-term": (kb) =>
     billingOverTime(
@@ -1121,6 +1210,10 @@ async function billingOverTime(
 }
 
 const TIERS: OverTime = { catalog: TIERS_CATALOG_XML, details: true }
+const SUBSCRIPTION_ALIGNED_TIERS: OverTime = {
+  catalog: SUBSCRIPTION_ALIGNED_TIERS_CATALOG_XML,
+  details: true,
+}
 
 function bcd(kb: Client, day: number, effectiveFrom: string) {
   return async ({ subscriptionId }: Member) => {

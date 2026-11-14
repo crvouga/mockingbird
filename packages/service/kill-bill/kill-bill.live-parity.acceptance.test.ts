@@ -319,13 +319,19 @@ describe("Kill Bill 0.24.16 behaviour", () => {
   })
 })
 
-async function tiers() {
-  const server = await createServer({
-    plans: [
-      { name: "low-annual", product: "Low", amount: 1200, currency: "USD", intervalDays: 365 },
-      { name: "high-annual", product: "High", amount: 1800, currency: "USD", intervalDays: 365 },
-    ],
-  })
+const TIERS = [
+  { name: "low-annual", product: "Low", amount: 1200, currency: "USD", intervalDays: 365 },
+  { name: "high-annual", product: "High", amount: 1800, currency: "USD", intervalDays: 365 },
+]
+
+/** The tiers of the parity catalog billed on their subscription's day (SUBSCRIPTION alignment). */
+const SUBSCRIPTION_ALIGNED_TIERS = [
+  ...TIERS,
+  { name: "low-biannual", product: "Low", amount: 650, currency: "USD", intervalDays: 180 },
+].map((plan) => ({ ...plan, billingAlignment: "SUBSCRIPTION" as const }))
+
+async function tiers(plans = TIERS, planName = "low-annual") {
+  const server = await createServer({ plans })
   const request = (path: string, method = "GET", body?: unknown) =>
     fetch(`${server.url}/1.0/kb${path}`, {
       method,
@@ -342,9 +348,7 @@ async function tiers() {
   await request(`/accounts/${accountId}/paymentMethods?isDefault=true`, "POST", {
     pluginName: "__EXTERNAL_PAYMENT__",
   })
-  const id = (
-    await request("/subscriptions", "POST", { accountId, planName: "low-annual" })
-  ).headers
+  const id = (await request("/subscriptions", "POST", { accountId, planName })).headers
     .get("location")
     ?.split("/")
     .at(-1) as string
@@ -365,7 +369,8 @@ async function tiers() {
     ((await subscription()).events as Array<{ eventType: string; plan: string }>)
       .filter((event) => event.eventType === "CHANGE")
       .map((event) => event.plan)
-  return { server, request, json, clock, accountId, id, invoices, subscription, changes }
+  const account = () => json(`/accounts/${accountId}?accountWithBalanceAndCBA=true`)
+  return { server, request, json, clock, accountId, id, invoices, subscription, changes, account }
 }
 
 describe("Kill Bill 0.24.16 plan changes and renewal-day moves", () => {
@@ -695,6 +700,80 @@ describe("Kill Bill 0.24.16 invoicing holds and account credit", () => {
         ["CBA_ADJ", 85, "Adjustment (account credit)"],
       ])
       expect(await s.account()).toMatchObject({ accountCBA: 100 })
+    } finally {
+      await s.server.close()
+    }
+  })
+})
+
+describe("Kill Bill 0.24.16 billing-day writes and changes of billing period", () => {
+  test("an upgrade after a billing-day write on the period end bills to that day, then yearly", async () => {
+    const s = await tiers(SUBSCRIPTION_ALIGNED_TIERS, "low-biannual")
+    try {
+      await s.clock("2030-01-01T12:00:00Z")
+      await s.request(`/subscriptions/${s.id}/bcd?effectiveFromDate=2030-07-01`, "PUT", {
+        billCycleDayLocal: 1,
+      })
+      await s.request(`/subscriptions/${s.id}?billingPolicy=IMMEDIATE`, "PUT", {
+        planName: "high-annual",
+      })
+      expect((await s.invoices()).at(-1)).toEqual({
+        amount: 242.6,
+        items: ["RECURRING 2030-01-01..2030-07-01 892.6", "REPAIR_ADJ 2030-01-01..2030-07-01 -650"],
+      })
+      expect(await s.subscription()).toMatchObject({ chargedThroughDate: "2030-07-01" })
+      await s.clock("2030-07-02")
+      expect((await s.invoices()).at(-1)?.items).toEqual(["RECURRING 2030-07-01..2031-07-01 1800"])
+      await s.clock("2031-07-02")
+      expect((await s.invoices()).at(-1)?.items).toEqual(["RECURRING 2031-07-01..2032-07-01 1800"])
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("the same upgrade mid-period bills the stub to the written day", async () => {
+    const s = await tiers(SUBSCRIPTION_ALIGNED_TIERS, "low-biannual")
+    try {
+      await s.clock("2030-03-01T12:00:00Z")
+      await s.request(`/subscriptions/${s.id}/bcd?effectiveFromDate=2030-07-01`, "PUT", {
+        billCycleDayLocal: 1,
+      })
+      await s.request(`/subscriptions/${s.id}?billingPolicy=IMMEDIATE`, "PUT", {
+        planName: "high-annual",
+      })
+      expect((await s.invoices()).at(-1)?.items).toEqual([
+        "RECURRING 2030-03-01..2030-07-01 601.64",
+        "REPAIR_ADJ 2030-03-01..2030-07-01 -438.12",
+      ])
+      await s.clock("2030-07-02")
+      expect((await s.invoices()).at(-1)?.items).toEqual(["RECURRING 2030-07-01..2031-07-01 1800"])
+    } finally {
+      await s.server.close()
+    }
+  })
+
+  test("a move now to a cheaper plan becomes account credit that the next renewal spends", async () => {
+    const s = await tiers(SUBSCRIPTION_ALIGNED_TIERS, "high-annual")
+    try {
+      await s.clock("2030-04-01T12:00:00Z")
+      await s.request(`/subscriptions/${s.id}?billingPolicy=IMMEDIATE`, "PUT", {
+        planName: "low-biannual",
+      })
+      expect((await s.invoices()).at(-1)).toEqual({
+        amount: -706.16,
+        items: [
+          "RECURRING 2030-04-01..2030-10-01 650",
+          "REPAIR_ADJ 2030-04-01..2031-01-01 -1356.16",
+          "CBA_ADJ 2030-04-01..2030-04-01 706.16",
+        ],
+      })
+      expect(await s.account()).toMatchObject({ accountBalance: -706.16, accountCBA: 706.16 })
+      await s.clock("2031-01-02")
+      expect((await s.invoices()).at(-1)).toEqual({
+        amount: 650,
+        items: ["RECURRING 2030-10-01..2031-04-01 650", "CBA_ADJ 2031-01-02..2031-01-02 -650"],
+      })
+      expect(await s.account()).toMatchObject({ accountBalance: -56.16, accountCBA: 56.16 })
     } finally {
       await s.server.close()
     }
