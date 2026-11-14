@@ -6,6 +6,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+import { queryError, queryInput, queryResponse } from "./query.js"
 import { type SqsMessage, type SqsMessageAttribute, type SqsQueue, SqsState } from "./state.js"
 
 export type { SqsRuntime, SqsRuntimeOptions } from "./runtime.js"
@@ -171,6 +172,8 @@ export class SqsAPI {
     if (message.groupId) values.MessageGroupId = message.groupId
     if (message.deduplicationId) values.MessageDeduplicationId = message.deduplicationId
     if (message.sequenceNumber) values.SequenceNumber = message.sequenceNumber
+    if (message.deadLetterQueueSourceArn)
+      values.DeadLetterQueueSourceArn = message.deadLetterQueueSourceArn
     return requested.includes("All")
       ? values
       : Object.fromEntries(Object.entries(values).filter(([name]) => requested.includes(name)))
@@ -217,9 +220,11 @@ export class SqsAPI {
       const prior = this.state.deduplications.get(key)
       if (prior && prior.expiresAt > this.now()) {
         const message = this.state.messages.get(prior.messageId)
+        // Accepted but not delivered: the original MessageId and SequenceNumber, with the MD5 of
+        // the body this call sent, which SDKs check against their own (best guess, see README).
         return {
           MessageId: prior.messageId,
-          MD5OfMessageBody: prior.md5 ?? message?.md5 ?? md5(body),
+          MD5OfMessageBody: md5(body),
           SequenceNumber: prior.sequenceNumber ?? message?.sequenceNumber,
           ...(attributesMd5 ? { MD5OfMessageAttributes: attributesMd5 } : {}),
         }
@@ -256,7 +261,6 @@ export class SqsAPI {
           id: deduplicationId,
           messageId: id,
           expiresAt: this.now() + 300_000,
-          md5: message.md5,
           ...(sequenceNumber ? { sequenceNumber } : {}),
         },
       )
@@ -280,7 +284,12 @@ export class SqsAPI {
         .find((value) => value.arn === policy.deadLetterTargetArn)
       if (!target) return false
       const { receiptHandle: _receiptHandle, ...rest } = message
-      this.state.messages.insert(message.id, { ...rest, queue: target.name, visibleAt: this.now() })
+      this.state.messages.insert(message.id, {
+        ...rest,
+        queue: target.name,
+        visibleAt: this.now(),
+        deadLetterQueueSourceArn: queue.arn,
+      })
       return true
     } catch {
       return false
@@ -401,6 +410,15 @@ export class SqsAPI {
       .map(({ value }) => value)[0]
   }
   async fetch(request: Request): Promise<Response> {
+    // No X-Amz-Target: an `Action` parameter (form body or query string) is the AWS query protocol.
+    if (!request.headers.has("x-amz-target")) {
+      const params = [
+        ...new URL(request.url).searchParams,
+        ...(request.method === "POST" ? new URLSearchParams(await request.text()) : []),
+      ]
+      const action = params.find(([key]) => key === "Action")?.[1]
+      if (action !== undefined) return this.query(action, params, request)
+    }
     if (request.method !== "POST") return this.error("InvalidAction", "Only POST is supported")
     const target = (request.headers.get("x-amz-target") ?? "").split(".").at(-1) ?? ""
     // An operation is answered or refused before any queue is looked up, so a misspelled or
@@ -413,6 +431,28 @@ export class SqsAPI {
           : `Unknown operation ${target || "(no X-Amz-Target)"}`,
       )
     const input = (await request.json().catch(() => ({}))) as Input
+    return this.dispatch(target, input, request)
+  }
+  /**
+   * The AWS query protocol: the same operations, their parameters translated to the AWS JSON
+   * input and their answers to XML (`./query.ts`). An `Action` SQS does not have is
+   * `InvalidAction`; one the emulator does not model is refused as over AWS JSON.
+   */
+  private async query(action: string, params: [string, string][], request: Request) {
+    if (!OPERATIONS.has(action))
+      return queryError(
+        UNIMPLEMENTED_OPERATIONS.has(action) ? "UnknownOperationException" : "InvalidAction",
+        UNIMPLEMENTED_OPERATIONS.has(action)
+          ? `${action} is an Amazon SQS operation this emulator does not implement.`
+          : `The action ${action} is not valid for this endpoint.`,
+        400,
+        this.requestId(),
+      )
+    const input = queryInput(action, params, new URL(request.url))
+    return queryResponse(action, await this.dispatch(action, input, request))
+  }
+  /** Answer one known operation from its AWS JSON input, as an AWS JSON response. */
+  private async dispatch(target: string, input: Input, request: Request): Promise<Response> {
     if (target === "CreateQueue") {
       const name = typeof input.QueueName === "string" ? input.QueueName : ""
       const attributes = stringRecord(input.Attributes)

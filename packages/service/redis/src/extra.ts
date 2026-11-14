@@ -1,6 +1,6 @@
 /**
  * Keyspace, list, sorted-set and hash-field-expiry commands added after the first command table:
- * `HSCAN` `SSCAN` `ZSCAN`, `ZUNIONSTORE`, `LMPOP`, `BLMOVE` `BRPOPLPUSH`, `MSETNX`, `COPY`,
+ * `HSCAN` `SSCAN` `ZSCAN`, `LMPOP`, `BLMOVE` `BRPOPLPUSH`, `MSETNX`, `COPY`,
  * `EXPIRETIME` `PEXPIRETIME`, and the `HEXPIRE` family. The engine routes unknown command names
  * here; every handler returns `undefined` for a name that is not its own.
  */
@@ -11,6 +11,7 @@ import {
   arr,
   bulk,
   err,
+  formatScore,
   int,
   nil,
   nilArray,
@@ -47,7 +48,6 @@ export interface ExtraHost<S extends ExtraSession> {
 }
 
 export const EXTRA_WRITES = [
-  "zunionstore",
   "lmpop",
   "blmove",
   "brpoplpush",
@@ -74,8 +74,6 @@ export function extraCommand<S extends ExtraSession>(
     case "sscan":
     case "zscan":
       return cmdCollectionScan(host, session, command, args)
-    case "zunionstore":
-      return cmdZunionstore(host, session, args, apply)
     case "lmpop":
       return cmdLmpop(host, session, args, apply)
     case "blmove":
@@ -186,94 +184,8 @@ function scanEntries(
   return []
 }
 
-export function formatScore(score: number): string {
-  if (Number.isNaN(score)) return "nan"
-  if (score === Infinity) return "inf"
-  if (score === -Infinity) return "-inf"
-  return String(score)
-}
-
 // ---------------------------------------------------------------------------------------------
 // ZUNIONSTORE
-
-function parseFloatArg(bytes: Uint8Array | undefined): number | null {
-  const value = text(bytes).trim().toLowerCase()
-  if (value === "inf" || value === "+inf") return Infinity
-  if (value === "-inf") return -Infinity
-  if (!/^[-+]?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?$/.test(value)) return null
-  const parsed = Number(value)
-  return Number.isFinite(parsed) ? parsed : null
-}
-
-function cmdZunionstore<S extends ExtraSession>(
-  host: ExtraHost<S>,
-  session: S,
-  args: Uint8Array[],
-  apply: boolean,
-): Reply {
-  if (args.length < 3) return arityError("zunionstore")
-  const numkeys = parseI64(args[1] ?? utf8(""))
-  if (numkeys === null) return notInteger()
-  if (numkeys < 1n) return err("ERR at least 1 input key is needed for 'zunionstore' command")
-  if (numkeys > BigInt(args.length - 2)) return syntaxError()
-  const count = Number(numkeys)
-  const keys = args.slice(2, 2 + count).map(text)
-  const weights: number[] = keys.map(() => 1)
-  let aggregate: "SUM" | "MIN" | "MAX" = "SUM"
-  for (let i = 2 + count; i < args.length; i++) {
-    const option = upper(args[i])
-    if (option === "WEIGHTS") {
-      if (i + count >= args.length) return syntaxError()
-      for (let j = 0; j < count; j++) {
-        const weight = parseFloatArg(args[i + 1 + j])
-        if (weight === null) return err("ERR weight value is not a float")
-        weights[j] = weight
-      }
-      i += count
-    } else if (option === "AGGREGATE") {
-      const kind = upper(args[++i])
-      if (kind !== "SUM" && kind !== "MIN" && kind !== "MAX") return syntaxError()
-      aggregate = kind
-    } else return syntaxError()
-  }
-  const database = host.database(session.db)
-  const scores = new Map<string, { member: Uint8Array; score: number }>()
-  keys.forEach((key, index) => {
-    const value = database.get(key)
-    if (!value) return
-    if (value.kind !== "zset" && value.kind !== "set") return
-    const weight = weights[index] ?? 1
-    const members =
-      value.kind === "zset"
-        ? [...value.members.values()]
-        : [...value.members.values()].map((member) => ({ member, score: 1 }))
-    for (const { member, score } of members) {
-      const scaled = Number.isNaN(score * weight) ? 0 : score * weight
-      const id = memberKey(member)
-      const current = scores.get(id)
-      if (!current) scores.set(id, { member, score: scaled })
-      else if (aggregate === "SUM") current.score = nanToZero(current.score + scaled)
-      else if (aggregate === "MIN") current.score = Math.min(current.score, scaled)
-      else current.score = Math.max(current.score, scaled)
-    }
-  })
-  // A wrong-typed input is reported before anything is written.
-  for (const key of keys) {
-    const value = database.get(key)
-    if (value && value.kind !== "zset" && value.kind !== "set") return wrongType()
-  }
-  if (!apply) return queued()
-  const dest = text(args[0])
-  database.delete(dest)
-  if (scores.size === 0) return int(0)
-  const members = new Map<string, { member: Uint8Array; score: number }>()
-  for (const [id, item] of scores) members.set(id, item)
-  database.put(dest, { kind: "zset", members })
-  host.wake(session.db, dest)
-  return int(members.size)
-}
-
-const nanToZero = (value: number): number => (Number.isNaN(value) ? 0 : value)
 
 // ---------------------------------------------------------------------------------------------
 // LMPOP, BLMOVE, BRPOPLPUSH
