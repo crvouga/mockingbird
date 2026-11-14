@@ -3,7 +3,7 @@ info:
   title: Daily.co REST API (Mockingbird subset)
   description: |
     Stateful emulator subset of the Daily.co REST API: rooms (create, get, update, delete, presence,
-    eject) and meeting tokens (create, validate). Trimmed from Daily's documented API to the
+    eject), meeting tokens (create, validate) and meetings (list, get). Trimmed from Daily's documented API to the
     calls our backend and EMR make; request schemas follow the fields our consumers send
     (daily-video.schemas.ts strict zod schemas, EMR RoomConfig / TokenConfig).
   version: "1"
@@ -341,6 +341,109 @@ paths:
           $ref: "#/components/responses/RateLimited"
         "500":
           $ref: "#/components/responses/ServerError"
+  /v1/meetings:
+    get:
+      operationId: ListMeetings
+      description: >-
+        Meeting sessions (analytics), newest first. The emulator lists the sessions ended
+        through `POST /__admin/rooms/{name}/session`.
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      parameters:
+        - name: room
+          in: query
+          style: form
+          explode: true
+          schema:
+            type: array
+            maxItems: 100
+            items:
+              type: string
+        - name: timeframe_start
+          in: query
+          schema:
+            type: integer
+        - name: timeframe_end
+          in: query
+          schema:
+            type: integer
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+        - name: starting_after
+          in: query
+          schema:
+            type: string
+        - name: ending_before
+          in: query
+          schema:
+            type: string
+        - name: ongoing
+          in: query
+          schema:
+            type: boolean
+        - name: no_participants
+          in: query
+          schema:
+            type: boolean
+      responses:
+        "200":
+          description: Meetings with the total matching the query
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [total_count, data]
+                properties:
+                  total_count:
+                    type: integer
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/Meeting"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
+  /v1/meetings/{meeting}:
+    parameters:
+      - name: meeting
+        in: path
+        required: true
+        description: The meeting session id.
+        schema:
+          type: string
+    get:
+      operationId: GetMeeting
+      x-mockingbird:
+        supported: true
+        parity:
+          enabled: true
+          safe: true
+      responses:
+        "200":
+          description: One meeting session (no participants)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MeetingSummary"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/ServerError"
 components:
   securitySchemes:
     bearerAuth:
@@ -388,6 +491,49 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    MeetingSummary:
+      type: object
+      required: [id, room, start_time, duration, ongoing, max_participants]
+      properties:
+        id:
+          type: string
+          x-mockingbird-volatile:
+            kind: id
+        room:
+          type: string
+        start_time:
+          type: integer
+          x-mockingbird-volatile:
+            kind: timestamp
+        duration:
+          type: number
+        ongoing:
+          type: boolean
+        max_participants:
+          type: integer
+    Meeting:
+      allOf:
+        - $ref: "#/components/schemas/MeetingSummary"
+        - type: object
+          properties:
+            participants:
+              type: array
+              items:
+                $ref: "#/components/schemas/MeetingParticipant"
+    MeetingParticipant:
+      type: object
+      required: [user_id, participant_id, user_name, join_time, duration]
+      properties:
+        user_id:
+          type: [string, "null"]
+        participant_id:
+          type: string
+        user_name:
+          type: [string, "null"]
+        join_time:
+          type: integer
+        duration:
+          type: number
     Error:
       type: object
       required: [error, info]
