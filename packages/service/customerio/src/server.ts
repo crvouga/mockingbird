@@ -32,6 +32,7 @@ const text = (value: string | boolean | undefined) =>
 
 /** How `serve` (and `serve --config`) builds the Customer.io mock from flags. */
 export const serveTarget: ServeTarget = {
+  supportsUpstream: true,
   name: "customerio",
   defaultPort: DEFAULT_PORT,
   options: {
@@ -66,6 +67,7 @@ export const serveTarget: ServeTarget = {
         ...(values["strict-messages"] === true ? { strictMessages: true } : {}),
         ...(trackingBase ? { trackingBase } : {}),
       },
+      ...(common.upstream ? { upstream: common.upstream } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),

@@ -32,8 +32,20 @@ const pkgs = discoverPackages()
   .sort((a, b) => a.name.localeCompare(b.name))
 const serviceLines: string[] = []
 const toolingLines: string[] = []
+const previewTools: Record<string, string> = {
+  "@crvouga/mockingbird-adapter-browser":
+    "Browser runtime and build adapters for virtual Node networking, filesystem and supported framework APIs. Read the documented compatibility limits before bundling an application.",
+  "@crvouga/mockingbird-preview":
+    "Worker hosts, streaming MessagePort bridges, verified artifacts, Node harness transport and named Cloudflare preview lifecycle helpers. Application composition and credential policy belong to the host.",
+  "@crvouga/mockingbird-ui":
+    "Reusable browser system harness with lazy surfaces, switching, retry and disposal, plus a CSS reset. This is UI tooling, not a vendor emulator.",
+}
 for (const pkg of pkgs) {
   const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8")) as Manifest
+  if (Object.hasOwn(previewTools, pkg.name)) {
+    toolingLines.push(`- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): ${previewTools[pkg.name]}`)
+    continue
+  }
   if (pkg.name === "@crvouga/mockingbird-fleet" && manifest.mockingbird?.layer === "adapter") {
     toolingLines.push(
       `- [${pkg.name}](${RAW}/${pkg.relDir}/README.md): The \`mockingbird-fleet\` CLI and its Node API: start every installed emulator from one \`mockingbird.json\`, each on its own port, with one controller, a ready file, a control client, archives and the \`--dashboard\`. Start here. This is tooling, not a vendor emulator.`,

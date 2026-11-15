@@ -28,6 +28,12 @@ import { ingressSupport, supportsPublicIngress } from "./fleet-proxy.js"
 import type { ArchiveRepository } from "./fleet-repository.js"
 import { type ClockSynchronization, FleetTimeController } from "./fleet-time.js"
 
+const bootArchive = (value: unknown) =>
+  !!value &&
+  typeof value === "object" &&
+  "format" in value &&
+  value.format === "mockingbird.boot/v1"
+
 export type Operation = {
   scope?: string[]
   participant?: string
@@ -615,6 +621,8 @@ export class FleetManagement {
         ["GET", "/namespaces/{namespace}/snapshots/{id}"],
         ["DELETE", "/namespaces/{namespace}/snapshots/{id}"],
         ["POST", "/namespaces/{namespace}/snapshots/{id}/restore"],
+        ["GET", "/services/{service}/upstream"],
+        ["PUT", "/services/{service}/upstream"],
         ["GET", "/metrics"],
         ["GET", "/clock"],
         ["POST", "/clock"],
@@ -1173,6 +1181,15 @@ export class FleetManagement {
         operationId: record.operationId,
         resolution: "restored-before-state",
       })
+    }
+    const upstreamService = /^\/services\/([a-z0-9-]+)\/upstream$/.exec(route)?.[1]
+    if (upstreamService && ["GET", "PUT"].includes(method)) {
+      if (!admin) return fleetError(403, "upstream controls require administrator scope")
+      const child = this.ctx.children.get(upstreamService)
+      if (!child) return fleetError(404, "unknown service")
+      if (!child.upstream) return fleetError(409, "upstream forwarding is not supported by service")
+      checked(body, ["mode", "baseUrl"])
+      return child.upstream(namespace, method === "PUT" ? body : undefined)
     }
     if (route === "/telemetry" && method === "GET")
       return admin
@@ -2097,10 +2114,13 @@ export class FleetManagement {
           !child ||
           child.protocol !== state.protocol ||
           !child.importCheckpoint ||
-          (state.target ?? name) !== (child.targetName ?? name)
+          (state.target ?? name) !== (child.targetName ?? name) ||
+          (state.packageVersion !== undefined &&
+            child.packageVersion !== undefined &&
+            state.packageVersion !== child.packageVersion)
         )
           throw new Error(`unsupported archive service ${name}`)
-        await child.importCheckpoint(namespace, state.state)
+        if (!bootArchive(state.state)) await child.importCheckpoint(namespace, state.state)
       }
     const rollback: {
       namespace: string
@@ -2127,10 +2147,12 @@ export class FleetManagement {
           selected,
           async (name, child) => {
             values.set(name, await child.checkpoint(namespace))
-            await child.restore(
-              namespace,
-              await child.importCheckpoint?.(namespace, ns.services[name]?.state),
-            )
+            if (bootArchive(ns.services[name]?.state)) await child.reset(namespace)
+            else
+              await child.restore(
+                namespace,
+                await child.importCheckpoint?.(namespace, ns.services[name]?.state),
+              )
           },
           true,
         )

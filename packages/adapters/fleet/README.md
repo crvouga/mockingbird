@@ -222,33 +222,43 @@ This implementation is a **best guess, not oracle-verified**, for the listener-f
 requested in #783. Each factory is invoked lazily and once per owned runtime; its failure
 is isolated and visible in `status()`. Factories receive an injected `fetch` transport;
 forward it to service webhook options when outbound delivery must remain in-process.
-All application traffic must enter `fleet.fetch(service, request)`. Do not retain or mutate
-the underlying runtime independently.
+All HTTP application traffic must enter `fleet.fetch(service, request)`. Raw engine operations use
+`fleet.run(name, runtime => runtime.value().query(...))`; await every operation within that callback.
+Do not retain or mutate the underlying runtime independently.
 
 `control(Request)` supports these `/__admin/fleet` paths:
 
-- `GET /status`, `GET /namespaces`.
+- `GET /status`, `GET /namespaces`, and `GET /__admin/health` readiness.
 - `POST /namespaces/:namespace` and `DELETE /namespaces/:namespace`.
 - `POST /namespaces/:namespace/reset`.
 - `GET|POST /clock?namespace=default`; POST accepts `set`, `advance`, `freeze`.
-- `GET|POST /namespaces/:namespace/snapshots`; creation accepts `label` (an identifier).
+- `GET|POST /namespaces/:namespace/snapshots`; creation accepts a label up to 256 characters.
+- `GET|DELETE /namespaces/:namespace/snapshots/:id`.
 - `POST /namespaces/:namespace/snapshots/:id/restore`.
-- `POST /archives/export` and `POST /archives/import {archive}`.
+- `POST /wait-until-idle` reports HTTP 409 while a routed stream/operation or webhook is active.
+- `POST /archives/export` and `POST /archives/import {archive}`; export accepts `services` and
+  `allNamespaces`, with the namespace selected by query/header otherwise. Import accepts
+  `namespace` to select an existing namespace from the archive, matching Node semantics.
+- `POST /archives/inspect {archive}` and `/archives/diff {left, right}` use the Node archive codec.
+- `GET|PUT /services/:service/upstream` selects the service's native forwarding controls.
 
-Mutating namespace, clock and snapshot controls accept `services: [name, ...]`;
-unknown services or fields reject before application. Explicit controls may create lazy
-runtimes. Snapshots are stored in each runtime's native snapshot registry, not a parallel
-fleet map; a shared identifier coordinates capture/restore. Reset uses native boot state
-and clears named snapshots as the runtime normally does. Namespace names are 1–64 ASCII
-letters, digits, dots, underscores or hyphens. The default namespace cannot be forgotten:
-its DELETE has the native runtime's reset behavior.
+Reset, clock and snapshot creation accept `services: [name, ...]`; wait-until-idle accepts the
+same selection. Unknown services or fields reject before application. Explicit controls may create
+lazy runtimes. The basic controller responses match the Node controller and work with the existing
+`FleetClient`: transaction results wrap each service's outcome, namespace listings include lifecycle
+metadata, and checkpoints have generated IDs, labels and timestamps. The fleet retains portable
+native checkpoint documents across reset and runtime replacement. Reset restores native boot state;
+restoring a checkpoint restores its saved participant selection and clock. Namespace creation accepts
+a checkpoint `baseline`, and deletion removes its checkpoints. Namespace names are 1–64 ASCII letters,
+digits, dots, underscores or hyphens. Deleting the default namespace returns HTTP 409.
 
-The serial admission barrier covers routed requests, including response consumption, and
-archive/control operations. An unread stream intentionally blocks a later archive until
-consumed or cancelled. Recursively delivering a webhook into the same fleet while its
-initiating request awaits delivery would deadlock; arrange delivery after the request or
-use a separate destination. The barrier cannot pause arbitrary timers, external databases,
-or direct access to retained runtime references.
+Application requests share admission, including response consumption. Exclusive archive/control
+operations wait for active requests to drain. Awaited webhooks may recursively enter `fleet.fetch`
+while a writer waits; once capture starts, new requests queue until it finishes. An unread stream
+blocks capture until consumed or cancelled. `controlTimeoutMs` bounds waiting for exclusive admission
+(default 30 seconds); starvation rejects an export/import Promise or returns HTTP 409 from the
+controller without poisoning later admission. The barrier cannot pause arbitrary timers, external
+databases or direct access to retained runtime references.
 
 Archives use the distinct `mockingbird.in-process/v1` format with exact configured service
 versions. They contain runtime portable namespace state, not sockets, named snapshot
@@ -262,8 +272,46 @@ commit is returned as `{committed: true, cleanupErrors}` and retained as `cleanu
 status; it is not reported as a successful rollback. Factory side effects outside their
 owned runtime cannot be rolled back.
 
-Explicitly unsupported: Node fleet archive compatibility, the fleet dashboard, raw
-PostgreSQL/Redis wire-protocol adapters, dynamic service installation, and all controller
-routes not listed above (HTTP 501 `mockingbird_unsupported`). This entry does not claim
-that those portions of #783 have been implemented. Service-specific fetch APIs may still
-be registered when their runtime satisfies the in-process contract.
+`exportArchive()` and the controller's archive export use the shared `mockingbird.fleet/v1`
+codec, canonical SHA-256 and optional `archiveCompatibility` tags. Node and in-process hosts
+exchange HTTP participant state directly, tested in both directions. Idle services use the explicit
+`mockingbird.boot/v1` marker: capture does not start them, and a Node importer restores boot state.
+Import verifies protocol, target and package version before staging. Node-format selected imports
+preserve unselected services/namespaces. `export()` retains the older complete in-process document
+for existing callers. Archive integrity is not authentication; accept archives only from trusted
+sources. Application schema compatibility can be pinned through explicit compatibility tags.
+
+`postgresParticipant({create, decode: Snapshot.decode, database?})`, `redisParticipant(create)` and
+`mountedParticipant(createMultiRuntime(...))` adapt the engines' own portable snapshots. Register
+them as services with the correct protocol and package version. PostgreSQL captures one named
+database, preserves SQL time and rejects incompatible multi-database/wire-fault archives. Redis
+uses its native codec and clock. Mounted providers preserve each mount separately and reject a
+changed mount list. `snapshotParticipant(codec)` supports other engines with the same ownership
+contract. Built-in data participants dispose their resources automatically. PostgreSQL starts
+with frozen time at its factory's current SQL instant; fleet clock controls can advance or unfreeze
+it. No wire listener is opened.
+
+`await fleet.dashboard()` returns the existing notifications harness, including its aggregate
+admin gateway, rather than another UI. Mount `dashboard.fetch(Request)` on a virtual page route.
+`fleet.dispose()` stops that harness and disposes owned runtimes. The gateway subpath is also
+available as `@crvouga/mockingbird-notifications/admin-gateway` for other portable hosts.
+
+The listener-free controller intentionally does not implement the entire Node management plane:
+repository storage, credentials/roles, profiles, scenarios, lifecycle event streaming, recovery,
+wire connections and dynamic installation remain Node concerns. Unknown controls return HTTP 501;
+this host does not claim complete route/response parity for that broader surface. Its supported
+basic controller routes share the Node response contracts. Exported data contains fixture state,
+not a safe place for real vendor credentials.
+
+### Explicit upstream transports
+
+For Node fleets, a service entry may specify `upstream: {baseUrl, mode?}`. Supply
+`startFleet(config, {load, upstreams: {serviceName: {fetch, rewriteAuth?}}})` separately: transports
+and credentials never live in `mockingbird.json`. Preflight rejects missing transports and targets
+that do not declare forwarding support. Resend, Twilio, Slack, Customer.io and FCM support it.
+
+The in-process host accepts the same entry and `upstreams` map. Its factory receives `upstream`
+and must pass that to `createRuntime`. No real vendor fetch or production base URL is inferred.
+`GET|PUT /__admin/fleet/services/:name/upstream` changes the selected namespace without replacing
+emulator business state. This control is administrator-only in the Node fleet. The browser host
+assumes its controller is already inside the application's trusted local boundary.

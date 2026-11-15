@@ -239,6 +239,17 @@ try {
     ) as Manifest
     for (const subpath of Object.keys(manifest.exports ?? { ".": null })) {
       if (subpath.includes("*") || subpath === "./package.json") continue
+      if (subpath.endsWith(".css")) {
+        const entry = manifest.exports?.[subpath]
+        const target =
+          typeof entry === "object" && entry !== null && "default" in entry ? entry.default : entry
+        if (typeof target !== "string" || !target.startsWith("./"))
+          throw new Error(`${pkg.name}: invalid stylesheet export ${subpath}`)
+        const stylesheet = join(app, "node_modules", pkg.name, target)
+        if (!existsSync(stylesheet) || !readFileSync(stylesheet, "utf8").trim())
+          throw new Error(`${pkg.name}: missing or empty stylesheet ${subpath}`)
+        continue
+      }
       specifiers.push(subpath === "." ? pkg.name : `${pkg.name}/${subpath.slice(2)}`)
     }
     const binNames =

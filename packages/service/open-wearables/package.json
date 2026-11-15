@@ -119,6 +119,7 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-adapter-node": "workspace:*"
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@playwright/test": "1.65.0"
   }
 }

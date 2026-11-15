@@ -46,9 +46,10 @@ test(
 )
 
 test(
-  "parity detects a deliberately divergent create envelope",
+  "parity detects a deliberately divergent create response",
   async () => {
     const real = new LifeFileAPI({ now })
+    let observedRequests = 0
     const error = await parity({
       provider: "lifefile",
       spec: document,
@@ -60,7 +61,10 @@ test(
       },
       mock: {
         create: () => ({
-          fetch: async () => Response.json({ type: "error", message: "Divergent fixture" }),
+          fetch: async () => {
+            observedRequests++
+            return Response.json({ type: "error", message: "Divergent fixture" }, { status: 418 })
+          },
         }),
         baseUrl: `https://${host}`,
         headers: () => ({ authorization: headers.authorization }),
@@ -70,6 +74,7 @@ test(
       },
       only: ["CreateOrder"],
       includeUnsafe: true,
+      seed: 0,
       numRuns: 3,
       maxCommands: 3,
       invalidProbability: 0,
@@ -79,6 +84,7 @@ test(
       () => undefined,
       (e: unknown) => e,
     )
+    expect(observedRequests).toBeGreaterThan(0)
     expect(error).toBeInstanceOf(ParityError)
   },
   { timeout: 60000 },

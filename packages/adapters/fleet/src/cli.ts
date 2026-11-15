@@ -12,7 +12,7 @@ import {
 } from "@crvouga/mockingbird-adapter-node"
 import { parse as parseYaml } from "yaml"
 import { DASHBOARD_PORT } from "./dashboard.js"
-import { startFleet } from "./index.js"
+import { startFleet } from "./start.js"
 
 const projectRoot = process.cwd()
 

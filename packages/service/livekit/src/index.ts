@@ -1,7 +1,9 @@
 import { type APIOptions, bootSqlite } from "@crvouga/mockingbird-service"
 import { clearNamespace } from "@crvouga/mockingbird-sqlite"
+import { DataPacket } from "@livekit/protocol"
 import { verifyJwt } from "./crypto.js"
 import { document, operationIds, supportedOperationIds } from "./generated/openapi.js"
+import type { AudioInput } from "./signal-audio.js"
 import {
   type AgentDispatch,
   type AgentJob,
@@ -38,6 +40,8 @@ export type LiveKitEvent = {
   track?: Record<string, unknown>
   egressInfo?: Record<string, unknown>
   sipCall?: Record<string, unknown>
+  packet?: string
+  control?: { id: string; backend: string; input: AudioInput }
 }
 export type LiveKitAPIOptions = APIOptions & {
   keys?: Readonly<Record<string, string>>
@@ -51,6 +55,16 @@ export class LiveKitAPI {
   private readonly sqlite
   private readonly namespace: string
   private readonly now: () => number
+  private readonly observers = new Set<(event: LiveKitEvent) => void>()
+  private readonly audioBackends = new Set<string>()
+  private readonly audioRequests = new Map<
+    string,
+    {
+      resolve(value: { sid: string }): void
+      reject(error: Error): void
+      timer: ReturnType<typeof setTimeout>
+    }
+  >()
   private readonly keys: Readonly<Record<string, string>>
   constructor(private readonly options: LiveKitAPIOptions = {}) {
     this.sqlite = bootSqlite(options.sqlite)
@@ -60,7 +74,18 @@ export class LiveKitAPI {
     this.state = new LiveKitState(this.sqlite, this.namespace)
   }
   async reset() {
+    for (const request of this.audioRequests.values()) {
+      clearTimeout(request.timer)
+      request.reject(new Error("Runtime reset"))
+    }
+    this.audioRequests.clear()
     clearNamespace(this.sqlite, this.namespace)
+    for (const observer of this.observers)
+      observer({
+        event: "emulator_reset",
+        id: "reset",
+        createdAt: String(Math.floor(this.now() / 1000)),
+      })
   }
   private json(body: unknown, status = 200) {
     return new Response(JSON.stringify(body), {
@@ -91,11 +116,232 @@ export class LiveKitAPI {
     }
   }
   private emit(event: Omit<LiveKitEvent, "id" | "createdAt">) {
-    this.options.onEvent?.({
+    const published = {
       ...event,
       id: this.state.ids.next("EV_", 20),
       createdAt: String(Math.floor(this.now() / 1000)),
+    }
+    this.options.onEvent?.(published)
+    for (const observer of this.observers) observer(published)
+  }
+  observe(listener: (event: LiveKitEvent) => void) {
+    this.observers.add(listener)
+    return () => {
+      this.observers.delete(listener)
+    }
+  }
+  async authorizeJoin(token: string, room?: string) {
+    const claims = await verifyJwt(token, this.keys, this.now())
+    if (!claims || typeof claims.sub !== "string" || !claims.sub) return undefined
+    const video = record(claims.video)
+    if (
+      video.roomJoin !== true ||
+      typeof video.room !== "string" ||
+      !video.room ||
+      (room && room !== video.room)
+    )
+      return undefined
+    return {
+      room: video.room,
+      identity: claims.sub,
+      name: typeof claims.name === "string" ? claims.name : claims.sub,
+      metadata: typeof claims.metadata === "string" ? claims.metadata : "",
+      permission: {
+        canPublish: video.canPublish !== false,
+        canSubscribe: video.canSubscribe !== false,
+        canPublishData: video.canPublishData !== false,
+      },
+    }
+  }
+  getRoom(name: string) {
+    return this.state.rooms.get(name)
+  }
+  getParticipant(room: string, identity: string) {
+    return this.participant(room, identity)
+  }
+  listParticipants(room: string) {
+    return this.state.participants.list({ where: (p) => p.room === room }).map(({ value }) => value)
+  }
+  updateAttributes(room: string, identity: string, attributes: Record<string, string>) {
+    const participant = this.participant(room, identity)
+    if (!participant) return undefined
+    const next = { ...participant, attributes: { ...participant.attributes } }
+    for (const [key, value] of Object.entries(attributes)) {
+      if (value === "") delete next.attributes[key]
+      else next.attributes[key] = value
+    }
+    this.state.participants.insert(this.state.participantId(room, identity), next)
+    this.notify({
+      event: "participant_updated",
+      room: { name: room },
+      participant: this.publicParticipant(next),
     })
+    return next
+  }
+  deliverPacket(room: string, identity: string, bytes: Uint8Array) {
+    const sender = this.participant(room, identity)
+    if (!sender || sender.permission.canPublishData === false)
+      throw new Error("Participant cannot publish data")
+    const packet = DataPacket.fromBinary(bytes)
+    if (
+      ![
+        "user",
+        "rpcRequest",
+        "rpcResponse",
+        "rpcAck",
+        "streamHeader",
+        "streamChunk",
+        "streamTrailer",
+        "transcription",
+      ].includes(packet.value.case ?? "")
+    )
+      throw new Error("Unsupported data packet")
+    packet.participantIdentity = sender.identity
+    packet.participantSid = sender.sid
+    if (packet.value.case === "user") {
+      packet.value.value.participantSid = sender.sid
+      packet.value.value.participantIdentity = sender.identity
+    }
+    const destinations = packet.destinationIdentities.length
+      ? packet.destinationIdentities
+      : packet.value.case === "user"
+        ? packet.value.value.destinationIdentities
+        : []
+    packet.destinationIdentities = destinations
+    const data = packet.value.case === "user" ? packet.value.value.payload : packet.toBinary()
+    let binary = ""
+    for (const byte of data) binary += String.fromCharCode(byte)
+    const message: DataMessage & { packet: string; senderIdentity: string } = {
+      id: this.state.ids.next("DP_", 20),
+      room,
+      data: btoa(binary),
+      kind: packet.kind === 0 ? "RELIABLE" : "LOSSY",
+      ...(packet.value.case === "user" ? { topic: packet.value.value.topic } : {}),
+      packet: packet.toJsonString(),
+      senderIdentity: identity,
+      createdAt: this.now(),
+    }
+    for (const recipient of this.listParticipants(room)) {
+      if (
+        recipient.identity === identity ||
+        recipient.permission.canSubscribe === false ||
+        (destinations.length && !destinations.includes(recipient.identity))
+      )
+        continue
+      this.state.inbox.insert(`${recipient.sid}\0${message.id}`, {
+        ...message,
+        participantSid: recipient.sid,
+      })
+    }
+    this.notify({
+      event: "signal_packet",
+      room: { name: room },
+      participant: this.publicParticipant(sender),
+      packet: packet.toJsonString(),
+    })
+    return message
+  }
+  recordMedia(
+    room: string,
+    identity: string,
+    trackSid: string,
+    packetsReceived: number,
+    bytesReceived: number,
+  ) {
+    const participant = this.participant(room, identity)
+    if (!participant?.tracks.some((track) => track.sid === trackSid)) return false
+    if (![packetsReceived, bytesReceived].every((value) => Number.isFinite(value) && value >= 0))
+      throw new TypeError("Invalid media counters")
+    this.state.media.insert(`${participant.sid}\0${trackSid}`, {
+      room,
+      identity,
+      trackSid,
+      packetsReceived,
+      bytesReceived,
+    })
+    return true
+  }
+  audioBackend(id: string, enabled: boolean) {
+    if (enabled) this.audioBackends.add(id)
+    else this.audioBackends.delete(id)
+  }
+  requestAudio(room: string, identity: string, input: AudioInput) {
+    const backend = this.audioBackends.values().next().value
+    if (!backend) throw new Error("Audio media factory is unavailable")
+    if (!this.participant(room, identity)) throw new Error("Unknown participant")
+    return new Promise<{ sid: string }>((resolve, reject) => {
+      const id = this.state.ids.next("AC_", 20)
+      const timer = setTimeout(() => {
+        this.audioRequests.delete(id)
+        reject(new Error("Audio media factory timed out"))
+      }, 5000)
+      this.audioRequests.set(id, { resolve, reject, timer })
+      this.notify({
+        event: "signal_audio",
+        room: { name: room },
+        participant: { identity },
+        control: { id, backend, input },
+      })
+    })
+  }
+  completeAudio(id: string, result: { sid: string } | { error: string }) {
+    const request = this.audioRequests.get(id)
+    if (!request) return
+    this.audioRequests.delete(id)
+    clearTimeout(request.timer)
+    if ("error" in result) request.reject(new Error(result.error))
+    else request.resolve(result)
+  }
+  unpublish(room: string, identity: string, trackSid: string) {
+    const participant = this.participant(room, identity)
+    const track = participant?.tracks.find((track) => track.sid === trackSid)
+    if (!participant || !track) return false
+    this.state.participants.insert(this.state.participantId(room, identity), {
+      ...participant,
+      tracks: participant.tracks.filter((track) => track.sid !== trackSid),
+    })
+    this.updateRoomCount(room)
+    this.emit({
+      event: "track_unpublished",
+      room: { name: room },
+      participant: this.publicParticipant(this.participant(room, identity) as LiveKitParticipant),
+      track,
+    })
+    return true
+  }
+  recordConnection(
+    id: string,
+    room: string,
+    identity: string,
+    state: "open" | "reconnecting" | "closed",
+  ) {
+    const previous = this.state.connections.get(id)
+    if (state === "closed" && !previous) return
+    this.state.connections.insert(id, {
+      id,
+      room,
+      identity,
+      state,
+      openedAt: previous?.openedAt ?? this.now(),
+      updatedAt: this.now(),
+      resumes:
+        (previous?.resumes ?? 0) + (previous?.state === "reconnecting" && state === "open" ? 1 : 0),
+    })
+  }
+  disconnectSignal(room?: string, identity?: string) {
+    this.notify({
+      event: "signal_disconnect",
+      ...(room ? { room: { name: room } } : {}),
+      ...(identity ? { participant: { identity } } : {}),
+    })
+  }
+  private notify(event: Omit<LiveKitEvent, "id" | "createdAt">) {
+    const published = {
+      ...event,
+      id: this.state.ids.next("EV_", 20),
+      createdAt: String(Math.floor(this.now() / 1000)),
+    }
+    for (const observer of this.observers) observer(published)
   }
   private room(name: unknown) {
     return typeof name === "string" ? this.state.rooms.get(name) : undefined
@@ -194,6 +440,7 @@ export class LiveKitAPI {
   deleteRoom(name: string) {
     const room = this.state.rooms.get(name)
     if (!room) return undefined
+    this.notify({ event: "room_deleted", room: this.publicRoom(room) })
     for (const { value } of this.state.participants.list({ where: (p) => p.room === name }))
       this.remove(name, value.identity)
     for (const { id } of this.state.dispatches.list({
@@ -204,9 +451,15 @@ export class LiveKitAPI {
     this.emit({ event: "room_finished", room: this.publicRoom(room) })
     return room
   }
-  publish(roomName: string, identity: string, input: Partial<LiveKitTrack>) {
+  publish(
+    roomName: string,
+    identity: string,
+    input: Partial<LiveKitTrack>,
+    requirePermission = false,
+  ) {
     const participant = this.participant(roomName, identity)
-    if (!participant) return undefined
+    if (!participant || (requirePermission && participant.permission.canPublish === false))
+      return undefined
     const track: LiveKitTrack = {
       sid: input.sid ?? this.state.ids.next("TR_", 24),
       name: input.name ?? "track",
@@ -455,6 +708,11 @@ export class LiveKitAPI {
           : {}),
       }
       this.state.participants.insert(this.state.participantId(input.room, input.identity), next)
+      this.notify({
+        event: "participant_updated",
+        room: { name: input.room },
+        participant: this.publicParticipant(next),
+      })
       return this.json(this.publicParticipant(next))
     }
     if (method === "MutePublishedTrack") {

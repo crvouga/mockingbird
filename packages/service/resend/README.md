@@ -176,3 +176,26 @@ then the connection dies before any response bytes; the same key replays), `rece
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--webhook-url`, `--webhook-secret`, `--forward-to-inbox`); port 8794. |
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+## Forwarding through an injected transport
+
+`createRuntime({ upstream: { baseUrl, fetch, rewriteAuth?, mode? } })` opts into the shared
+forwarding controls. There is no default upstream transport or production URL: supply both
+explicitly. Mode starts as `emulated`; `PUT /__admin/upstream {"mode":"forward"}` changes only
+the selected namespace. The per-request `x-mockingbird-upstream` override, faults, journal,
+reset and snapshot controls work in both modes. Admin requests always stay local.
+
+Authentication rewriting happens on a separate outgoing Request. Rewritten credentials are
+not retained in the journal or snapshots. Redirects are returned without following them; the
+host owns any redirect policy, allowed destinations and credential validation. The injected
+transport must honor the Request's abort signal. Real transport failures use the runtime's
+network-drop error.
+
+Successful send receipts are copied into the normal notifications outbox with `upstream: true`
+and `sentForReal: true`. They do not invoke emulator delivery hooks, fabricate delivery
+confirmation or update emulator business records. Failed HTTP responses do not create receipts.
+Switching back to emulated mode resumes the original business state. This is transport and
+receipt bookkeeping tested with injected transports, **not live-vendor parity evidence**.
+
+Receipt capture covers `POST /emails` and `/emails/batch`, pairing each returned ID with its
+original message. Local Mailosaur forwarding and delivery webhooks do not run for real sends.

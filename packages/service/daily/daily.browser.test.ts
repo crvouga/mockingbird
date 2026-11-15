@@ -228,3 +228,28 @@ test("wrong-room tokens and room opening windows reject before admission", async
     await a.destroy()
   }
 })
+
+test("destroying a pending media acquisition prevents a participant and stops late tracks", async () => {
+  const h = await harness()
+  let deliver: ((stream: MediaStream) => void) | undefined
+  let stopped = 0
+  const track = {
+    kind: "audio",
+    stop: () => {
+      stopped++
+    },
+  } as unknown as MediaStreamTrack
+  const call = createCallObject({
+    ...h.options,
+    getUserMedia: () =>
+      new Promise((resolve) => {
+        deliver = resolve
+      }),
+  })
+  const pending = call.join(h)
+  await call.destroy()
+  deliver?.({ getTracks: () => [track] } as unknown as MediaStream)
+  await expect(pending).rejects.toThrow("join cancelled")
+  expect(stopped).toBe(1)
+  expect(await (await h.api("/__admin/rooms/fixture/participants")).json()).toEqual([])
+})

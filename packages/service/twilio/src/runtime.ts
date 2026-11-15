@@ -11,6 +11,8 @@ import {
   type RequestLog,
   type ServiceRuntime,
   signers,
+  type UpstreamOptions,
+  upstreamRequest,
   type WebhookEndpoint,
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
@@ -160,6 +162,7 @@ export type TwilioAppWebhooks = {
 }
 
 export type TwilioRuntimeOptions = Pick<TwilioAPIOptions, "fixtures" | "baseUrl" | "tokens"> & {
+  upstream?: UpstreamOptions
   sqlite?: SqliteClient
   clock?: Clock
   seed?: number | string
@@ -278,6 +281,16 @@ export const createRuntime = (options: TwilioRuntimeOptions = {}): TwilioRuntime
   })
   const runtime = createServiceRuntime<TwilioAPI>({
     name: TWILIO_NAMESPACE,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    onForwardResponse: (api, request, response) => api.recordForwarded(request, response),
+    upstreamRequest: (request, baseUrl) => {
+      const url = new URL(request.url)
+      url.pathname = url.pathname.replace(
+        /^\/(api|verify|lookups|messaging|conversations)(?=\/)/,
+        "",
+      )
+      return upstreamRequest(new Request(url, request), baseUrl)
+    },
     document,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     ...(options.clock ? { clock: options.clock } : {}),

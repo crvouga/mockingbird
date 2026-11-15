@@ -93,8 +93,8 @@
     }
   },
   "scripts": {
-    "generate": "bun ../../openapi/codegen/dist/cli.js",
-    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "generate": "bun ../../openapi/codegen/dist/cli.js && bun scripts/generate-browser.ts",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check && bun scripts/generate-browser.ts --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
     "build": "bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -122,6 +122,8 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-adapter-node": "workspace:*"
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@playwright/test": "1.65.0",
+    "esbuild": "0.28.2"
   }
 }

@@ -38,6 +38,7 @@ const text = (value: string | boolean | undefined) =>
 
 /** How `serve` (and `serve --config`) builds the Slack mock from flags. */
 export const serveTarget: ServeTarget = {
+  supportsUpstream: true,
   name: "slack",
   defaultPort: DEFAULT_PORT,
   options: {
@@ -61,6 +62,7 @@ export const serveTarget: ServeTarget = {
         ...(token ? { tokens: [token] } : {}),
         ...(values["strict-channels"] === true ? { strictChannels: true } : {}),
       },
+      ...(common.upstream ? { upstream: common.upstream } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),

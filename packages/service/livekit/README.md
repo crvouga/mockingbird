@@ -59,23 +59,20 @@ Webhooks cover room, participant, track, egress, and SIP transitions. Each raw b
 
 ## Deliberately not modelled
 
-Real agent worker registration, job execution, publisher dispatch, restart/deployment policies, WebRTC media transport, signaling sockets, transcoding, PSTN calls, production scaling, billing, and dashboards are not modelled. The deterministic server API and lifecycle contract is the initial fidelity boundary.
+Real agent worker registration, job execution, publisher dispatch, restart/deployment policies, production SFU media transport, transcoding, PSTN calls, production scaling, billing, and dashboards are not modelled. The deterministic server API and lifecycle contract is the initial fidelity boundary.
 
 Official oracles: [LiveKit RoomService API](https://docs.livekit.io/reference/other/roomservice-api/) and [AgentDispatchService API](https://docs.livekit.io/reference/agents/agent-dispatch-service-api/).
 
-### Explicit signaling limitation (#781)
+### Opt-in signaling and media fixtures (#781)
 
-Requests to `/rtc` and `/rtc/validate` return HTTP 501 with the emulator's Twirp-style
-`{code: "unimplemented", msg, meta: {}}` error. The message identifies this as a
-Mockingbird limitation, **not an observed LiveKit vendor response**. The handler does
-not create rooms, participants, tracks, inbox messages or webhooks, and never reports
-that a client connected. This is an explicitly unsupported resolution, not live parity.
+[Signaling, worker/Node integration, controls and proof](BROWSER.md) are documented together.
+The browser helper negotiates real WebRTC with the unmodified client. An async MessagePort bridge
+keeps runtime state and JWT keys in a worker while the page owns peer connections. Node `createServer`
+accepts an explicit WebRTC provider and attaches a real WebSocket upgrade; no provider is bundled
+for production. The default server without this option still refuses `/rtc` with HTTP 501.
 
-A real `livekit-client` connection, including a data-only session, needs protobuf
-signaling and negotiated WebRTC peer connections/data channels. Those transports are
-absent from this emulator; returning a synthetic join response would not establish them.
-The requested future scope remains: Node WebSocket upgrade and injectable worker message
-streams, token validation, real peer negotiation, reconnect, scripted remote participant
-updates, data/transcription/text-stream delivery, and optionally audio transport. Existing
-synthetic participants and Twirp APIs remain useful for backend tests but do not satisfy
-that browser SDK flow.
+The tested slice includes microphone RTP counters, scripted tone/PCM audio, participant attributes,
+data, transcription, text streams, RPC inbox/response, namespace snapshots, and same-participant
+recovery after a signaling network-loss fault. This is SDK/protocol-based fixture compatibility,
+not live-server or production-SFU parity. See the linked limits before substituting it for a real
+media server.

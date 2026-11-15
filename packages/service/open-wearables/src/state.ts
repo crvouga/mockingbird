@@ -32,12 +32,21 @@ export type Task = {
   created_at_ms: number
   completed_at_ms: number | null
 }
+export type Authorization = {
+  id: string
+  userId: string
+  provider: string
+  redirectUrl: string | null
+  expiresAt: number
+  used: boolean
+}
 export type Settings = { apiKeys: string[]; autoCompleteAfterMs: number | null }
 export class WearablesState {
   readonly users: Collection<User>
   readonly providers: Collection<Provider>
   readonly connections: Collection<Connection>
   readonly tasks: Collection<Task>
+  readonly authorizations: Collection<Authorization>
   readonly settings: Collection<Settings>
   readonly ids: IdSequence
   constructor(
@@ -49,6 +58,7 @@ export class WearablesState {
     this.providers = new Collection(sqlite, namespace, "providers")
     this.connections = new Collection(sqlite, namespace, "connections")
     this.tasks = new Collection(sqlite, namespace, "tasks")
+    this.authorizations = new Collection(sqlite, namespace, "authorizations")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.ids = new IdSequence(sqlite, namespace)
     this.init()

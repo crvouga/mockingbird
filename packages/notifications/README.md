@@ -382,3 +382,9 @@ bun run --cwd packages/notifications dev        # a fleet of every messaging emu
 bun run --cwd packages/notifications e2e        # the browser tests (bunx playwright install chromium first)
 bun run --cwd packages/notifications storybook  # every UI state, from fixtures
 ```
+
+Portable hosts can import `adminGateway` from `@crvouga/mockingbird-notifications/admin-gateway`
+and pass it as `createNotificationHarness({admin: adminGateway(), services, ...})`. This serves
+the existing aggregate admin UI alongside notifications without importing Node's server entry.
+Anyone reaching this gateway can use its configured admin keys; mount it only inside the host's
+intended control boundary.

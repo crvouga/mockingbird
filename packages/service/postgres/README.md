@@ -533,6 +533,11 @@ positional `(string | null)[]` arrays plus `columns`) when you need every cell.
 - `open()` shares frozen tables until either side writes; idle `open().snapshot().encode()` is
   byte-identical to `snapshot().encode()`.
 - `open()` uses a fixed clock from the snapshot unless you pass `{ now: "system" }`, which stays live.
+  This existing restore behavior ignores a Date or function in `open({ now })`.
+- `openWithClock(dateOrFunctionOrSystem, options?)` explicitly replaces the captured clock. Use a
+  function to attach a restored database to a fleet clock; Date values stay fixed. Omitted-clock
+  `open()` still restores the captured instant. Both APIs preserve the snapshot's database and
+  PRNG state; this clock injection is an emulator control, not a PostgreSQL API.
 - Equivalent databases produce byte-identical `encode()` output (schema/rows sorted) **within a
   single library version**.
 - **Compatibility policy:** newer library versions can always decode older snapshots; older

@@ -153,8 +153,12 @@ not the retired batch endpoint. Call `enableLegacyHttpTransport()` for these bat
 The default HTTP/2 transport needs a host-provided HTTP/2 adapter and is not supplied here.
 These helpers do not make firebase-admin itself a browser-native SDK.
 
-The credential, routing, strict authentication and outbox behavior are tested in-process;
-a browser host's HTTP shim remains that host's responsibility, not verified SDK parity.
+The browser adapter's `fcm.browser.test.ts` bundles unmodified firebase-admin 12.7.0 and
+13.5.0 in Chromium, uses the explicit Node HTTP-to-Fetch adapter (not a private SDK hook), and
+checks a single send plus legacy multicast against strict emulator authentication and outbox
+capture. Route only the documented FCM surface to the emulator and reject all other requests.
+This is local SDK compatibility evidence, not a live Firebase parity claim. The SDK's default
+HTTP/2 path remains unsupported; call `enableLegacyHttpTransport()` before multicast.
 
 ### Forwarding real HTTP v1 sends
 
