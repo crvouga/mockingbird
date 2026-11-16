@@ -1,4 +1,4 @@
-import type { Expr, FromItem, TableRef } from "../ast/nodes.ts";
+import type { Expr, FromItem, IndexedColumn, TableRef } from "../ast/nodes.ts";
 import { SqliteError } from "../errors/index.ts";
 import type { ExecutionEnv } from "../executor/env.ts";
 import { exprEquals } from "../expressions/equals.ts";
@@ -140,6 +140,15 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
 
   const byColumn = new Map<string, SqlValue>();
   for (const eq of resolved) byColumn.set(eq.column.toLowerCase(), eq.value);
+  // Columns compared only with a bare literal or parameter, so no COLLATE on the value applies.
+  const collated = new Set(
+    equalities
+      .filter((eq) => eq.valueExpr.type !== "literal" && eq.valueExpr.type !== "parameter")
+      .map((eq) => eq.column.toLowerCase()),
+  );
+  const plainColumns = new Set(
+    equalities.map((eq) => eq.column.toLowerCase()).filter((column) => !collated.has(column)),
+  );
 
   let best: IndexLookup | null = null;
   for (const indexName of table.indexes) {
@@ -185,9 +194,14 @@ export function lookupTableRows(from: TableRef, where: Expr, env: ExecutionEnv):
     if (prefix.length === 0) continue;
     const full = prefix.length === index.columns.length;
     const rowids = full ? index.store.lookup(prefix) : index.store.lookupPrefix(prefix);
+    const columns = index.columns.slice(0, prefix.length).map((column) => column.name.toLowerCase());
+    // No row matches: answer at once rather than scan a wider candidate set to prove it.
+    if (rowids.length === 0 && exactTextPrefix(table, index.columns, prefix, plainColumns)) {
+      return { table, alias, rows: [], coveredColumns: new Set(columns) };
+    }
     const next = considerIndexLookup(best, {
       rowids,
-      columns: index.columns.slice(0, prefix.length).map((column) => column.name.toLowerCase()),
+      columns,
       prefixLen: prefix.length,
       uniqueFull: index.unique && full,
     });
@@ -350,6 +364,29 @@ interface IndexLookup {
 }
 
 /** Unique full-key lookups are authoritative (including misses). Empty prefix hits are not. */
+/**
+ * Whether an index lookup on `prefix` misses only when no row can match: every value is text
+ * compared with a TEXT column under the collation the index keeps, so no affinity conversion or
+ * other collation could make a row equal that the index does not hold under the same key.
+ */
+function exactTextPrefix(
+  table: Table,
+  columns: readonly IndexedColumn[],
+  prefix: readonly SqlValue[],
+  plainColumns: ReadonlySet<string>,
+): boolean {
+  return prefix.every((value, i) => {
+    const indexed = columns[i];
+    if (typeof value !== "string" || !indexed) return false;
+    const name = indexed.name.toLowerCase();
+    if (!plainColumns.has(name)) return false;
+    const column = table.columns.find((item) => (item.nameLower ?? item.name.toLowerCase()) === name);
+    return (
+      column?.affinity === "TEXT" && (indexed.collate ?? "BINARY") === (column.collate ?? "BINARY")
+    );
+  });
+}
+
 function considerIndexLookup(
   best: IndexLookup | null,
   candidate: IndexLookup,
