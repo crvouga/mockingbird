@@ -72,6 +72,7 @@ export class Table {
   private scanCache: Row[] | null = null;
   /** Lazy covering hashes: column nameLower → serializeIndexKey → rowids. */
   private equalityHashes: Map<string, Map<string, Rowid[]>> | null = null;
+  private ownedEqualityBuckets = new WeakSet<Rowid[]>();
   /** Cached maximum rowid. `undefined` means recompute after deleting the maximum. */
   private maximumRowid: Rowid | null | undefined = null;
   frozen = false;
@@ -371,6 +372,35 @@ export class Table {
     this.equalityHashes = null;
   }
 
+  /** A bucket this table may change in place; one shared with a fork is copied first. */
+  private ownedEqualityBucket(map: Map<string, Rowid[]>, key: string, bucket: Rowid[]): Rowid[] {
+    if (this.ownedEqualityBuckets.has(bucket)) return bucket;
+    const copy = bucket.slice();
+    this.ownedEqualityBuckets.add(copy);
+    map.set(key, copy);
+    return copy;
+  }
+
+  /**
+   * Hand a fork the equality hashes instead of letting it rebuild them from every row. Large maps
+   * fork page by page; buckets are shared and copied by whichever side changes them first.
+   */
+  private shareEqualityHashes(copy: Table): void {
+    if (!this.equalityHashes) return;
+    const forked = new Map<string, Map<string, Rowid[]>>();
+    for (const [column, map] of this.equalityHashes) {
+      let source = map;
+      if (!(source instanceof ForkMap) && source.size >= 4096) {
+        source = new ForkMap(source);
+        this.equalityHashes.set(column, source);
+      }
+      forked.set(column, source instanceof ForkMap ? source.fork() : new Map(source));
+    }
+    copy.equalityHashes = forked;
+    this.ownedEqualityBuckets = new WeakSet();
+    copy.ownedEqualityBuckets = new WeakSet();
+  }
+
   private indexEquality(row: Row): void {
     if (!this.equalityHashes) return;
     for (const [columnLower, map] of this.equalityHashes) {
@@ -379,8 +409,12 @@ export class Table {
       if (key === null) continue;
       const bucket = map.get(key);
       if (bucket) {
-        if (!bucket.some((id) => sameRowid(id, row.rowid))) bucket.push(row.rowid);
-      } else map.set(key, [row.rowid]);
+        if (!bucket.some((id) => sameRowid(id, row.rowid))) this.ownedEqualityBucket(map, key, bucket).push(row.rowid);
+      } else {
+        const created = [row.rowid];
+        this.ownedEqualityBuckets.add(created);
+        map.set(key, created);
+      }
     }
   }
 
@@ -393,8 +427,12 @@ export class Table {
       const bucket = map.get(key);
       if (!bucket) continue;
       const index = bucket.findIndex((id) => sameRowid(id, row.rowid));
-      if (index >= 0) bucket.splice(index, 1);
-      if (bucket.length === 0) map.delete(key);
+      if (index < 0) continue;
+      if (bucket.length === 1) {
+        map.delete(key);
+        continue;
+      }
+      this.ownedEqualityBucket(map, key, bucket).splice(index, 1);
     }
   }
 
@@ -607,6 +645,7 @@ export class Table {
     copy.#clusterStore =
       this.#clusterStore instanceof ForkMap ? this.#clusterStore.fork() : new Map(this.#clusterStore);
     copy.scanCache = this.scanCache;
+    this.shareEqualityHashes(copy);
     return copy;
   }
 
