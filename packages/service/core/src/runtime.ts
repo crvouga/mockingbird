@@ -203,6 +203,13 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   webhooks?: WebhookHub
   /** Retained time-travel checkpoints per namespace. Default 1,000. */
   maxCheckpoints?: number
+  /**
+   * Record a time-travel checkpoint after every accepted mutation and stamp its id in
+   * `x-mockingbird-checkpoint`. Default true. Each checkpoint reads the whole namespace, so a
+   * long-running mock that never travels back can turn this off to keep a write's cost its own;
+   * `checkpoint`, `snapshot`, `branch` and `checkout` still capture when called.
+   */
+  checkpointMutations?: boolean
   /** Injectable process IO used for observability and delays; logical service time uses `clock`. */
   io?: Partial<RuntimeIO>
   /**
@@ -568,6 +575,7 @@ export const createRuntime = <T extends ServiceInstance>(
   const timelines = new Map<string, Timeline<ServiceTimelineState>>()
   const branchStorage = new Map<string, string>()
   const captured = new Map<string, NamespaceSnapshot>()
+  const checkpointMutations = options.checkpointMutations !== false
   const credentials = createCredentialRegistry()
   for (const [credential, target] of Object.entries(boot.credentials))
     credentials.set(credential, target)
@@ -1579,7 +1587,8 @@ export const createRuntime = <T extends ServiceInstance>(
         )
       let active = true
       acceptance.set(request, (notes) => {
-        if (!active || accepted || !MUTATING_METHODS.has(request.method)) return
+        if (!checkpointMutations || !active || accepted || !MUTATING_METHODS.has(request.method))
+          return
         accepted = timeline(namespace).commit(capture(storage), { branch: selectedBranch })
         acceptedNotes = notes
       })
@@ -1594,7 +1603,12 @@ export const createRuntime = <T extends ServiceInstance>(
         acceptance.delete(request)
       }
       const wireStatus = responseNotes(response)?.wireStatus ?? response.status
-      if (MUTATING_METHODS.has(request.method) && wireStatus >= 200 && wireStatus < 400) {
+      if (
+        checkpointMutations &&
+        MUTATING_METHODS.has(request.method) &&
+        wireStatus >= 200 &&
+        wireStatus < 400
+      ) {
         const current = capture(storage)
         const unchanged =
           accepted &&
