@@ -99,6 +99,8 @@ export type MedplumRuntimeOptions = Omit<
   onLog?: (entry: RequestLog) => void
   /** Requests each namespace's journal keeps (`GET /__admin/requests`). Default 1000. */
   journalSize?: number
+  /** Record a time-travel checkpoint after every accepted write. Default true. */
+  checkpointMutations?: boolean
 }
 
 export type MedplumRuntime = ServiceRuntime<MedplumAPI>
@@ -242,6 +244,7 @@ export const createRuntime = (options: MedplumRuntimeOptions = {}): MedplumRunti
     adminControls,
     onLog,
     journalSize,
+    checkpointMutations,
     ...apiOptions
   } = options
   const runtime: ServiceRuntime<MedplumAPI> = createServiceRuntime<MedplumAPI>({
@@ -255,6 +258,7 @@ export const createRuntime = (options: MedplumRuntimeOptions = {}): MedplumRunti
     ...(adminControls !== undefined ? { adminControls } : {}),
     ...(onLog ? { onLog } : {}),
     ...(journalSize !== undefined ? { journalSize } : {}),
+    ...(checkpointMutations !== undefined ? { checkpointMutations } : {}),
     credential: credentialOf,
     presets: MEDPLUM_PRESETS,
     create: ({ sqlite, namespace, publicNamespace, clock }) =>
