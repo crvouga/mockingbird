@@ -7,7 +7,14 @@
 import { describe, expect, test } from "bun:test"
 import { Database } from "@crvouga/mockingbird-service-sqlite"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import { CHECKPOINT_HEADER, Collection, createRuntime, markMutationAccepted } from "./src/index.js"
+import {
+  CHECKPOINT_HEADER,
+  Collection,
+  ControlError,
+  createRuntime,
+  type MockControls,
+  markMutationAccepted,
+} from "./src/index.js"
 
 /** A client that counts the stored records its statements return. */
 const counting = () => {
@@ -37,7 +44,13 @@ const counting = () => {
   return { client, rowsRead: () => rowsRead }
 }
 
-const itemsRuntime = (options: { checkpointMutations?: boolean; sqlite?: SqliteClient } = {}) =>
+const itemsRuntime = (
+  options: {
+    checkpointMutations?: boolean
+    sqlite?: SqliteClient
+    adminControls?: MockControls
+  } = {},
+) =>
   createRuntime({
     name: "checkpoint-mutations",
     ...options,
@@ -96,5 +109,26 @@ describe("checkpointMutations", () => {
     expect(await readsForOneWrite(20, false)).toBe(0)
     expect(await readsForOneWrite(400, false)).toBe(0)
     expect(await readsForOneWrite(400, true)).toBeGreaterThan(400)
+  })
+
+  test("the boot control turns it off for a service that does not forward the option", async () => {
+    const runtime = itemsRuntime({ adminControls: { checkpointMutations: false } })
+    const response = await write(runtime, "a")
+    expect(response.headers.get(CHECKPOINT_HEADER)).toBeNull()
+    expect(runtime.instance().items.has("a")).toBe(true)
+  })
+
+  test("the runtime option wins over the boot control", async () => {
+    const runtime = itemsRuntime({
+      checkpointMutations: true,
+      adminControls: { checkpointMutations: false },
+    })
+    expect((await write(runtime, "a")).headers.get(CHECKPOINT_HEADER)).toBeTruthy()
+  })
+
+  test("the boot control must be a boolean", () => {
+    expect(() => itemsRuntime({ adminControls: { checkpointMutations: "no" } as never })).toThrow(
+      ControlError,
+    )
   })
 })
