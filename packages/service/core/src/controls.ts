@@ -158,10 +158,15 @@ export type MockControls = NamespaceControls & {
   credentials?: Record<string, string>
   /** Overrides for named namespaces. A key given here replaces the shared value. */
   namespaces?: Record<string, NamespaceControls>
+  /**
+   * Record a time-travel checkpoint after every accepted write. Default true. The runtime's own
+   * `checkpointMutations` option wins over this.
+   */
+  checkpointMutations?: boolean
 }
 
 const NAMESPACE_KEYS = new Set(["seed", "clock", "virtualTime", "latency", "faults", "snapshot"])
-const MOCK_KEYS = new Set([...NAMESPACE_KEYS, "credentials", "namespaces"])
+const MOCK_KEYS = new Set([...NAMESPACE_KEYS, "credentials", "namespaces", "checkpointMutations"])
 /**
  * What `GET /__admin/controls` reports beside the controls themselves. Accepted and ignored,
  * so what was read from one namespace can be applied to another as it is.
@@ -333,6 +338,7 @@ export type BootPlan = {
   shared: ControlPlan
   namespaces: Record<string, ControlPlan>
   credentials: Record<string, string>
+  checkpointMutations?: boolean
 }
 
 /** Validate a boot {@link MockControls} document. */
@@ -340,11 +346,16 @@ export const normalizeBootControls = (value: unknown, label = "controls"): BootP
   if (value === undefined) return { shared: {}, namespaces: {}, credentials: {} }
   if (!isRecord(value)) throw new ControlError(`${label}: expected an object`)
   unknownKeys(value, MOCK_KEYS, label)
-  const { credentials, namespaces, ...shared } = value
+  const { credentials, namespaces, checkpointMutations, ...shared } = value
   const plan: BootPlan = {
     shared: normalizeControls(shared, label),
     namespaces: {},
     credentials: {},
+  }
+  if (checkpointMutations !== undefined) {
+    if (typeof checkpointMutations !== "boolean")
+      throw new ControlError(`${label}.checkpointMutations: expected a boolean`)
+    plan.checkpointMutations = checkpointMutations
   }
   if (namespaces !== undefined) {
     if (!isRecord(namespaces)) throw new ControlError(`${label}.namespaces: expected an object`)
