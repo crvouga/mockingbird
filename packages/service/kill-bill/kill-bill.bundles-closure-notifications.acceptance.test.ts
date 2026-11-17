@@ -601,6 +601,32 @@ describe("push notifications (#739)", () => {
     }
   })
 
+  test("only the account with an unpaid invoice enters OD1 when several accounts are billed", async () => {
+    const s = await session()
+    try {
+      const paid = await s.account()
+      const unpaid = await s.account()
+      await s.subscribe({ accountId: paid, planName: "pro-monthly" })
+      await s.subscribe({ accountId: unpaid, planName: "pro-monthly" })
+      const [invoice] = await s.invoices(paid)
+      await s.call(`/invoices/${invoice?.invoiceId}/payments?externalPayment=true`, "POST", {
+        accountId: paid,
+        purchasedAmount: 100,
+      })
+      await s.events()
+      await s.call("/test/clock?requestedDate=2026-11-15T10:00:00.000Z", "POST")
+      expect((await s.call(`/accounts/${paid}/overdue`)).json.name).toBe(
+        "__KILLBILL__CLEAR__OVERDUE_STATE__",
+      )
+      expect((await s.call(`/accounts/${unpaid}/overdue`)).json.name).toBe("OD1")
+      expect(
+        (await s.events()).filter((n) => n.eventType === "OVERDUE_CHANGE").map((n) => n.objectId),
+      ).toEqual([unpaid])
+    } finally {
+      await s.close()
+    }
+  })
+
   test("a TRIAL phase bills a $0 fixed item, then SUBSCRIPTION_PHASE and the evergreen price", async () => {
     const s = await session()
     try {
