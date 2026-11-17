@@ -63,6 +63,8 @@ export type KillBillRuntimeOptions = {
   /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
   adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
+  /** Record a time-travel checkpoint after every accepted write. Default true. */
+  checkpointMutations?: boolean
   username?: string
   password?: string
   tenantKey?: string
@@ -176,6 +178,9 @@ export const createRuntime = (options: KillBillRuntimeOptions = {}): KillBillRun
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
     ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
+    ...(options.checkpointMutations !== undefined
+      ? { checkpointMutations: options.checkpointMutations }
+      : {}),
     create: ({ sqlite, namespace, clock, adminPrefix }) =>
       new KillBillAPI({
         sqlite,
