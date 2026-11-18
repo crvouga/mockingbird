@@ -1,4 +1,5 @@
 import type { SqliteClient, SqliteStatement } from "@crvouga/mockingbird-sqlite"
+import { openJournals } from "./write-journal.js"
 
 /** Every stored record carries a monotonically increasing sequence for stable ordering. */
 export type Stored<T> = { seq: number; value: T }
@@ -36,10 +37,36 @@ export class Collection<T> {
     readonly collectionName: string,
   ) {}
 
+  /** Note the record's current row in every open rollback journal that has not seen it yet. */
+  private journalRecord(id: string): void {
+    const journals = openJournals(this.sqlite, this.namespace)
+    if (!journals) return
+    const key = `${this.collectionName}\u0000${id}`
+    let before: { seq: number; value: string } | null | undefined
+    for (const journal of journals) {
+      if (journal.records.has(key)) continue
+      if (before === undefined) {
+        before =
+          this.prepare(
+            "SELECT seq, value FROM mockingbird_records WHERE namespace = ? AND collection = ? AND id = ?",
+          ).get<{ seq: number; value: string }>(this.namespace, this.collectionName, id) ?? null
+      }
+      journal.records.set(key, { collection: this.collectionName, id, before })
+    }
+  }
+
   private bumpCollectionSeq(): number {
     const row = this.prepare(
       "SELECT value FROM mockingbird_sequences WHERE namespace = ? AND name = ? AND kind = 'collection'",
     ).get<{ value: number }>(this.namespace, this.collectionName)
+    const journals = openJournals(this.sqlite, this.namespace)
+    if (journals) {
+      for (const journal of journals) {
+        if (!journal.sequences.has(this.collectionName)) {
+          journal.sequences.set(this.collectionName, row?.value ?? null)
+        }
+      }
+    }
     const next = (row?.value ?? 0) + 1
     this.prepare(
       `INSERT INTO mockingbird_sequences (namespace, name, kind, value) VALUES (?, ?, 'collection', ?)
@@ -70,6 +97,7 @@ export class Collection<T> {
   /** Insert a new record, assigning it the next sequence number. */
   insert(id: string, value: T): Stored<T> {
     return this.sqlite.transaction(() => {
+      this.journalRecord(id)
       const seq = this.bumpCollectionSeq()
       const stored = { seq, value }
       this.prepare(
@@ -88,6 +116,7 @@ export class Collection<T> {
         "SELECT seq, value FROM mockingbird_records WHERE namespace = ? AND collection = ? AND id = ?",
       ).get<{ seq: number; value: string }>(this.namespace, this.collectionName, id)
       if (!row) return undefined
+      this.journalRecord(id)
       const stored = { seq: row.seq, value }
       this.prepare(
         "UPDATE mockingbird_records SET value = ? WHERE namespace = ? AND collection = ? AND id = ?",
@@ -97,6 +126,7 @@ export class Collection<T> {
   }
 
   delete(id: string): boolean {
+    this.journalRecord(id)
     const result = this.prepare(
       "DELETE FROM mockingbird_records WHERE namespace = ? AND collection = ? AND id = ?",
     ).run(this.namespace, this.collectionName, id)
