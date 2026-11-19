@@ -296,6 +296,9 @@ Do not work around an emulator in your own project: file a GitHub issue on crvou
 - [@crvouga/mockingbird-service-mongoatlas](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mongoatlas/README.md): Stateful MongoDB Atlas public vendor API emulator with native namespaces, checkpoints and test controls. Parity: Vendor API workflows compared with the pinned Emulate package oracle.
 - [@crvouga/mockingbird-service-mongoatlas DISCOVERY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mongoatlas/DISCOVERY.md): coverage matrix
 - [@crvouga/mockingbird-service-mongoatlas SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mongoatlas/SUPPORT.md): coverage matrix
+- [@crvouga/mockingbird-service-mosaic](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mosaic/README.md): Stateful emulator of the Mosaic Diagnostics practitioner ordering API. Parity: Patients, lab orders, order-line lifecycle, and results.
+- [@crvouga/mockingbird-service-mosaic DISCOVERY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mosaic/DISCOVERY.md): coverage matrix
+- [@crvouga/mockingbird-service-mosaic SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/mosaic/SUPPORT.md): coverage matrix
 - [@crvouga/mockingbird-service-notion](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/notion/README.md): Notion 2022-06-28 OAuth, database search and page creation emulator. Parity: 2022-06-28 database search and page creation.
 - [@crvouga/mockingbird-service-notion DISCOVERY.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/notion/DISCOVERY.md): coverage matrix
 - [@crvouga/mockingbird-service-notion SUPPORT.md](https://raw.githubusercontent.com/crvouga/mockingbird/main/packages/service/notion/SUPPORT.md): coverage matrix

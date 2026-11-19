@@ -1030,6 +1030,7 @@
         "@crvouga/mockingbird-service-meta": "workspace:*",
         "@crvouga/mockingbird-service-microsoft": "workspace:*",
         "@crvouga/mockingbird-service-mongoatlas": "workspace:*",
+        "@crvouga/mockingbird-service-mosaic": "workspace:*",
         "@crvouga/mockingbird-service-notion": "workspace:*",
         "@crvouga/mockingbird-service-oauth": "workspace:*",
         "@crvouga/mockingbird-service-odx": "workspace:*",
@@ -2366,6 +2367,29 @@
         "@crvouga/mockingbird-openapi-codegen": "workspace:*",
         "@crvouga/mockingbird-service": "workspace:*",
         "@crvouga/mockingbird-sqlite": "workspace:*",
+      },
+    },
+    "packages/service/mosaic": {
+      "name": "@crvouga/mockingbird-service-mosaic",
+      "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-mosaic": "./dist/cli.js",
+      },
+      "dependencies": {
+        "@crvouga/mockingbird-runtime": "workspace:*",
+        "@crvouga/mockingbird-service-sqlite": "workspace:*",
+      },
+      "devDependencies": {
+        "@crvouga/mockingbird-adapter-node": "workspace:*",
+        "@crvouga/mockingbird-core": "workspace:*",
+        "@crvouga/mockingbird-credentials": "workspace:*",
+        "@crvouga/mockingbird-openapi": "workspace:*",
+        "@crvouga/mockingbird-openapi-codegen": "workspace:*",
+        "@crvouga/mockingbird-openapi-metadata": "workspace:*",
+        "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
+        "@crvouga/mockingbird-sqlite": "workspace:*",
+        "@crvouga/mockingbird-testing": "workspace:*",
       },
     },
     "packages/service/notion": {
@@ -4034,6 +4058,7 @@
         "@crvouga/mockingbird-service-mediaconvert": "workspace:*",
         "@crvouga/mockingbird-service-medplum": "workspace:*",
         "@crvouga/mockingbird-service-meta": "workspace:*",
+        "@crvouga/mockingbird-service-mosaic": "workspace:*",
         "@crvouga/mockingbird-service-notion": "workspace:*",
         "@crvouga/mockingbird-service-oauth": "workspace:*",
         "@crvouga/mockingbird-service-odx": "workspace:*",
@@ -4168,6 +4193,7 @@
         "@crvouga/mockingbird-service-meta": "workspace:*",
         "@crvouga/mockingbird-service-microsoft": "workspace:*",
         "@crvouga/mockingbird-service-mongoatlas": "workspace:*",
+        "@crvouga/mockingbird-service-mosaic": "workspace:*",
         "@crvouga/mockingbird-service-notion": "workspace:*",
         "@crvouga/mockingbird-service-oauth": "workspace:*",
         "@crvouga/mockingbird-service-odx": "workspace:*",
@@ -4893,6 +4919,8 @@
     "@crvouga/mockingbird-service-microsoft": ["@crvouga/mockingbird-service-microsoft@workspace:packages/service/microsoft"],
 
     "@crvouga/mockingbird-service-mongoatlas": ["@crvouga/mockingbird-service-mongoatlas@workspace:packages/service/mongoatlas"],
+
+    "@crvouga/mockingbird-service-mosaic": ["@crvouga/mockingbird-service-mosaic@workspace:packages/service/mosaic"],
 
     "@crvouga/mockingbird-service-notion": ["@crvouga/mockingbird-service-notion@workspace:packages/service/notion"],
 

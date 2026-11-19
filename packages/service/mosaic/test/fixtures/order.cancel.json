@@ -1,0 +1,8 @@
+{
+  "status": 200,
+  "body": {
+    "data": true,
+    "error": null,
+    "success": true
+  }
+}

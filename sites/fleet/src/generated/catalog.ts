@@ -629,6 +629,14 @@ export const CATALOG: readonly CatalogEntry[] = [
     "docs": "https://www.mongodb.com/docs/atlas/api/"
   },
   {
+    "target": "mosaic",
+    "package": "@crvouga/mockingbird-service-mosaic",
+    "displayName": "Mosaic Diagnostics",
+    "category": "health",
+    "description": "Stateful emulator of the Mosaic Diagnostics practitioner ordering API.",
+    "website": "https://mosaicdx.com"
+  },
+  {
     "target": "notion",
     "package": "@crvouga/mockingbird-service-notion",
     "displayName": "Notion",
@@ -1191,6 +1199,7 @@ export const LOADERS: Record<string, () => Promise<{ serveTarget?: unknown }>> =
   "meta": () => import("@crvouga/mockingbird-service-meta/server"),
   "microsoft": () => import("@crvouga/mockingbird-service-microsoft/server"),
   "mongoatlas": () => import("@crvouga/mockingbird-service-mongoatlas/server"),
+  "mosaic": () => import("@crvouga/mockingbird-service-mosaic/server"),
   "notion": () => import("@crvouga/mockingbird-service-notion/server"),
   "oauth": () => import("@crvouga/mockingbird-service-oauth/server"),
   "odx": () => import("@crvouga/mockingbird-service-odx/server"),
