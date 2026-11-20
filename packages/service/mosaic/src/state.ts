@@ -10,7 +10,7 @@ import {
   type TestType,
   US_COUNTRY_ID,
 } from "./catalog.js"
-import { parseWireDate, wireDate } from "./wire.js"
+import { parseStoredDate, parseWireDate, wireDate } from "./wire.js"
 
 export type PatientInput = {
   practitionerAccountId?: number | null
@@ -214,15 +214,21 @@ const orderRecord = (body: OrderInput, patient: PatientRecord, id: number, now: 
     dropShipId: null as number | null,
     kitIds: body.kitIds.filter((kitId) => kitId !== 0),
     portalTestTypeIds: body.portalTestTypeIds,
-    dateCreated: new Date(now).toISOString().slice(0, -1),
+    dateCreated: new Date(now).toISOString(),
     includePediatricBag: body.includePediatricBag ?? false,
     pediatricBagQuantity: body.pediatricBagQuantity ?? 0,
   }
 }
 
+const lineDateWire = (value: string | null) =>
+  value === null ? null : wireDate(parseStoredDate(value))
+
 export const orderWire = ({ patientAccountId, ...order }: OrderRecord, lines: LineRecord[]) => ({
   ...order,
-  sampleReceivedDate: lines.find((line) => line.receivedDate !== null)?.receivedDate ?? null,
+  dateCreated: wireDate(parseStoredDate(order.dateCreated), "milliseconds"),
+  sampleReceivedDate: lineDateWire(
+    lines.find((line) => line.receivedDate !== null)?.receivedDate ?? null,
+  ),
   requisitionNumber:
     lines.find((line) => line.requisitionNumber !== null)?.requisitionNumber ?? null,
   dropShipId: order.dropShipId ?? null,
@@ -255,7 +261,11 @@ export const lineWire = (line: LineRecord, order: OrderRecord, patient?: Patient
     status: LINE_STATUSES.find(({ id }) => id === line.statusId)?.name ?? "",
     canCancel: line.statusId === STATUS.placed,
     canEdit: line.statusId === STATUS.placed,
-    salesOrderDateCreated: order.dateCreated.slice(0, 19),
+    salesOrderDateCreated: wireDate(parseStoredDate(order.dateCreated)),
+    shippedDate: lineDateWire(line.shippedDate),
+    receivedDate: lineDateWire(line.receivedDate),
+    estimatedCompletion: lineDateWire(line.estimatedCompletion),
+    completedDate: lineDateWire(line.completedDate),
     languageId: language?.id ?? 0,
     language: language?.name ?? null,
     languageIds: language ? [language.id] : [],
@@ -404,11 +414,12 @@ export class MosaicState {
   }
 
   private applyTransition(id: string, line: LineRecord, change: Transition, now: number) {
-    const stamp = wireDate(now)
+    const second = Math.floor(now / 1000) * 1000
+    const stamp = new Date(second).toISOString()
     const next = { ...line, ...change }
     if (change.statusId === STATUS.processing || change.statusId === STATUS.completed) {
       next.requisitionNumber ??= this.nextRequisitionNumber()
-      next.estimatedCompletion ??= wireDate(now + 7 * 86_400_000)
+      next.estimatedCompletion ??= new Date(second + 7 * 86_400_000).toISOString()
     }
     switch (change.statusId) {
       case STATUS.shipped:

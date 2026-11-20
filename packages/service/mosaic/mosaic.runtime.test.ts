@@ -19,86 +19,206 @@ const harness = (prefix = "/__admin") => {
   return { runtime, client, admin, order }
 }
 
-test("lab transition accepts every status and publishes lifecycle fields on the injected clock", async () => {
+test.each([
+  ["winter", "2025-01-01T12:00:00.321Z", "2025-01-01T06:00:00", "2025-01-08T06:00:00"],
+  ["summer", "2025-07-01T12:00:00.321Z", "2025-07-01T07:00:00", "2025-07-08T07:00:00"],
+])(
+  "lab transition accepts every status and publishes Central lifecycle dates in %s",
+  async (_season, instant, stamp, estimatedCompletion) => {
+    const { admin, client, order } = harness()
+    expect((await admin("/clock", "POST", { now: instant, frozen: true })).status).toBe(200)
+    const { orderId, lineId } = await order()
+    expect((await (await client.getOrder(orderId)).json()).data.dateCreated).toBe(`${stamp}.321`)
+    const transition = (statusId: number, details = {}) =>
+      admin(`/lines/${lineId}/transition`, "POST", { statusId, ...details })
+    let requisitionNumber: number | undefined
+    let dropShipId: number | undefined
+    for (const status of [4, 7, 14, 2, 1, 10, 8, 6, 9, 11, 13, 12, 15]) {
+      const response = await transition(
+        status,
+        status === 7 ? { trackingNumber: "SYNTHETIC-TRACK", courier: "Sample Courier" } : {},
+      )
+      expect(response.status).toBe(200)
+      const line = await response.json()
+      expect(line.statusId).toBe(status)
+      expect(line.salesOrderDateCreated).toBe(stamp)
+      const page = await (await client.lines({ OrderIdFrom: orderId, OrderIdTo: orderId })).json()
+      expect(line).toEqual(page.data[0])
+      if (status === 4)
+        expect((await (await client.getOrder(orderId)).json()).data.dropShipId).toBeNull()
+      if (status === 7) {
+        expect(line).toMatchObject({
+          status: "Shipped to Patient",
+          trackingNumber: "SYNTHETIC-TRACK",
+          courier: "Sample Courier",
+          shippedDate: stamp,
+        })
+        dropShipId = (await (await client.getOrder(orderId)).json()).data.dropShipId
+        expect(dropShipId).toEqual(expect.any(Number))
+      }
+      if (status === 2) {
+        requisitionNumber = line.requisitionNumber
+        expect(line).toMatchObject({
+          receivedDate: stamp,
+          estimatedCompletion,
+        })
+        expect(requisitionNumber).toBeGreaterThan(999_999_999)
+        expect(orderId).toBeLessThanOrEqual(999_999_999)
+      }
+      if (status === 1)
+        expect(line).toMatchObject({
+          completedDate: stamp,
+          resultFileName: `result-${lineId}.pdf`,
+          fileName: `result-${lineId}.pdf`,
+        })
+    }
+    const second = instant.replace(".321", "")
+    const filters = {
+      OrderIdFrom: orderId,
+      OrderIdTo: orderId,
+      PractitionerAccountId: patientBody.practitionerAccountId,
+      TestTypeId: 263,
+      SalesOrderLineStatusId: 15,
+      ReceivedDateFrom: second,
+      ReceivedDateTo: second,
+      CompletedDateFrom: second,
+      CompletedDateTo: second,
+    }
+    expect((await (await client.lines(filters)).json()).totalRecords).toBe(1)
+    const centralFilters = {
+      ...filters,
+      ReceivedDateFrom: stamp,
+      ReceivedDateTo: stamp,
+      CompletedDateFrom: stamp,
+      CompletedDateTo: stamp,
+    }
+    expect((await (await client.lines(centralFilters)).json()).totalRecords).toBe(1)
+    for (const field of ["ReceivedDateFrom", "CompletedDateFrom"]) {
+      expect(
+        (await (await client.lines({ ...centralFilters, [field]: second.slice(0, 19) })).json())
+          .totalRecords,
+      ).toBe(0)
+    }
+    const day = stamp.slice(0, 10)
+    const nextWeek = estimatedCompletion.slice(0, 10)
+    for (const mismatch of [
+      { PractitionerAccountId: 0 },
+      { TestTypeId: 289 },
+      { SalesOrderLineStatusId: 2 },
+      { ReceivedDateFrom: nextWeek },
+      { ReceivedDateTo: day },
+      { CompletedDateFrom: nextWeek },
+      { CompletedDateTo: day },
+      { OrderIdFrom: orderId + 1 },
+      { OrderIdTo: orderId - 1 },
+    ]) {
+      expect((await (await client.lines({ ...filters, ...mismatch })).json()).totalRecords).toBe(0)
+    }
+    expect((await (await client.getOrder(orderId)).json()).data).toMatchObject({
+      requisitionNumber,
+      dropShipId,
+      sampleReceivedDate: stamp,
+    })
+    expect((await transition(100)).status).toBe(400)
+    expect((await transition(7, { shippedDate: "not a date" })).status).toBe(400)
+    expect((await admin("/lines/missing/transition", "POST", { statusId: 1 })).status).toBe(404)
+  },
+)
+
+test("transition date overrides and filters agree across daylight-saving changes", async () => {
   const { admin, client, order } = harness()
   const { orderId, lineId } = await order()
-  const stamp = "2025-07-01T12:00:00"
-  expect((await admin("/clock", "POST", { now: `${stamp}Z`, frozen: true })).status).toBe(200)
-  const transition = (statusId: number, details = {}) =>
-    admin(`/lines/${lineId}/transition`, "POST", { statusId, ...details })
-  let requisitionNumber: number | undefined
-  let dropShipId: number | undefined
-  for (const status of [4, 7, 14, 2, 1, 10, 8, 6, 9, 11, 13, 12, 15]) {
-    const response = await transition(
-      status,
-      status === 7 ? { trackingNumber: "SYNTHETIC-TRACK", courier: "Sample Courier" } : {},
-    )
-    expect(response.status).toBe(200)
-    const line = await response.json()
-    expect(line.statusId).toBe(status)
-    const page = await (await client.lines({ OrderIdFrom: orderId, OrderIdTo: orderId })).json()
-    expect(line).toEqual(page.data[0])
-    if (status === 4)
-      expect((await (await client.getOrder(orderId)).json()).data.dropShipId).toBeNull()
-    if (status === 7) {
-      expect(line).toMatchObject({
-        status: "Shipped to Patient",
-        trackingNumber: "SYNTHETIC-TRACK",
-        courier: "Sample Courier",
-        shippedDate: stamp,
-      })
-      dropShipId = (await (await client.getOrder(orderId)).json()).data.dropShipId
-      expect(dropShipId).toEqual(expect.any(Number))
-    }
-    if (status === 2) {
-      requisitionNumber = line.requisitionNumber
-      expect(line).toMatchObject({
-        receivedDate: stamp,
-        estimatedCompletion: "2025-07-08T12:00:00",
-      })
-      expect(requisitionNumber).toBeGreaterThan(999_999_999)
-      expect(orderId).toBeLessThanOrEqual(999_999_999)
-    }
-    if (status === 1)
-      expect(line).toMatchObject({
-        completedDate: stamp,
-        resultFileName: `result-${lineId}.pdf`,
-        fileName: `result-${lineId}.pdf`,
-      })
-  }
-  const filters = {
-    OrderIdFrom: orderId,
-    OrderIdTo: orderId,
-    PractitionerAccountId: patientBody.practitionerAccountId,
-    TestTypeId: 263,
-    SalesOrderLineStatusId: 15,
-    ReceivedDateFrom: "2025-07-01T12:00:00Z",
-    ReceivedDateTo: "2025-07-01T12:00:00Z",
-    CompletedDateFrom: "2025-07-01T12:00:00Z",
-    CompletedDateTo: "2025-07-01T12:00:00Z",
-  }
-  expect((await (await client.lines(filters)).json()).totalRecords).toBe(1)
-  for (const mismatch of [
-    { PractitionerAccountId: 0 },
-    { TestTypeId: 289 },
-    { SalesOrderLineStatusId: 2 },
-    { ReceivedDateFrom: "2025-07-02" },
-    { ReceivedDateTo: "2025-06-30" },
-    { CompletedDateFrom: "2025-07-02" },
-    { CompletedDateTo: "2025-06-30" },
-    { OrderIdFrom: orderId + 1 },
-    { OrderIdTo: orderId - 1 },
-  ]) {
-    expect((await (await client.lines({ ...filters, ...mismatch })).json()).totalRecords).toBe(0)
-  }
-  expect((await (await client.getOrder(orderId)).json()).data).toMatchObject({
-    requisitionNumber,
-    dropShipId,
-    sampleReceivedDate: stamp,
+  const path = `/lines/${lineId}/transition`
+  const response = await admin(path, "POST", {
+    statusId: 1,
+    shippedDate: "2025-03-09",
+    receivedDate: "2025-03-09T02:30:00",
+    estimatedCompletion: "2025-11-02T01:30:00",
+    completedDate: "2025-11-02T01:30:00-06:00",
   })
-  expect((await transition(100)).status).toBe(400)
-  expect((await transition(7, { shippedDate: "not a date" })).status).toBe(400)
-  expect((await admin("/lines/missing/transition", "POST", { statusId: 1 })).status).toBe(404)
+  expect(response.status).toBe(200)
+  expect(await response.json()).toMatchObject({
+    shippedDate: "2025-03-09T00:00:00",
+    receivedDate: "2025-03-09T03:30:00",
+    estimatedCompletion: "2025-11-02T01:30:00",
+    completedDate: "2025-11-02T01:30:00",
+  })
+  expect((await (await client.getOrder(orderId)).json()).data.sampleReceivedDate).toBe(
+    "2025-03-09T03:30:00",
+  )
+  const count = async (received: string, completed: string) =>
+    (
+      await (
+        await client.lines({
+          ReceivedDateFrom: received,
+          ReceivedDateTo: received,
+          CompletedDateFrom: completed,
+          CompletedDateTo: completed,
+        })
+      ).json()
+    ).totalRecords
+  expect(await count("2025-03-09T08:30:00Z", "2025-11-02T07:30:00Z")).toBe(1)
+  expect(await count("2025-03-09T02:30:00", "2025-11-02T01:30:00-06:00")).toBe(1)
+  expect(await count("2025-03-09T02:30:00", "2025-11-02T01:30:00")).toBe(0)
+
+  expect(
+    (await admin(path, "POST", { statusId: 1, completedDate: "2025-11-02T01:30:00" })).status,
+  ).toBe(200)
+  expect(await count("2025-03-09T03:30:00", "2025-11-02T06:30:00Z")).toBe(1)
+  expect(await count("2025-03-09T03:30:00", "2025-11-02T07:30:00Z")).toBe(0)
+})
+
+test("patient birth dates and calendar filters use Central time", async () => {
+  const { admin, client } = harness()
+  expect(
+    (await admin("/clock", "POST", { now: "2025-05-22T03:00:00Z", frozen: true })).status,
+  ).toBe(200)
+  const patientId = await client.id(
+    await client.createPatient({ ...patientBody, birthDate: "1985-05-22" }),
+  )
+  const getPatient = async () => (await (await client.getPatient(patientId)).json()).data
+  expect(await getPatient()).toMatchObject({ birthDate: "1985-05-22T00:00:00", age: 39 })
+
+  const update = await client.updatePatient({
+    patientAccountId: patientId,
+    birthDate: "1985-05-23T02:30:00Z",
+  })
+  expect(update.status).toBe(200)
+  expect(await update.json()).toMatchObject({ birthDate: "1985-05-22T21:30:00", age: 39 })
+  for (const birthDate of ["1985-05-22", "1985-05-23T02:30:00Z"]) {
+    const patients = await (await client.listPatients({ BirthDate: birthDate })).json()
+    expect(
+      patients.data.map((patient: { patientAccountId: number }) => patient.patientAccountId),
+    ).toEqual([patientId])
+  }
+  expect((await (await client.listPatients({ BirthDate: "1985-05-23" })).json()).data).toEqual([])
+})
+
+test("stored UTC timestamps from older snapshots keep their original instants", async () => {
+  const { runtime, client, order } = harness()
+  const { orderId, lineId } = await order()
+  const state = runtime.instance().state
+  const oldOrder = state.orders.get(String(orderId))
+  const oldLine = state.lines.get(lineId)
+  if (!oldOrder || !oldLine) throw new Error("Expected the placed order and line to be stored")
+  state.orders.update(String(orderId), { ...oldOrder, dateCreated: "2025-01-01T12:00:00.321" })
+  state.lines.update(lineId, { ...oldLine, receivedDate: "2025-07-01T12:00:00" })
+
+  expect((await (await client.getOrder(orderId)).json()).data).toMatchObject({
+    dateCreated: "2025-01-01T06:00:00.321",
+    sampleReceivedDate: "2025-07-01T07:00:00",
+  })
+  const page = await (
+    await client.lines({
+      ReceivedDateFrom: "2025-07-01T07:00:00",
+      ReceivedDateTo: "2025-07-01T12:00:00Z",
+    })
+  ).json()
+  expect(page.totalRecords).toBe(1)
+  expect(page.data[0]).toMatchObject({
+    salesOrderDateCreated: "2025-01-01T06:00:00",
+    receivedDate: "2025-07-01T07:00:00",
+  })
 })
 
 test("result controls merge PDF, report, and alternate result test type for the same file", async () => {
@@ -115,8 +235,8 @@ test("result controls merge PDF, report, and alternate result test type for the 
   expect(line).toMatchObject({
     status: "Results Completed",
     portalTestTypeId: 263,
-    estimatedCompletion: "2025-07-08T12:00:00",
-    completedDate: "2025-07-01T12:00:00",
+    estimatedCompletion: "2025-07-08T07:00:00",
+    completedDate: "2025-07-01T07:00:00",
   })
   const reqNum = line.requisitionNumber
   expect((await (await client.listResults(orderId)).json()).data).toEqual([

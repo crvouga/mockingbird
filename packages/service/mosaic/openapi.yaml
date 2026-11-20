@@ -4,7 +4,10 @@ info:
   title: Mosaic Diagnostics GPL API Services
   version: v1
   description: Practitioner ordering contract adapted from the published v1 OpenAPI
-    and corrected against observed wire responses.
+    and corrected against observed wire responses. The API returns timestamps as US Central
+    wall-clock time (America/Chicago) with no offset. Inputs without an offset use US Central
+    time, with date-only inputs taken at midnight. Inputs with an explicit offset identify
+    an instant.
 servers:
 - url: http://127.0.0.1:8931
   description: Standalone Mockingbird emulator

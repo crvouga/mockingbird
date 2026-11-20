@@ -137,7 +137,9 @@ test("#5 unknown patient returns the observed unsuccessful envelope", async () =
 
 test("#6 placed order and line expose the internal patient id and shipping fields", async () => {
   const { client, admin, line } = scenario()
-  await admin("/clock", "POST", { now: "2025-07-01T12:00:00.000Z", freeze: true })
+  expect(
+    (await admin("/clock", "POST", { now: "2025-07-01T12:00:00.000Z", frozen: true })).status,
+  ).toBe(200)
   const patientAccountId = await client.id(await client.createPatient())
   const orderResponse = await client.createOrder(orderBody(patientAccountId))
   expect(orderResponse.status).toBe(200)
@@ -160,7 +162,7 @@ test("#6 placed order and line expose the internal patient id and shipping field
       shippingAddress: patientBody.address,
       shippingCity: patientBody.city,
       shippingPostalCode: patientBody.postalCode,
-      dateCreated: expect.any(String),
+      dateCreated: "2025-07-01T07:00:00.000",
     },
     error: null,
     success: true,

@@ -37,12 +37,14 @@ import {
   envelope,
   input,
   ok,
+  parseStoredDate,
   parseWireDate,
   problem,
   query,
   queryValue,
   textDate,
   unauthenticated,
+  wireDate,
 } from "./wire.js"
 
 export type MosaicAPIOptions = APIOptions & { now?: () => number }
@@ -63,11 +65,15 @@ const tagged = (response: Response, ids: Record<string, number | string>) =>
 const textMatches = (filter: string | undefined, value: string) =>
   filter === undefined || filter.toLowerCase() === value.toLowerCase()
 
-const dateInRange = (value: string | null, from?: string, to?: string) => {
-  if (!from && !to) return true
-  if (!value) return false
-  const time = parseWireDate(value)
-  return (!from || time >= parseWireDate(from)) && (!to || time <= parseWireDate(to))
+const dateRange = (from?: string, to?: string) => {
+  if (!from && !to) return () => true
+  const start = from ? parseWireDate(from) : -Infinity
+  const end = to ? parseWireDate(to) : Infinity
+  return (value: string | null) => {
+    if (value === null) return false
+    const time = parseStoredDate(value)
+    return time >= start && time <= end
+  }
 }
 
 export class MosaicAPI implements FetchAPI {
@@ -226,6 +232,8 @@ export class MosaicAPI implements FetchAPI {
       (get) => {
         const practitioner = get("PractitionerAccountId")
         const birthDate = get("BirthDate")
+        const birthday =
+          birthDate === undefined ? undefined : wireDate(parseWireDate(birthDate)).slice(0, 10)
         const rows = this.state.patients.list({
           where: (patient) =>
             (practitioner === undefined ||
@@ -237,7 +245,7 @@ export class MosaicAPI implements FetchAPI {
               get("FullName"),
               [patient.firstName, patient.lastName].filter(Boolean).join(" "),
             ) &&
-            (birthDate === undefined || birthDate.slice(0, 10) === patient.birthDate?.slice(0, 10)),
+            (birthday === undefined || birthday === patient.birthDate?.slice(0, 10)),
         })
         return ok(rows.map(({ value }) => patientWire(value, context.now())))
       },
@@ -267,6 +275,8 @@ export class MosaicAPI implements FetchAPI {
       const pageIndex = number("PageIndex", 1)
       const perPage = number("RecordsPerPage", 50)
       if (pageIndex < 0 || perPage < 1) return problem(context, 400)
+      const receivedInRange = dateRange(get("ReceivedDateFrom"), get("ReceivedDateTo"))
+      const completedInRange = dateRange(get("CompletedDateFrom"), get("CompletedDateTo"))
       const rows = this.state.lines.list({ order: "oldest" }).flatMap(({ value: line }) => {
         const order = this.state.orders.get(String(line.orderId))
         if (
@@ -277,8 +287,8 @@ export class MosaicAPI implements FetchAPI {
           !equals("PatientAccountId", order.patientAccountId) ||
           !equals("TestTypeId", line.portalTestTypeId) ||
           !equals("SalesOrderLineStatusId", line.statusId) ||
-          !dateInRange(line.receivedDate, get("ReceivedDateFrom"), get("ReceivedDateTo")) ||
-          !dateInRange(line.completedDate, get("CompletedDateFrom"), get("CompletedDateTo"))
+          !receivedInRange(line.receivedDate) ||
+          !completedInRange(line.completedDate)
         )
           return []
         return [lineWire(line, order, this.state.patients.get(String(order.patientAccountId)))]

@@ -25,14 +25,50 @@ export const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
 export const integer = (value: unknown): value is number => Number.isSafeInteger(value)
-export const parseWireDate = (value: string) =>
-  Date.parse(/T/.test(value) && !/(?:Z|[+-]\d{2}:?\d{2})$/i.test(value) ? `${value}Z` : value)
+
+const centralTime = new Intl.DateTimeFormat("en-US", {
+  timeZone: "America/Chicago",
+  timeZoneName: "longOffset",
+})
+const dayMs = 86_400_000
+const hasOffset = (value: string) => /(?:Z|[+-]\d{2}:?\d{2})$/i.test(value)
+
+const centralOffset = (time: number) => {
+  const offset = centralTime.formatToParts(time).find(({ type }) => type === "timeZoneName")?.value
+  const [, sign, hours, minutes, seconds = "0"] =
+    /^GMT([+-])(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(offset ?? "") ?? []
+  return sign
+    ? (sign === "-" ? -1 : 1) *
+        (Number(hours) * 3600 + Number(minutes) * 60 + Number(seconds)) *
+        1000
+    : 0
+}
+
+export const parseWireDate = (value: string) => {
+  if (hasOffset(value)) return Date.parse(value)
+  const wallTime = Date.parse(value.includes("T") ? `${value}Z` : value)
+  if (!Number.isFinite(wallTime)) return wallTime
+
+  const before = wallTime - centralOffset(wallTime - dayMs)
+  const after = wallTime - centralOffset(wallTime + dayMs)
+  if (before === after) return before
+
+  const earlier = Math.min(before, after)
+  // Use the first occurrence of a repeated time and move skipped times forward by the gap.
+  return earlier + centralOffset(earlier) === wallTime ? earlier : Math.max(before, after)
+}
 
 export const textDate = (value: unknown): value is string =>
   typeof value === "string" &&
   /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}.*)?$/.test(value) &&
   Number.isFinite(parseWireDate(value))
-export const wireDate = (time: number) => new Date(time).toISOString().slice(0, 19)
+
+export const wireDate = (time: number, precision: "seconds" | "milliseconds" = "seconds") =>
+  new Date(time + centralOffset(time)).toISOString().slice(0, precision === "seconds" ? 19 : -1)
+
+// Older snapshots stored offset-free order and lifecycle timestamps as UTC.
+export const parseStoredDate = (value: string) =>
+  value.includes("T") && !hasOffset(value) ? Date.parse(`${value}Z`) : parseWireDate(value)
 
 export const problem = (
   scope: Pick<OperationContext, "sqlite" | "namespace">,

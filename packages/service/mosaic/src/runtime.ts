@@ -15,7 +15,7 @@ import { CANCEL_REASONS, LINE_STATUSES, type TestType } from "./catalog.js"
 import { document } from "./generated/openapi.js"
 import { normalizeVendorRequest } from "./routing.js"
 import { lineWire, type MosaicState, type Result, type Transition } from "./state.js"
-import { apiKey, envelope, integer, isRecord, textDate } from "./wire.js"
+import { apiKey, envelope, integer, isRecord, parseWireDate, textDate } from "./wire.js"
 
 export type MosaicRuntime = ServiceRuntime<MosaicAPI>
 export type MosaicRuntimeOptions = Pick<
@@ -84,7 +84,7 @@ const parseTransition = (body: unknown): Transition | string => {
     const value = body[key]
     if (value === undefined) continue
     if (!textDate(value)) return `${key} must be a date or timestamp`
-    change[key] = value
+    change[key] = new Date(parseWireDate(value)).toISOString()
   }
   if (body.requisitionNumber !== undefined) {
     if (!integer(body.requisitionNumber) || body.requisitionNumber <= 0)

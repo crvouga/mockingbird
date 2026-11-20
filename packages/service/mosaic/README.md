@@ -91,6 +91,14 @@ try {
     page, as in `error.missing-lines.json`. The offline replay tests combine the sampled arrays
     with that recorded envelope and compare status, keys, types, and nullability.
 
+### Timestamps
+
+The API returns timestamps as US Central wall-clock time (`America/Chicago`) with no offset.
+Offset-free inputs, including order-line date filters, use the same time zone. Date-only inputs
+use midnight Central. An explicit `Z` or numeric offset identifies an instant. At daylight-saving
+changes, a repeated local time uses its earlier occurrence and a skipped local time moves forward
+by the gap. The shared admin clock still takes instants.
+
 ### Test setup
 
 Use `GET /__admin/state/lines` to find the line's storage ID. A newly placed line uses
@@ -128,9 +136,9 @@ emits no webhooks.
 ## Assumptions (not observed at the vendor)
 
 - A partial `PUT /api/patient` preserves omitted fields and applies supplied fields. An update
-  for an unknown account returns 404. Birth dates accept ISO-style dates and timestamps, with a
-  timezone-free timestamp interpreted as UTC. Empty and practitioner-only creates are the verified
-  rejection cases. Other minimum demographic requirements and validation wording are assumed.
+  for an unknown account returns 404. Birth dates accept ISO-style dates and timestamps.
+  Empty and practitioner-only creates are the verified rejection cases. Other minimum demographic
+  requirements and validation wording are assumed.
 - Patient text filters compare case-insensitively, non-empty date bounds are inclusive, and
   the default line page is page 1 with up to 50 lines in creation order. For a query name repeated
   with different casing the emulator uses its first value. A missing country filter defaults to
