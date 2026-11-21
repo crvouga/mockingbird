@@ -213,7 +213,7 @@ export async function renderMarkdown(
 }
 
 const GITHUB_SERVICE =
-  /^https:\/\/github\.com\/crvouga\/mockingbird\/(?:blob|tree)\/main\/packages\/service\/([a-z0-9-]+)(\/README\.md)?\/?(#.*)?$/
+  /^https:\/\/github\.com\/(?:crvouga|crvouga-organization)\/mockingbird\/(?:blob|tree)\/main\/packages\/service\/([a-z0-9-]+)(\/README\.md)?\/?(#.*)?$/
 
 export function rewriteHref(href: string, ctx: LinkContext, mode: "link" | "raw" = "link"): string {
   if (href.startsWith("#")) return href

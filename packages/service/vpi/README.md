@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-vpi
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 > [!WARNING]
 > **Our app's `VPI_API_URL` defaults to PRODUCTION** (`https://api.vpicompounding.net`, see
@@ -15,7 +15,7 @@ the provider-signature duplicate check, `saveNewPrescription`, and the three pag
 status lists our poller reads. Prescriptions move only when a test says so (an admin
 transition). VPI sends no webhooks: our backend polls page 1 (limit 5) of each list.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/vpi/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/vpi/SUPPORT.md)
 - The vendor publishes no spec: the contract (`openapi.yaml`) is hand-derived from our client's
   zod schemas (`vpi-api.contracts.ts` plus the client-local schemas in `vpi-api.client.ts`).
   The acceptance tests parse every emulator response with a verbatim port of those schemas.
@@ -166,4 +166,4 @@ verify in every namespace.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--token-ttl`); port 8802. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

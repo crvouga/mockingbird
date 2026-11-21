@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-shopify
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the Shopify Admin GraphQL API for a backend that fulfils orders through
 Shopify: it creates orders (directly or through draft orders), reads their fulfilment status and

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-daily
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **Daily.co** REST API for test suites: rooms (create, get, update,
 delete, presence, eject), meeting tokens (mint and validate), meetings (list and get),
@@ -11,7 +11,7 @@ transcript written to the stack's S3. Every EMR
 booking creates a room and a token; today a broken Daily integration is silent because booking
 swallows the error. Against the emulator it is observable and assertable.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/daily/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/daily/SUPPORT.md)
 - The contract (`openapi.yaml`) is trimmed from Daily's documented REST API to the calls our
   backend and EMR make, with the fields they send.
 
@@ -251,7 +251,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `room_
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8800. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 For a one-shot join failure, `POST /__admin/call-fault {type}` accepts `ejected`,
 `exp-token`, `no-room`, `exp-room`, `nbf-room`, or `room-full`. The next browser join

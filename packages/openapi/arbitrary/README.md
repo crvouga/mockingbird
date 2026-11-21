@@ -86,4 +86,4 @@ Gotcha: when `mutationSites` finds nothing to break (an unconstrained schema suc
 - [`@crvouga/mockingbird-openapi`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi) — schema resolution and `validateValue`.
 - [`@crvouga/mockingbird-commands`](https://www.npmjs.com/package/@crvouga/mockingbird-commands) — builds whole API commands from these arbitraries.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

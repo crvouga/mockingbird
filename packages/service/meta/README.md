@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-meta
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful Meta Graph v26 emulator for server-side Conversions API events and marketing reporting. It
 preserves privacy-safe hashed user fields, event deduplication, ambiguous writes, Graph errors,

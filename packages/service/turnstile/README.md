@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-turnstile
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Cloudflare Turnstile server-side Siteverify emulator. It never solves or issues real challenges.
 

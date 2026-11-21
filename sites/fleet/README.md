@@ -144,7 +144,7 @@ like behind any load balancer.
 
 ```sh
 # Try it: no dependencies, data in memory, sign in by typing an email (loopback only).
-docker run --rm -p 8080:8080 -e AUTH_DEV_LOGIN=1 ghcr.io/crvouga/chrisvouga-mockingbird-fleet
+docker run --rm -p 8080:8080 -e AUTH_DEV_LOGIN=1 ghcr.io/crvouga-organization/chrisvouga-mockingbird-fleet
 
 # Run it for real: copy .env.example to .env and fill in the REQUIRED block.
 docker run --rm --env-file .env <image> bun dist/main.js check   # validate, then exit
@@ -328,7 +328,7 @@ On loopback with no `DATABASE_URL` / `S3_*`, storage is in memory, for developme
 
 | Platform piece | How this service uses it |
 | --- | --- |
-| Hosting | Service `mockingbird-fleet`, image `ghcr.io/crvouga/chrisvouga-mockingbird-fleet`, port 8080, health `GET /health` (no database, no auth). `GET /ready` checks the database. Set `TRUSTED_PROXY_HOPS=1`. |
+| Hosting | Service `mockingbird-fleet`, image `ghcr.io/crvouga-organization/chrisvouga-mockingbird-fleet`, port 8080, health `GET /health` (no database, no auth). `GET /ready` checks the database. Set `TRUSTED_PROXY_HOPS=1`. |
 | Vault | Secrets are declared in the service inventory and arrive as env vars. `OPERATOR_TOKEN` is the one new key, and only if operator controls are wanted (sessions are database rows, so there is no signing key). |
 | PostgreSQL | `DATABASE_URL`, schema `mockingbird_fleet`. Migrations run at boot under an advisory lock and touch only that schema. |
 | Object store | The shared R2 bucket, under `mockingbird-fleet/` only. |

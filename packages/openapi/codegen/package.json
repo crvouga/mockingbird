@@ -18,10 +18,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
     "directory": "packages/openapi/codegen"
   },
-  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/openapi/codegen#readme",
+  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/openapi/codegen#readme",
   "keywords": [
     "mockingbird",
     "openapi",

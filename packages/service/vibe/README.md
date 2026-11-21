@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-vibe
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Vibe revision **2026-06-01** OAuth and asynchronous campaign-spend reports.
 

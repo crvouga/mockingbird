@@ -34,10 +34,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
     "directory": "packages/service/step-functions"
   },
-  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/step-functions#readme",
+  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/step-functions#readme",
   "keywords": [
     "mockingbird",
     "aws",
@@ -82,7 +82,7 @@
         "GET /__admin/faults/presets",
         "GET /__admin/ui"
       ],
-      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "scripts": {

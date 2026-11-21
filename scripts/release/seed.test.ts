@@ -20,7 +20,7 @@ case '${name}'" $1" in
   'gh run')
     case "$2" in
       list) echo '[{"databaseId":42,"status":"completed","conclusion":"failure"}]';;
-      view) echo 'Check its Trusted Publisher (repo crvouga/mockingbird, workflow ci.yml): https://www.npmjs.com/package/@crvouga/mockingbird-service-ecs/access';;
+      view) echo 'Check its Trusted Publisher (repo crvouga-organization/mockingbird, workflow ci.yml): https://www.npmjs.com/package/@crvouga/mockingbird-service-ecs/access';;
       *) exit 99;;
     esac;;
   'bun scripts/release/publish.ts') exit 0;;

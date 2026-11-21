@@ -8,7 +8,7 @@ Working on this repo: requirements, how the packages are layered, and the qualit
 - npm is required for the package-integrity gates (`bunx publint`, `bunx attw`); Bun runs the rest.
 
 ```bash
-git clone https://github.com/crvouga/mockingbird.git && cd mockingbird
+git clone https://github.com/crvouga-organization/mockingbird.git && cd mockingbird
 bun run setup   # install, build every package, create .env.local from .env.example
 bun test
 ```
@@ -70,7 +70,7 @@ bun run health -- --no-interactive               # disable browser approval in a
 | Check | What it verifies |
 | --- | --- |
 | `npm` | Every public service exists on npm; `latest` resolves, metadata and tarball integrity exist, current services are not deprecated, exact internal dependency pins exist, stable release tags agree with npm, current tags have GitHub Releases, and retired packages are absent or deprecated |
-| `trusted-publisher` | Each public package trusts `crvouga/mockingbird`, `ci.yml`, an empty environment, and direct `npm publish`; missing packages and unreadable settings are distinct |
+| `trusted-publisher` | Each public package trusts `crvouga-organization/mockingbird`, `ci.yml`, an empty environment, and direct `npm publish`; missing packages and unreadable settings are distinct |
 | `github` | Repository and Actions are enabled, main is protected, workflow files are registered and active, latest main runs succeed, schedules are not overdue, and the Actions cache stays below its 10 GiB budget |
 | `secrets` | Required workflow secrets, effective repository/organization secret names, parity workflow env mappings, scheduled parity readiness, and optional local/on-demand credentials; values are never printed or fetched from GitHub |
 | `docs` | Fresh shared hosting contract and authoritative fleet inventory, HTTPS pages and machine-readable routes, all service catalog entries, deployed `llms.txt` versus main, webhook runtime and read protection, and immutable deployed revision evidence |
@@ -248,12 +248,12 @@ ordering example's browser dependencies are optimized before its first launch. T
 boundary, keep the dev server running, run `bun run docs:build`, then reload
 `/examples/medical-testing` and open the Example, Notifications and Emulators tabs.
 
-The docs site (`sites/docs`) is hosted by `crvouga/personal` as the service
+The docs site (`sites/docs`) is hosted by `crvouga-organization/personal` as the service
 `mockingbird-docs` ([cloud infrastructure guide §4](https://www.chrisvouga.dev/llms-cloud.txt)).
 [`sites/docs/Dockerfile`](../sites/docs/Dockerfile) builds the static Astro site and serves it
 with nginx on port 80. Its build context is the repo root, because the site renders every service
 package. On every push to `main`, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml)
-calls `crvouga/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga/chrisvouga-mockingbird-docs:<sha>`,
-and then `crvouga/personal` deploys that exact image and health-checks it. Railway never builds this repo.
+calls `crvouga-organization/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga-organization/chrisvouga-mockingbird-docs:<sha>`,
+and then `crvouga-organization/personal` deploys that exact image and health-checks it. Railway never builds this repo.
 
 To check the image locally, run `docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs`.

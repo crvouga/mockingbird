@@ -2,7 +2,7 @@
 
 > **Internal package — not published to npm.** Mockingbird publishes only its emulator services (`@crvouga/mockingbird-service-*`), which bundle this code. It is documented here for contributors to this repo.
 
-Loads third-party sandbox credentials for live parity runs from the environment, plus helpers to scrub those secrets from logs. Locally the environment is `.env.local` (Bun loads it automatically). In GitHub Actions it is repository secrets exposed as env vars (see [docs/SECRETS.md](https://github.com/crvouga/mockingbird/blob/main/docs/SECRETS.md)). Use it in a live-parity script before calling `parity(...)` from [`@crvouga/mockingbird-parity`](https://github.com/crvouga/mockingbird/tree/main/packages/parity/runner). You do not need it for self-parity tests.
+Loads third-party sandbox credentials for live parity runs from the environment, plus helpers to scrub those secrets from logs. Locally the environment is `.env.local` (Bun loads it automatically). In GitHub Actions it is repository secrets exposed as env vars (see [docs/SECRETS.md](https://github.com/crvouga-organization/mockingbird/blob/main/docs/SECRETS.md)). Use it in a live-parity script before calling `parity(...)` from [`@crvouga/mockingbird-parity`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/parity/runner). You do not need it for self-parity tests.
 
 No dependencies and no filesystem access. ESM only, Node >= 22 or Bun >= 1.2.
 
@@ -42,6 +42,6 @@ Exported types: `CredentialSpec<F>` (`{ provider; fields: Record<F, envVarName> 
 
 ## Related
 
-- [`@crvouga/mockingbird-parity`](https://github.com/crvouga/mockingbird/tree/main/packages/parity/runner): pass `createRedactor(credentials.secrets)` as its `redact` option.
+- [`@crvouga/mockingbird-parity`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/parity/runner): pass `createRedactor(credentials.secrets)` as its `redact` option.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
