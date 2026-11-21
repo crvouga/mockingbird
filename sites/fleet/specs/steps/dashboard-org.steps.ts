@@ -254,11 +254,11 @@ Then("today is listed under requests per day with {string}", async ({ dash }, co
 // ---- keys and tokens -----------------------------------------------------------------------
 
 Then("the key {string} is listed as {string}", async ({ dash }, name: string, role: string) => {
-  await expect(dash.row("API keys", name).getByText(role, { exact: true })).toBeVisible()
+  await expect(dash.namedRow("API keys", name).getByText(role, { exact: true })).toBeVisible()
 })
 
 Then("the key {string} says {string}", async ({ dash }, name: string, text: string) => {
-  await expect(dash.row("API keys", name)).toContainText(text)
+  await expect(dash.namedRow("API keys", name)).toContainText(text)
 })
 
 Then("the token {string} is listed", async ({ dash }, name: string) => {
@@ -303,7 +303,7 @@ When("someone uses the secret on screen to sign in from another browser", async 
 })
 
 Then("the details of the key {string} are shown in full", async ({ dash }, name: string) => {
-  const details = dash.row("API keys", name).getByText("Last used")
+  const details = dash.namedRow("API keys", name).getByText("Last used")
   await expect(details).toBeVisible()
   const { content, box } = await details.evaluate((element) => ({
     content: element.scrollWidth,
