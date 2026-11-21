@@ -6,7 +6,8 @@ import { SYSTEM_SERVICES } from "./services.js"
 export const DEV_PROXY_PATH = "/__dev"
 
 /** The page that explains dev resources, linked from the System screen. */
-export const DEV_DOCS_URL = "https://github.com/crvouga/mockingbird/blob/main/docs/DEV_RESOURCES.md"
+export const DEV_DOCS_URL =
+  "https://github.com/crvouga-organization/mockingbird/blob/main/docs/DEV_RESOURCES.md"
 
 /**
  * The browser half of dev resources: transports for the emulators to forward through, and the
