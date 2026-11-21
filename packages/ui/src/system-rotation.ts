@@ -25,6 +25,55 @@ export function writeExcluded(storage: () => Store, excluded: ReadonlySet<string
   }
 }
 
+/** localStorage key holding the switcher's order (System included), as a JSON string array. */
+export const ORDER_KEY = "mockingbird.system-switcher.order"
+
+/** The saved order. Unreadable or malformed storage means the default order. */
+export function readOrder(storage: () => Store, ids: readonly string[]): string[] {
+  try {
+    const parsed: unknown = JSON.parse(storage().getItem(ORDER_KEY) ?? "[]")
+    if (Array.isArray(parsed)) return reconcileOrder(parsed, ids)
+  } catch {
+    /* Storage can be unavailable or hold something else; the default order stands. */
+  }
+  return [...ids]
+}
+
+/**
+ * `wanted` reconciled with the ids that exist: unknown entries are dropped, and an id `wanted`
+ * lacks keeps its default place after the id that precedes it in `ids`.
+ */
+export function reconcileOrder(wanted: readonly unknown[], ids: readonly string[]): string[] {
+  const order = [
+    ...new Set(wanted.filter((id): id is string => typeof id === "string" && ids.includes(id))),
+  ]
+  ids.forEach((id, index) => {
+    if (order.includes(id)) return
+    const before = ids
+      .slice(0, index)
+      .reverse()
+      .find((candidate) => order.includes(candidate))
+    order.splice(before === undefined ? 0 : order.indexOf(before) + 1, 0, id)
+  })
+  return order
+}
+
+export function writeOrder(storage: () => Store, order: readonly string[]): void {
+  try {
+    storage().setItem(ORDER_KEY, JSON.stringify(order))
+  } catch {
+    /* The order is a convenience; it holds for this session without storage. */
+  }
+}
+
+/** `list` with the item at `from` moved to `to`. */
+export function move<T>(list: readonly T[], from: number, to: number): T[] {
+  const next = [...list]
+  const [item] = next.splice(from, 1)
+  if (item !== undefined) next.splice(Math.max(0, Math.min(to, next.length)), 0, item)
+  return next
+}
+
 /**
  * The id one step from `current` through `order`, skipping excluded ids. "system" is never
  * excluded, so there is always somewhere to go. An excluded `current` (opened by URL or by its

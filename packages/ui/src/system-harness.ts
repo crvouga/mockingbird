@@ -1,8 +1,17 @@
 /// <reference lib="dom" />
-import { readExcluded, stepRotation, writeExcluded } from "./system-rotation.js"
+
+import { paintIcon, SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
+import {
+  readExcluded,
+  readOrder,
+  reconcileOrder,
+  stepRotation,
+  writeExcluded,
+  writeOrder,
+} from "./system-rotation.js"
 import { mountSystemScreen, SYSTEM_CSS, type SystemServices } from "./system-screen.js"
 
-export { ROTATION_KEY } from "./system-rotation.js"
+export { ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
 export type {
   SystemSandboxStatus,
   SystemService,
@@ -14,8 +23,10 @@ export type {
 export type SystemSurface = {
   id: string
   label: string
-  /** One line shown on the surface's card on the System screen. */
+  /** One line shown on the surface's row on the System screen. */
   description?: string
+  /** Shown on its row and in the switcher's tooltips; see `SystemIcon`. Defaults to its first letter. */
+  icon?: SystemIcon
   mount(host: HTMLElement, signal: AbortSignal): Promise<() => void> | (() => void)
 }
 export type SystemHarnessOptions = {
@@ -40,8 +51,9 @@ export type SystemHarness = {
  * The reserved System surface is always reachable. URL state is opt-in for embedded hosts.
  * The switcher pill docks to the middle of the left edge until dragged; the edge and the
  * position along it are kept in localStorage, so it returns there after a reload or resize.
- * The System screen's "In switcher" toggles choose which surfaces the arrows cycle through (kept
- * in localStorage under ROTATION_KEY); `show(id)`, the URL and each card's Open still reach all.
+ * The System screen's "In switcher" toggles choose which surfaces the arrows cycle through, and
+ * dragging its rows sets the order they go in (kept in localStorage under ROTATION_KEY and
+ * ORDER_KEY); `show(id)`, the URL and each row's Open still reach every surface.
  */
 export function mountSystemHarness(
   host: HTMLElement,
@@ -91,6 +103,7 @@ export function mountSystemHarness(
   let current = ""
   const storage = () => win.localStorage
   const excluded = readExcluded(storage)
+  let order = readOrder(storage, ["system", ...surfaces.map((surface) => surface.id)])
   const controller = new AbortController()
   type Entry = {
     spec: SystemSurface
@@ -105,13 +118,28 @@ export function mountSystemHarness(
       label: "System",
       mount: (panel) =>
         mountSystemScreen(panel, {
-          apps: surfaces,
+          apps: order.map((id) =>
+            id === "system"
+              ? {
+                  id,
+                  label: "System",
+                  description: "This screen: the apps, the switcher and the services behind them.",
+                  icon: SYSTEM_ICONS.system,
+                }
+              : (surfaces.find((surface) => surface.id === id) as SystemSurface),
+          ),
           open: (id) => void show(id),
-          inRotation: (id) => !excluded.has(id),
+          inRotation: (id) => id === "system" || !excluded.has(id),
           setInRotation(id, included) {
+            if (id === "system") return
             if (included) excluded.delete(id)
             else excluded.add(id)
             writeExcluded(storage, excluded)
+            paintArrows()
+          },
+          setOrder(ids) {
+            order = reconcileOrder(ids, order)
+            writeOrder(storage, order)
             paintArrows()
           },
           services: options.services,
@@ -190,7 +218,6 @@ export function mountSystemHarness(
     await load(entry)
   }
   function neighbour(step: -1 | 1): Entry {
-    const order = entries.map((entry) => entry.spec.id)
     const id = stepRotation(order, excluded, current, step)
     return entries.find((entry) => entry.spec.id === id) ?? (entries[0] as Entry)
   }
@@ -209,7 +236,16 @@ export function mountSystemHarness(
   let tipFor: HTMLButtonElement | undefined
   function showTip(button: HTMLButtonElement) {
     tipFor = button
-    tip.textContent = button.dataset.tip ?? ""
+    const destination = neighbour(button === previousButton ? -1 : 1).spec
+    const mark = doc.createElement("span")
+    mark.className = "msh-tip-icon"
+    mark.setAttribute("aria-hidden", "true")
+    paintIcon(
+      mark,
+      destination.icon ?? (destination.id === "system" ? SYSTEM_ICONS.system : undefined),
+      destination.label,
+    )
+    tip.replaceChildren(mark, button.dataset.tip ?? "")
     tip.hidden = false
     const box = shell.getBoundingClientRect()
     const target = button.getBoundingClientRect()

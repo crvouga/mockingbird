@@ -37,14 +37,15 @@ Application entrypoints, seeds, routing and credentials belong to the consumer. 
 
 The root export also provides `CSS_RESET` and `scopeReset`. Bundlers may import `@crvouga/mockingbird-ui/reset.css` as a stylesheet.
 
-The built-in System screen lists every surface as a card (its optional `description`, an Open button and an "In switcher" toggle; ids left out of the arrows persist under `ROTATION_KEY`). Pass `services` (a `SystemServices`, such as `createSandbox(...).controls(...)` from `@crvouga/mockingbird-preview`) to list each emulated service with an Emulated | Sandbox switch and a sandbox access panel, and `docsUrl` for a "How sandbox mode works" link.
+The built-in System screen lists every surface, System included, in the order the switcher's arrows go through them. Each row shows the surface's `icon` and optional `description`, an Open button, and a switch for whether the arrows stop there; clicking anywhere on the row flips it. Drag a row by its grip, or focus the grip and use the arrow keys, Home and End, to reorder. The order persists under `ORDER_KEY`, the ids left out under `ROTATION_KEY`, and the pill's position too, all in `localStorage`, so a reload keeps them. An `icon` is inline SVG (`{ svg }`, trusted markup from your code), an image (`{ src }`), or a site's favicon (`{ favicon: url }`, trying `/favicon.ico` then `/apple-touch-icon.png`). Anything that fails to load falls back to the label's first letter, and no third-party icon service is asked. `SYSTEM_ICONS` has Mockingbird's own icons for `system`, `emulators` and `notifications`. Pass `services` (a `SystemServices`, such as `createSandbox(...).controls(...)` from `@crvouga/mockingbird-preview`) to list each emulated service with an Emulated | Sandbox switch and a sandbox access panel, and `docsUrl` for a "How sandbox mode works" link.
 
 ## API
 
 - `mountSystemHarness`: mounts lazy application surfaces and manages switching and teardown.
 - `SystemSurface`, `SystemHarness`, `SystemHarnessOptions`: TypeScript lifecycle contracts.
 - `SystemServices`, `SystemService`, `SystemServiceMode`, `SystemSandboxStatus`: what the System screen lists and switches.
-- `ROTATION_KEY`: the localStorage key of the surfaces left out of the switcher.
+- `SystemIcon`, `SYSTEM_ICONS`: a surface's icon, and Mockingbird's icons for the surfaces it provides.
+- `ROTATION_KEY`, `ORDER_KEY`: the localStorage keys of the surfaces left out of the switcher, and of its order.
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.

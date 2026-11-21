@@ -1,6 +1,7 @@
 export { CSS_RESET, scopeReset } from "./reset.js"
 export {
   mountSystemHarness,
+  ORDER_KEY,
   ROTATION_KEY,
   type SystemHarness,
   type SystemHarnessOptions,
@@ -10,3 +11,4 @@ export {
   type SystemServices,
   type SystemSurface,
 } from "./system-harness.js"
+export { SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"

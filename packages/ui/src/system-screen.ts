@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import { paintIcon, type SystemIcon } from "./system-icons.js"
 import { summarizeServices } from "./system-rotation.js"
 
 export type SystemServiceMode = "emulated" | "sandbox"
@@ -32,10 +33,18 @@ export type SystemServices = {
 
 /** What the harness hands the System screen. */
 export type SystemScreenContext = {
-  apps: readonly { id: string; label: string; description?: string | undefined }[]
+  /** Every surface, System included, in the order the switcher's arrows go through them. */
+  apps: readonly {
+    id: string
+    label: string
+    description?: string | undefined
+    icon?: SystemIcon | undefined
+  }[]
   open(id: string): void
   inRotation(id: string): boolean
   setInRotation(id: string, included: boolean): void
+  /** The person reordered the list. */
+  setOrder(ids: readonly string[]): void
   services?: SystemServices | undefined
   docsUrl?: string | undefined
 }
@@ -48,6 +57,7 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   alert:
     '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
+  grip: '<circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M17 6l3 3M15 8l2 2"/>',
   plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8ZM12 18v4"/>',
 } as const
@@ -138,54 +148,169 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   appsTitles.append(appsHeading, appsMeta)
   appsHead.append(appsTitles)
   apps.append(appsHead)
+  const surfaces = context.apps.filter((app) => app.id !== "system")
   const paintAppsMeta = () => {
-    const included = context.apps.filter((app) => context.inRotation(app.id)).length
+    const included = surfaces.filter((app) => context.inRotation(app.id)).length
     appsMeta.textContent =
-      context.apps.length === 0
+      surfaces.length === 0
         ? "This preview has no apps yet."
-        : `${context.apps.length} ${context.apps.length === 1 ? "app" : "apps"} · ${included} in the switcher. The arrows skip the ones you switch off.`
+        : `${surfaces.length} ${surfaces.length === 1 ? "app" : "apps"} · ${included} in the switcher. The arrows go down this list, skipping the ones you switch off. Drag to reorder.`
   }
   paintAppsMeta()
-  if (context.apps.length > 0) {
-    const grid = el("ul", "msh-apps")
-    grid.setAttribute("role", "list")
-    for (const app of context.apps) {
-      const card = el("li", "msh-card msh-app")
-      card.dataset.app = app.id
-      const top = el("div", "msh-app-top")
-      const mark = el("span", "msh-mark", (app.label.trim()[0] ?? "?").toUpperCase())
-      mark.setAttribute("aria-hidden", "true")
-      const text = el("div", "msh-app-text")
-      text.append(el("h3", "msh-app-label", app.label))
-      if (app.description) text.append(el("p", "msh-app-desc", app.description))
-      top.append(mark, text)
+  if (surfaces.length > 0) {
+    const list = el("ol", "msh-apps")
+    list.setAttribute("aria-label", "Switcher order")
+    const hint = el("p", "msh-sr", "Drag to reorder, or use the arrow keys, Home and End.")
+    hint.id = id("reorder-hint")
+    const announce = el("p", "msh-sr")
+    announce.setAttribute("role", "status")
+    apps.append(hint, announce)
 
-      const foot = el("div", "msh-app-foot")
-      const toggle = el("button", "msh-switch")
-      toggle.type = "button"
-      toggle.setAttribute("role", "switch")
-      toggle.setAttribute("aria-label", `${app.label} in switcher`)
-      toggle.innerHTML =
-        '<span class="msh-track" aria-hidden="true"><span class="msh-thumb"></span></span>'
-      toggle.append(el("span", "msh-switch-label", "In switcher"))
-      const paintToggle = () =>
-        toggle.setAttribute("aria-checked", String(context.inRotation(app.id)))
-      paintToggle()
-      toggle.onclick = () => {
-        context.setInRotation(app.id, !context.inRotation(app.id))
-        paintToggle()
-        paintAppsMeta()
+    const ids = () => [...list.children].map((row) => (row as HTMLElement).dataset.app as string)
+    const labelOf = (appId: string) => context.apps.find((app) => app.id === appId)?.label ?? appId
+    const commit = (moved: string) => {
+      const order = ids()
+      context.setOrder(order)
+      announce.textContent = `${labelOf(moved)} moved to position ${order.indexOf(moved) + 1} of ${order.length}.`
+    }
+    /** Slides `row` from where it was drawn to where it now is (FLIP), unless motion is reduced. */
+    const slide = (row: HTMLElement, fromTop: number) => {
+      const delta = fromTop - row.offsetTop
+      if (!delta || doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+      row.style.transition = "none"
+      row.style.transform = `translateY(${delta}px)`
+      void row.offsetHeight
+      row.style.transition = "transform .16s ease-out"
+      row.style.transform = ""
+    }
+
+    for (const app of context.apps) {
+      const fixed = app.id === "system"
+      const row = el("li", "msh-card msh-row")
+      row.dataset.app = app.id
+
+      const grip = el("button", "msh-grip")
+      grip.type = "button"
+      grip.innerHTML = icon("grip")
+      grip.setAttribute("aria-label", `Reorder ${app.label}`)
+      grip.setAttribute("aria-describedby", hint.id)
+
+      const mark = el("span", "msh-mark")
+      mark.setAttribute("aria-hidden", "true")
+      paintIcon(mark, app.icon, app.label)
+      const text = el("span", "msh-app-text")
+      text.append(el("span", "msh-app-label", app.label))
+      if (app.description) text.append(el("span", "msh-app-desc", app.description))
+
+      // The whole row body is the switch: one click anywhere on it turns the app on or off.
+      let main: HTMLElement
+      if (fixed) {
+        main = el("div", "msh-row-main msh-row-fixed")
+        main.append(mark, text, el("span", "msh-always", "Always on"))
+      } else {
+        const toggle = el("button", "msh-switch msh-row-main")
+        toggle.type = "button"
+        toggle.setAttribute("role", "switch")
+        toggle.setAttribute("aria-label", `${app.label} in switcher`)
+        toggle.innerHTML =
+          '<span class="msh-track" aria-hidden="true"><span class="msh-thumb"></span></span>'
+        toggle.append(mark, text)
+        const paint = () => toggle.setAttribute("aria-checked", String(context.inRotation(app.id)))
+        paint()
+        toggle.onclick = () => {
+          context.setInRotation(app.id, !context.inRotation(app.id))
+          paint()
+          paintAppsMeta()
+        }
+        main = toggle
       }
+
       const open = button("msh-btn-secondary msh-open", "Open", "open")
       open.setAttribute("aria-label", `Open ${app.label}`)
       // Icon after the text reads better for "Open ↗".
       open.append(open.querySelector("svg") as SVGElement)
       open.onclick = () => context.open(app.id)
-      foot.append(toggle, open)
-      card.append(top, foot)
-      grid.append(card)
+
+      // Keyboard: the grip moves its row.
+      grip.onkeydown = (event) => {
+        const order = ids()
+        const from = order.indexOf(app.id)
+        const to =
+          event.key === "ArrowUp"
+            ? from - 1
+            : event.key === "ArrowDown"
+              ? from + 1
+              : event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? order.length - 1
+                  : undefined
+        if (to === undefined) return
+        event.preventDefault()
+        if (to < 0 || to >= order.length || to === from) return
+        const tops = new Map([...list.children].map((r) => [r, (r as HTMLElement).offsetTop]))
+        const reference = list.children[to > from ? to + 1 : to] ?? null
+        list.insertBefore(row, reference)
+        for (const [r, top] of tops) slide(r as HTMLElement, top)
+        grip.focus()
+        commit(app.id)
+      }
+
+      // Pointer: drag the grip; the row follows and the others make room as it passes them.
+      let drag: { y: number; from: number } | undefined
+      grip.onpointerdown = (event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        try {
+          grip.setPointerCapture(event.pointerId)
+        } catch {
+          /* A synthetic pointer has nothing to capture; moves still reach the grip. */
+        }
+        drag = { y: event.clientY, from: ids().indexOf(app.id) }
+        row.style.transition = "none"
+        row.classList.add("msh-row-dragging")
+      }
+      grip.onpointermove = (event) => {
+        if (!drag) return
+        const center = () => row.offsetTop + row.offsetHeight / 2 + (event.clientY - (drag?.y ?? 0))
+        for (;;) {
+          const next = row.nextElementSibling as HTMLElement | null
+          const previous = row.previousElementSibling as HTMLElement | null
+          const before = row.offsetTop
+          let passed: HTMLElement | undefined
+          if (next && center() > next.offsetTop + next.offsetHeight / 2) passed = next
+          else if (previous && center() < previous.offsetTop + previous.offsetHeight / 2)
+            passed = previous
+          if (!passed) break
+          const passedTop = passed.offsetTop
+          if (passed === next) list.insertBefore(passed, row)
+          else list.insertBefore(row, passed)
+          slide(passed, passedTop)
+          // Keep the row under the pointer now that its slot moved.
+          drag.y += row.offsetTop - before
+        }
+        const min = -row.offsetTop
+        const max = list.clientHeight - row.offsetTop - row.offsetHeight
+        const dy = Math.max(min, Math.min(max, event.clientY - drag.y))
+        row.style.transform = `translateY(${dy}px)`
+      }
+      const drop = () => {
+        if (!drag) return
+        const { from } = drag
+        drag = undefined
+        row.classList.remove("msh-row-dragging")
+        slide(row, row.offsetTop + (Number.parseFloat(row.style.transform.slice(11)) || 0))
+        row.style.transform = ""
+        if (ids().indexOf(app.id) !== from) commit(app.id)
+      }
+      grip.onpointerup = drop
+      grip.onpointercancel = drop
+      grip.onlostpointercapture = drop
+
+      row.append(grip, main, open)
+      list.append(row)
     }
-    apps.append(grid)
+    apps.append(list)
   }
   page.append(apps)
 
@@ -600,15 +725,33 @@ position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasTex
 .msh-meta{margin-top:2px!important;color:var(--msh-muted);font-size:13px}
 
 .msh-card{background:var(--msh-card);border:1px solid var(--msh-line);border-radius:12px;box-shadow:var(--msh-shadow)}
-.msh-apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:14px}
-.msh-app{display:flex;flex-direction:column;gap:16px;padding:16px;transition:border-color .15s}
-.msh-app:hover{border-color:var(--msh-line-strong)}
-.msh-app-top{display:flex;gap:12px;align-items:flex-start;flex:1}
-.msh-mark{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:9px;background:var(--msh-accent-soft);color:var(--msh-accent);font-weight:700;font-size:15px}
-.msh-app-text{min-width:0}
+.msh-apps{display:grid;gap:8px;position:relative;margin:0;padding:0;list-style:none}
+.msh-row{display:flex;align-items:center;gap:4px;padding:6px 10px 6px 4px;position:relative;background:var(--msh-card);transition:border-color .15s,box-shadow .15s}
+.msh-row:hover{border-color:var(--msh-line-strong)}
+.msh-row-dragging{z-index:2;border-color:var(--msh-accent);box-shadow:0 12px 32px rgb(0 0 0/.22)}
+.msh-grip{display:grid;place-items:center;flex:none;width:32px;height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--msh-faint);cursor:grab;touch-action:none}
+.msh-grip:hover{background:var(--msh-hover);color:var(--msh-text)}
+.msh-row-dragging .msh-grip{cursor:grabbing;color:var(--msh-accent)}
+.msh-grip .msh-icon{width:18px;height:18px;fill:currentColor;stroke:none}
+.msh-row .msh-row-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:8px 10px;margin:0;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;text-align:left}
+button.msh-row-main{cursor:pointer}
+button.msh-row-main:hover{background:var(--msh-hover)}
+.msh-row-main .msh-mark{width:32px;height:32px;font-size:14px}
+.msh-row-main[aria-checked=false] .msh-mark{background:var(--msh-hover);color:var(--msh-faint)}
+.msh-row-main[aria-checked=false] .msh-app-label{color:var(--msh-muted)}
+/* No switch on System's row; keep its icon in line with the others'. */
+.msh-row-fixed::before{content:"";flex:none;width:34px}
+.msh-always{margin-left:auto;flex:none;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;color:var(--msh-muted);background:var(--msh-hover)}
+.msh-mark{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:9px;background:var(--msh-accent-soft);color:var(--msh-accent);font-weight:700;font-size:15px;transition:background-color .15s,color .15s}
+.msh-mark svg{width:19px;height:19px}
+.msh-mark img{width:20px;height:20px;border-radius:4px;object-fit:contain}
+.msh-row-main[aria-checked=false] .msh-mark img{filter:grayscale(1);opacity:.6}
+.msh-tip-icon{display:inline-grid;place-items:center;width:14px;height:14px;margin-right:6px;vertical-align:-2px;font-size:10px;font-weight:700}
+.msh-tip-icon svg,.msh-tip-icon img{width:14px;height:14px}
+.msh-app-text{display:grid;min-width:0}
 .msh-app-label{font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
-.msh-app-desc{margin-top:2px!important;color:var(--msh-muted);font-size:13px}
-.msh-app-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;border-top:1px solid var(--msh-line)}
+.msh-app-desc{color:var(--msh-muted);font-size:13px;font-weight:400}
+.msh-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
 .msh-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 12px;border-radius:8px;border:1px solid transparent;font:inherit;font-weight:550;font-size:13px;line-height:1.2;cursor:pointer;white-space:nowrap;transition:background-color .15s,border-color .15s,color .15s}
 .msh-btn:disabled{cursor:default;opacity:.55}

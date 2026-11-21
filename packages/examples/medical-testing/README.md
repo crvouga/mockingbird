@@ -44,7 +44,7 @@ Standalone links use `?surface=app`, `?surface=system`, `?surface=emulators` or
 fresh demonstration world. URLs do not contain patient data or session state.
 
 The reusable, framework-free `mountSystemHarness` export in `@crvouga/mockingbird-ui` accepts
-`{ id, label, description?, mount(host, signal) }` entries, plus optional `services` and `docsUrl`
+`{ id, label, description?, icon?, mount(host, signal) }` entries, plus optional `services` and `docsUrl`
 for the System screen. A mount resolves with a disposer when ready and
 rejects on failure (the shell offers Retry). Use dynamic imports inside mount for optional UI.
 An adapter may mount a client, an iframe, or a controller/inspector for a non-client service.
@@ -56,8 +56,10 @@ The current lab client has module-scoped ports and supports one system per docum
 
 **System** (press **←** from the app) is the preview's control panel:
 
-- **Apps**: open any surface, and choose with **In switcher** which ones the arrow pill rotates
-  through. That choice is kept in the browser.
+- **Apps**: every surface in the order the arrow pill goes through them, each with its icon.
+  Drag a row by its grip (or use the arrow keys on it) to reorder, and click a row to take it
+  out of the switcher or put it back. Open still reaches any of them. The order, those choices
+  and the pill's position are kept in the browser.
 - **Sandbox access**: the proxy's status, and where to enter the access key that unlocks it.
 - **Services**: every third-party service the app talks to (`src/composition/services.ts`), each
   with an **Emulated | Sandbox** control, or the reason it can only be emulated.

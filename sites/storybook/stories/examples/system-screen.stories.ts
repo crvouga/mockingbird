@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import { expect, userEvent, waitFor, within } from "storybook/test"
 import { mountSystemHarness } from "../../../../packages/ui/src/system-harness.js"
-import { ROTATION_KEY } from "../../../../packages/ui/src/system-rotation.js"
+import { SYSTEM_ICONS } from "../../../../packages/ui/src/system-icons.js"
+import { ORDER_KEY, ROTATION_KEY } from "../../../../packages/ui/src/system-rotation.js"
 import type {
   SystemSandboxStatus,
   SystemService,
@@ -22,6 +23,7 @@ export default {
       "packages/ui/src/system-harness.ts",
       "packages/ui/src/system-screen.ts",
       "packages/ui/src/system-rotation.ts",
+      "packages/ui/src/system-icons.ts",
     ],
   },
 } satisfies Meta
@@ -133,16 +135,20 @@ const SURFACES = [
     id: "app",
     label: "Lab workspace",
     description: "The patient, clinician and admin app, signed out and seeded with demo data.",
+    // An app without an icon of its own: an image URL (here Storybook's favicon).
+    icon: { src: "./favicon.svg" },
   },
   {
     id: "emulators",
     label: "Emulators",
     description: "The admin UI of every emulator: state, requests, clock, faults and SQL.",
+    icon: SYSTEM_ICONS.emulators,
   },
   {
     id: "notifications",
     label: "Notifications",
     description: "Every email, text, push and staff chat message the app sent.",
+    icon: SYSTEM_ICONS.notifications,
   },
 ]
 
@@ -152,6 +158,7 @@ const screen =
   () => {
     stop?.()
     localStorage.removeItem(ROTATION_KEY)
+    localStorage.removeItem(ORDER_KEY)
     localStorage.removeItem("mockingbird.system-switcher.dock")
     const host = document.createElement("div")
     host.style.height = "100vh"
@@ -452,6 +459,120 @@ export const Rotation: StoryObj = {
     } finally {
       again.destroy()
       host.remove()
+      localStorage.removeItem(ROTATION_KEY)
+    }
+  },
+}
+
+const visible = (root: HTMLElement) =>
+  root.querySelector("section[data-surface]:not([hidden])")?.getAttribute("data-surface")
+const rows = (root: HTMLElement) =>
+  [...root.querySelectorAll<HTMLElement>("ol.msh-apps > li")].map((row) => row.dataset.app)
+
+/**
+ * The switcher's order: drag a row by its grip, or move it with the keyboard. The arrows follow
+ * the list, and a fresh mount reads the same order back. Each row shows its app's icon.
+ */
+export const Reorder: StoryObj = {
+  render: screen({ state: "ready" }),
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement)
+    await expect(await page.findByRole("list", { name: "Switcher order" })).toBeVisible()
+    await expect(rows(canvasElement)).toEqual(["system", "app", "emulators", "notifications"])
+
+    // Icons: Mockingbird's own as SVG; the app's as an image.
+    const mark = (id: string) =>
+      canvasElement.querySelector<HTMLElement>(`li[data-app="${id}"] .msh-mark`)
+    await expect(mark("emulators")?.dataset.icon).toBe("svg")
+    await expect(mark("system")?.dataset.icon).toBe("svg")
+    await expect(mark("app")?.dataset.icon).toBe("image")
+    await waitFor(() =>
+      expect(mark("app")?.querySelector("img")?.naturalWidth ?? 0).toBeGreaterThan(0),
+    )
+
+    // Keyboard: Home moves Notifications to the top.
+    page.getByRole("button", { name: "Reorder Notifications" }).focus()
+    await userEvent.keyboard("{Home}")
+    await expect(rows(canvasElement)).toEqual(["notifications", "system", "app", "emulators"])
+    await expect(page.getByRole("status")).toHaveTextContent(
+      "Notifications moved to position 1 of 4.",
+    )
+    await expect(page.getByRole("button", { name: "Reorder Notifications" })).toHaveFocus()
+    await userEvent.keyboard("{ArrowDown}")
+    await expect(rows(canvasElement)).toEqual(["system", "notifications", "app", "emulators"])
+
+    // Pointer: drag Emulators' grip up past two rows.
+    const grip = page.getByRole("button", { name: "Reorder Emulators" })
+    const target = canvasElement.querySelector<HTMLElement>('li[data-app="notifications"]')
+    if (!target) throw new Error("no Notifications row")
+    const from = grip.getBoundingClientRect()
+    const startY = from.top + from.height / 2
+    const endY = target.getBoundingClientRect().top + 4
+    const pointer = (type: string, y: number) =>
+      grip.dispatchEvent(
+        new PointerEvent(type, {
+          bubbles: true,
+          button: 0,
+          pointerId: 7,
+          pointerType: "mouse",
+          clientX: from.left + 4,
+          clientY: y,
+        }),
+      )
+    pointer("pointerdown", startY)
+    for (let step = 1; step <= 8; step++)
+      pointer("pointermove", startY + ((endY - startY) * step) / 8)
+    pointer("pointerup", endY)
+    await expect(rows(canvasElement)).toEqual(["system", "emulators", "notifications", "app"])
+    await expect(JSON.parse(localStorage.getItem(ORDER_KEY) ?? "[]")).toEqual([
+      "system",
+      "emulators",
+      "notifications",
+      "app",
+    ])
+
+    // The arrows follow the new order.
+    await expect(page.getByRole("button", { name: "Next app" })).toHaveAttribute(
+      "aria-description",
+      "Next: Emulators",
+    )
+    await userEvent.click(page.getByRole("button", { name: "Next app" }))
+    await expect(visible(canvasElement)).toBe("emulators")
+    await userEvent.click(page.getByRole("button", { name: "Next app" }))
+    await expect(visible(canvasElement)).toBe("notifications")
+
+    // Toggling is one click anywhere on the row.
+    await userEvent.click(page.getByRole("button", { name: "Previous app" }))
+    await userEvent.click(page.getByRole("button", { name: "Previous app" }))
+    await userEvent.click(page.getByText("The admin UI of every emulator", { exact: false }))
+    await expect(page.getByRole("switch", { name: "Emulators in switcher" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    )
+    await expect(JSON.parse(localStorage.getItem(ROTATION_KEY) ?? "[]")).toEqual(["emulators"])
+
+    // A fresh mount reads the same order and rotation.
+    const host = document.createElement("div")
+    host.style.cssText = "position:fixed;inset:0"
+    canvasElement.append(host)
+    const again = mountSystemHarness(
+      host,
+      SURFACES.map((surface) => ({ ...surface, mount: () => () => {} })),
+    )
+    try {
+      await within(host).findByRole("list", { name: "Switcher order" })
+      await expect(rows(host)).toEqual(["system", "emulators", "notifications", "app"])
+      await expect(
+        within(host).getByRole("switch", { name: "Emulators in switcher" }),
+      ).toHaveAttribute("aria-checked", "false")
+      await expect(within(host).getByRole("button", { name: "Next app" })).toHaveAttribute(
+        "aria-description",
+        "Next: Notifications",
+      )
+    } finally {
+      again.destroy()
+      host.remove()
+      localStorage.removeItem(ORDER_KEY)
       localStorage.removeItem(ROTATION_KEY)
     }
   },
