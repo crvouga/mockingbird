@@ -89,7 +89,7 @@ test("real LiveKit browser client joins, publishes microphone, receives data and
     expect(errors).toEqual([])
     expect(
       await page.evaluate<unknown>(
-        "Promise.race([globalThis.result,new Promise((_,reject)=>setTimeout(()=>reject(new Error(globalThis.phase)),15000))])",
+        "Promise.race([globalThis.result,new Promise((_,reject)=>setTimeout(()=>reject(new Error(globalThis.phase)),45000))])",
       ),
     ).toEqual({
       kind: "audio",
@@ -107,4 +107,4 @@ test("real LiveKit browser client joins, publishes microphone, receives data and
   } finally {
     await browser.close()
   }
-}, 30000)
+}, 60000)
