@@ -126,6 +126,74 @@ The application must honor the boot/request AbortSignals to terminate work it st
   (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
   `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
   `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
+- `createBackendHost({ backends, drainMs? })`, `backendControlHandler(host, { path?, importBackend? })`
+  and `backendControls(fetch, { url?, pollMs? })`: lazy, swappable in-tab backends and emulators,
+  their control routes, and the tab's client. See [System parts](#system-parts).
+- `PreviewPartsManifest`, `parsePartsManifest`, `gzipSize`, `checkPartBudgets`,
+  `formatPartSizes`, `PreviewPartBudgetError`, `partUpdatesResponse` and `followPartUpdates`: the
+  parts manifest, its size budgets and its update stream. `buildPreviewParts` and
+  `watchPreviewParts`, from the `/node` export (`esbuild` is a peer dependency, loaded on first
+  use), build it and run the dev loop. `acceptPreviewFrame()` connects an iframe app to the bridge.
+
+## System parts
+
+A system preview with several apps, backends and emulators loads each one only when it is first
+needed, and updates each one alone. The app registry (`defineSystem` / `mountSystem` in
+`@crvouga/mockingbird-ui`) declares the apps; this package builds their parts and runs the
+backends.
+
+```ts
+import { buildPreviewParts } from "@crvouga/mockingbird-preview/node"
+
+declare const system: { parts(): { id: string; source?: string; entry?: string }[] } // defineSystem(...)
+await buildPreviewParts({
+  parts: system.parts(),
+  backends: { api: "backends/api/preview.ts" },
+  outdir: "preview-dist",
+  shell: ["preview.js"],
+  budgets: { shell: 150_000, part: 400_000 },
+})
+```
+
+- **Parts manifest.** `buildPreviewParts` bundles every part with a `source` to
+  `parts/<id>-<pin>.js` (an iframe app also gets `parts/<id>-<pin>.html`), where the pin is the
+  content hash of the bytes, so unchanged parts keep their pin and URL across builds and stay
+  cached for good. It writes `parts.json`: per app its `entry`, `pin`, gzip `bytes`, `backends`
+  and `prefetch`; per backend its `entry`, `pin` and `bytes`; the `runtime` pin (given, or the
+  hash of the `shell` files) and `shellBytes`. Parts with only an `entry` are pinned by their
+  bytes in `outdir`, or by their URL when served from elsewhere.
+- **Budgets.** It prints a size table and throws `PreviewPartBudgetError` (code
+  `preview_part_over_budget`, `over` lists each name, size and budget) when the shell or any part
+  is over its compressed budget, so the build fails naming the part.
+- **Lazy backends.** `createBackendHost` routes each request to the first backend whose `match`
+  (a host name, a path prefix or a predicate) accepts it, booting that backend on its first
+  request; later requests queue behind the boot. `status()` says `not started`, `starting` (with
+  the `progress(fraction, note)` the boot reports), `ready`, `failed` or `updating`; `subscribe`
+  fires on every change, and the host is directly a `SystemBackends` for the System screen. A
+  failed boot answers 503 `preview_backend_failed` and is retried on the next request. Pass the
+  host's `fetch` as the system a `createPreviewHost` boot returns. An emulator is a backend whose
+  `boot` creates its runtime, so it too is created on the first request to its host.
+- **Swapping a backend.** `replace(id, boot, { drainMs })` boots the new code beside the old one.
+  Once it is ready, new requests go to it, and requests already running on the old one (until
+  their response body is read or cancelled) finish there. After `drainMs` (default 10 s) the
+  remaining ones fail with `PreviewBackendDrainError` (code `preview_backend_drained`) and the old
+  generation is disposed. If the new code fails to boot, the old one keeps serving and `replace`
+  rejects with `PreviewBackendUpdateError` (code `preview_backend_update_failed`). Other backends,
+  emulators and in-memory databases are untouched, so their state survives with no export or
+  import. `backendControlHandler` exposes `GET` status and `POST {"ensure": [...]}` /
+  `POST {"replace": id, "entry": url}` for a tab whose backends run in a worker; without
+  `importBackend`, `replace` answers 501 `preview_backend_replace_unsupported` instead of
+  pretending to swap. `backendControls(fetch)` is the tab's client: `list`/`subscribe` for the
+  System screen, `ensure` for `mountSystem`'s `ensureBackends`, `replace` for its `replaceBackend`.
+- **Dev loop.** `watchPreviewParts(options)` builds once, then watches the files esbuild says each
+  part (and backend) is made of, and rebuilds only the parts a change touches (a module shared by
+  two apps rebuilds both). A failed rebuild keeps the last good manifest and is recorded in
+  `rebuilds()`. Serve its manifests with `partUpdatesResponse(watcher)` (Server-Sent Events) and
+  follow them in the tab with `followPartUpdates(url, preview.applyManifest)`; the tab swaps the
+  changed app in place.
+- **Iframe apps.** Inside an iframe app, `await acceptPreviewFrame()` waits for the shell's
+  connect message (only from `parent`, and from `origin` when given) and returns a `fetch` over
+  the same bridge inline apps use.
 
 ## Cookies, redirects and trust
 

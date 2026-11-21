@@ -51,6 +51,37 @@ declare const livePreview: SystemBuild // e.g. createLivePreview(...) from @crvo
 mountSystemHarness(host, surfaces, { build: livePreview })
 ```
 
+## App registry
+
+Declare each app once with `defineSystem` and mount the registry with `mountSystem`. The switcher order, the System screen's Apps and Backends lists, the routes and the build's part list (`system.parts()`, which `buildPreviewParts` in `@crvouga/mockingbird-preview/node` turns into `parts.json`) all come from that one declaration, so adding an app is one more entry.
+
+```ts
+import { defineSystem, mountSystem } from "@crvouga/mockingbird-ui"
+
+const system = defineSystem({
+  apps: [
+    { id: "member", label: "Member web", route: "/", part: { source: "apps/member/preview.ts" }, backends: ["api", "stripe"] },
+    { id: "clinician", label: "Clinician web", route: "/clinician", part: { source: "apps/clinician/preview.ts", prefetch: true }, backends: ["api"] },
+    { id: "partner", label: "Partner portal", route: "/partner", mount: "iframe", defaultEnabled: false, part: { source: "apps/partner/preview.ts" } },
+  ],
+  backends: [{ id: "api" }, { id: "stripe", kind: "emulator" }],
+})
+
+declare const host: HTMLElement
+declare const manifest: import("@crvouga/mockingbird-ui").PreviewPartsManifestLike // parts.json
+const preview = mountSystem(host, system, { manifest, syncUrl: true })
+```
+
+- **A `PreviewApp`** has `id`, `label`, optional `icon` and `description`, `defaultEnabled`, `route`, `part`, `backends`, `mount` (`"inline"`, the default, or `"iframe"`) and `health`. An inline part's module exports `mount(host, { app, route, version, signal })` and returns a disposer; `part.load` imports one from the shell's own bundle instead of a built entry.
+- **`defineSystem` rejects a registry** that cannot work, with a `PreviewRegistryError` whose `code` says why: `duplicate_app`, `reserved_app` (`system`), `invalid_route`, `route_conflict` (two apps with the same route; `/` and `/clinician` do not conflict, the longest route wins), `unknown_backend` (when `backends` is declared), `invalid_part`. A build script that imports the registry fails on it.
+- **Off by default.** `defaultEnabled: false` keeps an app out of the arrows' rotation until it is switched on in System. The choice is kept per browser under `INCLUDED_KEY`, beside `ROTATION_KEY`.
+- **Routes.** With `syncUrl`, a deep link (`/clinician/patients/7`) opens the app that owns the path, apps without a route keep `?surface=`, and switching away and back restores each app's last path (in memory, for the tab). Routes are absolute paths on the page's origin.
+- **Lazy loading.** An app's part and the backends it names (`ensureBackends`, such as `backendControls(...).ensure`) load on its first open; the shell's first paint costs the shell and that one app. Parts marked `prefetch` load at idle priority (`requestIdleCallback`) only after the first app is up. A part loads once per pin; a failed load shows Retry in that app only and is fetched again on retry.
+- **Iframe apps** get their own document and globals. Each time the frame loads it receives a `MessagePort` (`PREVIEW_FRAME_CONNECT`) that the shell hands to `bridge`, so it reaches the same backends as inline apps; inside the frame, `acceptPreviewFrame()` from `@crvouga/mockingbird-preview` turns it into a `fetch`.
+- **Updating one app in place.** `preview.applyManifest(next)` compares pins (`planPartUpdate`) and swaps only what changed: backends first through `replaceBackend`, then each changed app is disposed and mounted again with its new code while every other app keeps its DOM, scroll position and state. A change to the shared runtime (the `runtime` pin), or apps or backends added or removed, is refused with a notice that says why and offers Reload. A backend whose new code fails to boot leaves the old one serving and shows the error with Retry. Feed it from `followPartUpdates` for the dev loop, or from your freshness signal in a deployed preview.
+
+`mountSystemHarness` keeps working with plain `SystemSurface`s; the registry's fields (`defaultEnabled`, `route`, `backends`, `version`, `health`) are optional there too, and `harness.update(id, next?)` and `harness.notify(notice)` are available on any harness.
+
 ## API
 
 - `mountSystemHarness`: mounts lazy application surfaces and manages switching and teardown.
@@ -58,7 +89,11 @@ mountSystemHarness(host, surfaces, { build: livePreview })
 - `SystemServices`, `SystemService`, `SystemServiceMode`, `SystemDevStatus`: what the System screen lists and switches.
 - `SystemBuild`, `SystemBuildState`: a live preview's build, checks, connection and pending update, and the actions on it (`applyUpdate`, `postpone`, `setAutoUpdate`), for the switcher's status dot, the update toast and System's Preview card.
 - `SystemIcon`, `SYSTEM_ICONS`: a surface's icon, and Mockingbird's icons for the surfaces it provides.
-- `ROTATION_KEY`, `ORDER_KEY`: the localStorage keys of the surfaces left out of the switcher, and of its order.
+- `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`: the localStorage keys of the surfaces left out of the switcher, of its order, and of the off-by-default surfaces switched on.
+- `defineSystem`, `mountSystem`, `PreviewApp`, `PreviewSystem`, `PreviewRegistryError`: the app registry and the shell it mounts.
+- `systemSurfaces`, `planPartUpdate`, `PreviewPartsManifestLike`: the registry as surfaces with their part loader, and what a newer parts manifest takes to apply.
+- `SystemHarness.update`, `SystemHarness.notify`, `SystemNotice`: swap one surface's code in place; show a notice over the apps.
+- `SystemBackends`, `SystemBackend`: the in-tab backends and emulators for the System screen's Backends list.
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.

@@ -80,3 +80,10 @@ export async function listenPreview(
       }),
   }
 }
+export {
+  type BuildPreviewPartsOptions,
+  buildPreviewParts,
+  type PreviewPartSource,
+  type PreviewPartsWatcher,
+  watchPreviewParts,
+} from "./parts-build.js"

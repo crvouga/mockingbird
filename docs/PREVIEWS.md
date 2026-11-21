@@ -120,6 +120,36 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
 
+## System previews: one registry, lazy parts, per-app updates
+
+A preview that runs a whole system in one tab (several web apps, backends and emulators) declares
+its apps once and lets the library do the rest:
+
+- **One declaration per app.** `defineSystem({ apps, backends })` from `@crvouga/mockingbird-ui`
+  lists each app's id, label, route, part, the backends and emulators it calls, whether it is on
+  by default, and whether it mounts inline or in an isolated iframe. `mountSystem(host, system)`
+  derives the switcher, the System screen (with each app's backends and health, and which apps
+  call which backend), deep-link routes and the build's part list from it. Duplicate ids and two
+  apps on the same route are rejected when the registry is defined, so the build fails.
+- **Lazy by default.** `buildPreviewParts` (`@crvouga/mockingbird-preview/node`) builds each app
+  into a content-pinned part and writes `parts.json`, failing the build when the shell or a part
+  is over its gzip budget. A cold visit loads the shell and the one app opened, and boots only
+  the backends that app calls (`createBackendHost` boots each backend on its first request and
+  reports `not started` until then). Parts marked `prefetch` load while the tab is idle. A part
+  loads once, and a part whose pin did not change is never fetched again.
+- **Update one app, keep the rest.** `preview.applyManifest(next)` swaps only the apps and
+  backends whose pin changed. A changed app is remounted while the others keep their DOM and
+  state; a changed backend boots beside the old one, takes new requests once ready, and lets the
+  old one drain (bounded, then a typed `PreviewBackendDrainError`). Emulator and database state
+  stays. If the new backend fails to boot, the old one keeps serving and the shell offers Retry; a
+  change to the shared runtime is refused with a notice saying a reload is needed, and why.
+- **Dev loop.** `watchPreviewParts` rebuilds only the parts whose files changed and streams the
+  new manifest to the open tab (`partUpdatesResponse` / `followPartUpdates`), which swaps that one
+  app in place.
+
+See the [UI package README](../packages/ui/README.md#app-registry) and the
+[preview package README](../packages/adapters/preview/README.md#system-parts) for the API.
+
 ## What a preview does not do
 
 - **Checks status starts once the caller file is on your default branch.** GitHub runs
@@ -127,4 +157,10 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
 - **A status change reaches open tabs within about 25 s.** It lands in a new Worker version,
   which an open SSE stream picks up when it reconnects; polling tabs see it on their next poll.
 - **A new version starts a fresh app.** Anything your app keeps in memory is gone after an
-  in-place update; what it keeps in `localStorage` stays.
+  in-place update; what it keeps in `localStorage` stays. A system preview fed parts manifests
+  (`applyManifest`) restarts only the apps whose part changed.
+- **The deployed boot loader still swaps whole versions.** Per-app swaps run when you feed
+  `applyManifest` yourself (the dev loop, or your own freshness signal); the reusable workflow's
+  boot loader does not read `parts.json` yet.
+- **A backend request counts as in flight until its response body is read or cancelled.** A
+  response nobody reads holds the old generation until the drain deadline.

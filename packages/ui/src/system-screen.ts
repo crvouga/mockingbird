@@ -34,6 +34,28 @@ export type SystemServices = {
   setMode(id: string, mode: SystemServiceMode): Promise<void>
 }
 
+/** Where an in-tab backend or emulator is: lazy ones stay `not started` until first called. */
+export type SystemBackendState = "not started" | "starting" | "ready" | "failed" | "updating"
+
+/** One in-tab backend or emulator on the System screen. */
+export type SystemBackend = {
+  id: string
+  label?: string
+  kind?: "backend" | "emulator"
+  state?: SystemBackendState
+  /** Why it failed, or what it is doing ("Booting · 40%"). */
+  message?: string
+}
+
+/**
+ * The in-tab backends and emulators. `@crvouga/mockingbird-preview`'s `createBackendHost()` and
+ * `backendControls()` are ones; `subscribe` repaints the list when a state changes.
+ */
+export type SystemBackends = {
+  list(): Promise<readonly SystemBackend[]> | readonly SystemBackend[]
+  subscribe?(listener: () => void): () => void
+}
+
 /** What the harness hands the System screen. */
 export type SystemScreenContext = {
   /** Every surface, System included, in the order the switcher's arrows go through them. */
@@ -42,7 +64,16 @@ export type SystemScreenContext = {
     label: string
     description?: string | undefined
     icon?: SystemIcon | undefined
+    backends?: readonly string[] | undefined
+    version?: string | undefined
+    health?:
+      | ((
+          signal: AbortSignal,
+        ) => Promise<{ ok: boolean; message?: string }> | { ok: boolean; message?: string })
+      | undefined
   }[]
+  /** The backends and emulators behind the apps; with any app's `backends`, adds a Backends list. */
+  backends?: SystemBackends | undefined
   open(id: string): void
   inRotation(id: string): boolean
   setInRotation(id: string, included: boolean): void
@@ -91,6 +122,9 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 export function mountSystemScreen(panel: HTMLElement, context: SystemScreenContext): () => void {
   const doc = panel.ownerDocument
   let disposed = false
+  /** Aborts the apps' health probes when the screen goes. */
+  const probes = new AbortController()
+  const stops: (() => void)[] = []
   let uid = 0
   const id = (name: string) => `msh-${name}-${++uid}-${Math.random().toString(36).slice(2, 7)}`
   const el = <K extends keyof HTMLElementTagNameMap>(
@@ -203,6 +237,37 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       const text = el("span", "msh-app-text")
       text.append(el("span", "msh-app-label", app.label))
       if (app.description) text.append(el("span", "msh-app-desc", app.description))
+      const facts = el("span", "msh-app-facts")
+      if (app.backends?.length) {
+        const uses = el("span", "msh-app-uses", `Calls ${app.backends.join(", ")}`)
+        uses.dataset.testid = `system-app-backends-${app.id}`
+        facts.append(uses)
+      }
+      if (app.version) {
+        const version = el("span", "msh-app-version", app.version.slice(0, 12))
+        version.title = `Code version ${app.version}`
+        facts.append(version)
+      }
+      if (app.health) {
+        const health = el("span", "msh-chip msh-health", "Checking")
+        health.dataset.testid = `system-app-health-${app.id}`
+        health.dataset.state = "checking"
+        facts.append(health)
+        const probe = app.health
+        void (async () => {
+          let result: { ok: boolean; message?: string }
+          try {
+            result = await probe(probes.signal)
+          } catch (error) {
+            result = { ok: false, message: message(error) }
+          }
+          if (disposed) return
+          health.dataset.state = result.ok ? "ok" : "failed"
+          health.textContent = result.ok ? "Healthy" : "Unhealthy"
+          health.title = result.message ?? health.textContent
+        })()
+      }
+      if (facts.childElementCount > 0) text.append(facts)
 
       // The whole row body is the switch: one click anywhere on it turns the app on or off.
       let main: HTMLElement
@@ -317,6 +382,79 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     apps.append(list)
   }
   page.append(apps)
+
+  // ---- backends: what each app calls, and whether it has booted
+  const backendsSection = mountBackends()
+  if (backendsSection) page.append(backendsSection)
+  function mountBackends(): HTMLElement | undefined {
+    const usedBy = new Map<string, string[]>()
+    for (const app of surfaces)
+      for (const backend of app.backends ?? [])
+        usedBy.set(backend, [...(usedBy.get(backend) ?? []), app.label])
+    if (!context.backends && usedBy.size === 0) return undefined
+    const section = el("section", "msh-section")
+    const heading = el("h2", "msh-h2", "Backends")
+    heading.id = id("backends")
+    section.setAttribute("aria-labelledby", heading.id)
+    const head = el("div", "msh-section-head")
+    const titles = el("div")
+    titles.append(
+      heading,
+      el(
+        "p",
+        "msh-meta",
+        "The backends and emulators running in this tab, and the apps that call them. Each boots on its first request.",
+      ),
+    )
+    head.append(titles)
+    const list = el("ul", "msh-backends")
+    list.setAttribute("aria-label", "Backends")
+    section.append(head, list)
+    const paint = (known: readonly SystemBackend[]) => {
+      const byId = new Map(known.map((backend) => [backend.id, backend]))
+      const ids = [...new Set([...known.map((backend) => backend.id), ...usedBy.keys()])]
+      list.replaceChildren(
+        ...ids.map((backendId) => {
+          const backend = byId.get(backendId)
+          const row = el("li", "msh-card msh-backend")
+          row.dataset.backend = backendId
+          const text = el("span", "msh-app-text")
+          text.append(el("span", "msh-app-label", backend?.label ?? backendId))
+          const users = usedBy.get(backendId) ?? []
+          text.append(
+            el(
+              "span",
+              "msh-app-desc",
+              `${backend?.kind === "emulator" ? "Emulator" : "Backend"} · ${
+                users.length ? `used by ${users.join(", ")}` : "no app declares it"
+              }`,
+            ),
+          )
+          row.append(text)
+          if (backend?.state) {
+            const chip = el("span", "msh-chip msh-backend-state", backend.state)
+            chip.dataset.state = backend.state.replace(" ", "-")
+            if (backend.message) chip.title = backend.message
+            row.append(chip)
+          }
+          return row
+        }),
+      )
+    }
+    const refresh = async () => {
+      try {
+        const known = (await context.backends?.list()) ?? []
+        if (!disposed) paint(known)
+      } catch {
+        if (!disposed) paint([])
+      }
+    }
+    paint([])
+    void refresh()
+    const stop = context.backends?.subscribe?.(() => void refresh())
+    if (stop) stops.push(stop)
+    return section
+  }
 
   // ---- services + dev access
   const services = context.services
@@ -639,6 +777,8 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   void load()
   return () => {
     disposed = true
+    probes.abort()
+    for (const stop of stops) stop()
     preview?.dispose()
     home.remove()
   }
@@ -713,6 +853,17 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 .msh-app-text{display:grid;min-width:0}
 .msh-app-label{font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
 .msh-app-desc{color:var(--msh-muted);font-size:13px;font-weight:400}
+.msh-app-facts{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;margin-top:2px;color:var(--msh-faint);font-size:12px;font-weight:400}
+.msh-app-version{font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+.msh-health[data-state=ok],.msh-backend-state[data-state=ready]{--msh-state:var(--msh-ok);--msh-state-soft:var(--msh-ok-soft)}
+.msh-health[data-state=failed],.msh-backend-state[data-state=failed]{--msh-state:var(--msh-danger);--msh-state-soft:var(--msh-danger-soft)}
+.msh-backend-state[data-state=starting],.msh-backend-state[data-state=updating]{--msh-state:var(--msh-warn);--msh-state-soft:var(--msh-warn-soft)}
+.msh-backends{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:8px;margin:0;padding:0;list-style:none}
+.msh-backend{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px}
+.msh-notice{position:absolute;top:12px;left:50%;transform:translateX(-50%);pointer-events:auto;display:flex;align-items:center;flex-wrap:wrap;gap:8px;max-width:min(640px,calc(100% - 32px));padding:10px 12px 10px 16px;border-radius:12px;border:1px solid var(--msh-line-strong);border-left:4px solid var(--msh-state,var(--msh-accent));background:var(--msh-card);color:var(--msh-text);box-shadow:0 8px 24px rgb(0 0 0/.18)}
+.msh-notice[data-tone=warning]{--msh-state:var(--msh-warn)}
+.msh-notice[data-tone=error]{--msh-state:var(--msh-danger)}
+.msh-notice-text{flex:1 1 240px;min-width:0}
 .msh-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
 .msh-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 12px;border-radius:8px;border:1px solid transparent;font:inherit;font-weight:550;font-size:13px;line-height:1.2;cursor:pointer;white-space:nowrap;transition:background-color .15s,border-color .15s,color .15s}
