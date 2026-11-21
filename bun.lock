@@ -148,12 +148,21 @@
     "packages/adapters/preview": {
       "name": "@crvouga/mockingbird-preview",
       "version": "0.0.0-development",
+      "bin": {
+        "mockingbird-preview": "./dist/cli.js",
+      },
       "devDependencies": {
         "@playwright/test": "1.65.0",
         "@types/bun": "1.4.0",
         "@types/node": "22.20.1",
         "esbuild": "0.28.2",
       },
+      "peerDependencies": {
+        "esbuild": ">=0.28.0",
+      },
+      "optionalPeers": [
+        "esbuild",
+      ],
     },
     "packages/admin-ui": {
       "name": "@crvouga/mockingbird-admin-ui",

@@ -1,12 +1,13 @@
 {
   "name": "mockingbird-lab-preview",
   "compatibility_date": "2026-11-13",
-  // Serves /__dev/* (the dev proxy); everything else is a static file.
+  // The package's preview Worker plus the dev proxy: /__dev/* and /__preview/* (live CI status,
+  // pushed into this Worker's configuration by CI); everything else is a static file. Stateless.
   "main": "src/worker.ts",
   "assets": {
     "directory": "./preview-dist",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/__dev", "/__dev/*"]
+    "run_worker_first": ["/__dev", "/__dev/*", "/__preview/*"]
   }
 }

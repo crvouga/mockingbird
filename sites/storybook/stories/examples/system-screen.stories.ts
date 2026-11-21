@@ -191,6 +191,10 @@ export const AllEmulated: StoryObj = {
     await expect(page.getByRole("heading", { level: 1, name: "System" })).toBeVisible()
     await expect(page.getByText("Everything this preview runs, in this browser tab.")).toBeVisible()
     await expect(page.getByRole("link", { name: /How dev resources work/ })).toBeVisible()
+    // Without a live build, no status dot, update toast or Preview card.
+    await expect(page.queryByTestId("system-build-dot")).toBeNull()
+    await expect(page.queryByTestId("system-update-toast")).toBeNull()
+    await expect(page.queryByTestId("system-preview")).toBeNull()
     await loaded(canvasElement)
     await expect(await summary(canvasElement)).toHaveTextContent("8 services · 8 emulated · 0 dev")
     const access = page.getByTestId("system-dev-proxy")

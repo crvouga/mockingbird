@@ -1,4 +1,4 @@
-import { mountSystemHarness, SYSTEM_ICONS } from "@crvouga/mockingbird-ui"
+import { mountSystemHarness, SYSTEM_ICONS, type SystemBuild } from "@crvouga/mockingbird-ui"
 import { setFetcher } from "../client/api.js"
 import { setInboxOpener } from "../client/inbox.js"
 import { mountApp } from "../client/main.js"
@@ -25,6 +25,8 @@ export const mount = async (
     syncUrl?: boolean
     /** The dev proxy, absolute or relative to this page. Without it every service stays emulated. */
     devProxyUrl?: string
+    /** The preview's live build status and updates (the boot loader in `preview.ts`). */
+    build?: SystemBuild
   } = {},
 ): Promise<() => void> => {
   const dev = createLabDevResources(options.devProxyUrl)
@@ -85,6 +87,7 @@ export const mount = async (
       syncUrl: options.syncUrl ?? false,
       services: dev.controls(demo.admins),
       docsUrl: DEV_DOCS_URL,
+      ...(options.build ? { build: options.build } : {}),
     },
   )
   setInboxOpener((target) => {

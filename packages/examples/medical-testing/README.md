@@ -52,6 +52,28 @@ Abort cancels pending work on teardown, and late mount results are disposed. The
 system's topology and transports; the shell never imports application or emulator code.
 The current lab client has module-scoped ports and supports one system per document.
 
+### Live, self-updating previews
+
+An open preview always knows where CI is and updates itself; no reload is ever needed.
+
+- **CI state, pushed by CI, no state of its own.** The lab's preview uses the reusable workflow
+  every project can use ([Live PR previews](../../../docs/PREVIEWS.md)). When a build starts,
+  deploys or fails, and when `CI` starts or finishes for the PR, it writes the status into the
+  preview Worker's own configuration (`wrangler secret bulk`). The stateless Worker
+  (`createPreviewWorker` in `src/worker.ts`) serves it as Server-Sent Events at `/__preview/live`,
+  and the tab polls `/__preview/status` if SSE is unavailable. No GitHub token, database or
+  Durable Object.
+- **Updates without reloading.** `index.html` loads the package's boot loader (`preview.js`),
+  which is never swapped. It runs the app version `version.json` names (`app-<hash>.js`, built
+  from `src/app.ts` by `scripts/build-preview.ts`, stamped with the PR head at deploy). When a
+  newer version deploys, it unmounts the running app and imports the new one into the same page:
+  the switcher order, the pill's position and each service's mode carry over; the demonstration
+  world starts fresh. Updates apply after a short countdown (**Update now** / **Not now**), or at
+  once in a background tab; turn auto-update off on the System screen.
+- **Freshness everywhere.** A dot on the switcher pill shows live / building / update ready /
+  failed / offline, and the System screen's **Preview** card shows the version this tab runs and
+  its age, the latest deploy, the build and checks with links to their runs, and the connection.
+
 ### The System screen
 
 **System** (press **←** from the app) is the preview's control panel:

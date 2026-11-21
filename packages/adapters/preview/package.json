@@ -23,7 +23,30 @@
     "./dev-proxy": {
       "types": "./dist/dev-proxy.d.ts",
       "default": "./dist/dev-proxy.js"
+    },
+    "./preview-status": {
+      "types": "./dist/preview-status.d.ts",
+      "default": "./dist/preview-status.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "default": "./dist/worker.js"
+    },
+    "./worker-entry": {
+      "types": "./dist/worker-entry.d.ts",
+      "default": "./dist/worker-entry.js"
+    },
+    "./boot": {
+      "types": "./dist/boot.d.ts",
+      "default": "./dist/boot.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
     }
+  },
+  "bin": {
+    "mockingbird-preview": "./dist/cli.js"
   },
   "publishConfig": {
     "access": "public",
@@ -39,7 +62,13 @@
     "layer": "adapter",
     "entries": {
       "node": "node",
-      "dev-proxy": "portable"
+      "dev-proxy": "portable",
+      "preview-status": "portable",
+      "worker": "portable",
+      "worker-entry": "portable",
+      "boot": "portable",
+      "build": "node",
+      "cli": "node"
     }
   },
   "scripts": {
@@ -55,5 +84,13 @@
     "@types/node": "22.20.1",
     "@playwright/test": "1.65.0",
     "esbuild": "0.28.2"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.28.0"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
   }
 }

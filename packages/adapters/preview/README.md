@@ -96,6 +96,36 @@ The application must honor the boot/request AbortSignals to terminate work it st
 - `createDevResources({ proxyUrl?, storage?, fetch? })` is the browser side: `upstream(id)` for an
   emulator's `createRuntime({ upstream })` and `controls(services)` for the System screen.
   `DEV_MESSAGES` holds its status sentences and `DEV_STORAGE_KEYS` its storage keys.
+- `createPreviewStatus({ env, readVersion, basePath?, sse? })`, from the `/preview-status` export
+  (also re-exported from the package root), is a stateless Fetch handler for a preview's CI status,
+  read on every call from the Worker env CI writes (`PREVIEW_BUILD`, `PREVIEW_CHECKS`, `PREVIEW_PR`;
+  names in `PREVIEW_ENV`): `GET /__preview/status` (one snapshot) and `GET /__preview/live`
+  (Server-Sent Events), same-origin only, `undefined` for every other path.
+  `parsePreviewBuild(value)`, `parsePreviewChecks(value)` and `parsePreviewPr(value)` validate one
+  env value (undefined when missing or malformed); `PREVIEW_STATUS_NO_CI_MESSAGE` is the message of
+  a snapshot CI has not reported to. See [Live previews](#live-previews).
+- `createPreviewWorker({ basePath?, devProxy? })`, from the `/worker` export, is the generic preview
+  Worker `{ fetch(request, env) }`: `/__preview/*` is the CI status (deployed version from the
+  `ASSETS` binding's `/version.json`), the optional dev proxy serves its `basePath` with only the
+  string env values, and everything else is `env.ASSETS.fetch(request)`. The `/worker-entry` export
+  (`dist/worker-entry.js`) default-exports `createPreviewWorker()`, ready to be a wrangler `main`.
+- `bootPreview({ host?, versionUrl?, live? })`, from the `/boot` export (browser), is the boot
+  loader: it fetches `version.json` (no-store), imports the entry it names, calls its
+  `start(host, { build })` and follows every newer deploy with `createLivePreview`. On failure it
+  writes a readable message into the host (default `#preview`) and rejects.
+- `buildPreview({ entry, outdir, title?, hostId?, esbuild? })` and
+  `stampPreviewVersion({ outdir, version, pr?, builtAt? })`, from the `/build` export (Bun / Node;
+  `esbuild` is a peer dependency), build the static preview (hashed `app-<hash>.js`, `preview.js`,
+  `index.html`, `build.json`, a development `version.json`) and stamp `version.json` with the
+  commit a deploy ships. See [Building the preview](#building-the-preview).
+- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`) is what the preview workflow
+  runs. See [The CLI](#the-cli).
+- `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
+  browser side: it mounts `current`, follows the status stream (or polls it), and swaps in each newly deployed
+  build without reloading the page. Its result is structurally the UI package's `SystemBuild`
+  (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
+  `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
+  `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
 
 ## Cookies, redirects and trust
 
@@ -333,6 +363,210 @@ emulator's mode from `GET /__admin/upstream`, and its `unavailable` reason follo
 the spec's `unsupported`, no proxy configured, proxy unreachable or refusing the page
 (`cross_origin`), provider secrets missing, the provider's `blocked` reason. Chosen modes persist per viewer; because emulator state resets on reload, the
 first `list()` re-applies stored Dev choices that are still available.
+
+## Live previews
+
+A PR preview that knows what CI is doing to it and moves itself to every new deploy, with no hard
+refresh: the open tab shows when a newer commit is building, deployed or failed, the PR's checks,
+and how fresh it is, then swaps in the new build in place.
+
+Everything is stateless and nothing reads a GitHub API. CI **pushes** its status into the preview
+Worker's own configuration: the preview workflow runs `mockingbird-preview status`, which writes
+`PREVIEW_BUILD` or `PREVIEW_CHECKS` with `wrangler secret bulk` using the Cloudflare credentials
+the deploy already has. Each write rolls a new Worker version with the same code and assets. The
+Worker serves whatever is in its env, plus the deployed build from the static `version.json`.
+Realtime is Server-Sent Events from that same function plus polling the client manages itself; no
+Durable Object, database, GitHub token or callback URL is involved.
+
+```mermaid
+flowchart LR
+  CI["Preview workflow<br/>(build, deploy, CI checks)"] -- "mockingbird-preview status<br/>wrangler secret bulk: PREVIEW_BUILD / PREVIEW_CHECKS" --> W["Preview Worker env<br/>(new version, same code and assets)"]
+  CI -- "wrangler deploy: assets + PREVIEW_PR var" --> W
+  W --> F["Stateless function<br/>createPreviewWorker() / createPreviewStatus()"]
+  V["static /version.json"] --> F
+  F -- "SSE GET /__preview/live<br/>snapshot now, then on change; heartbeat; ends after 25 s" --> B["Browser boot loader<br/>bootPreview()"]
+  B -. "GET /__preview/status: 5 s while building, 30 s otherwise (x4 hidden)<br/>when the stream keeps failing" .-> F
+  B -. "GET /version.json every 60 s (the update gate)" .-> V
+  B -- "newer deployed version: dispose the running app,<br/>import the new hashed entry, mount it. Never location.reload()" --> B
+```
+
+### Using it in your project
+
+One caller workflow; the reusable workflow builds your app, deploys a Worker named after the PR
+(`<name>-pr-<number>`), stamps `version.json`, pushes build and checks status, and removes the
+preview when the PR closes. Your app module exports
+`start(host, { build }): Promise<() => void>`, and your build command calls `buildPreview`.
+
+```yaml
+# .github/workflows/preview.yml
+name: Preview
+on:
+  pull_request: { types: [opened, synchronize, reopened, closed] }
+  workflow_run: { workflows: [CI], types: [requested, completed] }
+jobs:
+  preview:
+    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    with: { name: lab, install: bun install --frozen-lockfile, build: bun run preview:build, outdir: preview-dist }
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+Inputs:
+
+| Input               | Meaning                                                                                 |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| `name`              | Preview name; Workers are `<name>-pr-<number>`.                                         |
+| `working-directory` | Where `install` and `build` run (default the repository root).                          |
+| `install`           | Install command.                                                                        |
+| `build`             | Build command; it writes the static preview to `outdir` (see `buildPreview`).           |
+| `outdir`            | The built preview, relative to `working-directory`.                                     |
+| `wrangler-config`   | Optional path to your own wrangler config (e.g. a Worker with a dev proxy).             |
+| `bun-version`       | Bun version for the job.                                                                |
+
+The `workflow_run` trigger is what reports your CI checks (`running` on `requested`, `passed` or
+`failed` on `completed`) to the preview of that commit's PR. Secrets are passed explicitly, never
+with `secrets: inherit`: the two Cloudflare values, and optionally `WORKER_SECRETS`, `KEY=value`
+lines set on the preview Worker.
+
+### Status in the Worker env
+
+| Name             | Written by                                     | Value (JSON)                                                                  |
+| ---------------- | ---------------------------------------------- | ----------------------------------------------------------------------------- |
+| `PREVIEW_BUILD`  | `mockingbird-preview status --kind build`      | `{ state: "building" \| "deployed" \| "failed", version, at, runUrl?, message? }` |
+| `PREVIEW_CHECKS` | `mockingbird-preview status --kind checks`     | `{ state: "running" \| "passed" \| "failed", version, at, runUrl?, summary? }`    |
+| `PREVIEW_PR`     | the deploy, as a plain var                     | `{ number, url }`                                                             |
+
+They are separate so each write replaces only its own. A missing or malformed value leaves that
+part of the snapshot out; reading never throws. Only `https:` run and PR URLs are kept, and messages
+are capped at 500 characters.
+
+A snapshot is `{ build?, checks?, deployed?, pr?, source, message?, updatedAt }`: `build` and
+`checks` as CI last reported them (with `kind`), `deployed` what `version.json` names
+(`{ version, at: builtAt, runUrl? }`; `runUrl` when the reported build deployed that version),
+`pr` from `PREVIEW_PR`, and `source` `"ci"` once either status is present, else `"none"` with
+`message` "CI has not reported for this preview yet".
+
+`/live` sends `retry: 2000`, an `event: snapshot` at once, then recomputes every `intervalMs` (5 s)
+and sends a snapshot only when it changed, a `: heartbeat` comment every `heartbeatMs` (15 s), and
+ends the response after `maxMs` (25 s). A status write rolls a new Worker version, which an open
+stream only reaches when EventSource reconnects, so the stream is kept short. A client disconnect
+(`request.signal`, or the stream being cancelled) stops it at once and clears every timer.
+
+### Worker wiring
+
+The ready-made Worker needs no code: `mockingbird-preview wrangler-config` points `main` at
+`node_modules/@crvouga/mockingbird-preview/dist/worker-entry.js`. To add a dev proxy, write your
+own Worker:
+
+```ts
+import { devProviders, devProxyWorker, NON_PROD_PATTERNS } from "@crvouga/mockingbird-preview/dev-proxy"
+import { createPreviewWorker } from "@crvouga/mockingbird-preview/worker"
+
+const proxy = devProxyWorker({
+  basePath: "/__dev",
+  providers: Object.values(devProviders),
+  allow: { ...NON_PROD_PATTERNS },
+})
+
+export default createPreviewWorker({ devProxy: { basePath: "/__dev", fetch: proxy.fetch } })
+```
+
+and list its paths in `run_worker_first` (`--run-worker-first /__dev --run-worker-first '/__dev/*'`).
+`createPreviewStatus({ env: () => env, readVersion })` is the status handler alone, for a Worker
+that routes by itself.
+
+### Building the preview
+
+```ts
+import { browserRuntimeBuildOptions } from "@crvouga/mockingbird-adapter-browser/build"
+import { buildPreview } from "@crvouga/mockingbird-preview/build"
+
+await buildPreview({
+  entry: "src/app.ts", // exports start(host, { build })
+  outdir: "preview-dist",
+  title: "Lab preview",
+  esbuild: browserRuntimeBuildOptions(), // merged into the app build
+})
+```
+
+`buildPreview` empties `outdir`, bundles the app as one hashed entry (`app-<hash>.js`, ESM,
+code-split, ES2022, minified; `esbuild` options are merged in, while the entry, output, format,
+splitting and file naming stay fixed), bundles the stable boot loader `preview.js` (which calls
+`bootPreview({ host: "#<hostId>" })`), and writes `build.json` (`{ entry }`), a development
+`version.json` and `index.html` (`<main id="<hostId>">` plus the boot script; `hostId` defaults to
+`preview`). The build may be a cache replay of an older commit's identical output, so the commit is
+stamped at deploy time by `stampPreviewVersion` (or `mockingbird-preview stamp`), which writes
+`version.json` as `{ version, builtAt, entry, pr? }`.
+
+### The CLI
+
+```sh
+mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha> \
+  [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
+mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>] \
+  [--compatibility-date <date>] [--run-worker-first <pattern>]... [--pr <n> --pr-url <url>] > wrangler.json
+```
+
+`status` writes `{ "PREVIEW_BUILD" | "PREVIEW_CHECKS": "<json>" }` to a 0600 temporary file, runs
+`<wrangler> secret bulk <file> --name <worker>` (`--wrangler` defaults to `bunx wrangler@4.50.0`)
+and deletes the file. It prints one line and always exits 0, turning any failure into a
+`::warning::`: status is best effort and never fails CI. `wrangler-config` prints a JSON config:
+`main` (default the package's `dist/worker-entry.js`, as an absolute path), `compatibility_date`,
+`assets` (`binding: "ASSETS"`, `not_found_handling: "single-page-application"`,
+`run_worker_first: ["/__preview/*", …]`) and, with `--pr`, the `PREVIEW_PR` var.
+
+### Browser boot loader
+
+`buildPreview` emits the boot loader for you. By hand it is one call:
+
+```ts
+import { bootPreview } from "@crvouga/mockingbird-preview/boot"
+
+await bootPreview({ host: "#app", live: { storage: localStorage } })
+```
+
+It fetches `./version.json` (no-store), creates `createLivePreview({ current, pr, load })` where
+`load` imports the version's entry relative to the page and calls its `start(host, { build: live })`
+(which returns a disposer), and starts it. The lower-level client is `createLivePreview`:
+
+```ts
+import { createLivePreview, type PreviewVersion } from "@crvouga/mockingbird-preview"
+
+const current = (await (await fetch("/version.json", { cache: "no-store" })).json()) as PreviewVersion
+const host = document.getElementById("app") as HTMLElement
+
+const live = createLivePreview({
+  current,
+  storage: localStorage,
+  // Import the version's hashed entry and mount it; return its disposer.
+  load: async (version) => {
+    const app = (await import(version.entry)) as {
+      start(host: HTMLElement, options: { build: typeof live }): Promise<() => void>
+    }
+    return app.start(host, { build: live })
+  },
+})
+await live.start()
+```
+
+`start()` mounts `current`, then connects: an `EventSource` on `/__preview/live`
+(`connection: "live"` while it is open; the server's periodic close is invisible). After three
+errors in a row without a snapshot, when the browser gives up on the stream, or without
+`EventSource` at all, it polls `/__preview/status` itself (`connection: "polling"`): every 5 s while
+a build is `"building"`, 30 s otherwise, four times slower while the tab is hidden and at once when
+it becomes visible, retrying the stream every 60 s and returning to `"live"` when it opens.
+`/version.json` is polled every 60 s regardless (`"offline"` when it and `/status` both fail).
+An update is offered only once `/version.json` names the new build, so its
+assets are live. With auto-update on (the default, persisted per viewer) it applies after
+`countdownMs` (10 s), or at once while the tab is hidden; `postpone()` skips the countdown until
+the next new version. `applyUpdate()` disposes the running app and loads the new one; if that
+fails it remounts the previous build and reports `update.error` (no automatic retry of that
+version). A lazy chunk that fails to load (`Failed to fetch dynamically imported module`,
+`ChunkLoadError`, …) means the tab's build was replaced: the client checks `/version.json` and
+applies the new build at once. If the first mount fails, `start()` still connects and then
+rejects, so a fixed build replaces the broken one as soon as it deploys.
 
 ## Validation
 

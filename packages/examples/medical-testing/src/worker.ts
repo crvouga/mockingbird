@@ -3,11 +3,7 @@ import {
   devProxyWorker,
   NON_PROD_PATTERNS,
 } from "@crvouga/mockingbird-preview/dev-proxy"
-
-/** The Worker's bindings: the static preview, plus the credentials set with `wrangler secret`. */
-type Env = Record<string, string | undefined> & {
-  ASSETS: { fetch(request: Request): Promise<Response> }
-}
+import { createPreviewWorker } from "@crvouga/mockingbird-preview/worker"
 
 /** Must match `DEV_PROXY_PATH` in `composition/dev.ts` and `run_worker_first` in wrangler.jsonc. */
 const BASE_PATH = "/__dev"
@@ -27,17 +23,11 @@ const proxy = devProxyWorker({
 })
 
 /**
- * The lab preview Worker. Static files come from `preview-dist`; `/__dev/*` is the dev proxy,
- * which attaches allow-listed non-production credentials to requests the browser's emulators
- * forward to a real dev resource. Same origin as the page, so no CORS and no URL to configure.
+ * The lab preview Worker: the package's preview Worker (static files, and the live CI status at
+ * `/__preview/*`, which CI pushes into this Worker's configuration) plus the lab's dev resources
+ * proxy at `/__dev/*`, which attaches allow-listed non-production credentials to requests the
+ * browser's emulators forward to a real dev resource. Stateless; same origin as the page.
  */
-export default {
-  fetch(request: Request, env: Env): Promise<Response> {
-    const { pathname } = new URL(request.url)
-    if (pathname === BASE_PATH || pathname.startsWith(`${BASE_PATH}/`)) {
-      const { ASSETS: _assets, ...secrets } = env
-      return proxy.fetch(request, secrets)
-    }
-    return env.ASSETS.fetch(request)
-  },
-}
+export default createPreviewWorker({
+  devProxy: { basePath: BASE_PATH, fetch: (request, env) => proxy.fetch(request, env) },
+})
