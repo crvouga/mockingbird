@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-config
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Transport scaffold for Amazon Config. ESM; Node 22+ or Bun 1.2+.
 

@@ -85,4 +85,4 @@ Exported types: `Exchange` (`{ status; headers (lower-cased); body: DecodedBody 
 - [`@crvouga/mockingbird-openapi-metadata`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-metadata) — the `x-mockingbird-resource` / `x-mockingbird-volatile` annotations this reads.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — the runner.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-open-wearables
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Work-in-progress emulator of the public Open Wearables API. Users, provider settings,
 connections and asynchronous sync tasks run locally, including inside a browser worker.

@@ -70,7 +70,7 @@ designed for assertions and diagnosis by consuming test suites.
 
 ## Report a mismatch or missing capability
 
-Follow the [agent reporting contract](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md). Include package version,
+Follow the [agent reporting contract](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md). Include package version,
 operation/command, a minimal redacted request, actual emulator result, expected oracle result or vendor
 documentation, and whether the mismatch appears in the matrix. Never include keys, tokens,
 customer data, prompts, PHI, card data, or unredacted recordings.

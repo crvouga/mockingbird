@@ -278,16 +278,16 @@ body{
 }
 `;
 
-const POWERED_BY = `<div class="powered-by">Powered by <a href="https://github.com/crvouga/mockingbird" target="_blank" rel="noopener">Mockingbird</a></div>`;
+const POWERED_BY = `<div class="powered-by">Powered by <a href="https://github.com/crvouga-organization/mockingbird" target="_blank" rel="noopener">Mockingbird</a></div>`;
 
 function emuBar(service?: string): string {
   const title = service ? `${escapeHtml(service)} Emulator` : "Emulator";
   return `<div class="emu-bar">
   <span class="emu-bar-title">${title}</span>
   <nav class="emu-bar-links">
-    <a href="https://github.com/crvouga/mockingbird/issues" target="_blank" rel="noopener"><span class="full">Report Issue</span><span class="short">Report</span></a>
-    <a href="https://github.com/crvouga/mockingbird" target="_blank" rel="noopener"><span class="full">Source Code</span><span class="short">Source</span></a>
-    <a href="https://github.com/crvouga/mockingbird" target="_blank" rel="noopener"><span class="full">Learn More</span><span class="short">Learn</span></a>
+    <a href="https://github.com/crvouga-organization/mockingbird/issues" target="_blank" rel="noopener"><span class="full">Report Issue</span><span class="short">Report</span></a>
+    <a href="https://github.com/crvouga-organization/mockingbird" target="_blank" rel="noopener"><span class="full">Source Code</span><span class="short">Source</span></a>
+    <a href="https://github.com/crvouga-organization/mockingbird" target="_blank" rel="noopener"><span class="full">Learn More</span><span class="short">Learn</span></a>
   </nav>
 </div>`;
 }

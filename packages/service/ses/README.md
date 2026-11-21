@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-ses
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful local emulator of Amazon Simple Email Service. ESM; Node 22+ or Bun 1.2+.
 

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-edamam
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **Edamam** APIs our apps call, answering from a built-in food and recipe
 corpus: the Food Database v2 parser (text and UPC), nutrients and image recognition, Nutrition
@@ -9,7 +9,7 @@ Analysis (`nutrition-data`, `nutrition-details`), Recipe Search v2 (search with 
 logging, barcode scans, photo logging, recipe search, meal plans and grocery lists then work in
 tests without Edamam keys, quotas or network.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/edamam/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/edamam/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from Edamam's per-API docs and our consumers:
   `metrics/adapters/outbound/edamam-nutrition.adapter.ts`,
   `meal-planning/adapters/outbound/edamam-meal-planning.adapter.ts`, and the Python chat
@@ -144,4 +144,4 @@ and the Python client, which concatenate paths; the meal adapter resolves paths 
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--app`, `--require-account-user`); port 8824. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
