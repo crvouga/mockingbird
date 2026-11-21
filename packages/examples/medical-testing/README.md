@@ -166,8 +166,9 @@ the resend cooldown and preferences.
 ## Run it
 
 **In the browser, no server:** visit `/examples/medical-testing` and click "Launch the app",
-or open the standalone static preview. Use **Switch apps** to open System, Lab workspace,
-Emulators or Notifications. These surfaces share the same running database and emulators.
+or open the standalone static preview. The arrows on the switcher pill (middle left until you
+drag it to another edge, where it stays) step through System, Lab workspace, Emulators and
+Notifications; hover one to see where it goes. These surfaces share the same running database and emulators.
 The emulator inspector includes SQL queries, state, clock, faults, journal and routes.
 
 **As a standalone dev server:**
