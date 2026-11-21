@@ -96,16 +96,13 @@ The application must honor the boot/request AbortSignals to terminate work it st
 - `createDevResources({ proxyUrl?, storage?, fetch? })` is the browser side: `upstream(id)` for an
   emulator's `createRuntime({ upstream })` and `controls(services)` for the System screen.
   `DEV_MESSAGES` holds its status sentences and `DEV_STORAGE_KEYS` its storage keys.
-- `createPreviewStatusObject({ verify, pr?, upgrade? })`, from the `/preview-status` export (also
-  re-exported from the package root), returns a Durable Object class holding a preview's CI status
-  snapshot: `GET /status`, `GET /live` (hibernatable WebSocket: the snapshot on connect and on every
-  change, `ping` answered with `pong`) and `POST /events`. `previewStatusRoutes({ basePath?,
-  binding? })` forwards `/__preview/status|live|events` from the Worker to it (same-origin only for
-  status and live). `githubOidcVerifier({ repository, audience?, issuer?, fetch?, now? })` verifies
-  the GitHub Actions OIDC token CI posts events with, and `parsePreviewEvent(value)` validates an
-  event body. See [Live previews](#live-previews).
+- `createPreviewStatus({ repository, pr, readVersion, token?, workflows?, cache?, cacheTtlMs?,
+  basePath?, sse? })`, from the `/preview-status` export (also re-exported from the package root),
+  is a stateless Fetch handler for a preview's CI status, read from the GitHub REST API on request:
+  `GET /__preview/status` (one snapshot) and `GET /__preview/live` (Server-Sent Events), same-origin
+  only, `undefined` for every other path. See [Live previews](#live-previews).
 - `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
-  browser side: it mounts `current`, follows the status object, and swaps in each newly deployed
+  browser side: it mounts `current`, follows the status stream (or polls it), and swaps in each newly deployed
   build without reloading the page. Its result is structurally the UI package's `SystemBuild`
   (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
   `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
@@ -354,80 +351,83 @@ A PR preview that knows what CI is doing to it and moves itself to every new dep
 refresh: the open tab shows when a newer commit is building, deployed or failed, the PR's checks,
 and how fresh it is, then swaps in the new build in place.
 
+Everything is stateless. GitHub is the source of truth; the preview's Worker is a plain Fetch
+handler that, on request, reads CI state from the GitHub REST API and the deployed build from the
+static `version.json`. Realtime is Server-Sent Events from that same function plus polling the
+client manages itself, so it runs on any serverless Fetch runtime with no Durable Object, database
+or CI-to-preview callback.
+
 ```mermaid
 flowchart LR
-  CI["GitHub Actions"] -- "POST /__preview/events<br/>Bearer: GitHub OIDC JWT (aud = preview origin)" --> W["Worker"]
-  W --> DO["Durable Object PREVIEW_STATUS<br/>idFromName('status')<br/>snapshot in state.storage"]
-  DO -- "WebSocket /__preview/live<br/>snapshot on connect, then every change" --> B["Browser boot loader"]
-  B -. "GET /__preview/status every 15 s while the socket is down" .-> W
-  B -. "GET /version.json every 60 s (static, the deployed build)" .-> W
+  GH["GitHub REST API<br/>PR head SHA, latest build and checks runs"] -- "on request, cached 10 s,<br/>one refresh in flight" --> F["Stateless function<br/>createPreviewStatus()"]
+  V["static /version.json"] --> F
+  F -- "SSE GET /__preview/live<br/>snapshot now, then on change; heartbeat; ends after 55 s" --> B["Browser boot loader"]
+  B -. "GET /__preview/status: 5 s while building, 30 s otherwise (x4 hidden)<br/>when the stream keeps failing" .-> F
+  B -. "GET /version.json every 60 s (the update gate)" .-> V
   B -- "newer deployed version: dispose the running app,<br/>import the new hashed entry, mount it. Never location.reload()" --> B
 ```
 
-Events are `{ kind: "build", state: "building" | "deployed" | "failed", version, at, runUrl?,
-message? }` and `{ kind: "checks", state: "running" | "passed" | "failed", version, at, runUrl?,
-summary? }` (`version` is the commit SHA, `at` an ISO time). An event older than the stored one of
-the same kind and version is ignored, so retried or reordered CI steps cannot move the status back.
+A snapshot is `{ build?, checks?, deployed?, pr?, source, message?, updatedAt }`:
+
+- `build` is the build workflow's (default `system-preview.yml`) latest run for the PR's head
+  commit: `"building"` while queued or in progress, `"deployed"` when it succeeded, `"failed"` (with
+  a `message`) when it failed, was cancelled or timed out. `version` is the head SHA, `runUrl` the
+  run, `at` its last update.
+- `checks` is the checks workflow's (default `pr.yml`) latest run for the same commit: `"running"`,
+  `"passed"` or `"failed"`.
+- `deployed` is what `version.json` names (`{ version, at: builtAt }`).
+- `source` is `"github"` when CI status is fresh. Otherwise CI status is the last known one and
+  `message` says why: `"unauthenticated"` (a private repository without a token, or a rejected
+  token), `"rate-limited"` (403/429 with rate-limit headers: no GitHub calls until
+  `x-ratelimit-reset`, `retry-after`, or five minutes) or `"unavailable"` (network error, 5xx).
+  Messages are fixed sentences; GitHub's bodies and the token never reach a response.
+
+`/live` sends `retry: 2000`, an `event: snapshot` at once, then recomputes every `intervalMs` (5 s,
+through the same cache) and sends a snapshot only when it changed, a `: heartbeat` comment every
+`heartbeatMs` (15 s), and ends the response after `maxMs` (55 s), so no request outlives a platform
+limit; EventSource reconnects by itself. A client disconnect (`request.signal`, or the stream being
+cancelled) stops it at once and clears every timer.
 
 ### Worker wiring
 
 ```ts
-import {
-  createPreviewStatusObject,
-  githubOidcVerifier,
-  previewStatusRoutes,
-} from "@crvouga/mockingbird-preview/preview-status"
+import { createPreviewStatus } from "@crvouga/mockingbird-preview/preview-status"
 
-export const PreviewStatus = createPreviewStatusObject({
-  verify: githubOidcVerifier({ repository: "owner/name" }), // aud defaults to the request origin
-  pr: (env) =>
-    typeof env.PR_NUMBER === "string"
-      ? { number: Number(env.PR_NUMBER), url: `https://github.com/owner/name/pull/${env.PR_NUMBER}` }
-      : undefined,
-})
+type Env = {
+  ASSETS: { fetch(request: Request): Promise<Response> }
+  PR_NUMBER: string
+  /** Optional, read-only (Actions: read, Pull requests: read). */
+  PREVIEW_GITHUB_TOKEN?: string
+}
 
-const status = previewStatusRoutes() // "/__preview", binding "PREVIEW_STATUS"
+let status: ((request: Request) => Promise<Response> | undefined) | undefined
 
 export default {
-  fetch: (request: Request, env: Record<string, unknown> & { ASSETS: { fetch(request: Request): Promise<Response> } }) =>
-    status(request, env) ?? env.ASSETS.fetch(request),
+  fetch(request: Request, env: Env): Promise<Response> {
+    status ??= createPreviewStatus({
+      repository: "owner/name",
+      pr: Number(env.PR_NUMBER),
+      token: env.PREVIEW_GITHUB_TOKEN,
+      readVersion: async () => {
+        // The assets binding only reads the path.
+        const response = await env.ASSETS.fetch(new Request("https://assets.local/version.json"))
+        return response.ok ? ((await response.json()) as { version: string; builtAt: string }) : undefined
+      },
+      cache: caches.default, // Workers: share snapshots across isolates
+    })
+    return status(request) ?? env.ASSETS.fetch(request)
+  },
 }
 ```
 
-```jsonc
-// wrangler.jsonc
-"durable_objects": { "bindings": [{ "name": "PREVIEW_STATUS", "class_name": "PreviewStatus" }] },
-"migrations": [{ "tag": "v1", "new_sqlite_classes": ["PreviewStatus"] }]
-```
+Without `PREVIEW_GITHUB_TOKEN` it calls GitHub unauthenticated, which works for a public
+repository (60 requests an hour per egress IP, which the 10 s cache and the shared Cache API keep
+well under for a few viewers). A fine-grained, read-only token raises that to 5 000 an hour and
+reads private repositories. Store it as a Worker secret; it is only ever sent to `api.github.com`.
 
-The verifier accepts only RS256 tokens from `https://token.actions.githubusercontent.com` whose
-`aud` is the preview's origin and whose `repository` claim matches, with 60 s of clock skew. Keys
-come from the issuer's JWKS, cached ten minutes and refetched (at most every 30 s) when a token
-names an unknown key. Failures answer 401 with a reason and never echo the token. There is no
-shared secret to store.
-
-### CI event step
-
-Give the job `permissions: { id-token: write }`, request a token for the preview's origin and post
-the event. Keep it best-effort: a status update must never fail CI.
-
-```yaml
-- name: Report build to the preview
-  if: always()
-  continue-on-error: true
-  env:
-    ORIGIN: https://my-app-pr-12.example.workers.dev
-    STATE: ${{ job.status == 'success' && 'deployed' || 'failed' }}
-  run: |
-    token=$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
-      "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$ORIGIN" | jq -r .value)
-    jq -n --arg state "$STATE" --arg version "$GITHUB_SHA" \
-      --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      --arg runUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
-      '{kind: "build", state: $state, version: $version, at: $at, runUrl: $runUrl}' |
-      curl -sf -X POST "$ORIGIN/__preview/events" -H "Authorization: Bearer $token" \
-        -H "content-type: application/json" --data @- || true
-```
+A stateful push layer (for example a Durable Object that CI notifies, fanning updates out to every
+tab) could be added later as an optional upgrade behind the same `/__preview/live` stream. Nothing
+here requires one.
 
 ### Browser boot loader
 
@@ -454,10 +454,14 @@ const live = createLivePreview({
 await live.start()
 ```
 
-`start()` mounts `current`, then connects: WebSocket with backoff (1 s to 30 s, jittered) and a
-`ping` every 25 s; `/status` polled every 15 s while the socket is down (`connection: "polling"`);
-`/version.json` polled every 60 s regardless (`"offline"` when both fail); an immediate check when
-the tab becomes visible. An update is offered only once `/version.json` names the new build, so its
+`start()` mounts `current`, then connects: an `EventSource` on `/__preview/live`
+(`connection: "live"` while it is open; the server's periodic close is invisible). After three
+errors in a row without a snapshot, when the browser gives up on the stream, or without
+`EventSource` at all, it polls `/__preview/status` itself (`connection: "polling"`): every 5 s while
+a build is `"building"`, 30 s otherwise, four times slower while the tab is hidden and at once when
+it becomes visible, retrying the stream every 60 s and returning to `"live"` when it opens.
+`/version.json` is polled every 60 s regardless (`"offline"` when it and `/status` both fail).
+An update is offered only once `/version.json` names the new build, so its
 assets are live. With auto-update on (the default, persisted per viewer) it applies after
 `countdownMs` (10 s), or at once while the tab is hidden; `postpone()` skips the countdown until
 the next new version. `applyUpdate()` disposes the running app and loads the new one; if that

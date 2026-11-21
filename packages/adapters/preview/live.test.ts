@@ -67,41 +67,47 @@ const fakeClock = () => {
   }
 }
 
-class FakeSocket {
-  static instances: FakeSocket[] = []
+class FakeEventSource {
+  static instances: FakeEventSource[] = []
   readyState = 0
-  sent: string[] = []
-  closedBy: [number | undefined, string | undefined] | undefined
-  onopen: ((event: unknown) => void) | null = null
-  onmessage: ((event: { data: unknown }) => void) | null = null
-  onclose: ((event: unknown) => void) | null = null
-  onerror: ((event: unknown) => void) | null = null
+  closed = false
+  listeners = new Map<string, Set<(event: { data?: unknown }) => void>>()
   constructor(readonly url: string) {
-    FakeSocket.instances.push(this)
+    FakeEventSource.instances.push(this)
   }
-  send(data: string) {
-    this.sent.push(data)
+  addEventListener(type: string, listener: (event: { data?: unknown }) => void) {
+    if (!this.listeners.has(type)) this.listeners.set(type, new Set())
+    this.listeners.get(type)?.add(listener)
   }
-  close(code?: number, reason?: string) {
-    this.closedBy = [code, reason]
-    this.readyState = 3
+  close() {
+    this.closed = true
+    this.readyState = 2
+  }
+  #dispatch(type: string, event: { data?: unknown } = {}) {
+    for (const listener of this.listeners.get(type) ?? []) listener(event)
   }
   open() {
     this.readyState = 1
-    this.onopen?.({})
+    this.#dispatch("open")
   }
   snapshot(snapshot: Partial<PreviewStatusSnapshot>) {
-    this.onmessage?.({
+    this.#dispatch("snapshot", {
       data: JSON.stringify({
-        type: "snapshot",
-        snapshot: { updatedAt: new Date(T0).toISOString(), ...snapshot },
+        updatedAt: new Date(T0).toISOString(),
+        source: "github",
+        ...snapshot,
       }),
     })
   }
-  drop() {
-    this.readyState = 3
-    this.onerror?.({})
-    this.onclose?.({})
+  /** A dropped stream EventSource will retry by itself. */
+  error() {
+    this.readyState = 0
+    this.#dispatch("error")
+  }
+  /** A failure EventSource will not retry (HTTP error, wrong content type). */
+  fail() {
+    this.readyState = 2
+    this.#dispatch("error")
   }
 }
 
@@ -137,9 +143,12 @@ const memoryStorage = (initial: Record<string, string> = {}) => {
 type Served = { version: PreviewVersion | "fail"; status: PreviewStatusSnapshot | "fail" }
 
 const harness = (overrides: Partial<LivePreviewOptions> = {}) => {
-  FakeSocket.instances = []
+  FakeEventSource.instances = []
   const clock = fakeClock()
-  const served: Served = { version: V1, status: { updatedAt: new Date(T0).toISOString() } }
+  const served: Served = {
+    version: V1,
+    status: { updatedAt: new Date(T0).toISOString(), source: "github" },
+  }
   const requests: string[] = []
   const loads: string[] = []
   const disposed: string[] = []
@@ -166,11 +175,10 @@ const harness = (overrides: Partial<LivePreviewOptions> = {}) => {
     origin: ORIGIN,
     now: clock.now,
     timers: clock.timers,
-    random: () => 1,
     document: doc,
     window: win,
     storage,
-    WebSocket: FakeSocket as unknown as typeof WebSocket,
+    EventSource: FakeEventSource,
     fetch: fetchFake as typeof fetch,
     load: async (version) => {
       loads.push(version.version)
@@ -183,7 +191,7 @@ const harness = (overrides: Partial<LivePreviewOptions> = {}) => {
   })
   const states: LiveBuildState[] = []
   live.subscribe((state) => states.push(state))
-  const socket = () => FakeSocket.instances.at(-1) as FakeSocket
+  const socket = () => FakeEventSource.instances.at(-1) as FakeEventSource
   return {
     live,
     clock,
@@ -225,11 +233,10 @@ describe("createLivePreview", () => {
         origin: ORIGIN,
         now: clock.now,
         timers: clock.timers,
-        random: () => 1,
         document: new FakeTarget(),
         window: new FakeTarget(),
         storage: memoryStorage(),
-        WebSocket: FakeSocket as unknown as typeof WebSocket,
+        EventSource: FakeEventSource,
         load: async () => {
           globalThis.fetch = (async () => {
             throw new Error("the app's runtime fetch")
@@ -250,9 +257,9 @@ describe("createLivePreview", () => {
     const h = harness({ pr: { number: 12, url: "https://github.com/crvouga/mockingbird/pull/12" } })
     await h.live.start()
     expect(h.loads).toEqual([V1.version])
-    expect(h.socket().url).toBe("wss://lab-pr-12.example.workers.dev/__preview/live")
+    expect(h.socket().url).toBe("https://lab-pr-12.example.workers.dev/__preview/live")
     expect(h.requests).toContain("/version.json")
-    expect(h.live.get().connection).toBe("polling") // version.json answered; socket not open yet
+    expect(h.live.get().connection).toBe("polling") // version.json answered; stream not open yet
     h.socket().open()
     h.socket().snapshot({
       build: {
@@ -297,94 +304,152 @@ describe("createLivePreview", () => {
     h.live.close()
   })
 
-  test("uses ws: on http origins and the snapshot's PR when none is given", async () => {
+  test("uses the snapshot's PR when none is given", async () => {
     const h = harness({ origin: "http://localhost:8787" })
     await h.live.start()
-    expect(h.socket().url).toBe("ws://localhost:8787/__preview/live")
+    expect(h.socket().url).toBe("http://localhost:8787/__preview/live")
     h.socket().open()
     h.socket().snapshot({ pr: { number: 3, url: "https://github.com/o/r/pull/3" } })
     expect(h.live.get().pr).toEqual({ number: 3, url: "https://github.com/o/r/pull/3" })
     h.live.close()
   })
 
-  test("pings every 25 s and treats pong as contact", async () => {
+  test("stays live across the server's periodic stream close, and does not poll", async () => {
     const h = harness()
     await h.live.start()
     h.socket().open()
-    await h.clock.advance(25_000)
-    expect(h.socket().sent).toEqual(["ping"])
-    h.socket().onmessage?.({ data: "pong" })
-    expect(h.live.get().checkedAt).toBe(new Date(T0 + 25_000).toISOString())
-    await h.clock.advance(25_000)
-    expect(h.socket().sent).toEqual(["ping", "ping"])
-    h.live.close()
-  })
-
-  test("reconnects with exponential backoff capped at 30 s, reset on open", async () => {
-    const h = harness()
-    await h.live.start()
-    const delays: number[] = []
-    for (let i = 0; i < 7; i++) {
-      const before = FakeSocket.instances.length
-      const droppedAt = h.clock.now()
-      h.socket().drop()
-      let waited = 0
-      while (FakeSocket.instances.length === before) {
-        await h.clock.advance(500)
-        waited += 500
-        if (waited > 60_000) throw new Error("never reconnected")
-      }
-      delays.push(h.clock.now() - droppedAt)
-    }
-    expect(delays).toEqual([1_000, 2_000, 4_000, 8_000, 16_000, 30_000, 30_000])
+    h.socket().snapshot({})
+    h.socket().error() // the server ended the stream after maxMs; EventSource reopens it
+    expect(h.live.get().connection).toBe("live")
     h.socket().open()
-    const before = FakeSocket.instances.length
-    h.socket().drop()
-    await h.clock.advance(1_000)
-    expect(FakeSocket.instances.length).toBe(before + 1)
-    h.live.close()
-  })
-
-  test("jitter spreads the delay between half and all of the ceiling", async () => {
-    const h = harness({ random: () => 0 })
-    await h.live.start()
-    h.socket().drop()
-    await h.clock.advance(499)
-    expect(FakeSocket.instances.length).toBe(1)
-    await h.clock.advance(1)
-    expect(FakeSocket.instances.length).toBe(2)
-    h.live.close()
-  })
-
-  test("polls /status every 15 s while the socket is down, stops when it opens, offline when all fail", async () => {
-    const h = harness()
-    await h.live.start()
-    h.socket().open()
+    h.socket().snapshot({})
+    await h.clock.advance(120_000)
     expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(0)
-    h.socket().drop()
+    expect(FakeEventSource.instances.length).toBe(1)
+    h.live.close()
+  })
+
+  test("falls back to polling after 3 errors without a snapshot", async () => {
+    const h = harness()
+    await h.live.start()
+    h.socket().open()
+    h.socket().error()
+    h.socket().error()
+    expect(h.live.get().connection).toBe("polling")
+    expect(h.socket().closed).toBe(false)
+    expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(0)
+    h.socket().error()
+    expect(h.socket().closed).toBe(true)
     await h.clock.advance(0)
     expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(1)
     expect(h.live.get().connection).toBe("polling")
-    h.served.status = {
-      ...deployedSnapshot(V1),
-      updatedAt: new Date(T0).toISOString(),
-    } as PreviewStatusSnapshot
-    await h.clock.advance(15_000)
-    expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(2)
-    expect(h.live.get().latest?.version).toBe(V1.version)
+    h.live.close()
+  })
+
+  test("a snapshot resets the error count", async () => {
+    const h = harness()
+    await h.live.start()
+    h.socket().error()
+    h.socket().error()
     h.socket().open()
-    const count = h.requests.filter((p) => p === "/__preview/status").length
-    await h.clock.advance(45_000)
-    expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(count)
+    h.socket().snapshot({})
+    h.socket().error()
+    h.socket().error()
+    expect(h.socket().closed).toBe(false)
+    h.live.close()
+  })
+
+  test("falls back at once when EventSource gives up", async () => {
+    const h = harness()
+    await h.live.start()
+    h.socket().fail()
+    expect(h.socket().closed).toBe(true)
+    await h.clock.advance(0)
+    expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(1)
+    h.live.close()
+  })
+
+  test("polls without EventSource: 30 s idle, 5 s while building", async () => {
+    const h = harness({ EventSource: null })
+    await h.live.start()
+    expect(FakeEventSource.instances.length).toBe(0)
+    const count = () => h.requests.filter((p) => p === "/__preview/status").length
+    expect(count()).toBe(1)
+    await h.clock.advance(29_999)
+    expect(count()).toBe(1)
+    await h.clock.advance(1)
+    expect(count()).toBe(2)
+    h.served.status = {
+      build: { kind: "build", state: "building", version: V2.version, at: V2.builtAt },
+      source: "github",
+      updatedAt: new Date(T0).toISOString(),
+    }
+    await h.clock.advance(30_000)
+    expect(count()).toBe(3)
+    expect(h.live.get().build?.state).toBe("building")
+    await h.clock.advance(5_000)
+    expect(count()).toBe(4)
+    await h.clock.advance(5_000)
+    expect(count()).toBe(5)
+    h.live.close()
+    expect(h.clock.pendingCount()).toBe(0)
+  })
+
+  test("polls four times slower while hidden and at once on becoming visible", async () => {
+    const h = harness({ EventSource: null })
+    await h.live.start()
+    const count = () => h.requests.filter((p) => p === "/__preview/status").length
+    h.doc.hidden = true
+    await h.clock.advance(30_000) // the timer set while visible
+    expect(count()).toBe(2)
+    await h.clock.advance(119_999)
+    expect(count()).toBe(2)
+    await h.clock.advance(1)
+    expect(count()).toBe(3)
+    h.doc.hidden = false
+    h.doc.dispatch("visibilitychange")
+    await flush()
+    expect(count()).toBe(4)
+    await h.clock.advance(30_000)
+    expect(count()).toBe(5)
+    h.live.close()
+  })
+
+  test("retries the stream every 60 s while polling and returns to live when it opens", async () => {
+    const h = harness()
+    await h.live.start()
+    h.socket().fail()
+    await h.clock.advance(0)
+    expect(h.live.get().connection).toBe("polling")
+    await h.clock.advance(60_000)
+    expect(FakeEventSource.instances.length).toBe(2)
+    h.socket().fail() // still down: keep polling, try again in a minute
+    await h.clock.advance(60_000)
+    expect(FakeEventSource.instances.length).toBe(3)
+    h.socket().open()
     expect(h.live.get().connection).toBe("live")
-    // Everything down.
+    const count = h.requests.filter((p) => p === "/__preview/status").length
+    await h.clock.advance(120_000)
+    expect(h.requests.filter((p) => p === "/__preview/status").length).toBe(count)
+    expect(FakeEventSource.instances.length).toBe(3)
+    h.live.close()
+  })
+
+  test("offline when both /status and /version.json fail", async () => {
+    const h = harness()
+    await h.live.start()
+    h.socket().open()
+    expect(h.live.get().connection).toBe("live")
     h.served.status = "fail"
     h.served.version = "fail"
-    h.socket().drop()
+    h.socket().fail()
     await h.clock.advance(60_000)
     expect(h.live.get().connection).toBe("offline")
     const lastContact = h.live.get().checkedAt
     expect(Date.parse(lastContact ?? "")).toBeLessThan(h.clock.now())
+    h.served.version = V1
+    await h.clock.advance(60_000)
+    expect(h.live.get().connection).toBe("polling")
     h.live.close()
   })
 
@@ -579,7 +644,7 @@ describe("createLivePreview", () => {
     const h = harness()
     h.failLoad.add(V1.version)
     await expect(h.live.start()).rejects.toThrow("boom /app-1.js")
-    expect(FakeSocket.instances.length).toBe(1)
+    expect(FakeEventSource.instances.length).toBe(1)
     expect(h.live.get().update.error).toContain("boom")
     h.served.version = V2
     await h.clock.advance(60_000)
@@ -613,17 +678,17 @@ describe("createLivePreview", () => {
     h.live.close()
   })
 
-  test("becoming visible checks at once and reconnects a dropped socket", async () => {
+  test("becoming visible checks at once and retries a failed stream", async () => {
     const h = harness()
     await h.live.start()
-    h.socket().drop()
+    h.socket().fail()
     await flush()
-    const sockets = FakeSocket.instances.length
+    const sockets = FakeEventSource.instances.length
     const versions = h.requests.filter((p) => p === "/version.json").length
     h.doc.dispatch("visibilitychange")
     await flush()
     expect(h.requests.filter((p) => p === "/version.json").length).toBe(versions + 1)
-    expect(FakeSocket.instances.length).toBe(sockets + 1)
+    expect(FakeEventSource.instances.length).toBe(sockets + 1)
     h.live.close()
   })
 
@@ -642,13 +707,13 @@ describe("createLivePreview", () => {
     h.live.close()
   })
 
-  test("close stops timers, listeners and the socket", async () => {
+  test("close stops timers, listeners and the stream", async () => {
     const h = harness()
     await h.live.start()
     h.socket().open()
     expect(h.doc.count() + h.win.count()).toBe(3)
     h.live.close()
-    expect(h.socket().closedBy).toEqual([1000, "closed"])
+    expect(h.socket().closed).toBe(true)
     expect(h.clock.pendingCount()).toBe(0)
     expect(h.doc.count() + h.win.count()).toBe(0)
     expect(h.live.get().connection).not.toBe("live")

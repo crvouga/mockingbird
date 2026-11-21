@@ -1,9 +1,10 @@
 /**
  * Live preview client: keeps a preview tab on the latest deployed build without a reload.
  *
- * It listens to the preview's status object over a WebSocket (`${basePath}/live`), falls back to
- * polling `${basePath}/status` while the socket is down, and always polls the static
- * `/version.json`, which names the deployed build's hashed entry. When a newer build is live it
+ * It listens to the preview's stateless status function over Server-Sent Events
+ * (`${basePath}/live`). When the stream keeps failing, or `EventSource` is missing, it polls
+ * `${basePath}/status` itself (adaptively) and retries the stream every minute. It always polls the
+ * static `/version.json`, which names the deployed build's hashed entry. When a newer build is live it
  * disposes the running app and mounts the new one in the same page, never `location.reload()`.
  *
  * The returned object is structurally the UI package's `SystemBuild`; pass it to
@@ -64,6 +65,16 @@ export type LivePreview = SystemBuildLike & {
 
 type Disposer = () => void | Promise<void>
 
+/** An `EventSource`, as much of it as the client uses. */
+export type EventSourceLike = {
+  readonly readyState: number
+  addEventListener(type: string, listener: (event: { data?: unknown }) => void): void
+  close(): void
+}
+
+/** A constructor for `EventSourceLike` (the global `EventSource` satisfies it). */
+export type EventSourceConstructorLike = new (url: string) => EventSourceLike
+
 /** Event targets the client listens on, as much of them as it uses. */
 type ListenerTarget = {
   addEventListener(type: string, listener: (event: unknown) => void): void
@@ -83,7 +94,8 @@ export type LivePreviewOptions = {
   countdownMs?: number
   /** Persists the auto-update preference under `mockingbird.preview.auto-update`. */
   storage?: Pick<Storage, "getItem" | "setItem">
-  WebSocket?: typeof WebSocket
+  /** Default the global `EventSource`. `null` (or no global) polls `/status` instead. */
+  EventSource?: EventSourceConstructorLike | null
   fetch?: typeof fetch
   now?: () => number
   pr?: { number: number; url: string }
@@ -98,19 +110,20 @@ export type LivePreviewOptions = {
     setTimeout(callback: () => void, ms: number): unknown
     clearTimeout(handle: unknown): void
   }
-  /** Jitter source in [0, 1). Default `Math.random`. */
-  random?: () => number
 }
 
 export const LIVE_PREVIEW_STORAGE_KEY = "mockingbird.preview.auto-update"
 
-const BACKOFF_MIN_MS = 1_000
-const BACKOFF_MAX_MS = 30_000
-const PING_MS = 25_000
-const STATUS_POLL_MS = 15_000
+/** Consecutive stream errors without a snapshot before the client polls instead. */
+const SSE_MAX_ERRORS = 3
+/** How often a polling client tries the stream again. */
+const SSE_RETRY_MS = 60_000
+const STATUS_POLL_BUILDING_MS = 5_000
+const STATUS_POLL_MS = 30_000
+const HIDDEN_FACTOR = 4
 const VERSION_POLL_MS = 60_000
 const PENDING_RECHECK_MS = 5_000
-const OPEN = 1
+const CLOSED = 2
 
 const CHUNK_FAILURE =
   /Failed to fetch dynamically imported module|Importing a module script failed|error loading dynamically imported module|ChunkLoadError|Loading chunk [\w-]+ failed/i
@@ -159,7 +172,6 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
   const versionPath = options.versionUrl ?? "/version.json"
   const countdownMs = options.countdownMs ?? 10_000
   const now = options.now ?? Date.now
-  const random = options.random ?? Math.random
   // Captured now: the app versions this loads may install their own runtime and replace the
   // globals (the browser runtime routes fetch to in-page servers), but status and version checks
   // must always reach the real network.
@@ -167,7 +179,11 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
   const doFetch =
     options.fetch ??
     ((input: string, init?: RequestInit) => nativeFetch.call(globalThis, input, init))
-  const Socket = options.WebSocket ?? (globalThis as { WebSocket?: typeof WebSocket }).WebSocket
+  const Source =
+    options.EventSource === null
+      ? undefined
+      : (options.EventSource ??
+        (globalThis as { EventSource?: EventSourceConstructorLike }).EventSource)
   const timers = options.timers ?? {
     setTimeout: (callback: () => void, ms: number) => setTimeout(callback, ms),
     clearTimeout: (handle: unknown) => clearTimeout(handle as ReturnType<typeof setTimeout>),
@@ -192,8 +208,10 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
   let disposer: Disposer | undefined
   let snapshot: PreviewStatusSnapshot | undefined
   let deployed: PreviewVersion | undefined // from /version.json
-  let socket: WebSocket | undefined
-  let socketOpen = false
+  let source: EventSourceLike | undefined
+  let sseOpen = false
+  let sseErrors = 0
+  let polling = false
   let statusOk = false
   let versionOk = false
   let checkedAt: string | undefined
@@ -204,7 +222,6 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
   let postponed: string | undefined
   let failed: string | undefined
   let countdownFor: string | undefined
-  let attempts = 0
   let closed = true
   const handles = new Map<string, unknown>()
   const listeners = new Set<(state: LiveBuildState) => void>()
@@ -275,7 +292,7 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
             },
           }
         : {}),
-      connection: socketOpen ? "live" : statusOk || versionOk ? "polling" : "offline",
+      connection: sseOpen ? "live" : statusOk || versionOk ? "polling" : "offline",
       ...(checkedAt === undefined ? {} : { checkedAt }),
       update: {
         available: next !== undefined,
@@ -398,85 +415,85 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
     }
   }
 
+  /** 5 s while a build is running, 30 s otherwise; four times slower while the tab is hidden. */
+  const statusInterval = () =>
+    (snapshot?.build?.state === "building" ? STATUS_POLL_BUILDING_MS : STATUS_POLL_MS) *
+    (doc?.hidden === true ? HIDDEN_FACTOR : 1)
+
   const pollStatus = () => {
-    if (socketOpen || closed) return
-    later("status", STATUS_POLL_MS, () => {
-      void checkStatus()
-      pollStatus()
+    if (!polling || closed) return
+    later("status", statusInterval(), () => {
+      void checkStatus().then(pollStatus)
     })
   }
 
-  const ping = () => {
-    later("ping", PING_MS, () => {
-      if (socket?.readyState === OPEN) {
-        try {
-          socket.send("ping")
-        } catch {
-          // The close handler reconnects.
-        }
-      }
-      ping()
-    })
+  /** Polls `/status` until the stream opens again, retrying the stream every minute. */
+  const fallBack = () => {
+    if (closed) return
+    if (!polling) {
+      polling = true
+      void checkStatus()
+      pollStatus()
+    }
+    later("sse-retry", SSE_RETRY_MS, connect)
+  }
+
+  const stopPolling = () => {
+    polling = false
+    clear("status")
+    clear("sse-retry")
   }
 
   const connect = () => {
-    if (closed || Socket === undefined) return
-    clear("reconnect")
-    const wsUrl = new URL(`${basePath}/live`, origin || "http://localhost")
-    wsUrl.protocol = wsUrl.protocol === "https:" ? "wss:" : "ws:"
-    let ws: WebSocket
-    try {
-      ws = new Socket(wsUrl.href)
-    } catch {
-      disconnected()
+    if (closed) return
+    clear("sse-retry")
+    if (Source === undefined) {
+      fallBack()
       return
     }
-    socket = ws
-    ws.onopen = () => {
-      if (socket !== ws) return
-      attempts = 0
-      socketOpen = true
-      contact()
-      clear("status")
-      ping()
-      changed()
+    source?.close()
+    let es: EventSourceLike
+    try {
+      es = new Source(url(`${basePath}/live`))
+    } catch {
+      source = undefined
+      fallBack()
+      return
     }
-    ws.onmessage = (event) => {
-      if (socket !== ws || typeof event.data !== "string") return
-      if (event.data === "pong") {
-        contact()
-        changed()
-        return
-      }
+    source = es
+    es.addEventListener("open", () => {
+      if (source !== es || closed) return
+      sseOpen = true
+      contact()
+      stopPolling()
+      changed()
+    })
+    es.addEventListener("snapshot", (event) => {
+      if (source !== es || closed || typeof event.data !== "string") return
+      sseErrors = 0
       try {
-        const message = JSON.parse(event.data) as { type?: unknown; snapshot?: unknown }
-        if (message.type === "snapshot") acceptSnapshot(message.snapshot)
+        acceptSnapshot(JSON.parse(event.data))
       } catch {
         // Not ours.
       }
-    }
-    ws.onclose = () => {
-      if (socket === ws) disconnected()
-    }
-    ws.onerror = () => {
-      // onclose follows.
-    }
-  }
-
-  const disconnected = () => {
-    socket = undefined
-    const wasOpen = socketOpen
-    socketOpen = false
-    clear("ping")
-    if (closed) return
-    const ceiling = Math.min(BACKOFF_MAX_MS, BACKOFF_MIN_MS * 2 ** attempts)
-    attempts++
-    later("reconnect", ceiling / 2 + (random() * ceiling) / 2, connect)
-    if (!handles.has("status")) {
-      void checkStatus()
-      pollStatus()
-    }
-    if (wasOpen) changed()
+    })
+    es.addEventListener("error", () => {
+      if (source !== es || closed) return
+      const wasOpen = sseOpen
+      sseErrors++
+      // The server ends every stream after ~55 s and EventSource reopens it within seconds: the
+      // first error after a healthy stream stays "live"; a second one in a row does not.
+      if (!(wasOpen && sseErrors === 1 && es.readyState !== CLOSED)) sseOpen = false
+      if (sseErrors >= SSE_MAX_ERRORS || es.readyState === CLOSED) {
+        sseOpen = false
+        // EventSource gave up, or keeps failing: poll instead and try the stream again later.
+        source = undefined
+        es.close()
+        fallBack()
+      }
+      // Otherwise EventSource reconnects by itself (the server ends each stream after ~55 s).
+      if (wasOpen !== sseOpen || polling) changed()
+    })
   }
 
   const onVisibility = () => {
@@ -491,9 +508,10 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
       return
     }
     void checkVersion()
-    if (!socketOpen) {
-      void checkStatus()
-      attempts = 0
+    if (polling) {
+      // Back at the 1x interval at once, and give the stream another chance.
+      void checkStatus().then(pollStatus)
+      clear("status")
       connect()
     }
   }
@@ -587,10 +605,6 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
       win?.addEventListener("unhandledrejection", onFailure)
       win?.addEventListener("error", onFailure)
       connect()
-      if (Socket === undefined) {
-        void checkStatus()
-        pollStatus()
-      }
       await checkVersion()
       pollVersion()
       if (mountError !== undefined) throw mountError
@@ -602,11 +616,12 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
       doc?.removeEventListener("visibilitychange", onVisibility)
       win?.removeEventListener("unhandledrejection", onFailure)
       win?.removeEventListener("error", onFailure)
-      const ws = socket
-      socket = undefined
-      socketOpen = false
+      const es = source
+      source = undefined
+      sseOpen = false
+      polling = false
       try {
-        ws?.close(1000, "closed")
+        es?.close()
       } catch {
         // Already closed.
       }

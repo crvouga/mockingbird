@@ -1,740 +1,629 @@
-import { beforeAll, describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
 import {
-  createPreviewStatusObject,
-  type DurableObjectStateLike,
-  githubOidcVerifier,
+  createPreviewStatus,
+  type PreviewStatusCacheLike,
+  type PreviewStatusOptions,
   type PreviewStatusSnapshot,
-  type PreviewWebSocketLike,
-  parsePreviewEvent,
-  previewStatusRoutes,
 } from "./src/preview-status.js"
 
-const ISSUER = "https://token.actions.githubusercontent.com"
 const ORIGIN = "https://lab-pr-12.example.workers.dev"
 const REPO = "crvouga/mockingbird"
 const SHA = "a".repeat(40)
-const SHA2 = "b".repeat(40)
-const NOW = Date.parse("2026-11-20T12:00:00Z")
+const T0 = Date.parse("2026-11-20T12:00:00Z")
+const TOKEN = "ghp_SUPERSECRETTOKEN123"
+const RUN_AT = "2026-11-20T11:59:00Z"
 
-// --- JWT helpers ---
+type Run = { status: string; conclusion: string | null; html_url?: string; updated_at?: string }
+type Answer = Response | (() => Response | Promise<Response>) | "network"
 
-const b64url = (bytes: Uint8Array | string): string => {
-  const data = typeof bytes === "string" ? new TextEncoder().encode(bytes) : bytes
-  let binary = ""
-  for (const byte of data) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
-}
-
-type KeyPair = { privateKey: CryptoKey; publicKey: CryptoKey; jwk: JsonWebKey & { kid: string } }
-
-const generate = async (kid: string): Promise<KeyPair> => {
-  const pair = (await crypto.subtle.generateKey(
-    {
-      name: "RSASSA-PKCS1-v1_5",
-      modulusLength: 2048,
-      publicExponent: new Uint8Array([1, 0, 1]),
-      hash: "SHA-256",
-    },
-    true,
-    ["sign", "verify"],
-  )) as CryptoKeyPair
-  const jwk = await crypto.subtle.exportKey("jwk", pair.publicKey)
-  return { ...pair, jwk: { ...jwk, kid, use: "sig", alg: "RS256" } }
-}
-
-const sign = async (
-  key: KeyPair,
-  claims: Record<string, unknown>,
-  header: Record<string, unknown> = { alg: "RS256", typ: "JWT", kid: key.jwk.kid },
-): Promise<string> => {
-  const input = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(claims))}`
-  const signature = await crypto.subtle.sign(
-    "RSASSA-PKCS1-v1_5",
-    key.privateKey,
-    new TextEncoder().encode(input),
-  )
-  return `${input}.${b64url(new Uint8Array(signature))}`
-}
-
-const goodClaims = (overrides: Record<string, unknown> = {}) => ({
-  iss: ISSUER,
-  aud: ORIGIN,
-  repository: REPO,
-  iat: NOW / 1000 - 10,
-  nbf: NOW / 1000 - 10,
-  exp: NOW / 1000 + 300,
-  ...overrides,
-})
-
-let keyA: KeyPair
-let keyB: KeyPair
-beforeAll(async () => {
-  keyA = await generate("key-a")
-  keyB = await generate("key-b")
-})
-
-/** A verifier whose JWKS fetch serves `served()` and counts calls. */
-const verifierWith = (served: () => JsonWebKey[], clock: { now: number } = { now: NOW }) => {
-  const calls: string[] = []
-  const verify = githubOidcVerifier({
-    repository: REPO,
-    now: () => clock.now,
-    fetch: async (request) => {
-      calls.push(request.url)
-      return Response.json({ keys: served() })
-    },
-  })
-  return { verify, calls, clock }
-}
-
-const eventRequest = (token?: string, body: unknown = {}) =>
-  new Request(`${ORIGIN}/__preview/events`, {
-    method: "POST",
-    headers: token === undefined ? {} : { authorization: `Bearer ${token}` },
-    body: typeof body === "string" ? body : JSON.stringify(body),
-  })
-
-describe("githubOidcVerifier", () => {
-  test("accepts a good token and fetches the JWKS from the issuer", async () => {
-    const { verify, calls } = verifierWith(() => [keyA.jwk])
-    const result = await verify(eventRequest(await sign(keyA, goodClaims())))
-    expect(result.ok).toBe(true)
-    if (result.ok) expect(result.claims.repository).toBe(REPO)
-    expect(calls).toEqual([`${ISSUER}/.well-known/jwks`])
-  })
-
-  test("accepts an audience array and caches the JWKS", async () => {
-    const { verify, calls } = verifierWith(() => [keyA.jwk])
-    const token = await sign(keyA, goodClaims({ aud: ["other", ORIGIN] }))
-    expect((await verify(eventRequest(token))).ok).toBe(true)
-    expect((await verify(eventRequest(token))).ok).toBe(true)
-    expect(calls.length).toBe(1)
-  })
-
-  test("refetches the JWKS after ten minutes", async () => {
-    const { verify, calls, clock } = verifierWith(() => [keyA.jwk])
-    expect((await verify(eventRequest(await sign(keyA, goodClaims())))).ok).toBe(true)
-    clock.now += 11 * 60 * 1000
-    const token = await sign(keyA, goodClaims({ exp: clock.now / 1000 + 60 }))
-    expect((await verify(eventRequest(token))).ok).toBe(true)
-    expect(calls.length).toBe(2)
-  })
-
-  const rejects: [string, () => Promise<string>, string][] = [
-    [
-      "wrong audience",
-      () => sign(keyA, goodClaims({ aud: "https://evil.example" })),
-      "wrong audience",
-    ],
-    ["wrong issuer", () => sign(keyA, goodClaims({ iss: "https://evil.example" })), "wrong issuer"],
-    [
-      "wrong repository",
-      () => sign(keyA, goodClaims({ repository: "evil/fork" })),
-      "wrong repository",
-    ],
-    ["expired", () => sign(keyA, goodClaims({ exp: NOW / 1000 - 61 })), "token expired"],
-    [
-      "not yet valid",
-      () => sign(keyA, goodClaims({ nbf: NOW / 1000 + 120 })),
-      "token not yet valid",
-    ],
-    ["no expiry", () => sign(keyA, goodClaims({ exp: undefined })), "token has no expiry"],
-    [
-      "alg none",
-      async () =>
-        `${b64url(JSON.stringify({ alg: "none", kid: "key-a" }))}.${b64url(JSON.stringify(goodClaims()))}.`,
-      "unsupported token algorithm",
-    ],
-    [
-      "HS256",
-      () => sign(keyA, goodClaims(), { alg: "HS256", kid: "key-a" }),
-      "unsupported token algorithm",
-    ],
-    ["no kid", () => sign(keyA, goodClaims(), { alg: "RS256" }), "token has no key id"],
-    [
-      "bad signature",
-      async () => {
-        const token = await sign(keyB, goodClaims(), { alg: "RS256", kid: "key-a" })
-        return token
-      },
-      "bad signature",
-    ],
-    [
-      "tampered payload",
-      async () => {
-        const [h, , s] = (await sign(keyA, goodClaims())).split(".")
-        return `${h}.${b64url(JSON.stringify(goodClaims({ repository: "evil/fork" })))}.${s}`
-      },
-      "bad signature",
-    ],
-    ["malformed", async () => "not-a-jwt", "malformed token"],
-    ["malformed base64", async () => "a.b!.c", "malformed token"],
-  ]
-  for (const [name, token, reason] of rejects) {
-    test(`rejects ${name}`, async () => {
-      const { verify } = verifierWith(() => [keyA.jwk])
-      expect(await verify(eventRequest(await token()))).toEqual({ ok: false, reason })
-    })
-  }
-
-  test("tolerates 60 s of clock skew", async () => {
-    const { verify } = verifierWith(() => [keyA.jwk])
-    const token = await sign(keyA, goodClaims({ exp: NOW / 1000 - 30, nbf: NOW / 1000 + 30 }))
-    expect((await verify(eventRequest(token))).ok).toBe(true)
-  })
-
-  test("rejects a missing header without fetching keys", async () => {
-    const { verify, calls } = verifierWith(() => [keyA.jwk])
-    expect(await verify(eventRequest())).toEqual({ ok: false, reason: "missing bearer token" })
-    expect(calls.length).toBe(0)
-  })
-
-  test("refetches once on an unknown kid (key rotation), then rate-limits", async () => {
-    let served = [keyA.jwk]
-    const { verify, calls, clock } = verifierWith(() => served)
-    expect((await verify(eventRequest(await sign(keyA, goodClaims())))).ok).toBe(true)
-    served = [keyA.jwk, keyB.jwk]
-    clock.now += 31_000
-    expect(await verify(eventRequest(await sign(keyB, goodClaims())))).toMatchObject({ ok: true })
-    expect(calls.length).toBe(2)
-    // A kid nobody serves: one refetch per cooldown at most.
-    const ghost = await sign(keyA, goodClaims(), { alg: "RS256", kid: "ghost" })
-    clock.now += 31_000
-    expect(await verify(eventRequest(ghost))).toEqual({ ok: false, reason: "unknown signing key" })
-    expect(await verify(eventRequest(ghost))).toEqual({ ok: false, reason: "unknown signing key" })
-    expect(calls.length).toBe(3)
-  })
-
-  test("a JWKS failure is a rejection, not a throw", async () => {
-    const verify = githubOidcVerifier({
-      repository: REPO,
-      now: () => NOW,
-      fetch: async () => new Response("down", { status: 503 }),
-    })
-    expect(await verify(eventRequest(await sign(keyA, goodClaims())))).toEqual({
-      ok: false,
-      reason: "could not load signing keys",
-    })
-  })
-
-  test("custom audience and issuer", async () => {
-    const issuer = "https://issuer.example"
-    const verify = githubOidcVerifier({
-      repository: REPO,
-      issuer,
-      audience: () => "mockingbird-preview",
-      now: () => NOW,
-      fetch: async (request) => {
-        expect(request.url).toBe(`${issuer}/.well-known/jwks`)
-        return Response.json({ keys: [keyA.jwk] })
-      },
-    })
-    const token = await sign(keyA, goodClaims({ iss: issuer, aud: "mockingbird-preview" }))
-    expect((await verify(eventRequest(token))).ok).toBe(true)
-  })
-})
-
-describe("parsePreviewEvent", () => {
-  test("parses a build event and normalizes it", () => {
-    expect(
-      parsePreviewEvent({
-        kind: "build",
-        state: "failed",
-        version: SHA.toUpperCase(),
-        at: "2026-11-20T12:00:00+00:00",
-        runUrl: "https://github.com/crvouga/mockingbird/actions/runs/1",
-        message: "build-preview failed",
-        extra: "dropped",
-      }),
-    ).toEqual({
-      kind: "build",
-      state: "failed",
-      version: SHA,
-      at: "2026-11-20T12:00:00.000Z",
-      runUrl: "https://github.com/crvouga/mockingbird/actions/runs/1",
-      message: "build-preview failed",
-    })
-  })
-
-  test("parses a checks event", () => {
-    expect(
-      parsePreviewEvent({
-        kind: "checks",
-        state: "passed",
-        version: SHA,
-        at: "2026-11-20T12:00:00Z",
-        summary: "14 of 14 passed",
-      }),
-    ).toEqual({
-      kind: "checks",
-      state: "passed",
-      version: SHA,
-      at: "2026-11-20T12:00:00.000Z",
-      summary: "14 of 14 passed",
-    })
-  })
-
-  const bad: [string, unknown, RegExp][] = [
-    ["not an object", [], /JSON object/],
-    ["null", null, /JSON object/],
-    [
-      "unknown kind",
-      { kind: "deploy", state: "deployed", version: SHA, at: "2026-11-20T12:00:00Z" },
-      /kind/,
-    ],
-    [
-      "build state",
-      { kind: "build", state: "passed", version: SHA, at: "2026-11-20T12:00:00Z" },
-      /state/,
-    ],
-    [
-      "checks state",
-      { kind: "checks", state: "deployed", version: SHA, at: "2026-11-20T12:00:00Z" },
-      /state/,
-    ],
-    [
-      "version",
-      { kind: "build", state: "building", version: "main", at: "2026-11-20T12:00:00Z" },
-      /version/,
-    ],
-    ["at", { kind: "build", state: "building", version: SHA, at: "yesterday" }, /at must/],
-    [
-      "runUrl http",
-      {
-        kind: "build",
-        state: "building",
-        version: SHA,
-        at: "2026-11-20T12:00:00Z",
-        runUrl: "http://x.example",
-      },
-      /https/,
-    ],
-    [
-      "runUrl javascript",
-      {
-        kind: "build",
-        state: "building",
-        version: SHA,
-        at: "2026-11-20T12:00:00Z",
-        runUrl: "javascript:alert(1)",
-      },
-      /https/,
-    ],
-    [
-      "message type",
-      { kind: "build", state: "failed", version: SHA, at: "2026-11-20T12:00:00Z", message: 3 },
-      /message/,
-    ],
-    [
-      "message length",
-      {
-        kind: "build",
-        state: "failed",
-        version: SHA,
-        at: "2026-11-20T12:00:00Z",
-        message: "x".repeat(501),
-      },
-      /message/,
-    ],
-  ]
-  for (const [name, value, message] of bad) {
-    test(`rejects ${name}`, () => {
-      expect(() => parsePreviewEvent(value)).toThrow(message)
-    })
-  }
-})
-
-// --- Durable Object fakes ---
-
-class FakeSocket implements PreviewWebSocketLike {
-  sent: string[] = []
-  closed: [number | undefined, string | undefined] | undefined
-  send(data: string) {
-    if (this.closed) throw new Error("closed")
-    this.sent.push(data)
-  }
-  close(code?: number, reason?: string) {
-    this.closed = [code, reason]
-  }
-  snapshots(): PreviewStatusSnapshot[] {
-    return this.sent
-      .map((s) => JSON.parse(s) as { snapshot: PreviewStatusSnapshot })
-      .map((m) => m.snapshot)
-  }
-}
-
-const fakeState = () => {
-  const store = new Map<string, unknown>()
-  const accepted: FakeSocket[] = []
-  const puts: unknown[] = []
-  const autoResponses: unknown[] = []
-  const state: DurableObjectStateLike = {
-    acceptWebSocket: (ws) => {
-      accepted.push(ws as FakeSocket)
-    },
-    getWebSockets: () => accepted.filter((ws) => !ws.closed),
-    storage: {
-      get: async <T>(key: string) => structuredClone(store.get(key)) as T | undefined,
-      put: async <T>(key: string, value: T) => {
-        puts.push(value)
-        store.set(key, structuredClone(value))
-      },
-    },
-    setWebSocketAutoResponse: (pair) => {
-      autoResponses.push(pair)
-    },
-  }
-  return { state, store, accepted, puts, autoResponses }
-}
-
-const objectWith = (verdict: { ok: true } | { ok: false; reason: string } = { ok: true }) => {
-  const fake = fakeState()
-  const verified: Request[] = []
-  const PreviewStatus = createPreviewStatusObject({
-    verify: async (request) => {
-      verified.push(request)
-      return verdict
-    },
-    pr: (env) =>
-      typeof env.PR_NUMBER === "string"
-        ? { number: Number(env.PR_NUMBER), url: `https://github.com/${REPO}/pull/${env.PR_NUMBER}` }
-        : undefined,
-    upgrade: () => {
-      const server = new FakeSocket()
-      return {
-        server,
-        response: new Response(null, { status: 200, headers: { "x-upgrade": "websocket" } }),
-      }
-    },
-  })
-  const object = new PreviewStatus(fake.state, { PR_NUMBER: "12" })
-  return { object, fake, verified, PreviewStatus }
-}
-
-const build = (
-  state: string,
-  version: string,
-  at: string,
-  extra: Record<string, unknown> = {},
-) => ({
-  kind: "build",
-  state,
-  version,
-  at,
-  ...extra,
-})
-
-const post = (body: unknown) => eventRequest("token-value", body)
-const live = () => new Request(`${ORIGIN}/__preview/live`, { headers: { upgrade: "websocket" } })
-const status = () => new Request(`${ORIGIN}/__preview/status`)
-
-describe("createPreviewStatusObject", () => {
-  test("GET /status serves the empty snapshot with the PR, no-store", async () => {
-    const { object } = objectWith()
-    const response = await object.fetch(status())
-    expect(response.status).toBe(200)
-    expect(response.headers.get("cache-control")).toBe("no-store")
-    expect(await response.json()).toEqual({
-      updatedAt: new Date(0).toISOString(),
-      pr: { number: 12, url: `https://github.com/${REPO}/pull/12` },
-    })
-  })
-
-  test("POST /events merges, persists and serves build, deployed and checks", async () => {
-    const { object, fake } = objectWith()
-    const runUrl = "https://github.com/crvouga/mockingbird/actions/runs/7"
-    expect((await object.fetch(post(build("building", SHA, "2026-11-20T12:00:00Z")))).status).toBe(
-      204,
-    )
-    expect(
-      (await object.fetch(post(build("deployed", SHA, "2026-11-20T12:01:00Z", { runUrl })))).status,
-    ).toBe(204)
-    expect(
-      (
-        await object.fetch(
-          post({ kind: "checks", state: "running", version: SHA, at: "2026-11-20T12:02:00Z" }),
-        )
-      ).status,
-    ).toBe(204)
-    const snapshot = (await (await object.fetch(status())).json()) as PreviewStatusSnapshot
-    expect(snapshot.build).toMatchObject({ state: "deployed", version: SHA })
-    expect(snapshot.deployed).toEqual({ version: SHA, at: "2026-11-20T12:01:00.000Z", runUrl })
-    expect(snapshot.checks).toMatchObject({ state: "running", version: SHA })
-    expect(fake.puts.length).toBe(3)
-    expect(fake.store.get("snapshot")).not.toHaveProperty("pr")
-  })
-
-  test("a new object (after hibernation/eviction) reloads the snapshot from storage", async () => {
-    const { object, fake, PreviewStatus } = objectWith()
-    await object.fetch(post(build("deployed", SHA, "2026-11-20T12:01:00Z")))
-    const revived = new PreviewStatus(fake.state, {})
-    const snapshot = (await (await revived.fetch(status())).json()) as PreviewStatusSnapshot
-    expect(snapshot.deployed?.version).toBe(SHA)
-    expect(snapshot.pr).toBeUndefined()
-  })
-
-  test("ignores an event older than the stored one of the same kind and version", async () => {
-    const { object, fake } = objectWith()
-    await object.fetch(post(build("failed", SHA, "2026-11-20T12:05:00Z")))
-    expect((await object.fetch(post(build("building", SHA, "2026-11-20T12:00:00Z")))).status).toBe(
-      204,
-    )
-    let snapshot = (await (await object.fetch(status())).json()) as PreviewStatusSnapshot
-    expect(snapshot.build?.state).toBe("failed")
-    expect(fake.puts.length).toBe(1)
-    // A different version is not stale, even if older.
-    await object.fetch(post(build("building", SHA2, "2026-11-20T11:00:00Z")))
-    snapshot = (await (await object.fetch(status())).json()) as PreviewStatusSnapshot
-    expect(snapshot.build?.version).toBe(SHA2)
-    // Checks ordering is independent of builds.
-    await object.fetch(
-      post({ kind: "checks", state: "failed", version: SHA, at: "2026-11-20T12:10:00Z" }),
-    )
-    await object.fetch(
-      post({ kind: "checks", state: "running", version: SHA, at: "2026-11-20T12:09:00Z" }),
-    )
-    snapshot = (await (await object.fetch(status())).json()) as PreviewStatusSnapshot
-    expect(snapshot.checks?.state).toBe("failed")
-  })
-
-  test("401 on failed verification, without echoing the token", async () => {
-    const { object, fake } = objectWith({ ok: false, reason: "wrong audience" })
-    const response = await object.fetch(post(build("deployed", SHA, "2026-11-20T12:00:00Z")))
-    expect(response.status).toBe(401)
-    const text = await response.text()
-    expect(JSON.parse(text)).toEqual({ error: "wrong audience" })
-    expect(text).not.toContain("token-value")
-    expect(fake.puts.length).toBe(0)
-  })
-
-  test("400 on a bad body", async () => {
-    const { object } = objectWith()
-    expect((await object.fetch(post("{not json"))).status).toBe(400)
-    const response = await object.fetch(post({ kind: "build" }))
-    expect(response.status).toBe(400)
-    expect(((await response.json()) as { error: string }).error).toMatch(/version/)
-    expect((await object.fetch(post("x".repeat(17 * 1024)))).status).toBe(400)
-  })
-
-  test("405 on wrong methods, 404 elsewhere, 426 on /live without upgrade", async () => {
-    const { object } = objectWith()
-    expect((await object.fetch(new Request(`${ORIGIN}/__preview/events`))).status).toBe(405)
-    expect(
-      (await object.fetch(new Request(`${ORIGIN}/__preview/status`, { method: "POST" }))).status,
-    ).toBe(405)
-    expect((await object.fetch(new Request(`${ORIGIN}/__preview/other`))).status).toBe(404)
-    expect((await object.fetch(new Request(`${ORIGIN}/__preview/live`))).status).toBe(426)
-  })
-
-  test("/live accepts via the hibernation API, sends the snapshot, broadcasts changes", async () => {
-    const { object, fake } = objectWith()
-    const response = await object.fetch(live())
-    expect(response.headers.get("x-upgrade")).toBe("websocket")
-    await object.fetch(live())
-    expect(fake.accepted.length).toBe(2)
-    const [first, second] = fake.accepted as [FakeSocket, FakeSocket]
-    expect(JSON.parse(first.sent[0] ?? "")).toMatchObject({
-      type: "snapshot",
-      snapshot: { pr: { number: 12 } },
-    })
-    second.close(1000, "bye")
-    await object.fetch(post(build("building", SHA, "2026-11-20T12:00:00Z")))
-    expect(first.snapshots().map((s) => s.build?.state)).toEqual([undefined, "building"])
-    expect(second.sent.length).toBe(1)
-    // A stale event broadcasts nothing.
-    await object.fetch(post(build("building", SHA, "2026-11-20T11:00:00Z")))
-    expect(first.sent.length).toBe(2)
-  })
-
-  test("a socket that throws on send does not break the broadcast", async () => {
-    const { object, fake } = objectWith()
-    await object.fetch(live())
-    await object.fetch(live())
-    const [first, second] = fake.accepted as [FakeSocket, FakeSocket]
-    first.send = () => {
-      throw new Error("gone")
-    }
-    expect((await object.fetch(post(build("building", SHA, "2026-11-20T12:00:00Z")))).status).toBe(
-      204,
-    )
-    expect(second.sent.length).toBe(2)
-  })
-
-  test("hibernation handlers: ping/pong, close, error", () => {
-    const { object } = objectWith()
-    const ws = new FakeSocket()
-    object.webSocketMessage(ws, "ping")
-    object.webSocketMessage(ws, "hello")
-    expect(ws.sent).toEqual(["pong"])
-    object.webSocketClose(ws, 1006, "", false)
-    expect(ws.closed).toEqual([1000, ""])
-    const other = new FakeSocket()
-    object.webSocketClose(other, 4001, "going", true)
-    expect(other.closed).toEqual([4001, "going"])
-    const broken = new FakeSocket()
-    object.webSocketError(broken, new Error("x"))
-    expect(broken.closed).toEqual([1011, "error"])
-  })
-
-  test("registers a ping/pong auto-response when the runtime offers one", () => {
-    const globals = globalThis as { WebSocketRequestResponsePair?: unknown }
-    globals.WebSocketRequestResponsePair = class {
-      constructor(
-        readonly request: string,
-        readonly response: string,
-      ) {}
-    }
-    try {
-      const { fake } = objectWith()
-      expect(fake.autoResponses).toEqual([
-        expect.objectContaining({ request: "ping", response: "pong" }),
-      ])
-    } finally {
-      delete globals.WebSocketRequestResponsePair
-    }
-  })
-
-  test("default upgrade uses the WebSocketPair global", async () => {
-    const globals = globalThis as { WebSocketPair?: unknown }
-    const server = new FakeSocket()
-    const client = new FakeSocket()
-    let pairs = 0
-    globals.WebSocketPair = class {
-      0 = client
-      1 = server
-      constructor() {
-        pairs++
-      }
-    }
-    try {
-      const fake = fakeState()
-      const PreviewStatus = createPreviewStatusObject({ verify: async () => ({ ok: true }) })
-      const object = new PreviewStatus(fake.state, {})
-      // The Workers runtime accepts status 101 with `webSocket`; Bun's Response refuses it.
-      const outcome = await object.fetch(live()).then(
-        (response) => response.status,
-        (error: unknown) => (error instanceof RangeError ? "refused" : error),
-      )
-      expect([101, "refused"] as unknown[]).toContain(outcome)
-      expect(pairs).toBe(1)
-      if (outcome === 101) expect(fake.accepted).toEqual([server])
-    } finally {
-      delete globals.WebSocketPair
-    }
-  })
-})
-
-describe("previewStatusRoutes", () => {
-  const harness = (
-    options?: Parameters<typeof previewStatusRoutes>[0],
-    binding = "PREVIEW_STATUS",
-  ) => {
-    const forwarded: Request[] = []
-    const names: string[] = []
-    const env: Record<string, unknown> = {
-      [binding]: {
-        idFromName: (name: string) => {
-          names.push(name)
-          return { name }
+/** A fake GitHub REST API: the PR and one latest run per workflow file. */
+const fakeGithub = () => {
+  const requests: Request[] = []
+  const state = {
+    head: SHA,
+    runs: new Map<string, Run | undefined>([
+      [
+        "system-preview.yml",
+        {
+          status: "completed",
+          conclusion: "success",
+          html_url: "https://github.com/crvouga/mockingbird/actions/runs/1",
+          updated_at: RUN_AT,
         },
-        get: (id: { name: string }) => ({
-          fetch: async (request: Request) => {
-            forwarded.push(request)
-            return new Response(`object ${id.name}`)
-          },
-        }),
-      },
+      ],
+      [
+        "pr.yml",
+        {
+          status: "in_progress",
+          conclusion: null,
+          html_url: "https://github.com/crvouga/mockingbird/actions/runs/2",
+          updated_at: RUN_AT,
+        },
+      ],
+    ]),
+    /** When set, every request gets this instead. */
+    answer: undefined as Answer | undefined,
+  }
+  const fetch = async (request: Request): Promise<Response> => {
+    requests.push(request)
+    await Promise.resolve()
+    const answer = state.answer
+    if (answer === "network") throw new TypeError(`connect ECONNREFUSED (${TOKEN})`)
+    if (answer !== undefined) return typeof answer === "function" ? answer() : answer.clone()
+    const url = new URL(request.url)
+    if (url.pathname === `/repos/${REPO}/pulls/12`) {
+      return Response.json({ number: 12, head: { sha: state.head } })
     }
-    return { routes: previewStatusRoutes(options), env, forwarded, names }
+    const match = /^\/repos\/[^/]+\/[^/]+\/actions\/workflows\/([^/]+)\/runs$/.exec(url.pathname)
+    if (match?.[1]) {
+      const run = state.runs.get(decodeURIComponent(match[1]))
+      if (url.searchParams.get("head_sha") !== state.head) {
+        return Response.json({ total_count: 0, workflow_runs: [] })
+      }
+      return Response.json({ total_count: run ? 1 : 0, workflow_runs: run ? [run] : [] })
+    }
+    return Response.json({ message: "Not Found" }, { status: 404 })
+  }
+  return { fetch, requests, state }
+}
+
+const setup = (overrides: Partial<PreviewStatusOptions> = {}) => {
+  const github = fakeGithub()
+  let clock = T0
+  const version = { value: { version: SHA, builtAt: "2026-11-20T11:58:00.000Z" } as unknown }
+  const handler = createPreviewStatus({
+    repository: REPO,
+    pr: 12,
+    fetch: github.fetch,
+    now: () => clock,
+    readVersion: async () => {
+      if (version.value instanceof Error) throw version.value
+      return version.value as { version: string; builtAt: string } | undefined
+    },
+    ...overrides,
+  })
+  const call = (path: string, init: RequestInit = {}) =>
+    handler(new Request(`${ORIGIN}${path}`, init))
+  const status = async (): Promise<PreviewStatusSnapshot> => {
+    const response = await call("/__preview/status")
+    if (response === undefined) throw new Error("not routed")
+    expect(response.status).toBe(200)
+    return (await response.json()) as PreviewStatusSnapshot
+  }
+  return {
+    handler,
+    call,
+    status,
+    github,
+    version,
+    advance: (ms: number) => {
+      clock += ms
+    },
+  }
+}
+
+const rateLimited = (reset?: number) =>
+  new Response(JSON.stringify({ message: "API rate limit exceeded" }), {
+    status: 403,
+    headers: {
+      "x-ratelimit-remaining": "0",
+      ...(reset === undefined ? {} : { "x-ratelimit-reset": String(reset) }),
+    },
+  })
+
+describe("createPreviewStatus: GitHub mapping", () => {
+  const buildCases: [string, string | null, "building" | "deployed" | "failed" | undefined][] = [
+    ["queued", null, "building"],
+    ["in_progress", null, "building"],
+    ["waiting", null, "building"],
+    ["completed", "success", "deployed"],
+    ["completed", "failure", "failed"],
+    ["completed", "cancelled", "failed"],
+    ["completed", "timed_out", "failed"],
+    ["completed", "skipped", undefined],
+  ]
+  for (const [status, conclusion, expected] of buildCases) {
+    test(`build run ${status}/${conclusion} → ${expected}`, async () => {
+      const h = setup()
+      h.github.state.runs.set("system-preview.yml", {
+        status,
+        conclusion,
+        html_url: "https://github.com/crvouga/mockingbird/actions/runs/9",
+        updated_at: RUN_AT,
+      })
+      const snapshot = await h.status()
+      if (expected === undefined) {
+        expect(snapshot.build).toBeUndefined()
+        return
+      }
+      expect(snapshot.build).toMatchObject({
+        kind: "build",
+        state: expected,
+        version: SHA,
+        at: new Date(RUN_AT).toISOString(),
+        runUrl: "https://github.com/crvouga/mockingbird/actions/runs/9",
+      })
+      if (expected === "failed") expect(snapshot.build?.message).toBeString()
+      else expect(snapshot.build?.message).toBeUndefined()
+    })
   }
 
-  test("forwards status, live and events to the singleton object", async () => {
-    const { routes, env, forwarded, names } = harness()
-    for (const path of ["status", "live", "events"]) {
-      const response = await routes(new Request(`${ORIGIN}/__preview/${path}`), env)
-      expect(await response?.text()).toBe("object status")
-    }
-    expect(forwarded.map((r) => new URL(r.url).pathname)).toEqual([
-      "/__preview/status",
-      "/__preview/live",
-      "/__preview/events",
+  const checkCases: [string, string | null, "running" | "passed" | "failed"][] = [
+    ["queued", null, "running"],
+    ["in_progress", null, "running"],
+    ["completed", "success", "passed"],
+    ["completed", "failure", "failed"],
+    ["completed", "cancelled", "failed"],
+  ]
+  for (const [status, conclusion, expected] of checkCases) {
+    test(`checks run ${status}/${conclusion} → ${expected}`, async () => {
+      const h = setup()
+      h.github.state.runs.set("pr.yml", { status, conclusion, updated_at: RUN_AT })
+      const snapshot = await h.status()
+      expect(snapshot.checks).toEqual({
+        kind: "checks",
+        state: expected,
+        version: SHA,
+        at: new Date(RUN_AT).toISOString(),
+      })
+    })
+  }
+
+  test("a full snapshot: build, checks, deployed from version.json, PR and source", async () => {
+    const h = setup()
+    expect(await h.status()).toEqual({
+      build: {
+        kind: "build",
+        state: "deployed",
+        version: SHA,
+        at: new Date(RUN_AT).toISOString(),
+        runUrl: "https://github.com/crvouga/mockingbird/actions/runs/1",
+      },
+      checks: {
+        kind: "checks",
+        state: "running",
+        version: SHA,
+        at: new Date(RUN_AT).toISOString(),
+        runUrl: "https://github.com/crvouga/mockingbird/actions/runs/2",
+      },
+      deployed: {
+        version: SHA,
+        at: "2026-11-20T11:58:00.000Z",
+        runUrl: "https://github.com/crvouga/mockingbird/actions/runs/1",
+      },
+      pr: { number: 12, url: "https://github.com/crvouga/mockingbird/pull/12" },
+      source: "github",
+      updatedAt: new Date(T0).toISOString(),
+    })
+  })
+
+  test("no runs for the head yet: no build or checks", async () => {
+    const h = setup()
+    h.github.state.runs.clear()
+    const snapshot = await h.status()
+    expect(snapshot.build).toBeUndefined()
+    expect(snapshot.checks).toBeUndefined()
+    expect(snapshot.source).toBe("github")
+  })
+
+  test("deployed comes from version.json alone; a broken readVersion leaves it out", async () => {
+    const h = setup({ cacheTtlMs: 0 })
+    h.version.value = { version: "b".repeat(40), builtAt: "2026-11-20T10:00:00.000Z" }
+    expect((await h.status()).deployed).toEqual({
+      version: "b".repeat(40),
+      at: "2026-11-20T10:00:00.000Z",
+    })
+    h.version.value = new Error("assets down")
+    expect((await h.status()).deployed).toBeUndefined()
+    h.version.value = { nope: true }
+    expect((await h.status()).deployed).toBeUndefined()
+  })
+})
+
+describe("createPreviewStatus: GitHub requests", () => {
+  test("looks up the PR head, then the latest run of each workflow for that SHA", async () => {
+    const h = setup()
+    await h.status()
+    const urls = h.github.requests.map((request) => request.url)
+    expect(urls[0]).toBe(`https://api.github.com/repos/${REPO}/pulls/12`)
+    expect(urls.slice(1).sort()).toEqual([
+      `https://api.github.com/repos/${REPO}/actions/workflows/pr.yml/runs?head_sha=${SHA}&per_page=1`,
+      `https://api.github.com/repos/${REPO}/actions/workflows/system-preview.yml/runs?head_sha=${SHA}&per_page=1`,
     ])
-    expect(names).toEqual(["status", "status", "status"])
   })
 
-  test("returns undefined for other paths", () => {
-    const { routes, env } = harness()
-    expect(routes(new Request(`${ORIGIN}/`), env)).toBeUndefined()
-    expect(routes(new Request(`${ORIGIN}/__preview/other`), env)).toBeUndefined()
-    expect(routes(new Request(`${ORIGIN}/__previewstatus`), env)).toBeUndefined()
-    expect(routes(new Request(`${ORIGIN}/__preview/status/x`), env)).toBeUndefined()
+  test("workflow file names are configurable", async () => {
+    const h = setup({ workflows: { build: "deploy.yml", checks: "ci.yml" } })
+    h.github.state.runs.set("deploy.yml", {
+      status: "queued",
+      conclusion: null,
+      updated_at: RUN_AT,
+    })
+    const snapshot = await h.status()
+    expect(snapshot.build?.state).toBe("building")
+    const paths = h.github.requests.map((request) => new URL(request.url).pathname)
+    expect(paths).toContain(`/repos/${REPO}/actions/workflows/deploy.yml/runs`)
+    expect(paths).toContain(`/repos/${REPO}/actions/workflows/ci.yml/runs`)
   })
 
-  test("custom basePath and binding", async () => {
-    const { routes, env, forwarded } = harness({ basePath: "/_status/", binding: "LIVE" }, "LIVE")
-    expect(routes(new Request(`${ORIGIN}/__preview/status`), env)).toBeUndefined()
-    expect((await routes(new Request(`${ORIGIN}/_status/status`), env))?.status).toBe(200)
-    expect(forwarded.length).toBe(1)
+  test("unauthenticated by default: GitHub headers, no authorization", async () => {
+    const h = setup()
+    await h.status()
+    for (const request of h.github.requests) {
+      expect(request.headers.get("accept")).toBe("application/vnd.github+json")
+      expect(request.headers.get("x-github-api-version")).toBe("2022-11-28")
+      expect(request.headers.get("user-agent")).toBe("mockingbird-preview")
+      expect(request.headers.has("authorization")).toBe(false)
+    }
   })
 
-  test("refuses cross-origin status and live, but not CI events", async () => {
-    const { routes, env, forwarded } = harness()
-    const cross = { origin: "https://evil.example", "sec-fetch-site": "cross-site" }
+  test("sends the token as a Bearer header when set", async () => {
+    const h = setup({ token: TOKEN })
+    await h.status()
+    expect(h.github.requests.length).toBe(3)
+    for (const request of h.github.requests) {
+      expect(request.headers.get("authorization")).toBe(`Bearer ${TOKEN}`)
+    }
+  })
+
+  test("caches the snapshot for cacheTtlMs and shares one refresh across concurrent requests", async () => {
+    const h = setup()
+    const all = await Promise.all(Array.from({ length: 5 }, () => h.status()))
+    expect(h.github.requests.length).toBe(3)
+    expect(new Set(all.map((s) => JSON.stringify(s))).size).toBe(1)
+    h.advance(9_999)
+    await h.status()
+    expect(h.github.requests.length).toBe(3)
+    h.advance(1)
+    await h.status()
+    expect(h.github.requests.length).toBe(6)
+  })
+
+  test("a shared Cache API spares other isolates the GitHub calls", async () => {
+    const store = new Map<string, Response>()
+    const cache: PreviewStatusCacheLike = {
+      match: async (request) => store.get(request.url)?.clone(),
+      put: async (request, response) => {
+        store.set(request.url, response)
+      },
+    }
+    const first = setup({ cache })
+    const a = await first.status()
+    expect(store.size).toBe(1)
+    const second = setup({ cache })
+    const b = await second.status()
+    expect(second.github.requests.length).toBe(0)
+    expect(b).toEqual(a)
+    second.advance(10_000)
+    await second.status()
+    expect(second.github.requests.length).toBe(3)
+  })
+})
+
+describe("createPreviewStatus: failures", () => {
+  test("rate limited: backs off until x-ratelimit-reset and serves the last snapshot", async () => {
+    const h = setup()
+    const good = await h.status()
+    expect(good.build?.state).toBe("deployed")
+    h.advance(10_000)
+    h.github.state.answer = rateLimited(Math.floor(T0 / 1000) + 120)
+    const limited = await h.status()
+    expect(limited.source).toBe("rate-limited")
+    expect(limited.message).toContain("rate limit")
+    expect(limited.build).toEqual(good.build)
+    expect(limited.checks).toEqual(good.checks)
+    expect(limited.deployed).toEqual(good.deployed)
+    const calls = h.github.requests.length
+    h.github.state.answer = undefined
+    h.advance(60_000)
+    expect((await h.status()).source).toBe("rate-limited")
+    expect(h.github.requests.length).toBe(calls)
+    h.advance(50_000) // past the reset
+    expect((await h.status()).source).toBe("github")
+    expect(h.github.requests.length).toBe(calls + 3)
+  })
+
+  test("429 without headers backs off five minutes", async () => {
+    const h = setup()
+    h.github.state.answer = new Response("slow down", { status: 429 })
+    expect((await h.status()).source).toBe("rate-limited")
+    h.github.state.answer = undefined
+    const calls = h.github.requests.length
+    h.advance(5 * 60_000 - 1)
+    await h.status()
+    expect(h.github.requests.length).toBe(calls)
+    h.advance(1)
+    expect((await h.status()).source).toBe("github")
+  })
+
+  test("retry-after is honoured", async () => {
+    const h = setup()
+    h.github.state.answer = new Response("", { status: 403, headers: { "retry-after": "30" } })
+    expect((await h.status()).source).toBe("rate-limited")
+    h.github.state.answer = undefined
+    h.advance(30_000)
+    expect((await h.status()).source).toBe("github")
+  })
+
+  test("5xx and network failures serve the last snapshot as unavailable", async () => {
+    const h = setup({ cacheTtlMs: 0 })
+    const good = await h.status()
+    h.github.state.answer = new Response("bad gateway", { status: 502 })
+    const down = await h.status()
+    expect(down.source).toBe("unavailable")
+    expect(down.message).toBe("GitHub answered 502")
+    expect(down.build).toEqual(good.build)
+    h.github.state.answer = "network"
+    const offline = await h.status()
+    expect(offline.source).toBe("unavailable")
+    expect(offline.message).toBe("GitHub could not be reached")
+    expect(offline.checks).toEqual(good.checks)
+    h.github.state.answer = undefined
+    expect((await h.status()).source).toBe("github")
+  })
+
+  test("unavailable with nothing known yet still answers deployed and PR", async () => {
+    const h = setup()
+    h.github.state.answer = "network"
+    const snapshot = await h.status()
+    expect(snapshot.source).toBe("unavailable")
+    expect(snapshot.build).toBeUndefined()
+    expect(snapshot.deployed?.version).toBe(SHA)
+    expect(snapshot.pr?.number).toBe(12)
+  })
+
+  test("a private repository without a token is unauthenticated", async () => {
+    const h = setup()
+    h.github.state.answer = Response.json({ message: "Not Found" }, { status: 404 })
+    const snapshot = await h.status()
+    expect(snapshot.source).toBe("unauthenticated")
+    expect(snapshot.message).toContain("token")
+  })
+
+  test("a rejected token is unauthenticated; a token without access is unavailable", async () => {
+    const h = setup({ token: TOKEN, cacheTtlMs: 0 })
+    h.github.state.answer = Response.json({ message: "Bad credentials" }, { status: 401 })
+    expect((await h.status()).source).toBe("unauthenticated")
+    h.github.state.answer = Response.json({ message: "Not Found" }, { status: 404 })
+    expect((await h.status()).source).toBe("unavailable")
+  })
+
+  test("the token never appears in a response", async () => {
+    const answers: Answer[] = [
+      Response.json({ message: `Bad credentials ${TOKEN}` }, { status: 401 }),
+      Response.json({ message: TOKEN }, { status: 404 }),
+      new Response(TOKEN, { status: 500 }),
+      rateLimited(),
+      "network",
+      () => {
+        throw new Error(TOKEN)
+      },
+    ]
+    for (const answer of answers) {
+      const h = setup({ token: TOKEN })
+      h.github.state.answer = answer
+      for (const path of ["/__preview/status", "/__preview/nope"]) {
+        const response = await h.call(path)
+        const text = await response?.text()
+        expect(text).toBeString()
+        expect(text).not.toContain(TOKEN)
+        expect(text).not.toContain("SUPERSECRET")
+        expect(JSON.stringify([...(response?.headers ?? [])])).not.toContain(TOKEN)
+      }
+    }
+  })
+})
+
+describe("createPreviewStatus: routes", () => {
+  test("status answers JSON with no-store", async () => {
+    const h = setup()
+    const response = await h.call("/__preview/status")
+    expect(response?.status).toBe(200)
+    expect(response?.headers.get("content-type")).toContain("application/json")
+    expect(response?.headers.get("cache-control")).toBe("no-store")
+  })
+
+  test("paths outside the base fall through; unknown paths under it are 404", async () => {
+    const h = setup()
+    expect(h.call("/")).toBeUndefined()
+    expect(h.call("/__previewx/status")).toBeUndefined()
+    expect(h.call("/app/__preview/status")).toBeUndefined()
+    expect((await h.call("/__preview/events", { method: "POST" }))?.status).toBe(404)
+    expect((await h.call("/__preview"))?.status).toBe(404)
+    expect((await h.call("/__preview/status/x"))?.status).toBe(404)
+    expect(h.github.requests.length).toBe(0)
+  })
+
+  test("a custom basePath", async () => {
+    const h = setup({ basePath: "/_status/" })
+    expect(h.call("/__preview/status")).toBeUndefined()
+    expect((await h.call("/_status/status"))?.status).toBe(200)
+  })
+
+  test("only GET and HEAD", async () => {
+    const h = setup()
+    expect((await h.call("/__preview/status", { method: "POST" }))?.status).toBe(405)
+    expect((await h.call("/__preview/status", { method: "HEAD" }))?.status).toBe(200)
+  })
+
+  test("same-origin only", async () => {
+    const h = setup()
+    const foreign = await h.call("/__preview/status", {
+      headers: { origin: "https://evil.example" },
+    })
+    expect(foreign?.status).toBe(403)
+    const crossSite = await h.call("/__preview/live", {
+      headers: { "sec-fetch-site": "cross-site" },
+    })
+    expect(crossSite?.status).toBe(403)
+    const sameSite = await h.call("/__preview/status", {
+      headers: { "sec-fetch-site": "same-site" },
+    })
+    expect(sameSite?.status).toBe(403)
+    for (const site of ["same-origin", "none"]) {
+      const ok = await h.call("/__preview/status", {
+        headers: { "sec-fetch-site": site, origin: ORIGIN },
+      })
+      expect(ok?.status).toBe(200)
+    }
+    expect(h.github.requests.length).toBe(3)
+  })
+})
+
+// --- SSE ---
+
+/** Tracks real timers so a test can assert none were left behind. */
+const trackTimers = () => {
+  const realSet = globalThis.setTimeout
+  const realClear = globalThis.clearTimeout
+  const live = new Set<unknown>()
+  globalThis.setTimeout = ((run: () => void, ms?: number) => {
+    const handle = realSet(() => {
+      live.delete(handle)
+      run()
+    }, ms)
+    live.add(handle)
+    return handle
+  }) as typeof setTimeout
+  globalThis.clearTimeout = ((handle: Parameters<typeof clearTimeout>[0]) => {
+    live.delete(handle)
+    realClear(handle)
+  }) as typeof clearTimeout
+  return {
+    pending: () => live.size,
+    restore: () => {
+      globalThis.setTimeout = realSet
+      globalThis.clearTimeout = realClear
+    },
+  }
+}
+
+let timers: ReturnType<typeof trackTimers> | undefined
+afterEach(() => {
+  timers?.restore()
+  timers = undefined
+})
+
+type Frame = { event?: string; data?: string; retry?: string; comment?: string }
+
+const parseFrames = (text: string): Frame[] =>
+  text
+    .split("\n\n")
+    .filter((block) => block.length > 0)
+    .map((block) => {
+      const frame: Frame = {}
+      for (const line of block.split("\n")) {
+        if (line.startsWith(":")) frame.comment = line.slice(1).trim()
+        else if (line.startsWith("event: ")) frame.event = line.slice(7)
+        else if (line.startsWith("data: ")) frame.data = line.slice(6)
+        else if (line.startsWith("retry: ")) frame.retry = line.slice(7)
+      }
+      return frame
+    })
+
+const readAll = async (response: Response, onChunk?: (text: string) => void): Promise<string> => {
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader()
+  const decoder = new TextDecoder()
+  let text = ""
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) return text
+    const chunk = decoder.decode(value, { stream: true })
+    text += chunk
+    onChunk?.(chunk)
+  }
+}
+
+describe("createPreviewStatus: /live", () => {
+  test("streams retry and a snapshot at once, then only changes, heartbeats, and closes at maxMs", async () => {
+    timers = trackTimers()
+    const h = setup({ cacheTtlMs: 0, sse: { intervalMs: 10, heartbeatMs: 45, maxMs: 200 } })
+    const response = await h.call("/__preview/live")
+    expect(response?.status).toBe(200)
+    expect(response?.headers.get("content-type")).toBe("text/event-stream; charset=utf-8")
+    expect(response?.headers.get("cache-control")).toBe("no-store")
+    let flipped = false
+    const started = Date.now()
+    const text = await readAll(response as Response, (chunk) => {
+      if (!flipped && chunk.includes("event: snapshot")) {
+        flipped = true
+        // The next recompute sees a build starting.
+        h.github.state.runs.set("system-preview.yml", {
+          status: "in_progress",
+          conclusion: null,
+          updated_at: RUN_AT,
+        })
+      }
+    })
+    const elapsed = Date.now() - started
+    expect(elapsed).toBeGreaterThanOrEqual(190)
+    expect(elapsed).toBeLessThan(5_000)
+    const frames = parseFrames(text)
+    expect(frames[0]).toEqual({ retry: "2000" })
+    expect(frames[1]?.event).toBe("snapshot")
+    const snapshots = frames
+      .filter((frame) => frame.event === "snapshot")
+      .map((frame) => JSON.parse(frame.data ?? "") as PreviewStatusSnapshot)
+    // ~20 recomputes, but only two distinct snapshots.
+    expect(snapshots.map((s) => s.build?.state)).toEqual(["deployed", "building"])
+    expect(h.github.requests.length).toBeGreaterThan(6)
+    const heartbeats = frames.filter((frame) => frame.comment === "heartbeat").length
+    expect(heartbeats).toBeGreaterThanOrEqual(1)
+    expect(heartbeats).toBeLessThanOrEqual(5)
+    expect(timers.pending()).toBe(0)
+  })
+
+  test("stops when the client disconnects (request.signal) and leaves no timers", async () => {
+    timers = trackTimers()
+    const h = setup({ sse: { intervalMs: 10, heartbeatMs: 10, maxMs: 60_000 } })
+    const controller = new AbortController()
+    const response = (await h.handler(
+      new Request(`${ORIGIN}/__preview/live`, { signal: controller.signal }),
+    )) as Response
+    let seen = ""
+    const done = readAll(response, (chunk) => {
+      seen += chunk
+      if (seen.includes("event: snapshot")) controller.abort()
+    })
+    await done
+    expect(timers.pending()).toBe(0)
+    const calls = h.github.requests.length
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    expect(h.github.requests.length).toBe(calls)
+  })
+
+  test("stops when the reader cancels the stream", async () => {
+    timers = trackTimers()
+    const h = setup({ sse: { intervalMs: 10, heartbeatMs: 10, maxMs: 60_000 } })
+    const response = (await h.call("/__preview/live")) as Response
+    const reader = (response.body as ReadableStream<Uint8Array>).getReader()
+    await reader.read()
+    await reader.cancel()
+    expect(timers.pending()).toBe(0)
+  })
+
+  test("an already aborted request closes at once", async () => {
+    timers = trackTimers()
+    const h = setup()
+    const controller = new AbortController()
+    controller.abort()
+    const response = (await h.handler(
+      new Request(`${ORIGIN}/__preview/live`, { signal: controller.signal }),
+    )) as Response
+    expect(await readAll(response)).toBe("")
+    expect(timers.pending()).toBe(0)
+  })
+
+  test("the stream refuses foreign origins and serves rate-limited snapshots too", async () => {
+    const h = setup({ sse: { intervalMs: 10, heartbeatMs: 1_000, maxMs: 30 } })
     expect(
-      (await routes(new Request(`${ORIGIN}/__preview/status`, { headers: cross }), env))?.status,
+      (await h.call("/__preview/live", { headers: { origin: "https://evil.example" } }))?.status,
     ).toBe(403)
-    expect(
-      (
-        await routes(
-          new Request(`${ORIGIN}/__preview/live`, {
-            headers: { origin: "https://evil.example", upgrade: "websocket" },
-          }),
-          env,
-        )
-      )?.status,
-    ).toBe(403)
-    expect(
-      (
-        await routes(
-          new Request(`${ORIGIN}/__preview/status`, { headers: { "sec-fetch-site": "same-site" } }),
-          env,
-        )
-      )?.status,
-    ).toBe(403)
-    expect(
-      (
-        await routes(
-          new Request(`${ORIGIN}/__preview/live`, {
-            headers: { origin: ORIGIN, upgrade: "websocket" },
-          }),
-          env,
-        )
-      )?.status,
-    ).toBe(200)
-    expect(
-      (
-        await routes(
-          new Request(`${ORIGIN}/__preview/status`, {
-            headers: { "sec-fetch-site": "same-origin" },
-          }),
-          env,
-        )
-      )?.status,
-    ).toBe(200)
-    expect(
-      (
-        await routes(
-          new Request(`${ORIGIN}/__preview/events`, { method: "POST", headers: cross }),
-          env,
-        )
-      )?.status,
-    ).toBe(200)
-    expect(forwarded.length).toBe(3)
-  })
-
-  test("503 when the binding is missing", async () => {
-    const routes = previewStatusRoutes()
-    const response = await routes(new Request(`${ORIGIN}/__preview/status`), {})
-    expect(response?.status).toBe(503)
+    h.github.state.answer = rateLimited()
+    const text = await readAll((await h.call("/__preview/live")) as Response)
+    const frame = parseFrames(text).find((f) => f.event === "snapshot")
+    const snapshot = JSON.parse(frame?.data ?? "{}") as PreviewStatusSnapshot
+    expect(snapshot.source).toBe("rate-limited")
+    expect(text).not.toContain("API rate limit exceeded")
   })
 })

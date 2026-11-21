@@ -56,13 +56,16 @@ The current lab client has module-scoped ports and supports one system per docum
 
 An open preview always knows where CI is and updates itself; no reload is ever needed.
 
-- **CI state, live.** The System preview workflow tells the preview a build for a new commit has
-  started, deployed or failed, and `CI` tells it when the PR's checks are running, passed or
-  failed. Each event is signed with the run's GitHub OIDC token (`.github/actions/preview-event`),
-  so no secret is shared; the Worker's status object (`PreviewStatus` in `src/worker.ts`, a
-  Durable Object) checks it was issued to this repository and pushes it to every open tab over a
-  WebSocket at `/__preview/live`. If the socket drops, the tab polls `/__preview/status` and says
-  so.
+- **CI state, live, with no state of its own.** The Worker's `/__preview/*` is a stateless
+  function (`createPreviewStatus` in `src/worker.ts`). On request it reads this PR's head commit
+  and the runs for it from the GitHub API: the System preview build (building, deployed, failed)
+  and the CI checks (running, passed, failed). It reads the deployed version from
+  `version.json`, caches the answer for a few seconds at the edge, and streams changes as
+  Server-Sent Events at `/__preview/live`. Each stream closes after about a minute and the browser
+  reconnects. If SSE is unavailable, the tab polls `/__preview/status` itself, faster while a
+  build is running, and says so. No Durable Objects, KV or database. The optional
+  `PREVIEW_GITHUB_TOKEN` secret (read-only) raises GitHub's rate limit. Without it, a
+  rate-limited preview shows CI as unavailable, and updates still work.
 - **Updates without reloading.** `index.html` loads only `preview.js`, a small boot loader that is
   never swapped. It runs the app version `version.json` names (`app-<hash>.js`, stamped with the
   PR head commit by `scripts/stamp-version.ts` at deploy). When a newer version deploys, it

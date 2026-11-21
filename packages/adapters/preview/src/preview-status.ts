@@ -1,22 +1,23 @@
 /**
- * Preview status: CI tells a deployed preview what is happening to it, and every open tab hears
- * about it at once.
+ * Preview status: a stateless Fetch handler that tells a deployed preview what CI is doing to it.
  *
- * GitHub Actions POSTs build and checks events to `/__preview/events`, authenticated by the job's
- * GitHub OIDC token (no shared secret). A Durable Object keeps the latest snapshot and broadcasts
- * it over hibernatable WebSockets (`/__preview/live`); `/__preview/status` serves it to pollers.
+ * GitHub is the source of truth. On request it reads the PR's head commit and the latest runs of
+ * the build and checks workflows from the GitHub REST API, and the deployed version from the static
+ * `version.json`. `GET {base}/status` answers one snapshot; `GET {base}/live` streams snapshots as
+ * Server-Sent Events for up to `maxMs`, then closes so the client reconnects. Nothing is stored
+ * beyond a short per-isolate cache (plus the Cache API, when given), so it runs on any serverless
+ * Fetch runtime. A stateful push layer could be added on top later; nothing here needs one.
  *
- * Portable: Fetch + WebCrypto (+ the Workers `WebSocketPair` global, when present). The Durable
- * Object platform types are structural, so nothing here imports `cloudflare:workers`.
+ * Portable: Fetch, Streams and timers only.
  */
 
-/** A build of the preview for one commit. */
-export type PreviewBuildEvent = {
+/** The preview build for one commit: the build workflow's latest run for the PR head. */
+export type PreviewBuildStatus = {
   kind: "build"
   state: "building" | "deployed" | "failed"
-  /** Full commit SHA the build is for. */
+  /** Full commit SHA the build is for (the PR head). */
   version: string
-  /** ISO time of this event. */
+  /** ISO time the run last changed. */
   at: string
   /** The GitHub Actions run. */
   runUrl?: string
@@ -24,8 +25,8 @@ export type PreviewBuildEvent = {
   message?: string
 }
 
-/** The PR's CI checks for one commit. */
-export type PreviewChecksEvent = {
+/** The PR's CI checks for one commit: the checks workflow's latest run for the PR head. */
+export type PreviewChecksStatus = {
   kind: "checks"
   state: "running" | "passed" | "failed"
   version: string
@@ -35,306 +36,75 @@ export type PreviewChecksEvent = {
   summary?: string
 }
 
-export type PreviewEvent = PreviewBuildEvent | PreviewChecksEvent
+/** Where the CI half of a snapshot came from. */
+export type PreviewStatusSource = "github" | "unauthenticated" | "rate-limited" | "unavailable"
 
 export type PreviewStatusSnapshot = {
-  /** Latest build event (any state). */
-  build?: PreviewBuildEvent
-  /** Latest "deployed" build. */
+  /** The PR head's build (any state). */
+  build?: PreviewBuildStatus
+  /** What `version.json` says is deployed. */
   deployed?: { version: string; at: string; runUrl?: string }
-  /** Latest checks event. */
-  checks?: PreviewChecksEvent
+  /** The PR head's checks. */
+  checks?: PreviewChecksStatus
   pr?: { number: number; url: string }
+  /** "github" when CI status is fresh; otherwise why it is missing or stale. */
+  source: PreviewStatusSource
+  /** Why CI status is missing or stale. Never contains a secret. */
+  message?: string
   updatedAt: string
 }
 
-/** What a verifier decides about one request. */
-export type PreviewVerifyResult =
-  | { ok: true; claims?: Record<string, unknown> }
-  | { ok: false; reason: string }
+/** The deployed build, as the static `version.json` names it. */
+export type PreviewDeployedVersion = { version: string; builtAt: string }
 
-// --- event parsing ---
+/** A cache, as much of the Workers / browser Cache API as this module uses. */
+export type PreviewStatusCacheLike = {
+  match(request: Request): Promise<Response | undefined>
+  put(request: Request, response: Response): Promise<void>
+}
 
-const BUILD_STATES = ["building", "deployed", "failed"] as const
-const CHECK_STATES = ["running", "passed", "failed"] as const
-const VERSION = /^[0-9a-f]{7,64}$/i
-const MAX_TEXT = 500
-const MAX_BODY_BYTES = 16 * 1024
+export type PreviewStatusOptions = {
+  /** "owner/name". */
+  repository: string
+  /** The PR this preview belongs to. */
+  pr: number
+  /** Workflow file names. Default build "system-preview.yml", checks "pr.yml". */
+  workflows?: { build?: string; checks?: string }
+  /** Optional read-only GitHub token. Unauthenticated (60 requests/hour per IP) when absent. */
+  token?: string
+  /** Reads the deployed `version.json`; undefined when there is none. */
+  readVersion(): Promise<PreviewDeployedVersion | undefined>
+  /** Reaches the GitHub API. Default the global `fetch`. */
+  fetch?: (request: Request) => Promise<Response>
+  /** Clock in ms. Default `Date.now`. */
+  now?: () => number
+  /** How long a snapshot is reused. Default 10 000 ms. */
+  cacheTtlMs?: number
+  /** Shares snapshots across isolates (e.g. `caches.default`). */
+  cache?: PreviewStatusCacheLike
+  /** Default "/__preview". */
+  basePath?: string
+  /** `/live` timing. Defaults: recompute every 5 000 ms, heartbeat 15 000 ms, close after 55 000 ms. */
+  sse?: { intervalMs?: number; heartbeatMs?: number; maxMs?: number }
+}
+
+const GITHUB_API = "https://api.github.com"
+const API_VERSION = "2022-11-28"
+const USER_AGENT = "mockingbird-preview"
+const DEFAULT_BACKOFF_MS = 5 * 60 * 1000
+const SSE_RETRY_MS = 2_000
+
+const RUNNING = new Set(["queued", "in_progress", "waiting", "requested", "pending"])
+const FAILED_MESSAGES: Record<string, string> = {
+  failure: "The build failed",
+  cancelled: "The build was cancelled",
+  timed_out: "The build timed out",
+  startup_failure: "The build could not start",
+  action_required: "The build needs approval",
+}
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
-
-const optionalText = (record: Record<string, unknown>, key: string): string | undefined => {
-  const value = record[key]
-  if (value === undefined) return undefined
-  if (typeof value !== "string") throw new Error(`${key} must be a string`)
-  if (value.length > MAX_TEXT) throw new Error(`${key} must be at most ${MAX_TEXT} characters`)
-  return value
-}
-
-const optionalHttpsUrl = (record: Record<string, unknown>, key: string): string | undefined => {
-  const value = optionalText(record, key)
-  if (value === undefined) return undefined
-  let url: URL
-  try {
-    url = new URL(value)
-  } catch {
-    throw new Error(`${key} must be an absolute URL`)
-  }
-  if (url.protocol !== "https:") throw new Error(`${key} must be an https URL`)
-  return url.href
-}
-
-/** Validates an incoming event body; throws Error with a message on anything malformed. */
-export function parsePreviewEvent(value: unknown): PreviewEvent {
-  if (!isRecord(value)) throw new Error("event must be a JSON object")
-  const { kind, state, version, at } = value
-  if (kind !== "build" && kind !== "checks") throw new Error('kind must be "build" or "checks"')
-  if (typeof version !== "string" || !VERSION.test(version)) {
-    throw new Error("version must be a commit SHA (hex)")
-  }
-  if (typeof at !== "string" || Number.isNaN(Date.parse(at))) {
-    throw new Error("at must be an ISO timestamp")
-  }
-  const iso = new Date(at).toISOString()
-  const runUrl = optionalHttpsUrl(value, "runUrl")
-  if (kind === "build") {
-    if (!BUILD_STATES.includes(state as never)) {
-      throw new Error(`state must be one of ${BUILD_STATES.join(", ")}`)
-    }
-    const message = optionalText(value, "message")
-    return {
-      kind,
-      state: state as PreviewBuildEvent["state"],
-      version: version.toLowerCase(),
-      at: iso,
-      ...(runUrl === undefined ? {} : { runUrl }),
-      ...(message === undefined ? {} : { message }),
-    }
-  }
-  if (!CHECK_STATES.includes(state as never)) {
-    throw new Error(`state must be one of ${CHECK_STATES.join(", ")}`)
-  }
-  const summary = optionalText(value, "summary")
-  return {
-    kind,
-    state: state as PreviewChecksEvent["state"],
-    version: version.toLowerCase(),
-    at: iso,
-    ...(runUrl === undefined ? {} : { runUrl }),
-    ...(summary === undefined ? {} : { summary }),
-  }
-}
-
-// --- GitHub Actions OIDC ---
-
-export type GithubOidcVerifierOptions = {
-  /** "owner/name"; the token's `repository` claim must equal it. */
-  repository: string
-  /** Expected `aud`. Default: the request's origin. */
-  audience?: (request: Request) => string
-  /** Default "https://token.actions.githubusercontent.com". */
-  issuer?: string
-  /** Fetches the JWKS; injectable in tests. */
-  fetch?: (request: Request) => Promise<Response>
-  /** Clock in ms; injectable in tests. */
-  now?: () => number
-}
-
-export type GithubOidcResult =
-  | { ok: true; claims: Record<string, unknown> }
-  | { ok: false; reason: string }
-
-const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
-const JWKS_TTL_MS = 10 * 60 * 1000
-const UNKNOWN_KID_COOLDOWN_MS = 30 * 1000
-const SKEW_S = 60
-
-const base64UrlBytes = (text: string): Uint8Array => {
-  if (!/^[A-Za-z0-9_-]*$/.test(text)) throw new Error("not base64url")
-  const padded = text.replace(/-/g, "+").replace(/_/g, "/")
-  const binary = atob(padded + "=".repeat((4 - (padded.length % 4)) % 4))
-  const bytes = new Uint8Array(binary.length)
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
-  return bytes
-}
-
-const base64UrlJson = (text: string): Record<string, unknown> => {
-  const value: unknown = JSON.parse(new TextDecoder().decode(base64UrlBytes(text)))
-  if (!isRecord(value)) throw new Error("not an object")
-  return value
-}
-
-/** Verifies `Authorization: Bearer <GitHub Actions OIDC JWT>` (RS256 only). */
-export function githubOidcVerifier(
-  options: GithubOidcVerifierOptions,
-): (request: Request) => Promise<GithubOidcResult> {
-  const issuer = (options.issuer ?? GITHUB_ISSUER).replace(/\/$/, "")
-  const fetcher = options.fetch ?? ((request: Request) => fetch(request))
-  const now = options.now ?? Date.now
-  const audienceOf = options.audience ?? ((request: Request) => new URL(request.url).origin)
-  let keys: Map<string, CryptoKey> | undefined
-  let fetchedAt = Number.NEGATIVE_INFINITY
-
-  const loadKeys = async (): Promise<Map<string, CryptoKey>> => {
-    const response = await fetcher(
-      new Request(`${issuer}/.well-known/jwks`, { headers: { accept: "application/json" } }),
-    )
-    if (!response.ok) throw new Error(`JWKS fetch failed (${response.status})`)
-    const body: unknown = await response.json()
-    const list = isRecord(body) && Array.isArray(body.keys) ? body.keys : []
-    const next = new Map<string, CryptoKey>()
-    for (const jwk of list) {
-      if (!isRecord(jwk) || jwk.kty !== "RSA" || typeof jwk.kid !== "string") continue
-      if (jwk.use !== undefined && jwk.use !== "sig") continue
-      if (jwk.alg !== undefined && jwk.alg !== "RS256") continue
-      try {
-        const key = await crypto.subtle.importKey(
-          "jwk",
-          { kty: "RSA", n: jwk.n as string, e: jwk.e as string, alg: "RS256", ext: true },
-          { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" },
-          false,
-          ["verify"],
-        )
-        next.set(jwk.kid, key)
-      } catch {
-        // A key we cannot import cannot verify anything; skip it.
-      }
-    }
-    keys = next
-    fetchedAt = now()
-    return next
-  }
-
-  const keyFor = async (kid: string): Promise<CryptoKey | undefined> => {
-    let fetchedNow = false
-    if (keys === undefined || now() - fetchedAt > JWKS_TTL_MS) {
-      await loadKeys()
-      fetchedNow = true
-    }
-    const found = keys?.get(kid)
-    if (found !== undefined) return found
-    // Unknown kid: GitHub may have rotated. Refetch once, at most every 30 s.
-    if (fetchedNow || now() - fetchedAt < UNKNOWN_KID_COOLDOWN_MS) return undefined
-    return (await loadKeys()).get(kid)
-  }
-
-  return async (request) => {
-    const header = request.headers.get("authorization") ?? ""
-    const match = /^Bearer\s+(\S+)$/i.exec(header)
-    if (!match?.[1]) return { ok: false, reason: "missing bearer token" }
-    const parts = match[1].split(".")
-    if (parts.length !== 3) return { ok: false, reason: "malformed token" }
-    const [rawHeader = "", rawPayload = "", rawSignature = ""] = parts
-    let jose: Record<string, unknown>
-    let claims: Record<string, unknown>
-    let signature: Uint8Array
-    try {
-      jose = base64UrlJson(rawHeader)
-      claims = base64UrlJson(rawPayload)
-      signature = base64UrlBytes(rawSignature)
-    } catch {
-      return { ok: false, reason: "malformed token" }
-    }
-    if (jose.alg !== "RS256") return { ok: false, reason: "unsupported token algorithm" }
-    if (typeof jose.kid !== "string") return { ok: false, reason: "token has no key id" }
-    let key: CryptoKey | undefined
-    try {
-      key = await keyFor(jose.kid)
-    } catch {
-      return { ok: false, reason: "could not load signing keys" }
-    }
-    if (key === undefined) return { ok: false, reason: "unknown signing key" }
-    const valid = await crypto.subtle.verify(
-      "RSASSA-PKCS1-v1_5",
-      key,
-      signature as Uint8Array<ArrayBuffer>,
-      new TextEncoder().encode(`${rawHeader}.${rawPayload}`),
-    )
-    if (!valid) return { ok: false, reason: "bad signature" }
-    if (claims.iss !== issuer) return { ok: false, reason: "wrong issuer" }
-    const audience = audienceOf(request)
-    const aud = claims.aud
-    const audOk = Array.isArray(aud) ? aud.includes(audience) : aud === audience
-    if (!audOk) return { ok: false, reason: "wrong audience" }
-    const seconds = now() / 1000
-    if (typeof claims.exp !== "number") return { ok: false, reason: "token has no expiry" }
-    if (seconds > claims.exp + SKEW_S) return { ok: false, reason: "token expired" }
-    if (
-      claims.nbf !== undefined &&
-      (typeof claims.nbf !== "number" || seconds < claims.nbf - SKEW_S)
-    ) {
-      return { ok: false, reason: "token not yet valid" }
-    }
-    if (claims.repository !== options.repository) return { ok: false, reason: "wrong repository" }
-    return { ok: true, claims }
-  }
-}
-
-// --- Durable Object ---
-
-/** The server end of a Workers WebSocket, as much of it as this module uses. */
-export type PreviewWebSocketLike = {
-  send(data: string): void
-  close(code?: number, reason?: string): void
-}
-
-/** The Durable Object state, as much of it as this module uses (hibernation API). */
-export type DurableObjectStateLike = {
-  acceptWebSocket(ws: PreviewWebSocketLike, tags?: string[]): void
-  getWebSockets(tag?: string): PreviewWebSocketLike[]
-  storage: {
-    get<T = unknown>(key: string): Promise<T | undefined>
-    put<T>(key: string, value: T): Promise<void>
-  }
-  setWebSocketAutoResponse?(pair: unknown): void
-}
-
-/** A Durable Object namespace binding, as much of it as this module uses. */
-export type DurableObjectNamespaceLike = {
-  idFromName(name: string): unknown
-  get(id: unknown): { fetch(request: Request): Promise<Response> }
-}
-
-/** One WebSocket upgrade: the client end goes in the 101 response, the server end is accepted. */
-export type PreviewWebSocketUpgrade = {
-  server: PreviewWebSocketLike
-  response: Response
-}
-
-export type PreviewStatusObjectOptions = {
-  verify: (request: Request) => Promise<PreviewVerifyResult>
-  /** The PR this preview belongs to, read from the Worker's env. */
-  pr?: (env: Record<string, unknown>) => { number: number; url: string } | undefined
-  /**
-   * Creates a WebSocket pair and its 101 response. Default: the Workers `WebSocketPair` global and
-   * `new Response(null, { status: 101, webSocket })`. Injectable for runtimes without them (tests).
-   */
-  upgrade?: () => PreviewWebSocketUpgrade
-}
-
-export type PreviewStatusObject = {
-  fetch(request: Request): Promise<Response>
-  webSocketMessage(ws: PreviewWebSocketLike, message: string | ArrayBuffer): void
-  webSocketClose(ws: PreviewWebSocketLike, code: number, reason: string, wasClean: boolean): void
-  webSocketError(ws: PreviewWebSocketLike, error: unknown): void
-}
-
-type WebSocketPairGlobal = new () => { 0: unknown; 1: PreviewWebSocketLike }
-type AutoResponsePairGlobal = new (request: string, response: string) => unknown
-
-const defaultUpgrade = (): PreviewWebSocketUpgrade => {
-  const Pair = (globalThis as { WebSocketPair?: WebSocketPairGlobal }).WebSocketPair
-  if (Pair === undefined) throw new Error("WebSocketPair is not available in this runtime")
-  const pair = new Pair()
-  return {
-    server: pair[1],
-    response: new Response(null, { status: 101, webSocket: pair[0] } as ResponseInit),
-  }
-}
-
-const SNAPSHOT_KEY = "snapshot"
-type Stored = Omit<PreviewStatusSnapshot, "pr">
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
@@ -342,200 +112,391 @@ const json = (body: unknown, status = 200): Response =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   })
 
-const lastSegment = (pathname: string): string => pathname.slice(pathname.lastIndexOf("/") + 1)
-
-/** `true` when `event` is older than the stored event of the same kind and version. */
-const stale = (stored: { version: string; at: string } | undefined, event: PreviewEvent): boolean =>
-  stored !== undefined &&
-  stored.version === event.version &&
-  Date.parse(stored.at) > Date.parse(event.at)
-
-const readBody = async (request: Request): Promise<unknown> => {
-  const text = await request.text()
-  if (new TextEncoder().encode(text).byteLength > MAX_BODY_BYTES) {
-    throw new Error(`body must be at most ${MAX_BODY_BYTES} bytes`)
-  }
-  try {
-    return JSON.parse(text) as unknown
-  } catch {
-    throw new Error("body must be JSON")
-  }
-}
-
-/**
- * A Durable Object class holding the preview's status snapshot. Export it from the Worker and bind
- * it (as `PREVIEW_STATUS` by default) with a `new_sqlite_classes` migration.
- */
-export function createPreviewStatusObject(
-  options: PreviewStatusObjectOptions,
-): new (
-  state: DurableObjectStateLike,
-  env: Record<string, unknown>,
-) => PreviewStatusObject {
-  const upgrade = options.upgrade ?? defaultUpgrade
-  return class PreviewStatus implements PreviewStatusObject {
-    readonly #state: DurableObjectStateLike
-    readonly #env: Record<string, unknown>
-    #stored: Stored | undefined
-
-    constructor(state: DurableObjectStateLike, env: Record<string, unknown>) {
-      this.#state = state
-      this.#env = env
-      const AutoResponse = (globalThis as { WebSocketRequestResponsePair?: AutoResponsePairGlobal })
-        .WebSocketRequestResponsePair
-      if (AutoResponse !== undefined && state.setWebSocketAutoResponse !== undefined) {
-        // Answered by the runtime without waking the object.
-        state.setWebSocketAutoResponse(new AutoResponse("ping", "pong"))
-      }
-    }
-
-    async #load(): Promise<Stored> {
-      if (this.#stored === undefined) {
-        this.#stored = (await this.#state.storage.get<Stored>(SNAPSHOT_KEY)) ?? {
-          updatedAt: new Date(0).toISOString(),
-        }
-      }
-      return this.#stored
-    }
-
-    async #snapshot(): Promise<PreviewStatusSnapshot> {
-      const stored = await this.#load()
-      const pr = options.pr?.(this.#env)
-      return pr === undefined ? { ...stored } : { ...stored, pr }
-    }
-
-    #broadcast(snapshot: PreviewStatusSnapshot): void {
-      const message = JSON.stringify({ type: "snapshot", snapshot })
-      for (const ws of this.#state.getWebSockets()) {
-        try {
-          ws.send(message)
-        } catch {
-          // A socket closing under us; its close handler cleans up.
-        }
-      }
-    }
-
-    async fetch(request: Request): Promise<Response> {
-      const route = lastSegment(new URL(request.url).pathname)
-      if (route === "status") {
-        if (request.method !== "GET" && request.method !== "HEAD") {
-          return json({ error: "method not allowed" }, 405)
-        }
-        return json(await this.#snapshot())
-      }
-      if (route === "live") {
-        if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
-          return json({ error: "expected a WebSocket upgrade" }, 426)
-        }
-        const { server, response } = upgrade()
-        this.#state.acceptWebSocket(server)
-        server.send(JSON.stringify({ type: "snapshot", snapshot: await this.#snapshot() }))
-        return response
-      }
-      if (route === "events") {
-        if (request.method !== "POST") return json({ error: "method not allowed" }, 405)
-        const verdict = await options.verify(request)
-        if (!verdict.ok) return json({ error: verdict.reason }, 401)
-        let event: PreviewEvent
-        try {
-          event = parsePreviewEvent(await readBody(request))
-        } catch (error) {
-          return json({ error: error instanceof Error ? error.message : "bad event" }, 400)
-        }
-        await this.#apply(event)
-        return new Response(null, { status: 204, headers: { "cache-control": "no-store" } })
-      }
-      return json({ error: "not found" }, 404)
-    }
-
-    async #apply(event: PreviewEvent): Promise<void> {
-      const stored = await this.#load()
-      const next: Stored = { ...stored }
-      if (event.kind === "build") {
-        if (stale(stored.build, event)) return
-        next.build = event
-        if (event.state === "deployed") {
-          if (stale(stored.deployed, event)) return
-          next.deployed = {
-            version: event.version,
-            at: event.at,
-            ...(event.runUrl === undefined ? {} : { runUrl: event.runUrl }),
-          }
-        }
-      } else {
-        if (stale(stored.checks, event)) return
-        next.checks = event
-      }
-      next.updatedAt = new Date().toISOString()
-      await this.#state.storage.put(SNAPSHOT_KEY, next)
-      this.#stored = next
-      this.#broadcast(await this.#snapshot())
-    }
-
-    webSocketMessage(ws: PreviewWebSocketLike, message: string | ArrayBuffer): void {
-      if (message === "ping") ws.send("pong")
-    }
-
-    webSocketClose(ws: PreviewWebSocketLike, code: number, reason: string): void {
-      try {
-        ws.close(code === 1005 || code === 1006 ? 1000 : code, reason)
-      } catch {
-        // Already closed.
-      }
-    }
-
-    webSocketError(ws: PreviewWebSocketLike): void {
-      try {
-        ws.close(1011, "error")
-      } catch {
-        // Already closed.
-      }
-    }
-  }
-}
-
-// --- Worker router ---
-
-export type PreviewStatusRoutesOptions = {
-  /** Default "/__preview". */
-  basePath?: string
-  /** The Durable Object binding name. Default "PREVIEW_STATUS". */
-  binding?: string
-}
-
 const sameOrigin = (request: Request): boolean => {
   const origin = request.headers.get("origin")
   if (origin !== null && origin !== new URL(request.url).origin) return false
   const site = request.headers.get("sec-fetch-site")
   // Browsers always send Sec-Fetch-Site; a non-browser client (no header) cannot be a CSRF vector
   // and the snapshot holds nothing secret.
-  return site === null || site === "same-origin"
+  return site === null || site === "same-origin" || site === "none"
 }
 
+/** A GitHub answer this module cannot use, classified without keeping its body. */
+class GithubFailure extends Error {
+  constructor(
+    readonly source: Exclude<PreviewStatusSource, "github">,
+    message: string,
+    readonly retryAt?: number,
+  ) {
+    super(message)
+  }
+}
+
+type Run = { status: string; conclusion: string | null; url?: string; at: string }
+
+const parseRun = (body: unknown): Run | undefined => {
+  const runs = isRecord(body) && Array.isArray(body.workflow_runs) ? body.workflow_runs : []
+  const run: unknown = runs[0]
+  if (!isRecord(run) || typeof run.status !== "string") return undefined
+  const at =
+    typeof run.updated_at === "string" && !Number.isNaN(Date.parse(run.updated_at))
+      ? new Date(run.updated_at).toISOString()
+      : undefined
+  if (at === undefined) return undefined
+  return {
+    status: run.status,
+    conclusion: typeof run.conclusion === "string" ? run.conclusion : null,
+    ...(typeof run.html_url === "string" && run.html_url.startsWith("https://")
+      ? { url: run.html_url }
+      : {}),
+    at,
+  }
+}
+
+const toBuild = (run: Run | undefined, version: string): PreviewBuildStatus | undefined => {
+  if (run === undefined) return undefined
+  const base = { kind: "build" as const, version, at: run.at }
+  const runUrl = run.url === undefined ? {} : { runUrl: run.url }
+  if (run.status !== "completed") {
+    return RUNNING.has(run.status) ? { ...base, state: "building", ...runUrl } : undefined
+  }
+  if (run.conclusion === "success") return { ...base, state: "deployed", ...runUrl }
+  const message = FAILED_MESSAGES[run.conclusion ?? ""]
+  if (message === undefined) return undefined // skipped, neutral, stale: no build happened
+  return { ...base, state: "failed", ...runUrl, message }
+}
+
+const toChecks = (run: Run | undefined, version: string): PreviewChecksStatus | undefined => {
+  if (run === undefined) return undefined
+  const base = { kind: "checks" as const, version, at: run.at }
+  const runUrl = run.url === undefined ? {} : { runUrl: run.url }
+  if (run.status !== "completed") {
+    return RUNNING.has(run.status) ? { ...base, state: "running", ...runUrl } : undefined
+  }
+  if (run.conclusion === "success" || run.conclusion === "neutral") {
+    return { ...base, state: "passed", ...runUrl }
+  }
+  if (run.conclusion === "skipped" || run.conclusion === "stale") return undefined
+  return { ...base, state: "failed", ...runUrl }
+}
+
+/** Everything but `updatedAt`: two snapshots with the same key say the same thing. */
+const snapshotKey = (snapshot: PreviewStatusSnapshot): string => {
+  const { updatedAt: _, ...rest } = snapshot
+  return JSON.stringify(rest)
+}
+
+const isSnapshot = (value: unknown): value is PreviewStatusSnapshot =>
+  isRecord(value) && typeof value.updatedAt === "string" && typeof value.source === "string"
+
 /**
- * Worker-side router: forwards `${basePath}/status|live|events` to the singleton status object.
- * Returns undefined for any other path, so the Worker falls through to its own handling.
+ * A stateless Fetch handler for `{basePath}/status` and `{basePath}/live`, backed by the GitHub REST
+ * API. Returns undefined for any path outside `basePath`, so the Worker falls through.
  */
-export function previewStatusRoutes(
-  options: PreviewStatusRoutesOptions = {},
-): (request: Request, env: Record<string, unknown>) => Promise<Response> | undefined {
+export function createPreviewStatus(
+  options: PreviewStatusOptions,
+): (request: Request) => Promise<Response> | undefined {
   let basePath = options.basePath ?? "/__preview"
   while (basePath.endsWith("/")) basePath = basePath.slice(0, -1)
-  const binding = options.binding ?? "PREVIEW_STATUS"
-  return (request, env) => {
+  const repository = options.repository
+  const buildWorkflow = options.workflows?.build ?? "system-preview.yml"
+  const checksWorkflow = options.workflows?.checks ?? "pr.yml"
+  const fetcher = options.fetch ?? ((request: Request) => fetch(request))
+  const now = options.now ?? Date.now
+  const ttlMs = options.cacheTtlMs ?? 10_000
+  const intervalMs = options.sse?.intervalMs ?? 5_000
+  const heartbeatMs = options.sse?.heartbeatMs ?? 15_000
+  const maxMs = options.sse?.maxMs ?? 55_000
+  const pr = { number: options.pr, url: `https://github.com/${repository}/pull/${options.pr}` }
+  const cacheKey = new Request(
+    `https://mockingbird-preview.invalid/${encodeURIComponent(repository)}/pulls/${options.pr}`,
+  )
+
+  let last: PreviewStatusSnapshot | undefined
+  let lastAt = Number.NEGATIVE_INFINITY
+  let lastTtlMs = ttlMs
+  let inflight: Promise<PreviewStatusSnapshot> | undefined
+  let backoffUntil = Number.NEGATIVE_INFINITY
+
+  const github = async (path: string): Promise<unknown> => {
+    const headers: Record<string, string> = {
+      accept: "application/vnd.github+json",
+      "x-github-api-version": API_VERSION,
+      "user-agent": USER_AGENT,
+    }
+    if (options.token) headers.authorization = `Bearer ${options.token}`
+    let response: Response
+    try {
+      response = await fetcher(new Request(`${GITHUB_API}${path}`, { headers }))
+    } catch {
+      throw new GithubFailure("unavailable", "GitHub could not be reached")
+    }
+    if (response.ok) {
+      try {
+        return (await response.json()) as unknown
+      } catch {
+        throw new GithubFailure("unavailable", "GitHub answered with malformed JSON")
+      }
+    }
+    void response.body?.cancel().catch(() => {})
+    const { status } = response
+    const remaining = response.headers.get("x-ratelimit-remaining")
+    const retryAfter = response.headers.get("retry-after")
+    if (status === 429 || (status === 403 && (remaining === "0" || retryAfter !== null))) {
+      const reset = Number(response.headers.get("x-ratelimit-reset"))
+      const retrySeconds = Number(retryAfter)
+      const retryAt =
+        retryAfter !== null && Number.isFinite(retrySeconds) && retrySeconds > 0
+          ? now() + retrySeconds * 1000
+          : Number.isFinite(reset) && reset * 1000 > now()
+            ? reset * 1000
+            : now() + DEFAULT_BACKOFF_MS
+      throw new GithubFailure(
+        "rate-limited",
+        options.token
+          ? "GitHub API rate limit reached"
+          : "GitHub API rate limit reached; set a read-only token to raise it",
+        retryAt,
+      )
+    }
+    if (status === 401) {
+      throw new GithubFailure("unauthenticated", "GitHub rejected the token")
+    }
+    if (status === 403 || status === 404) {
+      throw options.token
+        ? new GithubFailure("unavailable", "The token cannot read this repository or PR")
+        : new GithubFailure(
+            "unauthenticated",
+            "The repository is not readable without a GitHub token",
+          )
+    }
+    throw new GithubFailure("unavailable", `GitHub answered ${status}`)
+  }
+
+  const runs = async (workflow: string, sha: string): Promise<Run | undefined> => {
+    const path = `/repos/${repository}/actions/workflows/${encodeURIComponent(workflow)}/runs?head_sha=${sha}&per_page=1`
+    return parseRun(await github(path))
+  }
+
+  const ci = async (): Promise<Pick<PreviewStatusSnapshot, "build" | "checks">> => {
+    const pull = await github(`/repos/${repository}/pulls/${options.pr}`)
+    const head = isRecord(pull) && isRecord(pull.head) ? pull.head.sha : undefined
+    if (typeof head !== "string" || !/^[0-9a-f]{7,64}$/i.test(head)) {
+      throw new GithubFailure("unavailable", "GitHub answered without a head commit")
+    }
+    const sha = head.toLowerCase()
+    const [build, checks] = await Promise.all([runs(buildWorkflow, sha), runs(checksWorkflow, sha)])
+    const buildStatus = toBuild(build, sha)
+    const checksStatus = toChecks(checks, sha)
+    return {
+      ...(buildStatus === undefined ? {} : { build: buildStatus }),
+      ...(checksStatus === undefined ? {} : { checks: checksStatus }),
+    }
+  }
+
+  const readDeployed = async (
+    build: PreviewBuildStatus | undefined,
+  ): Promise<PreviewStatusSnapshot["deployed"]> => {
+    try {
+      const value: unknown = await options.readVersion()
+      if (!isRecord(value) || typeof value.version !== "string") return undefined
+      if (typeof value.builtAt !== "string") return undefined
+      const runUrl =
+        build?.state === "deployed" && build.version === value.version ? build.runUrl : undefined
+      return {
+        version: value.version,
+        at: value.builtAt,
+        ...(runUrl === undefined ? {} : { runUrl }),
+      }
+    } catch {
+      return undefined
+    }
+  }
+
+  const fromCache = async (): Promise<boolean> => {
+    if (options.cache === undefined) return false
+    try {
+      const hit = await options.cache.match(cacheKey)
+      if (hit === undefined) return false
+      const fetchedAt = Number(hit.headers.get("x-fetched-at"))
+      const hitTtl = Number(hit.headers.get("x-ttl-ms"))
+      if (!Number.isFinite(fetchedAt) || !Number.isFinite(hitTtl)) return false
+      if (now() - fetchedAt >= hitTtl) return false
+      const body: unknown = await hit.json()
+      if (!isSnapshot(body)) return false
+      last = body
+      lastAt = fetchedAt
+      lastTtlMs = hitTtl
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  const toCache = async (snapshot: PreviewStatusSnapshot, ttl: number): Promise<void> => {
+    if (options.cache === undefined) return
+    try {
+      await options.cache.put(
+        cacheKey,
+        new Response(JSON.stringify(snapshot), {
+          headers: {
+            "content-type": "application/json",
+            "cache-control": `max-age=${Math.max(1, Math.ceil(ttl / 1000))}`,
+            "x-fetched-at": String(now()),
+            "x-ttl-ms": String(ttl),
+          },
+        }),
+      )
+    } catch {
+      // The cache is an optimisation.
+    }
+  }
+
+  const refresh = async (): Promise<PreviewStatusSnapshot> => {
+    if (await fromCache()) return last as PreviewStatusSnapshot
+    let source: PreviewStatusSource = "github"
+    let message: string | undefined
+    let ciPart: Pick<PreviewStatusSnapshot, "build" | "checks">
+    if (now() < backoffUntil) {
+      source = "rate-limited"
+      message = "GitHub API rate limit reached; showing the last known status"
+      ciPart = {
+        ...(last?.build ? { build: last.build } : {}),
+        ...(last?.checks ? { checks: last.checks } : {}),
+      }
+    } else {
+      try {
+        ciPart = await ci()
+      } catch (error) {
+        const failure =
+          error instanceof GithubFailure
+            ? error
+            : new GithubFailure("unavailable", "CI status could not be read")
+        source = failure.source
+        message = failure.message
+        if (failure.retryAt !== undefined) backoffUntil = failure.retryAt
+        ciPart = {
+          ...(last?.build ? { build: last.build } : {}),
+          ...(last?.checks ? { checks: last.checks } : {}),
+        }
+      }
+    }
+    const deployed = await readDeployed(ciPart.build)
+    const snapshot: PreviewStatusSnapshot = {
+      ...ciPart,
+      ...(deployed === undefined ? {} : { deployed }),
+      pr,
+      source,
+      ...(message === undefined ? {} : { message }),
+      updatedAt: new Date(now()).toISOString(),
+    }
+    const ttl = source === "rate-limited" ? Math.max(ttlMs, backoffUntil - now()) : ttlMs
+    last = snapshot
+    lastAt = now()
+    lastTtlMs = ttl
+    await toCache(snapshot, ttl)
+    return snapshot
+  }
+
+  /** The current snapshot: cached for `cacheTtlMs`, one refresh shared by concurrent callers. */
+  const snapshot = (): Promise<PreviewStatusSnapshot> => {
+    if (last !== undefined && now() - lastAt < lastTtlMs) return Promise.resolve(last)
+    if (inflight === undefined) {
+      inflight = refresh().finally(() => {
+        inflight = undefined
+      })
+    }
+    return inflight
+  }
+
+  const live = (request: Request): Response => {
+    const encoder = new TextEncoder()
+    const handles = new Set<ReturnType<typeof setTimeout>>()
+    let done = false
+    let finish = () => {}
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const send = (text: string) => {
+          if (done) return
+          try {
+            controller.enqueue(encoder.encode(text))
+          } catch {
+            finish()
+          }
+        }
+        const later = (ms: number, run: () => void) => {
+          if (done) return
+          const handle = setTimeout(() => {
+            handles.delete(handle)
+            if (!done) run()
+          }, ms)
+          handles.add(handle)
+        }
+        finish = () => {
+          if (done) return
+          done = true
+          for (const handle of handles) clearTimeout(handle)
+          handles.clear()
+          request.signal.removeEventListener("abort", finish)
+          try {
+            controller.close()
+          } catch {
+            // Already closed or cancelled.
+          }
+        }
+        if (request.signal.aborted) {
+          finish()
+          return
+        }
+        request.signal.addEventListener("abort", finish)
+        let sentKey: string | undefined
+        const push = (value: PreviewStatusSnapshot) => {
+          const key = snapshotKey(value)
+          if (key === sentKey) return
+          sentKey = key
+          send(`event: snapshot\ndata: ${JSON.stringify(value)}\n\n`)
+        }
+        const tick = () => {
+          void snapshot().then((value) => {
+            if (done) return
+            push(value)
+            later(intervalMs, tick)
+          })
+        }
+        const heartbeat = () => {
+          send(": heartbeat\n\n")
+          later(heartbeatMs, heartbeat)
+        }
+        send(`retry: ${SSE_RETRY_MS}\n\n`)
+        later(maxMs, finish)
+        later(heartbeatMs, heartbeat)
+        tick()
+      },
+      cancel() {
+        finish()
+      },
+    })
+    return new Response(stream, {
+      headers: {
+        "content-type": "text/event-stream; charset=utf-8",
+        "cache-control": "no-store",
+        "x-accel-buffering": "no",
+      },
+    })
+  }
+
+  return (request) => {
     const { pathname } = new URL(request.url)
-    if (!pathname.startsWith(`${basePath}/`)) return undefined
+    if (pathname !== basePath && !pathname.startsWith(`${basePath}/`)) return undefined
     const route = pathname.slice(basePath.length + 1)
-    if (route !== "status" && route !== "live" && route !== "events") return undefined
     return (async () => {
-      if (route !== "events" && !sameOrigin(request)) {
-        return json({ error: "cross-origin request refused" }, 403)
+      if (!sameOrigin(request)) return json({ error: "cross-origin request refused" }, 403)
+      if (route !== "status" && route !== "live") return json({ error: "not found" }, 404)
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return json({ error: "method not allowed" }, 405)
       }
-      const namespace = env[binding] as DurableObjectNamespaceLike | undefined
-      if (namespace === undefined || typeof namespace.idFromName !== "function") {
-        return json({ error: `Durable Object binding ${binding} is not configured` }, 503)
-      }
-      return namespace.get(namespace.idFromName("status")).fetch(request)
+      if (route === "live") return live(request)
+      return json(await snapshot())
     })()
   }
 }
