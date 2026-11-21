@@ -13,7 +13,7 @@
     "@crvouga/mockingbird-core": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-ui": "workspace:*",
-    "@types/bun": "latest",
+    "@types/bun": "1.4.0",
     "alasql": "^4.19.1",
     "esbuild": "^0.28.2",
     "fast-check": "^4.10.2",
