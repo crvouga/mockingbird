@@ -7,7 +7,7 @@ export const SANDBOX_PROXY_PATH = "/__sandbox"
 
 /** The page that explains sandbox mode, linked from the System screen. */
 export const SANDBOX_DOCS_URL =
-  "https://github.com/crvouga/mockingbird/blob/main/docs/SANDBOX_MODE.md"
+  "https://github.com/crvouga-organization/mockingbird/blob/main/docs/SANDBOX_MODE.md"
 
 /**
  * The browser half of sandbox mode: transports for the emulators to forward through, and the
