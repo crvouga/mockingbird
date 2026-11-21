@@ -1,4 +1,4 @@
-import { mountSystemHarness, SYSTEM_ICONS, type SystemBuild } from "@crvouga/mockingbird-ui"
+import { defineSystem, mountSystem, SYSTEM_ICONS, type SystemBuild } from "@crvouga/mockingbird-ui"
 import { setFetcher } from "../client/api.js"
 import { setInboxOpener } from "../client/inbox.js"
 import { mountApp } from "../client/main.js"
@@ -42,18 +42,22 @@ export const mount = async (
   }
 
   let notifications: import("@crvouga/mockingbird-notifications/ui").AppHandle | undefined
-  const dashboard = mountSystemHarness(
-    host,
-    [
+  // The app registry: adding an app to this preview is one more entry here.
+  const system = defineSystem({
+    apps: [
       {
         id: "app",
         label: "Lab workspace",
         icon: LAB_ICON,
         description: "The patient, clinician and admin app, signed out and seeded with demo data.",
-        mount: (panel) => {
-          const root = document.createElement("div")
-          panel.append(root)
-          return mountApp(root, true)
+        part: {
+          load: async () => ({
+            mount: (panel) => {
+              const root = document.createElement("div")
+              panel.append(root)
+              return mountApp(root, true)
+            },
+          }),
         },
       },
       {
@@ -61,9 +65,11 @@ export const mount = async (
         label: "Emulators",
         icon: SYSTEM_ICONS.emulators,
         description: "The admin UI of every emulator: state, requests, clock, faults and SQL.",
-        mount: async (panel) => {
-          const { mountEmulatorsPanel } = await import("./emulatorsPanel.js")
-          return mountEmulatorsPanel(panel, demo.admin)
+        part: {
+          load: async () => {
+            const { mountEmulatorsPanel } = await import("./emulatorsPanel.js")
+            return { mount: (panel) => mountEmulatorsPanel(panel, demo.admin) }
+          },
         },
       },
       {
@@ -72,24 +78,30 @@ export const mount = async (
         icon: SYSTEM_ICONS.notifications,
         description:
           "Every email, text, push and staff chat message the app sent, on lifelike devices.",
-        mount: async (panel) => {
-          const { mountNotifications } = await import("@crvouga/mockingbird-notifications/ui")
-          notifications = mountNotifications(panel, {
-            harness: demo.notifications,
-            title: "Cove notifications",
-          })
-          return () => notifications?.destroy()
+        part: {
+          load: async () => {
+            const { mountNotifications } = await import("@crvouga/mockingbird-notifications/ui")
+            return {
+              mount: (panel) => {
+                notifications = mountNotifications(panel, {
+                  harness: demo.notifications,
+                  title: "Cove notifications",
+                })
+                return () => notifications?.destroy()
+              },
+            }
+          },
         },
       },
     ],
-    {
-      initial: "app",
-      syncUrl: options.syncUrl ?? false,
-      services: dev.controls(demo.admins),
-      docsUrl: DEV_DOCS_URL,
-      ...(options.build ? { build: options.build } : {}),
-    },
-  )
+  })
+  const dashboard = mountSystem(host, system, {
+    initial: "app",
+    syncUrl: options.syncUrl ?? false,
+    services: dev.controls(demo.admins),
+    docsUrl: DEV_DOCS_URL,
+    ...(options.build ? { build: options.build } : {}),
+  })
   setInboxOpener((target) => {
     void dashboard.show("notifications").then(() => notifications?.show(target))
   })
