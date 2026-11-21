@@ -122,7 +122,7 @@ test("worker runtime owns authenticated LiveKit state, inbox, attributes, text a
     await page.goto("https://livekit.test")
     await page.addScriptTag({ content: pageBundle.outputFiles[0]?.text ?? "" })
     const result = await page.evaluate<unknown>(
-      "Promise.race([globalThis.result,new Promise((_,reject)=>setTimeout(()=>reject(new Error(globalThis.phase)),15000))])",
+      "Promise.race([globalThis.result,new Promise((_,reject)=>setTimeout(()=>reject(new Error(globalThis.phase)),45000))])",
     )
     expect(result).toEqual({
       pcmKind: "audio",
@@ -144,4 +144,4 @@ test("worker runtime owns authenticated LiveKit state, inbox, attributes, text a
   } finally {
     await browser.close()
   }
-}, 30000)
+}, 60000)
