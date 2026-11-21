@@ -1,0 +1,302 @@
+# Reusable: a live, self-updating preview of each pull request on Cloudflare Workers.
+#
+# A project adopts it with one workflow file (see docs/PREVIEWS.md):
+#
+#   on:
+#     pull_request: { types: [opened, synchronize, reopened, closed] }
+#     workflow_run: { workflows: [CI], types: [requested, completed] }
+#   permissions: { contents: read, pull-requests: write, actions: read }
+#   jobs:
+#     preview:
+#       uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+#       with: { name: my-app, build: bun run preview:build, outdir: preview-dist }
+#       secrets: inherit
+#
+# It needs only CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, the credentials any hosting needs.
+# The preview's live CI status is pushed here into the Worker's own configuration (PREVIEW_BUILD,
+# PREVIEW_CHECKS via `wrangler secret bulk`): no GitHub token, no database, no Durable Object.
+#
+#   pull_request opened/synchronize/reopened → build, stamp version.json, deploy, status
+#   pull_request closed                      → delete the Worker
+#   workflow_run of the project's CI         → checks status (running / passed / failed)
+#
+# Forks get no secrets, so their PRs are skipped. workflow_run always runs the caller's workflow
+# from the default branch, so checks status starts once the caller file is on it.
+
+name: Preview
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: Worker name prefix; each PR deploys `<name>-pr-<number>`.
+        type: string
+        required: true
+      working-directory:
+        description: Where install, build, the CLI and wrangler run.
+        type: string
+        default: "."
+      install:
+        description: Installs dependencies (must make the `mockingbird-preview` CLI available).
+        type: string
+        default: bun install --frozen-lockfile
+      build:
+        description: Builds the preview into `outdir` (e.g. a script calling buildPreview()).
+        type: string
+        required: true
+      outdir:
+        description: The built preview, relative to working-directory.
+        type: string
+        required: true
+      wrangler-config:
+        description: A wrangler config to deploy with (relative to working-directory). Empty generates one that serves `outdir` with the package's Worker.
+        type: string
+        default: ""
+      worker-secrets:
+        description: Space-separated names of the caller's secrets to copy to the preview Worker (e.g. dev resource credentials).
+        type: string
+        default: ""
+      cli:
+        description: Runs the `mockingbird-preview` CLI.
+        type: string
+        default: bunx mockingbird-preview
+      bun-version:
+        type: string
+        default: "1.4.0"
+      wrangler:
+        type: string
+        default: bunx wrangler@4.50.0
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Resolve the pull request and what to do
+        id: ctx
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event.workflow_run.head_repository.full_name == github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          NAME: ${{ inputs.name }}
+        run: |
+          mode=skip
+          if [ -z "$PR_NUMBER" ] || [ "$SAME_REPO" != "true" ]; then
+            echo "::notice::Not a same-repository pull request; no preview."
+          elif [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::Previews need CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets."
+          elif [ "$EVENT" = "pull_request" ] && [ "$ACTION" = "closed" ]; then mode=close
+          elif [ "$EVENT" = "pull_request" ]; then mode=deploy
+          elif [ "$EVENT" = "workflow_run" ]; then mode=checks
+          fi
+          checks_state=running
+          if [ "$ACTION" = "completed" ]; then
+            [ "$RUN_CONCLUSION" = "success" ] && checks_state=passed || checks_state=failed
+          fi
+          {
+            echo "mode=$mode"
+            echo "pr=$PR_NUMBER"
+            echo "pr-url=${PR_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUMBER}"
+            echo "sha=$HEAD_SHA"
+            echo "worker=$NAME-pr-$PR_NUMBER"
+            echo "checks-state=$checks_state"
+            echo "checks-url=$RUN_URL"
+            echo "run-url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=$mode pr=$PR_NUMBER worker=$NAME-pr-$PR_NUMBER"
+
+      # Status lives in the Worker's configuration. Writing it to a Worker that does not exist
+      # would create an empty one, so it is only written once the preview has been deployed.
+      - name: Does the preview exist
+        id: exists
+        if: steps.ctx.outputs.mode != 'skip'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER/settings")
+          echo "exists=$([ "$code" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        if: steps.ctx.outputs.mode != 'skip'
+        with:
+          bun-version: ${{ inputs.bun-version }}
+
+      # One helper for every status write: `push-status KEY STATE URL [MESSAGE]`.
+      - name: Status helper
+        if: steps.ctx.outputs.mode != 'skip'
+        run: |
+          cat > "$RUNNER_TEMP/push-status" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Writes PREVIEW_BUILD or PREVIEW_CHECKS into the preview Worker's configuration.
+          # Best effort: a failure only warns.
+          key=$1 state=$2 url=${3:-} message=${4:-}
+          file="$RUNNER_TEMP/preview-status.json"
+          ( umask 077; jq -n --arg key "$key" --arg state "$state" --arg version "$VERSION" --arg url "$url" \
+            --arg message "$message" '{($key): ({state: $state, version: $version, at: (now | todate)}
+              + (if $url != "" then {runUrl: $url} else {} end)
+              + (if $message != "" then {message: $message} else {} end) | tojson)}' > "$file" )
+          $WRANGLER secret bulk "$file" --name "$WORKER" > /dev/null && echo "$WORKER: $key $state ${VERSION:0:7}" \
+            || echo "::warning::Could not update $WORKER's status"
+          rm -f "$file"
+          SCRIPT
+          chmod +x "$RUNNER_TEMP/push-status"
+
+      - name: Tell the preview CI is running
+        if: steps.ctx.outputs.mode == 'checks' && steps.exists.outputs.exists == 'true'
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          WRANGLER: ${{ inputs.wrangler }}
+          STATE: ${{ steps.ctx.outputs.checks-state }}
+          URL: ${{ steps.ctx.outputs.checks-url }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_CHECKS "$STATE" "$URL"'
+
+      - name: Tell the preview a build started
+        if: steps.ctx.outputs.mode == 'deploy' && steps.exists.outputs.exists == 'true'
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          WRANGLER: ${{ inputs.wrangler }}
+          URL: ${{ steps.ctx.outputs.run-url }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_BUILD building "$URL"'
+
+      - uses: actions/checkout@v5
+        if: steps.ctx.outputs.mode == 'deploy'
+
+      - name: Install and build
+        if: steps.ctx.outputs.mode == 'deploy'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          INSTALL: ${{ inputs.install }}
+          BUILD: ${{ inputs.build }}
+        run: |
+          eval "$INSTALL"
+          eval "$BUILD"
+
+      - name: Deploy
+        id: deploy
+        if: steps.ctx.outputs.mode == 'deploy'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLI: ${{ inputs.cli }}
+          WRANGLER: ${{ inputs.wrangler }}
+          OUTDIR: ${{ inputs.outdir }}
+          CONFIG: ${{ inputs.wrangler-config }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          PR: ${{ steps.ctx.outputs.pr }}
+          PR_URL: ${{ steps.ctx.outputs.pr-url }}
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          WORKER_SECRETS: ${{ inputs.worker-secrets }}
+        run: |
+          # version.json names the commit this deploy ships; open tabs update to it in place.
+          $CLI stamp --outdir "$OUTDIR" --version "$VERSION" --pr "$PR" --pr-url "$PR_URL"
+          if [ -z "$CONFIG" ]; then
+            CONFIG="$RUNNER_TEMP/wrangler.json"
+            $CLI wrangler-config --name "$WORKER" --assets "$OUTDIR" > "$CONFIG"
+          fi
+          pr_json=$(jq -cn --argjson number "$PR" --arg url "$PR_URL" '{number: $number, url: $url}')
+          deploy() {
+            $WRANGLER deploy --config "$CONFIG" --name "$WORKER" --var "PREVIEW_PR:$pr_json" \
+              > "$RUNNER_TEMP/deploy.log" 2>&1
+          }
+          if ! deploy; then
+            # A preview first deployed with an older, Durable Object based version cannot drop that
+            # class in place. A preview holds no state worth keeping: delete it and deploy fresh.
+            if grep -qi "durable object" "$RUNNER_TEMP/deploy.log"; then
+              curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER?force=true"
+              deploy || { cat "$RUNNER_TEMP/deploy.log"; exit 1; }
+            else
+              cat "$RUNNER_TEMP/deploy.log"; exit 1
+            fi
+          fi
+          cat "$RUNNER_TEMP/deploy.log"
+          # Copy the named secrets; values go through a 0600 file that is removed at once.
+          file="$RUNNER_TEMP/worker-secrets.json"
+          ( umask 077; echo "$SECRETS_JSON" | jq --arg names "$WORKER_SECRETS" \
+            '($names | split(" ") | map(select(. != ""))) as $n | with_entries(select(.key as $k | $n | index($k)) | select(.value != ""))' > "$file" )
+          echo "Secrets for this preview: $(jq -r 'keys | join(", ")' "$file")"
+          if [ "$(jq length "$file")" -gt 0 ]; then $WRANGLER secret bulk "$file" --name "$WORKER" > /dev/null; fi
+          rm -f "$file"
+          url=$(grep -Eo "https://$WORKER\.[a-z0-9-]+\.workers\.dev" "$RUNNER_TEMP/deploy.log" | tail -1)
+          test -n "$url"
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 "$url/version.json" > /dev/null
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "[Open preview]($url)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tell the preview it deployed
+        if: steps.deploy.outputs.url != ''
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          WRANGLER: ${{ inputs.wrangler }}
+          URL: ${{ steps.ctx.outputs.run-url }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_BUILD deployed "$URL"'
+
+      - name: Tell the preview the build failed
+        if: failure() && steps.ctx.outputs.mode == 'deploy' && (steps.exists.outputs.exists == 'true' || steps.deploy.outputs.url != '')
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          WRANGLER: ${{ inputs.wrangler }}
+          URL: ${{ steps.ctx.outputs.run-url }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_BUILD failed "$URL" "The preview build or deploy failed"'
+
+      - name: Put the preview link at the top of the PR
+        if: steps.deploy.outputs.url != ''
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          PR: ${{ steps.ctx.outputs.pr }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = Number(process.env.PR);
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            const start = '<!-- system-preview:start -->';
+            const end = '<!-- system-preview:end -->';
+            const links = `[Preview](${process.env.PREVIEW_URL}/?surface=app)`;
+            const body = (pr.body || '').replace(/<!-- system-preview:start -->[\s\S]*?<!-- system-preview:end -->\s*/g, '').trimStart();
+            const next = `${start}\n${links}\n${end}\n\n${body}`;
+            if (pr.body !== next) await github.rest.pulls.update({ owner, repo, pull_number, body: next });
+
+      - name: Remove the preview
+        if: steps.ctx.outputs.mode == 'close'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+        run: |
+          # Delete only the script: `wrangler delete` also lists KV namespaces, which a
+          # deploy-scoped token may not read. A Worker that is already gone is fine.
+          status=$(curl -s -o "$RUNNER_TEMP/delete.json" -w '%{http_code}' -X DELETE \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER?force=true")
+          case "$status" in
+            200|404) echo "Removed $WORKER (HTTP $status)" ;;
+            *) cat "$RUNNER_TEMP/delete.json"; exit 1 ;;
+          esac

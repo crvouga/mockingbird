@@ -56,23 +56,20 @@ The current lab client has module-scoped ports and supports one system per docum
 
 An open preview always knows where CI is and updates itself; no reload is ever needed.
 
-- **CI state, live, with no state of its own.** The Worker's `/__preview/*` is a stateless
-  function (`createPreviewStatus` in `src/worker.ts`). On request it reads this PR's head commit
-  and the runs for it from the GitHub API: the System preview build (building, deployed, failed)
-  and the CI checks (running, passed, failed). It reads the deployed version from
-  `version.json`, caches the answer for a few seconds at the edge, and streams changes as
-  Server-Sent Events at `/__preview/live`. Each stream closes after about a minute and the browser
-  reconnects. If SSE is unavailable, the tab polls `/__preview/status` itself, faster while a
-  build is running, and says so. No Durable Objects, KV or database. The optional
-  `PREVIEW_GITHUB_TOKEN` secret (read-only) raises GitHub's rate limit. Without it, a
-  rate-limited preview shows CI as unavailable, and updates still work.
-- **Updates without reloading.** `index.html` loads only `preview.js`, a small boot loader that is
-  never swapped. It runs the app version `version.json` names (`app-<hash>.js`, stamped with the
-  PR head commit by `scripts/stamp-version.ts` at deploy). When a newer version deploys, it
-  unmounts the running app and imports the new one into the same page: the switcher order, the
-  pill's position and each service's mode carry over; the demonstration world starts fresh.
-  Updates apply after a short countdown (**Update now** / **Not now**), or at once in a background
-  tab; turn auto-update off on the System screen.
+- **CI state, pushed by CI, no state of its own.** The lab's preview uses the reusable workflow
+  every project can use ([Live PR previews](../../../docs/PREVIEWS.md)). When a build starts,
+  deploys or fails, and when `CI` starts or finishes for the PR, it writes the status into the
+  preview Worker's own configuration (`wrangler secret bulk`). The stateless Worker
+  (`createPreviewWorker` in `src/worker.ts`) serves it as Server-Sent Events at `/__preview/live`,
+  and the tab polls `/__preview/status` if SSE is unavailable. No GitHub token, database or
+  Durable Object.
+- **Updates without reloading.** `index.html` loads the package's boot loader (`preview.js`),
+  which is never swapped. It runs the app version `version.json` names (`app-<hash>.js`, built
+  from `src/app.ts` by `scripts/build-preview.ts`, stamped with the PR head at deploy). When a
+  newer version deploys, it unmounts the running app and imports the new one into the same page:
+  the switcher order, the pill's position and each service's mode carry over; the demonstration
+  world starts fresh. Updates apply after a short countdown (**Update now** / **Not now**), or at
+  once in a background tab; turn auto-update off on the System screen.
 - **Freshness everywhere.** A dot on the switcher pill shows live / building / update ready /
   failed / offline, and the System screen's **Preview** card shows the version this tab runs and
   its age, the latest deploy, the build and checks with links to their runs, and the connection.

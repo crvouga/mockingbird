@@ -94,7 +94,7 @@ class FakeEventSource {
     this.#dispatch("snapshot", {
       data: JSON.stringify({
         updatedAt: new Date(T0).toISOString(),
-        source: "github",
+        source: "ci",
         ...snapshot,
       }),
     })
@@ -147,7 +147,7 @@ const harness = (overrides: Partial<LivePreviewOptions> = {}) => {
   const clock = fakeClock()
   const served: Served = {
     version: V1,
-    status: { updatedAt: new Date(T0).toISOString(), source: "github" },
+    status: { updatedAt: new Date(T0).toISOString(), source: "ci" },
   }
   const requests: string[] = []
   const loads: string[] = []
@@ -381,7 +381,7 @@ describe("createLivePreview", () => {
     expect(count()).toBe(2)
     h.served.status = {
       build: { kind: "build", state: "building", version: V2.version, at: V2.builtAt },
-      source: "github",
+      source: "ci",
       updatedAt: new Date(T0).toISOString(),
     }
     await h.clock.advance(30_000)
