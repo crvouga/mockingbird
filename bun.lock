@@ -4304,6 +4304,7 @@
         "@crvouga/mockingbird-core": "workspace:*",
         "@crvouga/mockingbird-example-medical-testing": "workspace:*",
         "@crvouga/mockingbird-http-provider": "workspace:*",
+        "@crvouga/mockingbird-preview": "workspace:*",
         "@crvouga/mockingbird-service": "workspace:*",
         "@crvouga/mockingbird-service-apple": "workspace:*",
         "@crvouga/mockingbird-service-aws": "workspace:*",
