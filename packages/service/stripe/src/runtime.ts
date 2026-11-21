@@ -10,6 +10,7 @@ import {
   type RequestLog,
   type ServiceRuntime,
   signers,
+  type UpstreamOptions,
   type WebhookEndpoint,
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
@@ -187,6 +188,12 @@ export type StripeRuntimeOptions = {
    * default to off (every request and every clock change still runs it).
    */
   tickMs?: number
+  /**
+   * Where `PUT /__admin/upstream {"mode":"forward"}` sends API calls (a Stripe test-mode account,
+   * usually through the sandbox proxy). Only `/v1/*` forwards; hosted pages and admin routes stay
+   * local. Forwarded responses are relayed as-is and not mirrored into the emulator's state.
+   */
+  upstream?: UpstreamOptions
 }
 
 export type StripeRuntime = ServiceRuntime<StripeAPI> & {
@@ -587,6 +594,8 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
   const runtime = createServiceRuntime<StripeAPI>({
     name: STRIPE_NAMESPACE,
     document,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    canForward: (request) => /^\/v1\//.test(new URL(request.url).pathname),
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     clock,
     ...(options.seed !== undefined ? { seed: options.seed } : {}),

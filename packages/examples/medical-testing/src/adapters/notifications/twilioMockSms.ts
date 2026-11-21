@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import { createRuntime } from "@crvouga/mockingbird-service-twilio"
 import type { OutboundSms } from "../../app/ports/notifier.js"
 import type {
@@ -26,8 +27,8 @@ const VERIFY_URL = `https://verify.twilio.com/v2/Services/${VERIFY_SERVICE_SID}`
  *   one-time codes. Twilio Verify generates, delivers, expires and
  *   rate-limits the code; the app never sees or stores it.
  */
-export const createTwilioMockSms = () => {
-  const runtime = createRuntime()
+export const createTwilioMockSms = (upstream?: UpstreamOptions) => {
+  const runtime = createRuntime(upstream ? { upstream } : {})
 
   const post = (url: string, form: Record<string, string>): Promise<Response> =>
     runtime.fetch(

@@ -1,10 +1,32 @@
 /// <reference lib="dom" />
+import { readExcluded, stepRotation, writeExcluded } from "./system-rotation.js"
+import { mountSystemScreen, SYSTEM_CSS, type SystemServices } from "./system-screen.js"
+
+export { ROTATION_KEY } from "./system-rotation.js"
+export type {
+  SystemSandboxStatus,
+  SystemService,
+  SystemServiceMode,
+  SystemServices,
+} from "./system-screen.js"
 
 /** Product code supplies lazy surfaces; the shell knows nothing about their services. */
 export type SystemSurface = {
   id: string
   label: string
+  /** One line shown on the surface's card on the System screen. */
+  description?: string
   mount(host: HTMLElement, signal: AbortSignal): Promise<() => void> | (() => void)
+}
+export type SystemHarnessOptions = {
+  /** The surface shown first (default "system"); with `syncUrl`, the URL's `?surface=` wins. */
+  initial?: string
+  /** Keep `?surface=` in the address bar and follow back/forward. */
+  syncUrl?: boolean
+  /** The services the System screen lists and switches between emulated and sandbox. */
+  services?: SystemServices
+  /** Where the System screen's "How sandbox mode works" link points. */
+  docsUrl?: string
 }
 export type SystemHarness = {
   show(id: string): Promise<void>
@@ -18,11 +40,13 @@ export type SystemHarness = {
  * The reserved System surface is always reachable. URL state is opt-in for embedded hosts.
  * The switcher pill docks to the middle of the left edge until dragged; the edge and the
  * position along it are kept in localStorage, so it returns there after a reload or resize.
+ * The System screen's "In switcher" toggles choose which surfaces the arrows cycle through (kept
+ * in localStorage under ROTATION_KEY); `show(id)`, the URL and each card's Open still reach all.
  */
 export function mountSystemHarness(
   host: HTMLElement,
   surfaces: readonly SystemSurface[],
-  options: { initial?: string; syncUrl?: boolean } = {},
+  options: SystemHarnessOptions = {},
 ): SystemHarness {
   const ids = new Set(["system"])
   for (const surface of surfaces) {
@@ -35,24 +59,7 @@ export function mountSystemHarness(
   const shell = doc.createElement("div")
   shell.className = "msh"
   const style = doc.createElement("style")
-  style.textContent = `
-.msh{position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasText;background:Canvas;font:14px system-ui}
-.msh-panel{height:100%;overflow:auto}.msh [hidden]{display:none!important}
-.msh-chrome{position:absolute;inset:0;pointer-events:none;z-index:1000}
-.msh-switcher{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid #ffffff2e;background:#17212f;color:white;box-shadow:0 4px 16px #0005;cursor:grab;user-select:none}
-.msh-switcher.msh-dragging{cursor:grabbing}
-.msh-switcher button{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:999px;background:transparent;color:inherit;cursor:pointer}
-.msh-switcher button:hover{background:#ffffff1f}
-.msh-switcher button:active{background:#ffffff33}
-.msh-switcher.msh-dragging button{cursor:grabbing;background:transparent}
-.msh-switcher hr{width:1px;height:20px;margin:0;border:0;background:#ffffff2e}
-.msh-switcher svg{width:18px;height:18px;pointer-events:none}
-.msh-tip{position:absolute;pointer-events:none;padding:5px 9px;border-radius:6px;background:#0b1220;color:white;font:12px/1.3 system-ui;white-space:nowrap;box-shadow:0 2px 10px #0006}
-.msh-home button,.msh-status button{display:block;padding:12px;width:100%;text-align:left;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
-.msh-home button:hover{background:#8883}
-.msh-home,.msh-status{max-width:640px;padding:32px;margin:auto}
-.msh :focus-visible{outline:2px solid #477bff;outline-offset:2px}
-`
+  style.textContent = SYSTEM_CSS
   const chrome = doc.createElement("div")
   chrome.className = "msh-chrome"
   const switcher = doc.createElement("div")
@@ -82,6 +89,8 @@ export function mountSystemHarness(
   host.append(shell)
   let destroyed = false
   let current = ""
+  const storage = () => win.localStorage
+  const excluded = readExcluded(storage)
   const controller = new AbortController()
   type Entry = {
     spec: SystemSurface
@@ -94,26 +103,20 @@ export function mountSystemHarness(
     {
       id: "system",
       label: "System",
-      mount(panel) {
-        const home = doc.createElement("div")
-        home.className = "msh-home"
-        const heading = doc.createElement("h1")
-        heading.textContent = "System"
-        const intro = doc.createElement("p")
-        intro.textContent =
-          "Your whole system, running in this browser. Open an app or inspect the services behind it."
-        home.append(heading, intro)
-        for (const surface of surfaces) {
-          const button = doc.createElement("button")
-          button.textContent = surface.label
-          button.onclick = () => {
-            void show(surface.id)
-          }
-          home.append(button)
-        }
-        panel.append(home)
-        return () => home.remove()
-      },
+      mount: (panel) =>
+        mountSystemScreen(panel, {
+          apps: surfaces,
+          open: (id) => void show(id),
+          inRotation: (id) => !excluded.has(id),
+          setInRotation(id, included) {
+            if (included) excluded.delete(id)
+            else excluded.add(id)
+            writeExcluded(storage, excluded)
+            paintArrows()
+          },
+          services: options.services,
+          docsUrl: options.docsUrl,
+        }),
     },
     ...surfaces,
   ]
@@ -167,15 +170,7 @@ export function mountSystemHarness(
     const entry = entries.find((e) => e.spec.id === id) ?? entries[0]
     if (!entry) return
     current = entry.spec.id
-    for (const [button, step] of [
-      [previousButton, -1],
-      [nextButton, 1],
-    ] as const) {
-      const label = `${step < 0 ? "Previous" : "Next"}: ${neighbour(step).spec.label}`
-      button.dataset.tip = label
-      button.setAttribute("aria-description", label)
-    }
-    if (tipFor) showTip(tipFor)
+    paintArrows()
     for (const candidate of entries) {
       candidate.panel.hidden = candidate !== entry
       candidate.panel.inert = candidate !== entry
@@ -195,8 +190,21 @@ export function mountSystemHarness(
     await load(entry)
   }
   function neighbour(step: -1 | 1): Entry {
-    const index = entries.findIndex((entry) => entry.spec.id === current)
-    return entries[(index + step + entries.length) % entries.length] ?? (entries[0] as Entry)
+    const order = entries.map((entry) => entry.spec.id)
+    const id = stepRotation(order, excluded, current, step)
+    return entries.find((entry) => entry.spec.id === id) ?? (entries[0] as Entry)
+  }
+  /** Each arrow names where it goes; the rotation or the current surface changed. */
+  function paintArrows() {
+    for (const [button, step] of [
+      [previousButton, -1],
+      [nextButton, 1],
+    ] as const) {
+      const label = `${step < 0 ? "Previous" : "Next"}: ${neighbour(step).spec.label}`
+      button.dataset.tip = label
+      button.setAttribute("aria-description", label)
+    }
+    if (tipFor) showTip(tipFor)
   }
   let tipFor: HTMLButtonElement | undefined
   function showTip(button: HTMLButtonElement) {

@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import { createRuntime } from "@crvouga/mockingbird-service-resend"
 import type { OutboundEmail } from "../../app/ports/notifier.js"
 import type { MockAdmin } from "../admin.js"
@@ -10,8 +11,8 @@ const BASE_URL = "https://api.resend.com"
  * Emails through Mockingbird's in-process Resend emulator with the call the
  * Resend SDK makes: `POST /emails`, JSON, Bearer API key.
  */
-export const createResendMockEmail = () => {
-  const runtime = createRuntime()
+export const createResendMockEmail = (upstream?: UpstreamOptions) => {
+  const runtime = createRuntime(upstream ? { upstream } : {})
 
   const sendEmail = async (message: OutboundEmail): Promise<void> => {
     const response = await runtime.fetch(
