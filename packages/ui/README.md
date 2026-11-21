@@ -92,6 +92,7 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 - `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`: the localStorage keys of the surfaces left out of the switcher, of its order, and of the off-by-default surfaces switched on.
 - `defineSystem`, `mountSystem`, `PreviewApp`, `PreviewSystem`, `PreviewRegistryError`: the app registry and the shell it mounts.
 - `systemSurfaces`, `planPartUpdate`, `PreviewPartsManifestLike`: the registry as surfaces with their part loader, and what a newer parts manifest takes to apply.
+- `PREVIEW_FRAME_CONNECT`: the type of the message an iframe app receives with its bridge port.
 - `SystemHarness.update`, `SystemHarness.notify`, `SystemNotice`: swap one surface's code in place; show a notice over the apps.
 - `SystemBackends`, `SystemBackend`: the in-tab backends and emulators for the System screen's Backends list.
 - `CSS_RESET`: stylesheet string for a document.

@@ -128,7 +128,8 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
 - `createBackendHost({ backends, drainMs? })`, `backendControlHandler(host, { path?, importBackend? })`
   and `backendControls(fetch, { url?, pollMs? })`: lazy, swappable in-tab backends and emulators,
-  their control routes, and the tab's client. See [System parts](#system-parts).
+  their control routes, and the tab's client; `PreviewBackendDrainError` and
+  `PreviewBackendUpdateError` are their typed failures. See [System parts](#system-parts).
 - `PreviewPartsManifest`, `parsePartsManifest`, `gzipSize`, `checkPartBudgets`,
   `formatPartSizes`, `PreviewPartBudgetError`, `partUpdatesResponse` and `followPartUpdates`: the
   parts manifest, its size budgets and its update stream. `buildPreviewParts` and
