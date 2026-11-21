@@ -391,7 +391,13 @@ cancelled) stops it at once and clears every timer.
 ### Worker wiring
 
 ```ts
-import { createPreviewStatus } from "@crvouga/mockingbird-preview/preview-status"
+import {
+  createPreviewStatus,
+  type PreviewStatusCacheLike,
+} from "@crvouga/mockingbird-preview/preview-status"
+
+/** The Workers edge cache (`caches.default` is Cloudflare-only, so it is read structurally). */
+const edgeCache = (globalThis as { caches?: { default?: PreviewStatusCacheLike } }).caches?.default
 
 type Env = {
   ASSETS: { fetch(request: Request): Promise<Response> }
@@ -407,13 +413,13 @@ export default {
     status ??= createPreviewStatus({
       repository: "owner/name",
       pr: Number(env.PR_NUMBER),
-      token: env.PREVIEW_GITHUB_TOKEN,
+      ...(env.PREVIEW_GITHUB_TOKEN ? { token: env.PREVIEW_GITHUB_TOKEN } : {}),
       readVersion: async () => {
         // The assets binding only reads the path.
         const response = await env.ASSETS.fetch(new Request("https://assets.local/version.json"))
         return response.ok ? ((await response.json()) as { version: string; builtAt: string }) : undefined
       },
-      cache: caches.default, // Workers: share snapshots across isolates
+      ...(edgeCache ? { cache: edgeCache } : {}), // Workers: share snapshots across isolates
     })
     return status(request) ?? env.ASSETS.fetch(request)
   },
