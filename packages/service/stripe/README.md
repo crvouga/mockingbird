@@ -520,6 +520,24 @@ recorded prices (listed in `synthesizedLookupKeys`). Pass your own with `createR
 by [Stripe](https://docs.stripe.com/api/promotion_codes/list), and preserves its stored spelling.
 The filter composes with `active`, `coupon`, customer, created-time and pagination filters.
 
+## Forwarding to a Stripe test-mode account
+
+`createRuntime({ upstream: { baseUrl, fetch, rewriteAuth?, mode? } })` opts into the shared
+forwarding controls. Mode starts as `emulated`; `PUT /__admin/upstream {"mode":"forward"}` (per
+namespace) sends API calls to `baseUrl` + path + query through `fetch`. Only `/v1/*` forwards:
+hosted Checkout (`/c/...`), the customer portal (`/p/...`) and the Stripe.js stand-in (`/v3`)
+answer 501 in forward mode, and `/__admin/*` always stays local. Without `upstream`,
+`PUT /__admin/upstream {"mode":"forward"}` answers 409.
+
+Authentication rewriting happens on a separate outgoing Request and is never kept in the journal
+or snapshots. Redirects come back unfollowed; the transport must honor the Request's abort
+signal, and a transport failure behaves like a dropped connection. Forwarded responses are
+relayed as-is and **not mirrored into emulator state** (there is no forwarded-response journal
+hook for this service), so switching back to emulated resumes the emulator's own records. Tested
+with injected transports only; this is not live-vendor parity evidence. In a browser preview,
+`createSandbox(...).upstream("stripe")` from `@crvouga/mockingbird-preview` supplies the transport
+and the sandbox proxy attaches the real credentials server side.
+
 ## API
 
 `StripeAPI` is the engine; `createRuntime` wraps it in the service contract. From

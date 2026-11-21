@@ -37,10 +37,14 @@ Application entrypoints, seeds, routing and credentials belong to the consumer. 
 
 The root export also provides `CSS_RESET` and `scopeReset`. Bundlers may import `@crvouga/mockingbird-ui/reset.css` as a stylesheet.
 
+The built-in System screen lists every surface as a card (its optional `description`, an Open button and an "In switcher" toggle; ids left out of the arrows persist under `ROTATION_KEY`). Pass `services` (a `SystemServices`, such as `createSandbox(...).controls(...)` from `@crvouga/mockingbird-preview`) to list each emulated service with an Emulated | Sandbox switch and a sandbox access panel, and `docsUrl` for a "How sandbox mode works" link.
+
 ## API
 
 - `mountSystemHarness`: mounts lazy application surfaces and manages switching and teardown.
-- `SystemSurface`, `SystemHarness`: TypeScript lifecycle contracts.
+- `SystemSurface`, `SystemHarness`, `SystemHarnessOptions`: TypeScript lifecycle contracts.
+- `SystemServices`, `SystemService`, `SystemServiceMode`, `SystemSandboxStatus`: what the System screen lists and switches.
+- `ROTATION_KEY`: the localStorage key of the surfaces left out of the switcher.
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.

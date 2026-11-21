@@ -86,6 +86,15 @@ The application must honor the boot/request AbortSignals to terminate work it st
   listener is loopback on an ephemeral port. Responses are always `Cache-Control: no-store` to
   avoid browser worker-asset cache failures. Stream errors destroy the response instead of
   creating a successful EOF. Call the returned `close()` to release the listener.
+- `createSandboxProxy({ providers, env, accessKey?, basePath?, allowOrigins?, fetch? })`, from the
+  `/sandbox-proxy` export (also re-exported from the package root), is the sandbox proxy's Fetch
+  handler; `sandboxProxyWorker(options)` wraps it as a Cloudflare Worker `{ fetch(request, env) }`.
+  `sandboxProviders` holds the Stripe, Junction, Resend, Slack, Twilio and FCM providers;
+  `SANDBOX_KEY_HEADER` names the access-key header and `safeEqual(a, b)` is the constant-time
+  comparison it uses. See [Sandbox mode](#sandbox-mode).
+- `createSandbox({ proxyUrl?, storage?, fetch? })` is the browser side: `upstream(id)` for an
+  emulator's `createRuntime({ upstream })` and `controls(services)` for the System screen.
+  `SANDBOX_MESSAGES` holds its status sentences and `SANDBOX_STORAGE_KEYS` its storage keys.
 
 ## Cookies, redirects and trust
 
@@ -115,6 +124,158 @@ Cloudflare protocol references:
 [official Preview API implementation](https://github.com/cloudflare/workers-sdk/blob/main/packages/deploy-helpers/src/preview/api.ts),
 [asset upload documentation](https://developers.cloudflare.com/workers/static-assets/direct-upload/),
 [Worker Previews](https://developers.cloudflare.com/workers/previews/).
+
+## Sandbox mode
+
+A preview runs every third-party service as an in-browser emulator. Sandbox mode lets a viewer
+flip one service at a time from **Emulated** to **Sandbox**: that emulator's runtime switches to
+forward mode (`PUT /__admin/upstream {"mode":"forward"}`) and sends the app's API calls to the
+vendor's real sandbox or test account. The browser never holds a vendor secret. A small Fetch
+handler, the **sandbox proxy** (`@crvouga/mockingbird-preview/sandbox-proxy`), sits next to the
+static preview, holds the secrets in its environment and attaches them per request.
+
+```mermaid
+sequenceDiagram
+  participant App as App code (browser)
+  participant Emu as Emulator runtime (browser)
+  participant Proxy as Sandbox proxy (Worker / server)
+  participant Vendor as Vendor sandbox
+  App->>Emu: POST /v1/customers (Authorization: Bearer sk_test_fake)
+  Note over Emu: mode = forward (System screen chose "Sandbox")
+  Emu->>Proxy: POST /__sandbox/stripe/v1/customers<br/>x-mockingbird-sandbox-key: viewer key<br/>(Authorization dropped)
+  Note over Proxy: check access key (constant time)<br/>check STRIPE_SECRET_KEY is sk_test_/rk_test_<br/>strip cookie, origin, x-mockingbird-*, ...
+  Proxy->>Vendor: POST https://api.stripe.com/v1/customers<br/>Authorization: Bearer STRIPE_SECRET_KEY
+  Vendor-->>Proxy: 200 {"id": "cus_..."}
+  Proxy-->>Emu: 200 (set-cookie dropped, secrets redacted)
+  Emu-->>App: 200 {"id": "cus_..."}
+```
+
+### Providers
+
+`sandboxProviders` holds the vendors the proxy knows; pass the ones you want to offer.
+
+| id | Sandbox host | Env secrets | Live-key guard | Notes and limitations |
+| --- | --- | --- | --- | --- |
+| `stripe` | `api.stripe.com` | `STRIPE_SECRET_KEY` | must start `sk_test_` or `rk_test_` | Only `/v1/*`. Prices, products, coupons and webhook endpoints the app names must exist in the test account. |
+| `junction` | `api.sandbox.tryvital.io` (`api.sandbox.eu.tryvital.io` for `sk_eu_` keys) | `JUNCTION_API_KEY` | must start `sk_us_` or `sk_eu_` | Only `/v<n>/*`, sent as `x-vital-api-key`. Lab test ids and users must exist in the sandbox team. |
+| `resend` | `api.resend.com` | `RESEND_API_KEY` | none (Resend keys have no test prefix) | Real email is sent: use a sending domain and recipients you own. |
+| `slack` | `slack.com` | `SLACK_BOT_TOKEN` | none | Only `/api/*`. Channels and users must exist in the workspace the bot is in. |
+| `twilio` | `api.twilio.com`, `verify.twilio.com`, `lookups.twilio.com`, `messaging.twilio.com` (by path) | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | none (use test credentials or a trial account) | Any `/Accounts/<sid>/` is rewritten to the real SID. Sender numbers, Messaging Service SIDs and Verify Service SIDs must exist in that account. `/v1/Services` always goes to Messaging, so Conversations' `/v1/Services` is ambiguous and not reachable. |
+| `fcm` | `fcm.googleapis.com` | `FCM_ACCESS_TOKEN`, `FCM_PROJECT_ID` | none | Only `POST /v1/projects/*/messages:send`; the project id is rewritten to `FCM_PROJECT_ID`. The access token is a short-lived OAuth token (about an hour): refresh it out of band. |
+
+For every provider: vendor webhooks are **not** relayed back to the browser emulator, and
+forwarded responses are relayed as-is (emulators with a forwarded-response hook, such as Resend,
+FCM and Twilio, record a receipt; Stripe and Junction do not mirror sandbox objects into their
+state). A path a provider does not map answers `501`.
+
+### Security model
+
+- **Fails closed.** Without `SANDBOX_PROXY_TOKEN` (or the env name passed as `accessKey`) the
+  manifest reports `access: "disabled"` and every relay answers `503`. A caller must send that
+  value in `x-mockingbird-sandbox-key`; it is compared in constant time, and a wrong or missing
+  key gets `401`. Only a caller with the key learns which providers are configured.
+- **Allowlisted hosts only.** Each provider builds the vendor URL on a fixed origin from the
+  path; a crafted path cannot change the host, and unmapped paths answer `501`. Redirects are
+  returned, never followed.
+- **Secrets never reach the browser.** The proxy drops the caller's `authorization`, `cookie`,
+  `origin`, `referer`, `x-mockingbird-*`, `cf-*`, `x-forwarded-*` and `forwarded` headers,
+  attaches the credential itself, drops `set-cookie` from the answer, and redacts every secret
+  value from its own errors and from text responses (account identifiers such as the Twilio
+  Account SID stay). Errors are `{ "error": { "code", "message" } }`.
+- **A live key is refused.** `check` rejects Stripe live keys and Junction production keys before
+  anything is sent (`503`, and the System screen shows why).
+- **Access key per viewer.** The browser keeps the access key and chosen modes in its own
+  `localStorage`; share the key only with people who may spend the sandbox accounts. CORS is off
+  unless `allowOrigins` lists the page's origin; mounting the proxy on the page's own origin (as
+  below) needs none.
+
+### Mounting the proxy
+
+A Cloudflare Worker that serves the static preview and the proxy on one origin (set the secrets
+with `wrangler secret put SANDBOX_PROXY_TOKEN`, `wrangler secret put STRIPE_SECRET_KEY`, ...):
+
+```ts
+import { sandboxProviders, sandboxProxyWorker } from "@crvouga/mockingbird-preview/sandbox-proxy"
+
+const proxy = sandboxProxyWorker({
+  basePath: "/__sandbox",
+  providers: Object.values(sandboxProviders),
+})
+
+export default {
+  fetch(request: Request, env: Record<string, string | undefined> & { ASSETS: Fetcher }) {
+    const { pathname } = new URL(request.url)
+    if (pathname === "/__sandbox" || pathname.startsWith("/__sandbox/")) {
+      const { ASSETS: _assets, ...secrets } = env
+      return proxy.fetch(request, secrets)
+    }
+    return env.ASSETS.fetch(request)
+  },
+}
+```
+
+A Bun server (Node 18+ and Deno work the same with any Fetch-handler server), secrets from
+`.env.local` / the process environment:
+
+```ts
+import { createSandboxProxy, sandboxProviders } from "@crvouga/mockingbird-preview/sandbox-proxy"
+
+const sandbox = createSandboxProxy({
+  basePath: "/__sandbox",
+  providers: [sandboxProviders.stripe, sandboxProviders.resend],
+  env: process.env,
+  allowOrigins: ["http://localhost:5173"], // only when the page is on another origin
+})
+
+Bun.serve({
+  port: 8787,
+  fetch: (request) =>
+    new URL(request.url).pathname.startsWith("/__sandbox")
+      ? sandbox(request)
+      : new Response("Not found", { status: 404 }),
+})
+```
+
+`GET /__sandbox/` answers the manifest:
+`{ access: "granted" | "denied" | "disabled", providers: [{ id, label, configured, missing, error? }] }`.
+
+### Browser wiring
+
+```ts
+import { createSandbox } from "@crvouga/mockingbird-preview"
+import { createRuntime as createStripe } from "@crvouga/mockingbird-service-stripe"
+import { createRuntime as createResend } from "@crvouga/mockingbird-service-resend"
+
+const sandbox = createSandbox({ proxyUrl: "/__sandbox" }) // omit proxyUrl: sandbox not offered
+
+// Each emulator forwards through the proxy when switched to Sandbox; it boots emulated.
+const stripe = createStripe({ upstream: sandbox.upstream("stripe") })
+const resend = createResend({ upstream: sandbox.upstream("resend") })
+
+// The System screen's service list (`mountSystemHarness(host, surfaces, { services })`).
+const services = sandbox.controls([
+  { id: "stripe", label: "Stripe", category: "Payments", admin: (r) => stripe.fetch(r) },
+  { id: "resend", label: "Resend", category: "Email", admin: (r) => resend.fetch(r) },
+  {
+    id: "keycloak",
+    label: "Keycloak",
+    admin: async () => Response.json({ mode: "emulated" }),
+    unsupported: "Runs in this browser; there is no vendor sandbox",
+  },
+])
+
+await services.setAccessKey("the key the proxy's SANDBOX_PROXY_TOKEN holds")
+await services.setMode("stripe", "sandbox") // throws a readable reason when unavailable
+const { sandbox: status, services: rows } = await services.list()
+```
+
+`upstream(id)` gives `{ baseUrl: "<proxy>/<id>", fetch, rewriteAuth }`: `fetch` adds the stored
+access key, `rewriteAuth` drops the app's fake `authorization`. `controls()` reads each
+emulator's mode from `GET /__admin/upstream`, and its `unavailable` reason follows this order:
+the spec's `unsupported`, no proxy configured, proxy unreachable, proxy without
+`SANDBOX_PROXY_TOKEN`, access key missing or wrong, provider secrets missing, the provider's
+`check` error. Chosen modes persist per viewer; because emulator state resets on reload, the first
+`list()` re-applies stored Sandbox choices that are still available.
 
 ## Validation
 

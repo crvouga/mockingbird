@@ -142,6 +142,7 @@
     "@crvouga/mockingbird-http-codec": "workspace:*",
     "@crvouga/mockingbird-commands": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-preview": "workspace:*",
     "stripe-v17": "npm:stripe@17.7.0"
   }
 }

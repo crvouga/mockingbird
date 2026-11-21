@@ -5,6 +5,7 @@ import { mountApp } from "../client/main.js"
 import { STYLES } from "../client/theme.js"
 import { buildDemo } from "./build.js"
 import { createInProcessFetcher } from "./inProcessFetcher.js"
+import { createLabSandbox, SANDBOX_DOCS_URL } from "./sandbox.js"
 
 export { createInProcessFetcher }
 
@@ -15,9 +16,17 @@ const NO_CLIENT_ASSETS = { html: "", js: "" }
  */
 export const mount = async (
   host: HTMLElement,
-  options: { syncUrl?: boolean } = {},
+  options: {
+    syncUrl?: boolean
+    /** The sandbox proxy, absolute or relative to this page. Without it every service stays emulated. */
+    sandboxProxyUrl?: string
+  } = {},
 ): Promise<() => void> => {
-  const demo = await buildDemo(NO_CLIENT_ASSETS)
+  const sandbox = createLabSandbox(options.sandboxProxyUrl)
+  const demo = await buildDemo(
+    NO_CLIENT_ASSETS,
+    sandbox.upstream ? { upstream: sandbox.upstream } : {},
+  )
   setFetcher(createInProcessFetcher(demo.app))
 
   const styleId = "cove-app-styles"
@@ -35,6 +44,7 @@ export const mount = async (
       {
         id: "app",
         label: "Lab workspace",
+        description: "The patient, clinician and admin app, signed out and seeded with demo data.",
         mount: (panel) => {
           const root = document.createElement("div")
           panel.append(root)
@@ -44,6 +54,7 @@ export const mount = async (
       {
         id: "emulators",
         label: "Emulators",
+        description: "The admin UI of every emulator: state, requests, clock, faults and SQL.",
         mount: async (panel) => {
           const { mountEmulatorsPanel } = await import("./emulatorsPanel.js")
           return mountEmulatorsPanel(panel, demo.admin)
@@ -52,6 +63,8 @@ export const mount = async (
       {
         id: "notifications",
         label: "Notifications",
+        description:
+          "Every email, text, push and staff chat message the app sent, on lifelike devices.",
         mount: async (panel) => {
           const { mountNotifications } = await import("@crvouga/mockingbird-notifications/ui")
           notifications = mountNotifications(panel, {
@@ -62,7 +75,12 @@ export const mount = async (
         },
       },
     ],
-    { initial: "app", syncUrl: options.syncUrl ?? false },
+    {
+      initial: "app",
+      syncUrl: options.syncUrl ?? false,
+      services: sandbox.controls(demo.admins),
+      docsUrl: SANDBOX_DOCS_URL,
+    },
   )
   setInboxOpener((target) => {
     void dashboard.show("notifications").then(() => notifications?.show(target))

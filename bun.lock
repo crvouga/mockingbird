@@ -209,6 +209,8 @@
       "dependencies": {
         "@crvouga/mockingbird-adapter-browser": "workspace:*",
         "@crvouga/mockingbird-notifications": "workspace:*",
+        "@crvouga/mockingbird-preview": "workspace:*",
+        "@crvouga/mockingbird-service": "workspace:*",
         "@crvouga/mockingbird-service-fcm": "workspace:*",
         "@crvouga/mockingbird-service-junction": "workspace:*",
         "@crvouga/mockingbird-service-oauth": "workspace:*",
@@ -3465,6 +3467,7 @@
         "@crvouga/mockingbird-openapi-codegen": "workspace:*",
         "@crvouga/mockingbird-openapi-metadata": "workspace:*",
         "@crvouga/mockingbird-parity": "workspace:*",
+        "@crvouga/mockingbird-preview": "workspace:*",
         "@crvouga/mockingbird-service": "workspace:*",
         "@crvouga/mockingbird-service-sqlite": "workspace:*",
         "@crvouga/mockingbird-sqlite": "workspace:*",
