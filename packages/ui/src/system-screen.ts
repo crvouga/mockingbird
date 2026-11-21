@@ -1,7 +1,9 @@
 /// <reference lib="dom" />
+import { paintIcon, type SystemIcon } from "./system-icons.js"
 import { summarizeServices } from "./system-rotation.js"
 
-export type SystemServiceMode = "emulated" | "sandbox"
+/** Where a service's requests go: its emulator in this tab, or a real non-production resource. */
+export type SystemServiceMode = "emulated" | "dev"
 
 /** One third-party service behind the preview, and where its requests go. */
 export type SystemService = {
@@ -9,13 +11,16 @@ export type SystemService = {
   label: string
   category?: string
   mode: SystemServiceMode
-  /** Why sandbox cannot be chosen; undefined when it can. */
+  /** Why dev cannot be chosen (for example, the proxy blocked it); undefined when it can. */
   unavailable?: string
 }
 
-/** Whether this browser can reach the sandbox proxy, in one sentence. */
-export type SystemSandboxStatus = {
-  state: "ready" | "locked" | "off" | "unreachable" | "none"
+/**
+ * Whether this preview can reach the dev proxy, in one sentence. The proxy runs on the app's own
+ * origin and adds the credentials server-side, so the browser never sees a credential.
+ */
+export type SystemDevStatus = {
+  state: "ready" | "unreachable" | "none"
   /** One sentence shown in the access panel. */
   message: string
   /** The proxy URL, displayed. */
@@ -24,18 +29,24 @@ export type SystemSandboxStatus = {
 
 /** What the System screen lists and switches. `@crvouga/mockingbird-preview`'s `controls()` is one. */
 export type SystemServices = {
-  list(): Promise<{ sandbox: SystemSandboxStatus; services: readonly SystemService[] }>
+  list(): Promise<{ dev: SystemDevStatus; services: readonly SystemService[] }>
   setMode(id: string, mode: SystemServiceMode): Promise<void>
-  setAccessKey(key: string | null): Promise<void>
-  hasAccessKey(): boolean
 }
 
 /** What the harness hands the System screen. */
 export type SystemScreenContext = {
-  apps: readonly { id: string; label: string; description?: string | undefined }[]
+  /** Every surface, System included, in the order the switcher's arrows go through them. */
+  apps: readonly {
+    id: string
+    label: string
+    description?: string | undefined
+    icon?: SystemIcon | undefined
+  }[]
   open(id: string): void
   inRotation(id: string): boolean
   setInRotation(id: string, included: boolean): void
+  /** The person reordered the list. */
+  setOrder(ids: readonly string[]): void
   services?: SystemServices | undefined
   docsUrl?: string | undefined
 }
@@ -48,32 +59,26 @@ const ICONS = {
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
   alert:
     '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
-  key: '<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M17 6l3 3M15 8l2 2"/>',
+  grip: '<circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/>',
+  shield:
+    '<path d="M12 3 5 6v6c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>',
   plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8ZM12 18v4"/>',
 } as const
 const icon = (name: keyof typeof ICONS) =>
   `<svg class="msh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`
 
-const STATES: Record<SystemSandboxStatus["state"], { chip: string; hint: string }> = {
+const STATES: Record<SystemDevStatus["state"], { chip: string; hint: string }> = {
   ready: {
     chip: "Ready",
-    hint: "Services that support it can send their requests to the vendor's sandbox.",
-  },
-  locked: {
-    chip: "Locked",
-    hint: "Ask whoever runs this preview for the access key. It is kept only in this browser.",
-  },
-  off: {
-    chip: "Off",
-    hint: "Whoever runs the proxy turns sandbox mode on by giving it an access key.",
+    hint: "It runs on this app's own origin and adds the credentials itself.",
   },
   unreachable: {
     chip: "Unreachable",
-    hint: "Check that the proxy is running and allows this origin, then refresh.",
+    hint: "Check that the proxy is running on this app's origin, then refresh.",
   },
   none: {
     chip: "Not set up",
-    hint: "Every service is emulated in this tab. Deploy the sandbox proxy and give its URL to this preview to offer sandbox mode.",
+    hint: "Every service is emulated in this tab. Deploy the dev proxy and give its URL to this preview to reach non-production resources.",
   },
 }
 
@@ -121,7 +126,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     docs.href = context.docsUrl
     docs.target = "_blank"
     docs.rel = "noreferrer"
-    docs.append(el("span", "", "How sandbox mode works"))
+    docs.append(el("span", "", "How dev resources work"))
     docs.insertAdjacentHTML("beforeend", icon("external"))
     header.append(docs)
   }
@@ -138,58 +143,175 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   appsTitles.append(appsHeading, appsMeta)
   appsHead.append(appsTitles)
   apps.append(appsHead)
+  const surfaces = context.apps.filter((app) => app.id !== "system")
   const paintAppsMeta = () => {
-    const included = context.apps.filter((app) => context.inRotation(app.id)).length
+    const included = surfaces.filter((app) => context.inRotation(app.id)).length
     appsMeta.textContent =
-      context.apps.length === 0
+      surfaces.length === 0
         ? "This preview has no apps yet."
-        : `${context.apps.length} ${context.apps.length === 1 ? "app" : "apps"} · ${included} in the switcher. The arrows skip the ones you switch off.`
+        : `${surfaces.length} ${surfaces.length === 1 ? "app" : "apps"} · ${included} in the switcher. The arrows go down this list, skipping the ones you switch off. Drag to reorder.`
   }
   paintAppsMeta()
-  if (context.apps.length > 0) {
-    const grid = el("ul", "msh-apps")
-    grid.setAttribute("role", "list")
-    for (const app of context.apps) {
-      const card = el("li", "msh-card msh-app")
-      card.dataset.app = app.id
-      const top = el("div", "msh-app-top")
-      const mark = el("span", "msh-mark", (app.label.trim()[0] ?? "?").toUpperCase())
-      mark.setAttribute("aria-hidden", "true")
-      const text = el("div", "msh-app-text")
-      text.append(el("h3", "msh-app-label", app.label))
-      if (app.description) text.append(el("p", "msh-app-desc", app.description))
-      top.append(mark, text)
+  if (surfaces.length > 0) {
+    const list = el("ol", "msh-apps")
+    list.setAttribute("aria-label", "Switcher order")
+    const hint = el("p", "msh-sr", "Drag to reorder, or use the arrow keys, Home and End.")
+    hint.id = id("reorder-hint")
+    const announce = el("p", "msh-sr")
+    announce.setAttribute("role", "status")
+    apps.append(hint, announce)
 
-      const foot = el("div", "msh-app-foot")
-      const toggle = el("button", "msh-switch")
-      toggle.type = "button"
-      toggle.setAttribute("role", "switch")
-      toggle.setAttribute("aria-label", `${app.label} in switcher`)
-      toggle.innerHTML =
-        '<span class="msh-track" aria-hidden="true"><span class="msh-thumb"></span></span>'
-      toggle.append(el("span", "msh-switch-label", "In switcher"))
-      const paintToggle = () =>
-        toggle.setAttribute("aria-checked", String(context.inRotation(app.id)))
-      paintToggle()
-      toggle.onclick = () => {
-        context.setInRotation(app.id, !context.inRotation(app.id))
-        paintToggle()
-        paintAppsMeta()
+    const ids = () => [...list.children].map((row) => (row as HTMLElement).dataset.app as string)
+    const labelOf = (appId: string) => context.apps.find((app) => app.id === appId)?.label ?? appId
+    const commit = (moved: string) => {
+      const order = ids()
+      context.setOrder(order)
+      announce.textContent = `${labelOf(moved)} moved to position ${order.indexOf(moved) + 1} of ${order.length}.`
+    }
+    /** Slides `row` from where it was drawn to where it now is (FLIP), unless motion is reduced. */
+    const slide = (row: HTMLElement, fromTop: number) => {
+      const delta = fromTop - row.offsetTop
+      if (!delta || doc.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches) return
+      row.style.transition = "none"
+      row.style.transform = `translateY(${delta}px)`
+      void row.offsetHeight
+      row.style.transition = "transform .16s ease-out"
+      row.style.transform = ""
+    }
+
+    for (const app of context.apps) {
+      const fixed = app.id === "system"
+      const row = el("li", "msh-card msh-row")
+      row.dataset.app = app.id
+
+      const grip = el("button", "msh-grip")
+      grip.type = "button"
+      grip.innerHTML = icon("grip")
+      grip.setAttribute("aria-label", `Reorder ${app.label}`)
+      grip.setAttribute("aria-describedby", hint.id)
+
+      const mark = el("span", "msh-mark")
+      mark.setAttribute("aria-hidden", "true")
+      paintIcon(mark, app.icon, app.label)
+      const text = el("span", "msh-app-text")
+      text.append(el("span", "msh-app-label", app.label))
+      if (app.description) text.append(el("span", "msh-app-desc", app.description))
+
+      // The whole row body is the switch: one click anywhere on it turns the app on or off.
+      let main: HTMLElement
+      if (fixed) {
+        main = el("div", "msh-row-main msh-row-fixed")
+        main.append(mark, text, el("span", "msh-always", "Always on"))
+      } else {
+        const toggle = el("button", "msh-switch msh-row-main")
+        toggle.type = "button"
+        toggle.setAttribute("role", "switch")
+        toggle.setAttribute("aria-label", `${app.label} in switcher`)
+        toggle.innerHTML =
+          '<span class="msh-track" aria-hidden="true"><span class="msh-thumb"></span></span>'
+        toggle.append(mark, text)
+        const paint = () => toggle.setAttribute("aria-checked", String(context.inRotation(app.id)))
+        paint()
+        toggle.onclick = () => {
+          context.setInRotation(app.id, !context.inRotation(app.id))
+          paint()
+          paintAppsMeta()
+        }
+        main = toggle
       }
+
       const open = button("msh-btn-secondary msh-open", "Open", "open")
       open.setAttribute("aria-label", `Open ${app.label}`)
       // Icon after the text reads better for "Open ↗".
       open.append(open.querySelector("svg") as SVGElement)
       open.onclick = () => context.open(app.id)
-      foot.append(toggle, open)
-      card.append(top, foot)
-      grid.append(card)
+
+      // Keyboard: the grip moves its row.
+      grip.onkeydown = (event) => {
+        const order = ids()
+        const from = order.indexOf(app.id)
+        const to =
+          event.key === "ArrowUp"
+            ? from - 1
+            : event.key === "ArrowDown"
+              ? from + 1
+              : event.key === "Home"
+                ? 0
+                : event.key === "End"
+                  ? order.length - 1
+                  : undefined
+        if (to === undefined) return
+        event.preventDefault()
+        if (to < 0 || to >= order.length || to === from) return
+        const tops = new Map([...list.children].map((r) => [r, (r as HTMLElement).offsetTop]))
+        const reference = list.children[to > from ? to + 1 : to] ?? null
+        list.insertBefore(row, reference)
+        for (const [r, top] of tops) slide(r as HTMLElement, top)
+        grip.focus()
+        commit(app.id)
+      }
+
+      // Pointer: drag the grip; the row follows and the others make room as it passes them.
+      let drag: { y: number; from: number } | undefined
+      grip.onpointerdown = (event) => {
+        if (event.button !== 0) return
+        event.preventDefault()
+        try {
+          grip.setPointerCapture(event.pointerId)
+        } catch {
+          /* A synthetic pointer has nothing to capture; moves still reach the grip. */
+        }
+        drag = { y: event.clientY, from: ids().indexOf(app.id) }
+        row.style.transition = "none"
+        row.classList.add("msh-row-dragging")
+      }
+      grip.onpointermove = (event) => {
+        if (!drag) return
+        const center = () => row.offsetTop + row.offsetHeight / 2 + (event.clientY - (drag?.y ?? 0))
+        for (;;) {
+          const next = row.nextElementSibling as HTMLElement | null
+          const previous = row.previousElementSibling as HTMLElement | null
+          const before = row.offsetTop
+          let passed: HTMLElement | undefined
+          if (next && center() > next.offsetTop + next.offsetHeight / 2) passed = next
+          else if (previous && center() < previous.offsetTop + previous.offsetHeight / 2)
+            passed = previous
+          if (!passed) break
+          const passedTop = passed.offsetTop
+          // Always move the neighbour: moving the dragged row's own node would release its
+          // pointer capture and end the drag.
+          if (passed === next) list.insertBefore(passed, row)
+          else list.insertBefore(passed, row.nextSibling)
+          slide(passed, passedTop)
+          // Keep the row under the pointer now that its slot moved.
+          drag.y += row.offsetTop - before
+        }
+        const min = -row.offsetTop
+        const max = list.clientHeight - row.offsetTop - row.offsetHeight
+        const dy = Math.max(min, Math.min(max, event.clientY - drag.y))
+        row.style.transform = `translateY(${dy}px)`
+      }
+      const drop = () => {
+        if (!drag) return
+        const { from } = drag
+        drag = undefined
+        row.classList.remove("msh-row-dragging")
+        slide(row, row.offsetTop + (Number.parseFloat(row.style.transform.slice(11)) || 0))
+        row.style.transform = ""
+        if (ids().indexOf(app.id) !== from) commit(app.id)
+      }
+      grip.onpointerup = drop
+      grip.onpointercancel = drop
+      grip.onlostpointercapture = drop
+
+      row.append(grip, main, open)
+      list.append(row)
     }
-    apps.append(grid)
+    apps.append(list)
   }
   page.append(apps)
 
-  // ---- services + sandbox access
+  // ---- services + dev access
   const services = context.services
   const lower = el("div", services ? "msh-lower" : "msh-lower msh-lower-single")
   page.append(lower)
@@ -200,14 +322,19 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   servicesSection.setAttribute("aria-labelledby", servicesHeading.id)
   const servicesHead = el("div", "msh-section-head")
   const servicesTitles = el("div")
-  const summary = el("p", "msh-meta")
+  const description = el(
+    "p",
+    "msh-meta",
+    "Third-party services the apps call. Each runs emulated in this tab, or against a real non-production resource through the dev proxy.",
+  )
+  const summary = el("p", "msh-meta msh-summary")
   summary.dataset.testid = "system-services-summary"
-  servicesTitles.append(servicesHeading, summary)
+  servicesTitles.append(servicesHeading, description, summary)
   servicesHead.append(servicesTitles)
   servicesSection.append(servicesHead)
 
   if (!services) {
-    summary.textContent = "Third-party APIs the apps call."
+    summary.hidden = true
     const empty = el("div", "msh-card msh-empty")
     empty.innerHTML = icon("plug")
     const emptyText = el("div")
@@ -216,7 +343,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       el(
         "p",
         "msh-empty-body",
-        "The host app supplies them. When it passes its services to the harness, each emulator appears here and can switch between running in this tab and the vendor's sandbox.",
+        "The host app supplies them. When it passes its services to the harness, each emulator appears here and can switch between running in this tab and a real non-production resource.",
       ),
     )
     empty.append(emptyText)
@@ -229,12 +356,12 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     }
   }
 
-  // Sandbox access panel.
+  // Dev proxy status card: read-only, since the proxy holds the credentials.
   const access = el("section", "msh-card msh-access")
-  const accessHeading = el("h2", "msh-access-title", "Sandbox access")
+  const accessHeading = el("h2", "msh-access-title", "Dev proxy")
   accessHeading.id = id("access")
   access.setAttribute("aria-labelledby", accessHeading.id)
-  access.dataset.testid = "system-sandbox-access"
+  access.dataset.testid = "system-dev-proxy"
   const accessHead = el("div", "msh-access-head")
   const dot = el("span", "msh-dot")
   dot.setAttribute("aria-hidden", "true")
@@ -242,31 +369,20 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   accessHead.append(dot, accessHeading, chip)
   const accessMessage = el("p", "msh-access-msg")
   const accessHint = el("p", "msh-access-hint")
+  const safety = el("p", "msh-safety")
+  safety.innerHTML = icon("shield")
+  safety.append(
+    el(
+      "span",
+      "",
+      "Only credentials that match the proxy's non-production allow-list are used. They never reach this browser.",
+    ),
+  )
   const endpoint = el("div", "msh-endpoint")
   const endpointCode = el("code")
   endpoint.append(el("span", "msh-endpoint-label", "Proxy"), endpointCode)
 
-  const form = el("form", "msh-key")
-  const inputId = id("key")
-  const keyLabel = el("label", "msh-key-label", "Access key")
-  keyLabel.htmlFor = inputId
-  const keyRow = el("div", "msh-key-row")
-  const keyInput = el("input", "msh-input")
-  keyInput.id = inputId
-  keyInput.type = "password"
-  keyInput.autocomplete = "off"
-  keyInput.spellcheck = false
-  keyInput.placeholder = "Paste the sandbox access key"
-  const save = el("button", "msh-btn msh-btn-primary", "Save key")
-  save.type = "submit"
-  const forget = button("msh-btn-ghost", "Forget key")
-  keyRow.append(keyInput, save, forget)
-  const keyNote = el("p", "msh-key-note")
-  const keyError = el("p", "msh-error")
-  keyError.setAttribute("role", "alert")
-  keyError.hidden = true
-  form.append(keyLabel, keyRow, keyNote, keyError)
-  access.append(accessHead, accessMessage, accessHint, endpoint, form)
+  access.append(accessHead, accessMessage, accessHint, endpoint, safety)
 
   // Service list.
   const refresh = button("msh-btn-ghost msh-refresh", "Refresh", "refresh")
@@ -277,7 +393,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   const list = el("ul", "msh-card msh-svcs")
   list.setAttribute("role", "list")
   list.setAttribute("aria-label", "Services")
-  // When the proxy itself blocks sandbox, say so once instead of under every row.
+  // When the proxy itself blocks dev resources, say so once instead of under every row.
   const shared = el("p", "msh-shared")
   shared.id = id("shared")
   shared.hidden = true
@@ -306,14 +422,14 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     const main = el("div", "msh-svc-main")
     const name = el("div", "msh-svc-name")
     const label = el("span", "msh-svc-label")
-    const badge = el("span", "msh-badge-live", "Live sandbox")
+    const badge = el("span", "msh-badge-live", "Dev resource")
     name.append(label, badge)
     const category = el("span", "msh-svc-cat")
     main.append(name, category)
     const group = el("div", "msh-seg")
     group.setAttribute("role", "radiogroup")
-    const options = (["emulated", "sandbox"] as const).map((mode) => {
-      const option = el("button", "msh-seg-option", mode === "emulated" ? "Emulated" : "Sandbox")
+    const options = (["emulated", "dev"] as const).map((mode) => {
+      const option = el("button", "msh-seg-option", mode === "emulated" ? "Emulated" : "Dev")
       option.type = "button"
       option.setAttribute("role", "radio")
       option.dataset.mode = mode
@@ -322,7 +438,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     group.append(...options)
     const note = el("p", "msh-svc-note")
     note.id = id("note")
-    const status = el("p", "msh-svc-status")
+    const status = el("p", "msh-sr")
     status.setAttribute("role", "status")
     const error = el("p", "msh-error msh-svc-error")
     error.setAttribute("role", "alert")
@@ -338,7 +454,9 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
         li.dataset.mode = service.mode
         li.toggleAttribute("data-pending", row.pending)
         label.textContent = service.label
-        badge.hidden = service.mode !== "sandbox"
+        // Reserve the badge's space either way, so switching never moves the row's text.
+        badge.style.visibility = service.mode === "dev" ? "visible" : "hidden"
+        badge.setAttribute("aria-hidden", String(service.mode !== "dev"))
         category.textContent = service.category ?? "Service"
         group.setAttribute("aria-label", `${service.label} mode`)
         group.setAttribute("aria-busy", String(row.pending))
@@ -347,7 +465,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
           const checked = service.mode === mode
           option.setAttribute("aria-checked", String(checked))
           option.tabIndex = checked ? 0 : -1
-          const blocked = mode === "sandbox" && service.unavailable !== undefined && !checked
+          const blocked = mode === "dev" && service.unavailable !== undefined && !checked
           option.disabled = blocked || (row.pending && !checked)
           const sharedNote =
             sharedReason !== undefined &&
@@ -362,9 +480,8 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
         note.innerHTML = icon("info")
         note.append(el("span", "", service.unavailable ?? ""))
         status.textContent = row.pending
-          ? `Switching to ${service.mode === "sandbox" ? "the vendor sandbox" : "the emulator"}…`
+          ? `Switching to ${service.mode === "dev" ? "the dev resource" : "the emulator"}…`
           : ""
-        status.hidden = !row.pending
         error.hidden = row.error === undefined
         error.replaceChildren()
         if (row.error !== undefined) {
@@ -400,8 +517,9 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       if (group.contains(doc.activeElement) || doc.activeElement === doc.body)
         options.find((candidate) => candidate.dataset.mode === row.service.mode)?.focus()
     }
+    // The control is a toggle: a click on either half flips the mode.
     for (const option of options) {
-      option.onclick = () => void choose(option.dataset.mode as SystemServiceMode, false)
+      option.onclick = () => void choose(row.service.mode === "dev" ? "emulated" : "dev", false)
     }
     group.onkeydown = (event) => {
       const forward = event.key === "ArrowRight" || event.key === "ArrowDown"
@@ -429,16 +547,12 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     summary.textContent = "Loading services…"
   }
 
-  const paintAccess = (status: SystemSandboxStatus) => {
+  const paintAccess = (status: SystemDevStatus) => {
     sharedReason = status.state === "ready" ? undefined : status.message
     shared.hidden = sharedReason === undefined
-    shared.innerHTML = icon(status.state === "locked" ? "key" : "info")
+    shared.innerHTML = icon("info")
     shared.append(
-      el(
-        "span",
-        "",
-        `Sandbox is unavailable for every service: ${status.message.replace(/\.$/, "")}.`,
-      ),
+      el("span", "", `Dev is unavailable for every service: ${status.message.replace(/\.$/, "")}.`),
     )
     access.dataset.state = status.state
     chip.textContent = STATES[status.state].chip
@@ -447,13 +561,6 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     endpoint.hidden = !status.endpoint
     endpointCode.textContent = status.endpoint ?? ""
     endpointCode.title = status.endpoint ?? ""
-    const hasKey = services.hasAccessKey()
-    form.hidden = status.state !== "ready" && status.state !== "locked"
-    forget.hidden = !hasKey
-    keyNote.textContent = hasKey
-      ? "A key is saved in this browser. Saving a new one replaces it."
-      : "Only sent to the proxy, never to a vendor."
-    keyInput.placeholder = hasKey ? "Paste a new key to replace it" : "Paste the sandbox access key"
   }
 
   let sequence = 0
@@ -466,7 +573,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       const result = await services.list()
       if (disposed || mine !== sequence) return
       listError.hidden = true
-      paintAccess(result.sandbox)
+      paintAccess(result.dev)
       current = result.services
       const seen = new Set<string>()
       const ordered: HTMLLIElement[] = []
@@ -514,43 +621,12 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   }
 
   refresh.onclick = () => void load()
-  const saveKey = async (key: string | null) => {
-    keyError.hidden = true
-    save.disabled = true
-    forget.disabled = true
-    try {
-      await services.setAccessKey(key)
-      if (disposed) return
-      keyInput.value = ""
-      await load()
-    } catch (failure) {
-      if (disposed) return
-      keyError.hidden = false
-      keyError.textContent = message(failure)
-    } finally {
-      save.disabled = false
-      forget.disabled = false
-    }
-  }
-  form.onsubmit = (event) => {
-    event.preventDefault()
-    const key = keyInput.value.trim()
-    if (!key) {
-      keyError.hidden = false
-      keyError.textContent = "Enter the access key first."
-      keyInput.focus()
-      return
-    }
-    void saveKey(key)
-  }
-  forget.onclick = () => void saveKey(null)
 
   access.dataset.state = "loading"
   chip.textContent = "Checking"
-  accessMessage.textContent = "Checking the sandbox proxy…"
+  accessMessage.textContent = "Checking the dev proxy…"
   accessHint.textContent = ""
   endpoint.hidden = true
-  form.hidden = true
   panel.append(home)
   void load()
   return () => {
@@ -564,7 +640,9 @@ export const SYSTEM_CSS = `
 .msh{--msh-bg:#f4f5f7;--msh-card:#fff;--msh-text:#14181f;--msh-muted:#5b6576;--msh-faint:#8a93a3;--msh-line:#e3e6eb;--msh-line-strong:#cdd2da;--msh-hover:#f0f2f5;--msh-accent:#3451d1;--msh-accent-hover:#2a43b3;--msh-accent-text:#fff;--msh-accent-soft:#eceffd;--msh-ok:#14803c;--msh-ok-soft:#e6f5ec;--msh-warn:#a15c07;--msh-warn-soft:#fcf1dc;--msh-danger:#bf2530;--msh-danger-soft:#fdecec;--msh-off:#6b7483;--msh-off-soft:#eef0f3;--msh-live:#c2410c;--msh-live-soft:#ffefe5;--msh-shadow:0 1px 2px rgb(16 24 40/.05),0 1px 3px rgb(16 24 40/.07);--msh-ring:#3451d1;--msh-seg-bg:#eceef2;--msh-seg-on:#fff;
 position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasText;background:Canvas;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 @media (prefers-color-scheme:dark){.msh{--msh-bg:#0e1116;--msh-card:#161a21;--msh-text:#e7eaf0;--msh-muted:#a0a8b6;--msh-faint:#737c8c;--msh-line:#262c36;--msh-line-strong:#353c48;--msh-hover:#1d222b;--msh-accent:#6f8cff;--msh-accent-hover:#89a0ff;--msh-accent-text:#0b1020;--msh-accent-soft:#1c2440;--msh-ok:#4ad07f;--msh-ok-soft:#12291c;--msh-warn:#f0b357;--msh-warn-soft:#2e2210;--msh-danger:#ff7b84;--msh-danger-soft:#33161a;--msh-off:#8d96a5;--msh-off-soft:#1f242c;--msh-live:#ff9a62;--msh-live-soft:#35190b;--msh-shadow:0 1px 2px rgb(0 0 0/.4);--msh-ring:#89a0ff;--msh-seg-bg:#0f1218;--msh-seg-on:#262c37}}
-.msh-panel{height:100%;overflow:auto}.msh [hidden]{display:none!important}
+/* Positioned, so absolutely placed descendants (screen-reader text) scroll and clip with the
+   panel instead of overflowing the shell and scrolling the page too. */
+.msh-panel{position:relative;height:100%;overflow:auto}.msh [hidden]{display:none!important}
 .msh-chrome{position:absolute;inset:0;pointer-events:none;z-index:1000}
 .msh-switcher{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid #ffffff2e;background:#17212f;color:white;box-shadow:0 4px 16px #0005;cursor:grab;user-select:none}
 .msh-switcher.msh-dragging{cursor:grabbing}
@@ -600,20 +678,36 @@ position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasTex
 .msh-meta{margin-top:2px!important;color:var(--msh-muted);font-size:13px}
 
 .msh-card{background:var(--msh-card);border:1px solid var(--msh-line);border-radius:12px;box-shadow:var(--msh-shadow)}
-.msh-apps{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,250px),1fr));gap:14px}
-.msh-app{display:flex;flex-direction:column;gap:16px;padding:16px;transition:border-color .15s}
-.msh-app:hover{border-color:var(--msh-line-strong)}
-.msh-app-top{display:flex;gap:12px;align-items:flex-start;flex:1}
-.msh-mark{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:9px;background:var(--msh-accent-soft);color:var(--msh-accent);font-weight:700;font-size:15px}
-.msh-app-text{min-width:0}
+.msh-apps{display:grid;gap:8px;position:relative;margin:0;padding:0;list-style:none}
+.msh-row{display:flex;align-items:center;gap:4px;padding:6px 10px 6px 4px;position:relative;background:var(--msh-card);transition:border-color .15s,box-shadow .15s}
+.msh-row:hover{border-color:var(--msh-line-strong)}
+.msh-row-dragging{z-index:2;border-color:var(--msh-accent);box-shadow:0 12px 32px rgb(0 0 0/.22)}
+.msh-grip{display:grid;place-items:center;flex:none;width:32px;height:44px;padding:0;border:0;border-radius:8px;background:transparent;color:var(--msh-faint);cursor:grab;touch-action:none}
+.msh-grip:hover{background:var(--msh-hover);color:var(--msh-text)}
+.msh-row-dragging .msh-grip{cursor:grabbing;color:var(--msh-accent)}
+.msh-grip .msh-icon{width:18px;height:18px;fill:currentColor;stroke:none}
+.msh-row .msh-row-main{flex:1;min-width:0;display:flex;align-items:center;gap:12px;padding:8px 10px;margin:0;border:0;border-radius:8px;background:transparent;color:inherit;font:inherit;text-align:left}
+button.msh-row-main{cursor:pointer}
+button.msh-row-main:hover{background:var(--msh-hover)}
+.msh-row-main .msh-mark{width:32px;height:32px;font-size:14px}
+.msh-row-main[aria-checked=false] .msh-mark{background:var(--msh-hover);color:var(--msh-faint)}
+.msh-row-main[aria-checked=false] .msh-app-label{color:var(--msh-muted)}
+/* No switch on System's row; keep its icon in line with the others'. */
+.msh-row-fixed::before{content:"";flex:none;width:34px}
+.msh-always{margin-left:auto;flex:none;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;color:var(--msh-muted);background:var(--msh-hover)}
+.msh-mark{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:9px;background:var(--msh-accent-soft);color:var(--msh-accent);font-weight:700;font-size:15px;transition:background-color .15s,color .15s}
+.msh-mark svg{width:19px;height:19px}
+.msh-mark img{width:20px;height:20px;border-radius:4px;object-fit:contain}
+.msh-row-main[aria-checked=false] .msh-mark img{filter:grayscale(1);opacity:.6}
+.msh-tip-icon{display:inline-grid;place-items:center;width:14px;height:14px;margin-right:6px;vertical-align:-2px;font-size:10px;font-weight:700}
+.msh-tip-icon svg,.msh-tip-icon img{width:14px;height:14px}
+.msh-app-text{display:grid;min-width:0}
 .msh-app-label{font-size:15px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}
-.msh-app-desc{margin-top:2px!important;color:var(--msh-muted);font-size:13px}
-.msh-app-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:12px;border-top:1px solid var(--msh-line)}
+.msh-app-desc{color:var(--msh-muted);font-size:13px;font-weight:400}
+.msh-sr{position:absolute!important;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0}
 
 .msh-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 12px;border-radius:8px;border:1px solid transparent;font:inherit;font-weight:550;font-size:13px;line-height:1.2;cursor:pointer;white-space:nowrap;transition:background-color .15s,border-color .15s,color .15s}
 .msh-btn:disabled{cursor:default;opacity:.55}
-.msh-btn-primary{background:var(--msh-accent);color:var(--msh-accent-text)}
-.msh-btn-primary:hover:not(:disabled){background:var(--msh-accent-hover)}
 .msh-btn-secondary{background:var(--msh-card);border-color:var(--msh-line-strong);color:var(--msh-text)}
 .msh-btn-secondary:hover:not(:disabled){background:var(--msh-hover)}
 .msh-btn-ghost{background:transparent;color:var(--msh-muted)}
@@ -639,9 +733,7 @@ position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasTex
 .msh-dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--msh-state,var(--msh-off));box-shadow:0 0 0 4px var(--msh-state-soft,var(--msh-off-soft))}
 .msh-chip{padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--msh-state-soft,var(--msh-off-soft));color:var(--msh-state,var(--msh-off))}
 .msh-access[data-state=ready]{--msh-state:var(--msh-ok);--msh-state-soft:var(--msh-ok-soft)}
-.msh-access[data-state=locked]{--msh-state:var(--msh-warn);--msh-state-soft:var(--msh-warn-soft)}
 .msh-access[data-state=unreachable]{--msh-state:var(--msh-danger);--msh-state-soft:var(--msh-danger-soft)}
-.msh-access[data-state=off]{--msh-state:var(--msh-off);--msh-state-soft:var(--msh-off-soft)}
 .msh-access[data-state=none]{--msh-state:var(--msh-faint);--msh-state-soft:var(--msh-off-soft)}
 .msh-access[data-state=none] .msh-dot{background:transparent;box-shadow:inset 0 0 0 2px var(--msh-faint)}
 .msh-access[data-state=loading] .msh-dot{animation:msh-pulse 1.2s ease-in-out infinite}
@@ -650,21 +742,14 @@ position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasTex
 .msh-endpoint{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:8px;background:var(--msh-bg);border:1px solid var(--msh-line);min-width:0}
 .msh-endpoint-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--msh-faint)}
 .msh-endpoint code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--msh-text)}
-.msh-key{display:grid;gap:6px;padding-top:12px;border-top:1px solid var(--msh-line)}
-.msh-key-label{font-size:13px;font-weight:600}
-.msh-key-row{display:flex;flex-wrap:wrap;gap:8px}
-.msh-input{flex:1 1 160px;min-width:0;min-height:34px;padding:6px 10px;border:1px solid var(--msh-line-strong);border-radius:8px;background:var(--msh-card);color:var(--msh-text);font:inherit;font-size:13px}
-.msh-input::placeholder{color:var(--msh-faint)}
-.msh-input:focus-visible{outline:2px solid var(--msh-ring);outline-offset:0;border-color:transparent}
-.msh-key-row .msh-input{flex-basis:100%}
 .msh-shared{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:10px;font-size:13px;color:var(--msh-muted);background:var(--msh-off-soft);border:1px solid var(--msh-line)}
 .msh-shared .msh-icon{margin-top:2px}
-.msh-key-note{font-size:12px;color:var(--msh-faint)}
+.msh-safety{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--msh-muted)}.msh-safety .msh-icon{flex:none;width:14px;height:14px;margin-top:1px;color:var(--msh-ok)}
 
 .msh-svcs{overflow:hidden}
 .msh-svc{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 16px;border-top:1px solid var(--msh-line);transition:background-color .15s}
 .msh-svc:first-child{border-top:0}
-.msh-svc[data-mode=sandbox]{background:linear-gradient(90deg,var(--msh-live-soft),transparent 55%);box-shadow:inset 3px 0 0 var(--msh-live)}
+.msh-svc[data-mode=dev]{background:linear-gradient(90deg,var(--msh-live-soft),transparent 55%);box-shadow:inset 3px 0 0 var(--msh-live)}
 .msh-svc-main{flex:1 1 200px;min-width:0;display:grid;gap:2px}
 .msh-svc-name{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
 .msh-svc-label{font-weight:600;font-size:14.5px}
@@ -675,14 +760,15 @@ position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasTex
 .msh-seg-option{min-width:86px;min-height:30px;padding:4px 12px;border:0;border-radius:6px;background:transparent;color:var(--msh-muted);font:inherit;font-size:13px;font-weight:550;cursor:pointer;transition:background-color .15s,color .15s}
 .msh-seg-option:hover:not(:disabled){color:var(--msh-text)}
 .msh-seg-option[aria-checked=true]{background:var(--msh-seg-on);color:var(--msh-text);box-shadow:0 1px 2px rgb(16 24 40/.12),0 0 0 1px var(--msh-line)}
-.msh-seg-option[data-mode=sandbox][aria-checked=true]{color:var(--msh-live)}
+.msh-seg-option[data-mode=dev][aria-checked=true]{color:var(--msh-live)}
 .msh-seg-option:disabled{cursor:not-allowed;color:var(--msh-faint);opacity:.7}
+.msh-seg{position:relative}
 .msh-seg[aria-busy=true] .msh-seg-option[aria-checked=true]{opacity:.7}
-.msh-svc-note,.msh-svc-status,.msh-svc-error{flex-basis:100%;display:flex;align-items:flex-start;gap:6px;font-size:12.5px}
+/* Switching: a spinner over the control instead of a status line, so nothing moves. */
+.msh-seg[aria-busy=true]::after{content:"";position:absolute;top:50%;right:9px;width:12px;height:12px;margin-top:-6px;border-radius:50%;border:2px solid var(--msh-line-strong);border-top-color:var(--msh-accent);animation:msh-spin .7s linear infinite}
+.msh-svc-note,.msh-svc-error{flex-basis:100%;display:flex;align-items:flex-start;gap:6px;font-size:12.5px}
 .msh-svc-note{color:var(--msh-muted)}
 .msh-svc-note .msh-icon,.msh-error .msh-icon{width:14px;height:14px;margin-top:2px}
-.msh-svc-status{color:var(--msh-muted)}
-.msh-svc-status::before{content:"";flex:none;width:12px;height:12px;margin-top:3px;border-radius:50%;border:2px solid var(--msh-line-strong);border-top-color:var(--msh-accent);animation:msh-spin .7s linear infinite}
 .msh-error{display:flex;align-items:flex-start;gap:6px;color:var(--msh-danger);font-size:12.5px;font-weight:500}
 .msh-svc-error{padding:8px 10px;border-radius:8px;background:var(--msh-danger-soft)}
 .msh-svc-empty{color:var(--msh-muted)}

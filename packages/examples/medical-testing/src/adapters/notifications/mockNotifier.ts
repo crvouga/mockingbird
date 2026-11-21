@@ -10,7 +10,7 @@ import { createTwilioMockSms } from "./twilioMockSms.js"
  * Twilio for SMS and WhatsApp, FCM for push, Slack for staff chat. Twilio
  * also backs `phoneVerifier` (Twilio Verify). `runtimes` are the emulators
  * themselves, so the notification harness reads exactly what the app sent.
- * `upstream` gives a channel's emulator a transport to the vendor's sandbox,
+ * `upstream` gives a channel's emulator a transport to a real dev resource,
  * which the System screen can switch it to.
  */
 export const createMockNotifier = (

@@ -86,15 +86,16 @@ The application must honor the boot/request AbortSignals to terminate work it st
   listener is loopback on an ephemeral port. Responses are always `Cache-Control: no-store` to
   avoid browser worker-asset cache failures. Stream errors destroy the response instead of
   creating a successful EOF. Call the returned `close()` to release the listener.
-- `createSandboxProxy({ providers, env, accessKey?, basePath?, allowOrigins?, fetch? })`, from the
-  `/sandbox-proxy` export (also re-exported from the package root), is the sandbox proxy's Fetch
-  handler; `sandboxProxyWorker(options)` wraps it as a Cloudflare Worker `{ fetch(request, env) }`.
-  `sandboxProviders` holds the Stripe, Junction, Resend, Slack, Twilio and FCM providers;
-  `SANDBOX_KEY_HEADER` names the access-key header and `safeEqual(a, b)` is the constant-time
-  comparison it uses. See [Sandbox mode](#sandbox-mode).
-- `createSandbox({ proxyUrl?, storage?, fetch? })` is the browser side: `upstream(id)` for an
+- `createDevProxy({ providers, env, allow, basePath?, allowOrigins?, trustNonBrowser?, fetch? })`, from
+  the `/dev-proxy` export (also re-exported from the package root), is the dev proxy's Fetch
+  handler; `devProxyWorker(options)` wraps it as a Cloudflare Worker `{ fetch(request, env) }`.
+  `allow` is required: an anchored pattern per env value a provider reads, checked default-deny.
+  `devProviders` holds the Stripe, Junction, Resend, Slack, Twilio and FCM providers;
+  `NON_PROD_PATTERNS` the vendor formats that by themselves prove a non-production credential;
+  and `devBaseUrlName(id)` the `<ID>_BASE_URL` override name. See [Dev resources](#dev-resources).
+- `createDevResources({ proxyUrl?, storage?, fetch? })` is the browser side: `upstream(id)` for an
   emulator's `createRuntime({ upstream })` and `controls(services)` for the System screen.
-  `SANDBOX_MESSAGES` holds its status sentences and `SANDBOX_STORAGE_KEYS` its storage keys.
+  `DEV_MESSAGES` holds its status sentences and `DEV_STORAGE_KEYS` its storage keys.
 
 ## Cookies, redirects and trust
 
@@ -125,87 +126,139 @@ Cloudflare protocol references:
 [asset upload documentation](https://developers.cloudflare.com/workers/static-assets/direct-upload/),
 [Worker Previews](https://developers.cloudflare.com/workers/previews/).
 
-## Sandbox mode
+## Dev resources
 
-A preview runs every third-party service as an in-browser emulator. Sandbox mode lets a viewer
-flip one service at a time from **Emulated** to **Sandbox**: that emulator's runtime switches to
-forward mode (`PUT /__admin/upstream {"mode":"forward"}`) and sends the app's API calls to the
-vendor's real sandbox or test account. The browser never holds a vendor secret. A small Fetch
-handler, the **sandbox proxy** (`@crvouga/mockingbird-preview/sandbox-proxy`), sits next to the
-static preview, holds the secrets in its environment and attaches them per request.
+A preview runs every third-party service as an in-browser emulator. Dev resources let a viewer
+flip one service at a time from **Emulated** to **Dev**: that emulator's runtime switches to
+forward mode (`PUT /__admin/upstream {"mode":"forward"}`) and sends the app's API calls to a real
+**non-production** resource the app's dev instance uses: a Stripe account in test mode,
+Junction's sandbox, a dev Resend account, a dev Slack workspace, a self-hosted dev instance. The
+browser never holds a credential. A small Fetch handler, the **dev proxy**
+(`@crvouga/mockingbird-preview/dev-proxy`), sits next to the static preview, holds the secrets in
+its environment and attaches them per request, and only after checking that every one of them is
+allowed. It is mounted on the dev app's own origin and trusts that app: there is no access key,
+and the client never handles a credential.
 
 ```mermaid
 sequenceDiagram
   participant App as App code (browser)
   participant Emu as Emulator runtime (browser)
-  participant Proxy as Sandbox proxy (Worker / server)
-  participant Vendor as Vendor sandbox
+  participant Proxy as Dev proxy (Worker / server)
+  participant Vendor as Non-prod resource (e.g. Stripe test mode)
   App->>Emu: POST /v1/customers (Authorization: Bearer sk_test_fake)
-  Note over Emu: mode = forward (System screen chose "Sandbox")
-  Emu->>Proxy: POST /__sandbox/stripe/v1/customers<br/>x-mockingbird-sandbox-key: viewer key<br/>(Authorization dropped)
-  Note over Proxy: check access key (constant time)<br/>check STRIPE_SECRET_KEY is sk_test_/rk_test_<br/>strip cookie, origin, x-mockingbird-*, ...
+  Note over Emu: mode = forward (System screen chose "Dev")
+  Emu->>Proxy: POST /__dev/stripe/v1/customers<br/>Sec-Fetch-Site: same-origin<br/>(Authorization dropped)
+  Note over Proxy: same origin? else 403 cross_origin<br/>STRIPE_SECRET_KEY must match allow (sk_test_/rk_test_)<br/>and not deny (sk_live_/rk_live_), else 403<br/>strip cookie, origin, x-mockingbird-*, ...
   Proxy->>Vendor: POST https://api.stripe.com/v1/customers<br/>Authorization: Bearer STRIPE_SECRET_KEY
   Vendor-->>Proxy: 200 {"id": "cus_..."}
   Proxy-->>Emu: 200 (set-cookie dropped, secrets redacted)
   Emu-->>App: 200 {"id": "cus_..."}
 ```
 
-### Providers
+### Safety model: default deny
 
-`sandboxProviders` holds the vendors the proxy knows; pass the ones you want to offer.
+Nothing is reachable until you say, in code, what a non-production value looks like.
 
-| id | Sandbox host | Env secrets | Live-key guard | Notes and limitations |
+- **`allow` is required.** For every env value a provider reads (its secrets, its identifiers and
+  any `<ID>_BASE_URL` override) `allow` names the pattern it must match. A provider with an env
+  value that has no entry, or does not match it, is **blocked**: the manifest reports why and
+  every relay answers `403 { "error": { "code": "not_allowed", "message" } }` without sending
+  anything. Patterns must be anchored (`/^…$/`, no `m` flag) or `createDevProxy()` /
+  `devProxyWorker()` throws; each is matched against the whole value. They live in code so they
+  are reviewed, never in the environment.
+- **Known production formats always lose.** A provider can declare `deny` patterns that win over
+  `allow`: Stripe refuses `sk_live_` and `rk_live_` keys even under `allow: { STRIPE_SECRET_KEY: /^.+$/ }`.
+- **`NON_PROD_PATTERNS`** holds the vendor formats that by themselves prove a non-production
+  credential (`STRIPE_SECRET_KEY: /^(sk|rk)_test_[A-Za-z0-9]+$/`,
+  `JUNCTION_API_KEY: /^sk_(us|eu)_[A-Za-z0-9_-]+$/`). Resend, Slack, Twilio and FCM credentials
+  look the same in production and development, so there is no entry for them: pin an identifier
+  (`TWILIO_ACCOUNT_SID: /^AC0123…$/`, `FCM_PROJECT_ID: /^my-app-dev$/`) or write a pattern that
+  only your dev credential matches.
+- **Reasons never echo values.** `blocked` reads "No allow-list pattern for RESEND_API_KEY",
+  "STRIPE_SECRET_KEY does not match its allow-list pattern" or "STRIPE_SECRET_KEY is a production
+  credential"; the System screen shows it as the service's reason.
+- **Base URL overrides are allow-listed too.** Each provider has a default host. An env value
+  `<ID>_BASE_URL` (`RESEND_BASE_URL`, `JUNCTION_BASE_URL`, ...; `devBaseUrlName(id)`) replaces it
+  only when `allow` has a matching entry for that name and the value is an `https:` URL without
+  query or credentials; a path prefix is kept. Otherwise the provider is blocked. This is how a
+  self-hosted dev instance is reached.
+
+| id | Reaches by default | Secrets | Identifiers | `allow` entry |
 | --- | --- | --- | --- | --- |
-| `stripe` | `api.stripe.com` | `STRIPE_SECRET_KEY` | must start `sk_test_` or `rk_test_` | Only `/v1/*`. Prices, products, coupons and webhook endpoints the app names must exist in the test account. |
-| `junction` | `api.sandbox.tryvital.io` (`api.sandbox.eu.tryvital.io` for `sk_eu_` keys) | `JUNCTION_API_KEY` | must start `sk_us_` or `sk_eu_` | Only `/v<n>/*`, sent as `x-vital-api-key`. Lab test ids and users must exist in the sandbox team. |
-| `resend` | `api.resend.com` | `RESEND_API_KEY` | none (Resend keys have no test prefix) | Real email is sent: use a sending domain and recipients you own. |
-| `slack` | `slack.com` | `SLACK_BOT_TOKEN` | none | Only `/api/*`. Channels and users must exist in the workspace the bot is in. |
-| `twilio` | `api.twilio.com`, `verify.twilio.com`, `lookups.twilio.com`, `messaging.twilio.com` (by path) | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | none (use test credentials or a trial account) | Any `/Accounts/<sid>/` is rewritten to the real SID. Sender numbers, Messaging Service SIDs and Verify Service SIDs must exist in that account. `/v1/Services` always goes to Messaging, so Conversations' `/v1/Services` is ambiguous and not reachable. |
-| `fcm` | `fcm.googleapis.com` | `FCM_ACCESS_TOKEN`, `FCM_PROJECT_ID` | none | Only `POST /v1/projects/*/messages:send`; the project id is rewritten to `FCM_PROJECT_ID`. The access token is a short-lived OAuth token (about an hour): refresh it out of band. |
+| `stripe` | `api.stripe.com` (`/v1/*`) | `STRIPE_SECRET_KEY` | | `NON_PROD_PATTERNS` (test-mode keys; live keys are denied) |
+| `junction` | Junction's sandbox `api.sandbox.tryvital.io` (`api.sandbox.eu.tryvital.io` for `sk_eu_` keys; `/v<n>/*`) | `JUNCTION_API_KEY` | | `NON_PROD_PATTERNS` |
+| `resend` | `api.resend.com` | `RESEND_API_KEY` | | pin your dev key, or reach a dev instance via `RESEND_BASE_URL` |
+| `slack` | `slack.com` (`/api/*`) | `SLACK_BOT_TOKEN` | | pin your dev workspace's bot token |
+| `twilio` | `api.twilio.com`, `verify.twilio.com`, `lookups.twilio.com`, `messaging.twilio.com` (by path) | `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN` | `TWILIO_ACCOUNT_SID` | pin an identifier: `TWILIO_ACCOUNT_SID` (test credentials or a dev subaccount) |
+| `fcm` | `fcm.googleapis.com` (`POST /v1/projects/*/messages:send`) | `FCM_ACCESS_TOKEN`, `FCM_PROJECT_ID` | `FCM_PROJECT_ID` | pin an identifier: `FCM_PROJECT_ID` (your dev project) |
+
+Every value in the Secrets column needs an `allow` entry, including the token next to a pinned
+identifier (a loose `/^.+$/` is fine there: the pin is what proves non-prod).
+
+Provider notes: Stripe prices, products, coupons and webhook endpoints the app names must exist in
+the test-mode account. Junction lab test ids and users must exist in Junction's sandbox team; a
+`JUNCTION_BASE_URL` override replaces the EU host switch. Resend really sends email: use a sending
+domain and recipients you own. Slack channels and users must exist in the bot's workspace. Twilio
+rewrites any `/Accounts/<sid>/` to the configured SID; sender numbers and Messaging / Verify
+Service SIDs must exist in that account; `/v1/Services` always goes to Messaging, so Conversations'
+`/v1/Services` is not reachable; a `TWILIO_BASE_URL` override replaces only the default API host
+(`/2010-04-01/*`), Verify, Lookups and Messaging keep their vendor hosts. FCM rewrites the project
+id to `FCM_PROJECT_ID`; the access token is a short-lived OAuth token (about an hour), refresh it
+out of band.
 
 For every provider: vendor webhooks are **not** relayed back to the browser emulator, and
 forwarded responses are relayed as-is (emulators with a forwarded-response hook, such as Resend,
-FCM and Twilio, record a receipt; Stripe and Junction do not mirror sandbox objects into their
+FCM and Twilio, record a receipt; Stripe and Junction do not mirror remote objects into their
 state). A path a provider does not map answers `501`.
 
-### Security model
+### Trust and transport
 
-- **Fails closed.** Without `SANDBOX_PROXY_TOKEN` (or the env name passed as `accessKey`) the
-  manifest reports `access: "disabled"` and every relay answers `503`. A caller must send that
-  value in `x-mockingbird-sandbox-key`; it is compared in constant time, and a wrong or missing
-  key gets `401`. Only a caller with the key learns which providers are configured.
-- **Allowlisted hosts only.** Each provider builds the vendor URL on a fixed origin from the
-  path; a crafted path cannot change the host, and unmapped paths answer `501`. Redirects are
-  returned, never followed.
+- **Same-origin only.** The proxy answers a request only when the browser marks it
+  `Sec-Fetch-Site: same-origin` and its `Origin`, when sent, is the proxy's own origin (or listed
+  in `allowOrigins`, which also turns on CORS for exactly those origins). Cross-site, same-site and
+  navigation requests, and a foreign `Origin`, get `403 { "error": { "code": "cross_origin" } }`
+  with nothing sent. A request without `Sec-Fetch-Site` (curl, a server, a test) is refused too
+  unless the proxy is built with `trustNonBrowser: true`.
+- **Who can open the preview is the preview host's job.** Anyone who can load the page can use its
+  dev resources, so restrict the preview itself, e.g. with
+  [Cloudflare Access](https://developers.cloudflare.com/cloudflare-one/policies/access/) in front
+  of the Worker. The allow-list above is what keeps those resources non-production.
+- **Fixed hosts only.** Each provider builds the URL on its fixed (or allow-listed override)
+  base from the path; a crafted path cannot change the host, and unmapped paths answer `501`.
+  Redirects are returned, never followed.
 - **Secrets never reach the browser.** The proxy drops the caller's `authorization`, `cookie`,
   `origin`, `referer`, `x-mockingbird-*`, `cf-*`, `x-forwarded-*` and `forwarded` headers,
   attaches the credential itself, drops `set-cookie` from the answer, and redacts every secret
   value from its own errors and from text responses (account identifiers such as the Twilio
   Account SID stay). Errors are `{ "error": { "code", "message" } }`.
-- **A live key is refused.** `check` rejects Stripe live keys and Junction production keys before
-  anything is sent (`503`, and the System screen shows why).
-- **Access key per viewer.** The browser keeps the access key and chosen modes in its own
-  `localStorage`; share the key only with people who may spend the sandbox accounts. CORS is off
-  unless `allowOrigins` lists the page's origin; mounting the proxy on the page's own origin (as
-  below) needs none.
+- **Modes per viewer.** The browser keeps only the chosen modes in its own `localStorage`.
 
 ### Mounting the proxy
 
 A Cloudflare Worker that serves the static preview and the proxy on one origin (set the secrets
-with `wrangler secret put SANDBOX_PROXY_TOKEN`, `wrangler secret put STRIPE_SECRET_KEY`, ...):
+with `wrangler secret put STRIPE_SECRET_KEY`, ...):
 
 ```ts
-import { sandboxProviders, sandboxProxyWorker } from "@crvouga/mockingbird-preview/sandbox-proxy"
+import {
+  devProviders,
+  devProxyWorker,
+  NON_PROD_PATTERNS,
+} from "@crvouga/mockingbird-preview/dev-proxy"
 
-const proxy = sandboxProxyWorker({
-  basePath: "/__sandbox",
-  providers: Object.values(sandboxProviders),
+const proxy = devProxyWorker({
+  basePath: "/__dev",
+  providers: [devProviders.stripe, devProviders.junction, devProviders.twilio],
+  allow: {
+    ...NON_PROD_PATTERNS,
+    TWILIO_ACCOUNT_SID: /^AC_YOUR_DEV_ACCOUNT_SID$/, // the dev account, pinned
+    TWILIO_AUTH_TOKEN: /^[0-9a-f]{32}$/,
+  },
 })
 
 export default {
   fetch(request: Request, env: Record<string, string | undefined> & { ASSETS: { fetch(request: Request): Promise<Response> } }) {
     const { pathname } = new URL(request.url)
-    if (pathname === "/__sandbox" || pathname.startsWith("/__sandbox/")) {
+    if (pathname === "/__dev" || pathname.startsWith("/__dev/")) {
       const { ASSETS: _assets, ...secrets } = env
       return proxy.fetch(request, secrets)
     }
@@ -215,67 +268,71 @@ export default {
 ```
 
 A Bun server (Node 18+ and Deno work the same with any Fetch-handler server), secrets from
-`.env.local` / the process environment:
+`.env.local` / the process environment, reaching a self-hosted dev Resend-compatible instance:
 
 ```ts
-import { createSandboxProxy, sandboxProviders } from "@crvouga/mockingbird-preview/sandbox-proxy"
+import { createDevProxy, devProviders, NON_PROD_PATTERNS } from "@crvouga/mockingbird-preview/dev-proxy"
 
-const sandbox = createSandboxProxy({
-  basePath: "/__sandbox",
-  providers: [sandboxProviders.stripe, sandboxProviders.resend],
+const dev = createDevProxy({
+  basePath: "/__dev",
+  providers: [devProviders.stripe, devProviders.resend],
   env: process.env,
-  allowOrigins: ["http://localhost:5173"], // only when the page is on another origin
+  allow: {
+    ...NON_PROD_PATTERNS,
+    RESEND_API_KEY: /^re_dev_[A-Za-z0-9_]+$/,
+    RESEND_BASE_URL: /^https:\/\/mail\.dev\.example\.com$/,
+  },
+  allowOrigins: ["http://localhost:5173"], // only when the page is served from another origin
 })
 
 Bun.serve({
   port: 8787,
   fetch: (request) =>
-    new URL(request.url).pathname.startsWith("/__sandbox")
-      ? sandbox(request)
+    new URL(request.url).pathname.startsWith("/__dev")
+      ? dev(request)
       : new Response("Not found", { status: 404 }),
 })
 ```
 
-`GET /__sandbox/` answers the manifest:
-`{ access: "granted" | "denied" | "disabled", providers: [{ id, label, configured, missing, error? }] }`.
+`GET /__dev/` answers the manifest:
+`{ providers: [{ id, label, configured, missing, blocked? }] }`.
 
 ### Browser wiring
 
 ```ts
-import { createSandbox } from "@crvouga/mockingbird-preview"
+import { createDevResources } from "@crvouga/mockingbird-preview"
 import { createRuntime as createStripe } from "@crvouga/mockingbird-service-stripe"
 import { createRuntime as createResend } from "@crvouga/mockingbird-service-resend"
 
-const sandbox = createSandbox({ proxyUrl: "/__sandbox" }) // omit proxyUrl: sandbox not offered
+const dev = createDevResources({ proxyUrl: "/__dev" }) // omit proxyUrl: dev resources not offered
 
-// Each emulator forwards through the proxy when switched to Sandbox; it boots emulated.
-const stripe = createStripe({ upstream: sandbox.upstream("stripe") })
-const resend = createResend({ upstream: sandbox.upstream("resend") })
+// Each emulator forwards through the proxy when switched to Dev; it boots emulated.
+const stripe = createStripe({ upstream: dev.upstream("stripe") })
+const resend = createResend({ upstream: dev.upstream("resend") })
 
 // The System screen's service list (`mountSystemHarness(host, surfaces, { services })`).
-const services = sandbox.controls([
+const services = dev.controls([
   { id: "stripe", label: "Stripe", category: "Payments", admin: (r) => stripe.fetch(r) },
   { id: "resend", label: "Resend", category: "Email", admin: (r) => resend.fetch(r) },
   {
     id: "keycloak",
     label: "Keycloak",
     admin: async () => Response.json({ mode: "emulated" }),
-    unsupported: "Runs in this browser; there is no vendor sandbox",
+    unsupported: "Runs in this browser; there is no remote dev resource",
   },
 ])
 
-await services.setAccessKey("the key the proxy's SANDBOX_PROXY_TOKEN holds")
-await services.setMode("stripe", "sandbox") // throws a readable reason when unavailable
-const { sandbox: status, services: rows } = await services.list()
+await services.setMode("stripe", "dev") // throws a readable reason when unavailable
+const { dev: status, services: rows } = await services.list()
 ```
 
-`upstream(id)` gives `{ baseUrl: "<proxy>/<id>", fetch, rewriteAuth }`: `fetch` adds the stored
-access key, `rewriteAuth` drops the app's fake `authorization`. `controls()` reads each
+`upstream(id)` gives `{ baseUrl: "<proxy>/<id>", fetch, rewriteAuth }`: `fetch` sends the request
+to the proxy as-is (the browser adds `Sec-Fetch-Site`), `rewriteAuth` drops the app's fake
+`authorization` and any cookie. `controls()` reads each
 emulator's mode from `GET /__admin/upstream`, and its `unavailable` reason follows this order:
-the spec's `unsupported`, no proxy configured, proxy unreachable, proxy without
-`SANDBOX_PROXY_TOKEN`, access key missing or wrong, provider secrets missing, the provider's
-`check` error. Chosen modes persist per viewer; because emulator state resets on reload, the first
-`list()` re-applies stored Sandbox choices that are still available.
+the spec's `unsupported`, no proxy configured, proxy unreachable or refusing the page
+(`cross_origin`), provider secrets missing, the provider's `blocked` reason. Chosen modes persist per viewer; because emulator state resets on reload, the
+first `list()` re-applies stored Dev choices that are still available.
 
 ## Validation
 

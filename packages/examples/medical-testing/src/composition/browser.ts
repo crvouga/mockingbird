@@ -1,15 +1,20 @@
-import { mountSystemHarness } from "@crvouga/mockingbird-ui"
+import { mountSystemHarness, SYSTEM_ICONS } from "@crvouga/mockingbird-ui"
 import { setFetcher } from "../client/api.js"
 import { setInboxOpener } from "../client/inbox.js"
 import { mountApp } from "../client/main.js"
 import { STYLES } from "../client/theme.js"
 import { buildDemo } from "./build.js"
+import { createLabDevResources, DEV_DOCS_URL } from "./dev.js"
 import { createInProcessFetcher } from "./inProcessFetcher.js"
-import { createLabSandbox, SANDBOX_DOCS_URL } from "./sandbox.js"
 
 export { createInProcessFetcher }
 
 const NO_CLIENT_ASSETS = { html: "", js: "" }
+
+/** The app's own mark (the plus in `client/components/Logo.ts`), for its row in the switcher. */
+const LAB_ICON = {
+  svg: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>',
+}
 
 /** Mount one browser-local system. Only one lab instance may be mounted per document:
  * the existing client's fetch and inbox ports are module-scoped.
@@ -18,15 +23,12 @@ export const mount = async (
   host: HTMLElement,
   options: {
     syncUrl?: boolean
-    /** The sandbox proxy, absolute or relative to this page. Without it every service stays emulated. */
-    sandboxProxyUrl?: string
+    /** The dev proxy, absolute or relative to this page. Without it every service stays emulated. */
+    devProxyUrl?: string
   } = {},
 ): Promise<() => void> => {
-  const sandbox = createLabSandbox(options.sandboxProxyUrl)
-  const demo = await buildDemo(
-    NO_CLIENT_ASSETS,
-    sandbox.upstream ? { upstream: sandbox.upstream } : {},
-  )
+  const dev = createLabDevResources(options.devProxyUrl)
+  const demo = await buildDemo(NO_CLIENT_ASSETS, dev.upstream ? { upstream: dev.upstream } : {})
   setFetcher(createInProcessFetcher(demo.app))
 
   const styleId = "cove-app-styles"
@@ -44,6 +46,7 @@ export const mount = async (
       {
         id: "app",
         label: "Lab workspace",
+        icon: LAB_ICON,
         description: "The patient, clinician and admin app, signed out and seeded with demo data.",
         mount: (panel) => {
           const root = document.createElement("div")
@@ -54,6 +57,7 @@ export const mount = async (
       {
         id: "emulators",
         label: "Emulators",
+        icon: SYSTEM_ICONS.emulators,
         description: "The admin UI of every emulator: state, requests, clock, faults and SQL.",
         mount: async (panel) => {
           const { mountEmulatorsPanel } = await import("./emulatorsPanel.js")
@@ -63,6 +67,7 @@ export const mount = async (
       {
         id: "notifications",
         label: "Notifications",
+        icon: SYSTEM_ICONS.notifications,
         description:
           "Every email, text, push and staff chat message the app sent, on lifelike devices.",
         mount: async (panel) => {
@@ -78,8 +83,8 @@ export const mount = async (
     {
       initial: "app",
       syncUrl: options.syncUrl ?? false,
-      services: sandbox.controls(demo.admins),
-      docsUrl: SANDBOX_DOCS_URL,
+      services: dev.controls(demo.admins),
+      docsUrl: DEV_DOCS_URL,
     },
   )
   setInboxOpener((target) => {

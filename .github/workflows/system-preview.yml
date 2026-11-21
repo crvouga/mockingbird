@@ -39,10 +39,9 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_ACTION: ${{ github.event.action }}
-          # Sandbox mode (docs/SANDBOX_MODE.md): the Worker's /__sandbox proxy attaches these to
-          # requests the preview forwards to a vendor sandbox. Without SANDBOX_PROXY_TOKEN the
-          # proxy refuses every relay, so a preview never spends sandbox credit for an anonymous visitor.
-          SANDBOX_PROXY_TOKEN: ${{ secrets.SANDBOX_PROXY_TOKEN }}
+          # Dev resources (docs/DEV_RESOURCES.md): the Worker's /__dev proxy attaches these to
+          # same-origin requests the preview forwards to a real non-production resource, and only
+          # values that match the allow-list in src/worker.ts. They never reach the browser.
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
           JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
           RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
@@ -73,9 +72,9 @@ jobs:
             }
             cat "$RUNNER_TEMP/worker-deploy.log"
             # Only names with a value are sent; values go through a 0600 file that is removed at once.
-            SECRETS_FILE="$RUNNER_TEMP/sandbox-secrets.json"
-            ( umask 077; jq -n 'env | with_entries(select(.key | test("^(SANDBOX_PROXY_TOKEN|STRIPE_SECRET_KEY|JUNCTION_API_KEY|RESEND_API_KEY|TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN|FCM_PROJECT_ID|FCM_ACCESS_TOKEN|SLACK_BOT_TOKEN)$")) | select(.value != ""))' > "$SECRETS_FILE" )
-            echo "Sandbox secrets for this preview: $(jq -r 'keys | join(", ")' "$SECRETS_FILE")"
+            SECRETS_FILE="$RUNNER_TEMP/dev-secrets.json"
+            ( umask 077; jq -n 'env | with_entries(select(.key | test("^(STRIPE_SECRET_KEY|JUNCTION_API_KEY|RESEND_API_KEY|TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN|FCM_PROJECT_ID|FCM_ACCESS_TOKEN|SLACK_BOT_TOKEN)$")) | select(.value != ""))' > "$SECRETS_FILE" )
+            echo "Dev resource secrets for this preview: $(jq -r 'keys | join(", ")' "$SECRETS_FILE")"
             if [ "$(jq length "$SECRETS_FILE")" -gt 0 ]; then
               bunx wrangler@4.50.0 secret bulk "$SECRETS_FILE" --name "mockingbird-lab-pr-$PR_NUMBER" > /dev/null
             fi

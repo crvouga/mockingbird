@@ -20,9 +20,9 @@
       "types": "./dist/node.d.ts",
       "default": "./dist/node.js"
     },
-    "./sandbox-proxy": {
-      "types": "./dist/sandbox-proxy.d.ts",
-      "default": "./dist/sandbox-proxy.js"
+    "./dev-proxy": {
+      "types": "./dist/dev-proxy.d.ts",
+      "default": "./dist/dev-proxy.js"
     }
   },
   "publishConfig": {
@@ -39,7 +39,7 @@
     "layer": "adapter",
     "entries": {
       "node": "node",
-      "sandbox-proxy": "portable"
+      "dev-proxy": "portable"
     }
   },
   "scripts": {

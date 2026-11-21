@@ -88,7 +88,7 @@ export const createJunctionMockLabTesting = (params: {
     })
     if (!response.ok) throw new Error(`Lab order creation failed (${response.status})`)
     const created = (await response.json()) as JunctionOrderResponse
-    // A sandbox order lives at Junction; its progress comes from Junction, not this demo's timers.
+    // A real order lives at Junction; its progress comes from Junction, not this demo's timers.
     if (!(await forwarding())) scheduleAutomaticProgress(created.order.id)
     return { labOrderId: created.order.id }
   }
