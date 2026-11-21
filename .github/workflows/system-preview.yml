@@ -7,8 +7,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  # Signs the CI events the preview shows live (.github/actions/preview-event); no secret involved.
-  id-token: write
 
 concurrency:
   group: system-preview-${{ github.event.pull_request.number }}
@@ -20,17 +18,6 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
-      # The open preview shows "building" for this commit within a second, before the build starts.
-      - name: Tell the preview a build started
-        if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: true
-        uses: ./.github/actions/preview-event
-        with:
-          kind: build
-          state: building
-          version: ${{ github.event.pull_request.head.sha }}
-          pr: ${{ github.event.pull_request.number }}
-          workers-subdomain: ${{ vars.PREVIEW_WORKERS_SUBDOMAIN || 'crvouga' }}
       - uses: ./.github/actions/setup
       - name: Build static system
         if: github.event.action != 'closed'
@@ -65,6 +52,9 @@ jobs:
           FCM_PROJECT_ID: ${{ secrets.FCM_PROJECT_ID }}
           FCM_ACCESS_TOKEN: ${{ secrets.FCM_ACCESS_TOKEN }}
           SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
+          # Optional, read-only (Actions + Pull requests: read). Without it the live status calls
+          # the GitHub API unauthenticated, which is rate limited; updates still work without it.
+          PREVIEW_GITHUB_TOKEN: ${{ secrets.PREVIEW_GITHUB_TOKEN }}
         run: |
           if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
             echo "::notice::Hosting needs CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID repository secrets. The static preview is available as an artifact."
@@ -83,14 +73,28 @@ jobs:
           else
             # version.json names this commit; open tabs update to it without reloading.
             PREVIEW_PR="$PR_NUMBER" bun scripts/stamp-version.ts
-            bunx wrangler@4.50.0 deploy --name "mockingbird-lab-pr-$PR_NUMBER" > "$RUNNER_TEMP/worker-deploy.log" 2>&1 || {
-              cat "$RUNNER_TEMP/worker-deploy.log"
-              exit 1
+            # The live status function reads this PR's CI from the GitHub API (stateless).
+            deploy() {
+              bunx wrangler@4.50.0 deploy --name "mockingbird-lab-pr-$PR_NUMBER" \
+                --var "PREVIEW_PR:$PR_NUMBER" --var "PREVIEW_REPOSITORY:$GITHUB_REPOSITORY" \
+                > "$RUNNER_TEMP/worker-deploy.log" 2>&1
             }
+            if ! deploy; then
+              # A preview first deployed with the old Durable Object status cannot drop that class
+              # in place. The preview holds no state worth keeping: remove it and deploy fresh.
+              if grep -qi "durable object" "$RUNNER_TEMP/worker-deploy.log"; then
+                curl --silent --show-error -o /dev/null -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/mockingbird-lab-pr-$PR_NUMBER?force=true"
+                deploy || { cat "$RUNNER_TEMP/worker-deploy.log"; exit 1; }
+              else
+                cat "$RUNNER_TEMP/worker-deploy.log"
+                exit 1
+              fi
+            fi
             cat "$RUNNER_TEMP/worker-deploy.log"
             # Only names with a value are sent; values go through a 0600 file that is removed at once.
             SECRETS_FILE="$RUNNER_TEMP/dev-secrets.json"
-            ( umask 077; jq -n 'env | with_entries(select(.key | test("^(STRIPE_SECRET_KEY|JUNCTION_API_KEY|RESEND_API_KEY|TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN|FCM_PROJECT_ID|FCM_ACCESS_TOKEN|SLACK_BOT_TOKEN)$")) | select(.value != ""))' > "$SECRETS_FILE" )
+            ( umask 077; jq -n 'env | with_entries(select(.key | test("^(PREVIEW_GITHUB_TOKEN|STRIPE_SECRET_KEY|JUNCTION_API_KEY|RESEND_API_KEY|TWILIO_ACCOUNT_SID|TWILIO_AUTH_TOKEN|FCM_PROJECT_ID|FCM_ACCESS_TOKEN|SLACK_BOT_TOKEN)$")) | select(.value != ""))' > "$SECRETS_FILE" )
             echo "Dev resource secrets for this preview: $(jq -r 'keys | join(", ")' "$SECRETS_FILE")"
             if [ "$(jq length "$SECRETS_FILE")" -gt 0 ]; then
               bunx wrangler@4.50.0 secret bulk "$SECRETS_FILE" --name "mockingbird-lab-pr-$PR_NUMBER" > /dev/null
@@ -103,29 +107,6 @@ jobs:
             echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
             echo "[Open system preview]($PREVIEW_URL)" >> "$GITHUB_STEP_SUMMARY"
           fi
-
-      - name: Tell the preview it deployed
-        if: steps.deploy.outputs.url != ''
-        continue-on-error: true
-        uses: ./.github/actions/preview-event
-        with:
-          kind: build
-          state: deployed
-          version: ${{ github.event.pull_request.head.sha }}
-          pr: ${{ github.event.pull_request.number }}
-          origin: ${{ steps.deploy.outputs.url }}
-
-      - name: Tell the preview the build failed
-        if: failure() && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
-        continue-on-error: true
-        uses: ./.github/actions/preview-event
-        with:
-          kind: build
-          state: failed
-          version: ${{ github.event.pull_request.head.sha }}
-          pr: ${{ github.event.pull_request.number }}
-          workers-subdomain: ${{ vars.PREVIEW_WORKERS_SUBDOMAIN || 'crvouga' }}
-          message: The preview build or deploy failed
 
       - name: Put preview links at the top of the PR
         if: steps.deploy.outputs.url != ''
