@@ -6,6 +6,17 @@ import { build as rewriteLocations } from "esbuild"
 import { fs } from "memfs"
 import stdlib from "node-stdlib-browser"
 
+/**
+ * A value as a JavaScript literal for generated module source: JSON, with the characters that can
+ * end a script or string context (`<`, `>`, `/`, U+2028, U+2029) escaped, so no path or name can
+ * change the code around it.
+ */
+const literal = (value: unknown): string =>
+  JSON.stringify(value).replace(
+    /[<>/\u2028\u2029]/g,
+    (character) => `\\u${character.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  )
+
 const here = dirname(fileURLToPath(import.meta.url))
 const extension = import.meta.url.endsWith(".ts") ? ".ts" : ".js"
 const unsupported = new Set([
@@ -70,7 +81,7 @@ export function browserRuntimeBuildOptions(
   if (options.sourceRoot && !isAbsolute(options.sourceRoot))
     throw new TypeError("sourceRoot must be absolute")
   const registry = "mockingbird:module-registry"
-  const runtimePath = JSON.stringify(join(here, `runtime${extension}`))
+  const runtimePath = literal(join(here, `runtime${extension}`))
   const plugin: Plugin = {
     name: "mockingbird-browser-runtime",
     setup(build) {
@@ -101,7 +112,7 @@ export function browserRuntimeBuildOptions(
       }))
       build.onLoad({ filter: /.*/, namespace: "browser-support" }, () => {
         return {
-          contents: `import { createModuleRegistry } from ${JSON.stringify(join(here, `modules${extension}`))}; const registry = createModuleRegistry({${modules.map(([name, target]) => `${JSON.stringify(name)}: () => require(${JSON.stringify(target)})`).join(",")}}); const runtimeRequire = registry.require; export { runtimeRequire as require }; export const createRequire = () => runtimeRequire;`,
+          contents: `import { createModuleRegistry } from ${literal(join(here, `modules${extension}`))}; const registry = createModuleRegistry({${modules.map(([name, target]) => `${literal(name)}: () => require(${literal(target)})`).join(",")}}); const runtimeRequire = registry.require; export { runtimeRequire as require }; export const createRequire = () => runtimeRequire;`,
           resolveDir: here,
         }
       })
@@ -112,7 +123,7 @@ export function browserRuntimeBuildOptions(
           typeof value === "string" ? [...new TextEncoder().encode(value)] : [...value],
         ])
         return {
-          contents: `export const publicAssets = ${JSON.stringify(Object.fromEntries(files))};`,
+          contents: `export const publicAssets = ${literal(Object.fromEntries(files))};`,
           loader: "js",
         }
       })
@@ -147,13 +158,11 @@ export function browserRuntimeBuildOptions(
                   : {}),
                 logLevel: "silent",
                 define: {
-                  __filename: JSON.stringify(virtual),
-                  __dirname: JSON.stringify(virtual.slice(0, virtual.lastIndexOf("/")) || "/"),
-                  "import.meta.url": JSON.stringify(pathToFileURL(virtual).href),
-                  "import.meta.filename": JSON.stringify(virtual),
-                  "import.meta.dirname": JSON.stringify(
-                    virtual.slice(0, virtual.lastIndexOf("/")) || "/",
-                  ),
+                  __filename: literal(virtual),
+                  __dirname: literal(virtual.slice(0, virtual.lastIndexOf("/")) || "/"),
+                  "import.meta.url": literal(pathToFileURL(virtual).href),
+                  "import.meta.filename": literal(virtual),
+                  "import.meta.dirname": literal(virtual.slice(0, virtual.lastIndexOf("/")) || "/"),
                 },
               })
               contents = transformed.outputFiles[0]?.text ?? ""
@@ -215,7 +224,7 @@ export function browserRuntimeBuildOptions(
         return undefined
       })
       build.onLoad({ filter: /.*/, namespace: "browser-optional" }, (args) => ({
-        contents: `throw Object.assign(new Error(${JSON.stringify(`Optional module ${args.path} is unavailable in this preview`)}), { code: "ERR_BROWSER_RUNTIME_UNSUPPORTED" });`,
+        contents: `throw Object.assign(new Error(${literal(`Optional module ${args.path} is unavailable in this preview`)}), { code: "ERR_BROWSER_RUNTIME_UNSUPPORTED" });`,
         loader: "js",
       }))
       build.onLoad({ filter: /.*/, namespace: "browser-runtime" }, (args) => {
@@ -226,7 +235,7 @@ export function browserRuntimeBuildOptions(
           }
         if (args.path === "bun")
           return {
-            contents: `import { browserRuntime } from ${JSON.stringify(join(here, `runtime${extension}`))}; export const { serve, file, write, env, sleep } = browserRuntime.bun; export default browserRuntime.bun;`,
+            contents: `import { browserRuntime } from ${literal(join(here, `runtime${extension}`))}; export const { serve, file, write, env, sleep } = browserRuntime.bun; export default browserRuntime.bun;`,
             resolveDir: here,
           }
         if (args.path === "crypto") {
@@ -248,18 +257,18 @@ export function browserRuntimeBuildOptions(
             "getCiphers",
           ]
           return {
-            contents: `import legacy from ${JSON.stringify(stdlib.crypto)}; export const { ${names.join(",")} } = legacy; export const webcrypto = globalThis.crypto; export const subtle = webcrypto.subtle; export const randomUUID = () => webcrypto.randomUUID(); export const getRandomValues = value => webcrypto.getRandomValues(value); export default { ...legacy, webcrypto, subtle, randomUUID, getRandomValues };`,
+            contents: `import legacy from ${literal(stdlib.crypto)}; export const { ${names.join(",")} } = legacy; export const webcrypto = globalThis.crypto; export const subtle = webcrypto.subtle; export const randomUUID = () => webcrypto.randomUUID(); export const getRandomValues = value => webcrypto.getRandomValues(value); export default { ...legacy, webcrypto, subtle, randomUUID, getRandomValues };`,
             resolveDir: here,
           }
         }
         if (args.path === "assert/strict")
           return {
-            contents: `import assert from ${JSON.stringify(stdlib.assert)}; export default assert.strict;`,
+            contents: `import assert from ${literal(stdlib.assert)}; export default assert.strict;`,
             resolveDir: here,
           }
         if (args.path === "path/posix")
           return {
-            contents: `import path from ${JSON.stringify(stdlib.path)}; export const { resolve, normalize, isAbsolute, join, relative, dirname, basename, extname, format, parse, sep, delimiter } = path; export default path;`,
+            contents: `import path from ${literal(stdlib.path)}; export const { resolve, normalize, isAbsolute, join, relative, dirname, basename, extname, format, parse, sep, delimiter } = path; export default path;`,
             resolveDir: here,
           }
         if (args.path === "stream/promises")
@@ -270,7 +279,7 @@ export function browserRuntimeBuildOptions(
           }
         if (args.path === "http") {
           return {
-            contents: `import client from ${JSON.stringify(stdlib.http)}; import { createServer, Server, IncomingMessage, ServerResponse } from ${JSON.stringify(join(here, `http${extension}`))}; export const { request, get, Agent, STATUS_CODES, METHODS, globalAgent } = client; export { createServer, Server, IncomingMessage, ServerResponse }; export default { ...client, createServer, Server, IncomingMessage, ServerResponse };`,
+            contents: `import client from ${literal(stdlib.http)}; import { createServer, Server, IncomingMessage, ServerResponse } from ${literal(join(here, `http${extension}`))}; export const { request, get, Agent, STATUS_CODES, METHODS, globalAgent } = client; export { createServer, Server, IncomingMessage, ServerResponse }; export default { ...client, createServer, Server, IncomingMessage, ServerResponse };`,
             resolveDir: here,
           }
         }
@@ -285,7 +294,7 @@ export function browserRuntimeBuildOptions(
           .filter((name) => name !== "fs")
           .filter((name) => /^[a-zA-Z_$][\w$]*$/.test(name) && name !== "default")
         return {
-          contents: `import { browserRuntime } from ${JSON.stringify(join(here, `runtime${extension}`))}; const fs = browserRuntime.${member}; export default fs;\n${names.map((name) => `export const ${name} = fs[${JSON.stringify(name)}];`).join("\n")}`,
+          contents: `import { browserRuntime } from ${literal(join(here, `runtime${extension}`))}; const fs = browserRuntime.${member}; export default fs;\n${names.map((name) => `export const ${name} = fs[${literal(name)}];`).join("\n")}`,
           resolveDir: here,
         }
       })

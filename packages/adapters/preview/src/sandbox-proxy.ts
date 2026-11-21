@@ -1,3 +1,9 @@
+/** `value` without trailing slashes, in linear time (a `/\/+$/` regex backtracks on long runs). */
+const withoutTrailingSlashes = (value: string): string => {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--
+  return value.slice(0, end)
+}
 /**
  * Sandbox proxy: a Fetch handler that relays an emulator's forwarded requests to a vendor's real
  * sandbox (test) account and attaches the credentials there, so secrets never reach the browser.
@@ -281,7 +287,7 @@ export const createSandboxProxy = (
   options: SandboxProxyOptions,
 ): ((request: Request) => Promise<Response>) => {
   const accessKeyName = options.accessKey ?? "SANDBOX_PROXY_TOKEN"
-  const basePath = (options.basePath ?? "").replace(/\/+$/, "")
+  const basePath = withoutTrailingSlashes(options.basePath ?? "")
   const allowOrigins = options.allowOrigins ?? []
   const send = options.fetch ?? ((request: Request) => globalThis.fetch(request))
   const providers = new Map(options.providers.map((provider) => [provider.id, provider]))
