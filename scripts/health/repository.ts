@@ -54,7 +54,7 @@ export async function runRepositoryHealth() {
   const docs = jobs?.mockingbird_docs
   const publishing =
     permissions?.packages === "write" &&
-    docs?.uses === "crvouga/personal/.github/workflows/publish.yml@main" &&
+    docs?.uses === "crvouga-organization/personal/.github/workflows/publish.yml@main" &&
     docs.with?.service_id === "mockingbird-docs" &&
     docs.with?.dockerfile === "sites/docs/Dockerfile" &&
     docs.with?.context === "." &&
@@ -65,7 +65,8 @@ export async function runRepositoryHealth() {
     message: publishing
       ? "Docs publish uses the managed fleet workflow and required permissions."
       : "Docs publish workflow differs from the managed hosting contract.",
-    remedy: "Regenerate the managed workflow through crvouga/personal; do not deploy by hand.",
+    remedy:
+      "Regenerate the managed workflow through crvouga-organization/personal; do not deploy by hand.",
   })
   for (const pkg of discoverPackages().filter((entry) => entry.isPublic)) {
     const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8")) as {

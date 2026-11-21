@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-vercel
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 projects, deployments, domains, env vars, users, teams, file uploads, protection bypass, blob storage. Runs through Mockingbird's portable Fetch runtime with SQLite persistence, namespaces, checkpoints, faults and admin controls.
 

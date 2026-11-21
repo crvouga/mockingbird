@@ -179,7 +179,7 @@ enforces this rule.
 - `@crvouga/mockingbird-openapi`, `@crvouga/mockingbird-openapi-metadata`: document parsing and `x-mockingbird` metadata.
 - `@crvouga/mockingbird-adapter-node` / `@crvouga/mockingbird-adapter-bun`: serve the result over HTTP.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 ### Accepted mutations and response loss
 

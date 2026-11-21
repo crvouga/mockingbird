@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-vercel-blob
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 A **wip** portable Vercel Blob emulator verified with the unmodified `@vercel/blob` **2.8.0** SDK.
 Blobs, multipart uploads, pending parts and synthetic download grants use SQLite Collections,

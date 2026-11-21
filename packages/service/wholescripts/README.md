@@ -1,13 +1,13 @@
 # @crvouga/mockingbird-service-wholescripts
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **Wholescripts** supplement fulfilment API for test suites: the product
 catalog, the private-label (MedPax) catalog, order submit, status polling and cancel. Orders
 move only when a test says so (an admin transition or an auto-advance path on the emulator clock).
 Wholescripts sends no webhooks, so the app sees each change on its next status poll.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/wholescripts/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/wholescripts/SUPPORT.md)
 - The vendor publishes no spec. The contract (`openapi.yaml`) is hand-authored from our
   consumers' zod schemas (backend and EMR `wholescripts.types.ts`) and the supplement scheduler's Python client.
 
@@ -149,4 +149,4 @@ catalog (a list it leaves out is empty). In a fleet, set `options: {"catalog": "
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (auto-advance ticks every 100 ms); the `serve` CLI target; port 8803. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

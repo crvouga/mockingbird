@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-otel
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of an **OTLP/HTTP collector** in front of the **OpenObserve (O2) search API**,
 over one store. Local and E2E runs stop exporting to production telemetry infrastructure, and a
@@ -8,7 +8,7 @@ test can assert on structured events: emit through the real OpenTelemetry SDK, t
 log back with the same SQL our ops feed and investigation agent send ("the reconcile cron
 emitted `initial_credit_reconcile_completed` with `granted=1`").
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/otel/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/otel/SUPPORT.md)
 - OTLP/HTTP follows opentelemetry-proto v1; the O2 routes follow OpenObserve's API, trimmed to
   what our clients call.
 
@@ -254,4 +254,4 @@ username (the instance id); in `none` mode there is none, so use the header or t
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8809. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

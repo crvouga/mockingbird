@@ -3,7 +3,7 @@
     "mockingbird-sqlite": "./dist/socket/cli.js"
   },
   "bugs": {
-    "url": "https://github.com/crvouga/mockingbird/issues"
+    "url": "https://github.com/crvouga-organization/mockingbird/issues"
   },
   "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
   "devDependencies": {
@@ -59,7 +59,7 @@
     "CHANGELOG.md",
     "DISCOVERY.md"
   ],
-  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite#readme",
+  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite#readme",
   "keywords": [
     "mockingbird",
     "sqlite",
@@ -99,7 +99,7 @@
         "README.md public test controls",
         "COMPATIBILITY.md compatibility and divergence evidence"
       ],
-      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "module": "./dist/index.js",
@@ -110,7 +110,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
     "directory": "packages/service/sqlite"
   },
   "scripts": {

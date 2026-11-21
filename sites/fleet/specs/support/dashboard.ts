@@ -189,6 +189,15 @@ export class Dashboard {
       .filter({ hasText: text })
   }
 
+  /** A row of a named list whose own name is exactly `name`, so other text in other rows (a key's
+   *  random prefix, say) can never match it too. */
+  namedRow(list: string, name: string): Locator {
+    return this.page
+      .getByRole("list", { name: list, exact: true })
+      .getByRole("listitem")
+      .filter({ has: this.page.locator(".title").getByText(name, { exact: true }) })
+  }
+
   /** An emulator's card on the fleet screen. */
   emulator(name: string): Locator {
     return this.page.getByRole("article", { name, exact: true })

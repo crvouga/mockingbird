@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-apigateway
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Transport scaffold for Amazon API Gateway REST API. ESM; Node 22+ or Bun 1.2+.
 

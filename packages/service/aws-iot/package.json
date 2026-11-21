@@ -34,10 +34,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
     "directory": "packages/service/aws-iot"
   },
-  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/aws-iot#readme",
+  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/aws-iot#readme",
   "keywords": [
     "mockingbird",
     "service",
@@ -89,7 +89,7 @@
         "GET /__admin/faults/presets",
         "GET /__admin/ui"
       ],
-      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "scripts": {

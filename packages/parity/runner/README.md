@@ -217,7 +217,7 @@ Exported types: `ParityOptions`, `ParityReport`, `RealTarget`, `MockTarget`, `Wa
 ## Related
 
 - [`@crvouga/mockingbird-openapi-metadata`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-metadata) — the `x-mockingbird-*` annotations your spec needs.
-- [`@crvouga/mockingbird-credentials`](https://github.com/crvouga/mockingbird/tree/main/packages/auth/credentials) — load sandbox credentials and build `redact`.
+- [`@crvouga/mockingbird-credentials`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/auth/credentials) — load sandbox credentials and build `redact`.
 - Lower level: [`@crvouga/mockingbird-commands`](https://www.npmjs.com/package/@crvouga/mockingbird-commands), [`@crvouga/mockingbird-canonicalize`](https://www.npmjs.com/package/@crvouga/mockingbird-canonicalize), [`@crvouga/mockingbird-model`](https://www.npmjs.com/package/@crvouga/mockingbird-model), [`@crvouga/mockingbird-openapi`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

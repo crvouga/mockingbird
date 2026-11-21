@@ -6,7 +6,7 @@ const config: TrustConfig = {
   id: "healthy-id",
   type: "github",
   permissions: ["createPackage"],
-  claims: { repository: "crvouga/mockingbird", workflow_ref: { file: "ci.yml" } },
+  claims: { repository: "crvouga-organization/mockingbird", workflow_ref: { file: "ci.yml" } },
 }
 
 describe("local seed trust reconciliation", () => {
@@ -33,7 +33,7 @@ describe("local seed trust reconciliation", () => {
           id: "cli-id",
           type: "github",
           file: "ci.yml",
-          repository: "crvouga/mockingbird",
+          repository: "crvouga-organization/mockingbird",
           permissions: ["createPackage", "createStagedPackage"],
         }),
       ),
@@ -45,10 +45,10 @@ describe("local seed trust reconciliation", () => {
       normalizedTrustConfig({
         type: "github",
         file: "ci.yml",
-        repository: "crvouga/mockingbird",
+        repository: "crvouga-organization/mockingbird",
       }).claims,
     ).toEqual({
-      repository: "crvouga/mockingbird",
+      repository: "crvouga-organization/mockingbird",
       workflow_ref: { file: "ci.yml" },
     })
   })
