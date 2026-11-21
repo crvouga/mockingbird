@@ -1,5 +1,6 @@
 /// <reference lib="dom" />
 
+import { mountBuildChrome, type SystemBuild } from "./system-build.js"
 import { paintIcon, SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
 import {
   readExcluded,
@@ -11,6 +12,7 @@ import {
 } from "./system-rotation.js"
 import { mountSystemScreen, SYSTEM_CSS, type SystemServices } from "./system-screen.js"
 
+export type { SystemBuild, SystemBuildState } from "./system-build.js"
 export { ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
 export type {
   SystemDevStatus,
@@ -38,6 +40,11 @@ export type SystemHarnessOptions = {
   services?: SystemServices
   /** Where the System screen's "How dev resources work" link points. */
   docsUrl?: string
+  /**
+   * A live preview's build status (such as `createLivePreview()` from `@crvouga/mockingbird-preview`):
+   * adds a status dot to the switcher, an update toast beside it, and a Preview card to System.
+   */
+  build?: SystemBuild
 }
 export type SystemHarness = {
   show(id: string): Promise<void>
@@ -144,6 +151,7 @@ export function mountSystemHarness(
           },
           services: options.services,
           docsUrl: options.docsUrl,
+          build: options.build,
         }),
     },
     ...surfaces,
@@ -236,16 +244,25 @@ export function mountSystemHarness(
   let tipFor: HTMLButtonElement | undefined
   function showTip(button: HTMLButtonElement) {
     tipFor = button
-    const destination = neighbour(button === previousButton ? -1 : 1).spec
-    const mark = doc.createElement("span")
-    mark.className = "msh-tip-icon"
-    mark.setAttribute("aria-hidden", "true")
-    paintIcon(
-      mark,
-      destination.icon ?? (destination.id === "system" ? SYSTEM_ICONS.system : undefined),
-      destination.label,
-    )
-    tip.replaceChildren(mark, button.dataset.tip ?? "")
+    if (buildChrome && button === buildChrome.dot) {
+      const status = buildChrome.tip()
+      const tone = doc.createElement("span")
+      tone.className = "msh-tip-tone"
+      tone.dataset.tone = status.tone
+      tone.setAttribute("aria-hidden", "true")
+      tip.replaceChildren(tone, status.text)
+    } else {
+      const destination = neighbour(button === previousButton ? -1 : 1).spec
+      const mark = doc.createElement("span")
+      mark.className = "msh-tip-icon"
+      mark.setAttribute("aria-hidden", "true")
+      paintIcon(
+        mark,
+        destination.icon ?? (destination.id === "system" ? SYSTEM_ICONS.system : undefined),
+        destination.label,
+      )
+      tip.replaceChildren(mark, button.dataset.tip ?? "")
+    }
     tip.hidden = false
     const box = shell.getBoundingClientRect()
     const target = button.getBoundingClientRect()
@@ -259,6 +276,21 @@ export function mountSystemHarness(
     tipFor = undefined
     tip.hidden = true
   }
+  const buildChrome = options.build
+    ? mountBuildChrome({
+        build: options.build,
+        shell,
+        chrome,
+        switcher,
+        open: () => void show("system"),
+        dragging: () => dragged,
+        changed() {
+          if (tipFor && tipFor === buildChrome?.dot) showTip(tipFor)
+        },
+      })
+    : undefined
+  const tipped: HTMLButtonElement[] = [previousButton, nextButton]
+  if (buildChrome) tipped.push(buildChrome.dot)
   for (const [button, step] of [
     [previousButton, -1],
     [nextButton, 1],
@@ -267,6 +299,8 @@ export function mountSystemHarness(
       if (dragged) return
       void show(neighbour(step).spec.id)
     }
+  }
+  for (const button of tipped) {
     button.onpointerenter = (event) => {
       if (event.pointerType === "mouse" && !drag) showTip(button)
     }
@@ -325,6 +359,7 @@ export function mountSystemHarness(
     y = Math.max(0, Math.min(y, maxY + MARGIN))
     switcher.style.left = `${x}px`
     switcher.style.top = `${y}px`
+    buildChrome?.place()
   }
   const settle = () => {
     const { minX, minY, maxX, maxY } = limits()
@@ -413,6 +448,7 @@ export function mountSystemHarness(
       destroyed = true
       controller.abort()
       resize.disconnect()
+      buildChrome?.dispose()
       win.removeEventListener("popstate", pop)
       for (const entry of entries) {
         try {

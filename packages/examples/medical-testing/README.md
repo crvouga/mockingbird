@@ -52,6 +52,28 @@ Abort cancels pending work on teardown, and late mount results are disposed. The
 system's topology and transports; the shell never imports application or emulator code.
 The current lab client has module-scoped ports and supports one system per document.
 
+### Live, self-updating previews
+
+An open preview always knows where CI is and updates itself; no reload is ever needed.
+
+- **CI state, live.** The System preview workflow tells the preview a build for a new commit has
+  started, deployed or failed, and `CI` tells it when the PR's checks are running, passed or
+  failed. Each event is signed with the run's GitHub OIDC token (`.github/actions/preview-event`),
+  so no secret is shared; the Worker's status object (`PreviewStatus` in `src/worker.ts`, a
+  Durable Object) checks it was issued to this repository and pushes it to every open tab over a
+  WebSocket at `/__preview/live`. If the socket drops, the tab polls `/__preview/status` and says
+  so.
+- **Updates without reloading.** `index.html` loads only `preview.js`, a small boot loader that is
+  never swapped. It runs the app version `version.json` names (`app-<hash>.js`, stamped with the
+  PR head commit by `scripts/stamp-version.ts` at deploy). When a newer version deploys, it
+  unmounts the running app and imports the new one into the same page: the switcher order, the
+  pill's position and each service's mode carry over; the demonstration world starts fresh.
+  Updates apply after a short countdown (**Update now** / **Not now**), or at once in a background
+  tab; turn auto-update off on the System screen.
+- **Freshness everywhere.** A dot on the switcher pill shows live / building / update ready /
+  failed / offline, and the System screen's **Preview** card shows the version this tab runs and
+  its age, the latest deploy, the build and checks with links to their runs, and the connection.
+
 ### The System screen
 
 **System** (press **←** from the app) is the preview's control panel:

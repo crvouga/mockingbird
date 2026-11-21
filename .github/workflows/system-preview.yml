@@ -7,6 +7,8 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  # Signs the CI events the preview shows live (.github/actions/preview-event); no secret involved.
+  id-token: write
 
 concurrency:
   group: system-preview-${{ github.event.pull_request.number }}
@@ -18,6 +20,17 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v5
+      # The open preview shows "building" for this commit within a second, before the build starts.
+      - name: Tell the preview a build started
+        if: github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: ./.github/actions/preview-event
+        with:
+          kind: build
+          state: building
+          version: ${{ github.event.pull_request.head.sha }}
+          pr: ${{ github.event.pull_request.number }}
+          workers-subdomain: ${{ vars.PREVIEW_WORKERS_SUBDOMAIN || 'crvouga' }}
       - uses: ./.github/actions/setup
       - name: Build static system
         if: github.event.action != 'closed'
@@ -39,6 +52,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_ACTION: ${{ github.event.action }}
+          PREVIEW_VERSION: ${{ github.event.pull_request.head.sha }}
+          PREVIEW_PR_URL: ${{ github.event.pull_request.html_url }}
           # Dev resources (docs/DEV_RESOURCES.md): the Worker's /__dev proxy attaches these to
           # same-origin requests the preview forwards to a real non-production resource, and only
           # values that match the allow-list in src/worker.ts. They never reach the browser.
@@ -66,6 +81,8 @@ jobs:
               *) cat "$RUNNER_TEMP/worker-delete.json"; exit 1 ;;
             esac
           else
+            # version.json names this commit; open tabs update to it without reloading.
+            PREVIEW_PR="$PR_NUMBER" bun scripts/stamp-version.ts
             bunx wrangler@4.50.0 deploy --name "mockingbird-lab-pr-$PR_NUMBER" > "$RUNNER_TEMP/worker-deploy.log" 2>&1 || {
               cat "$RUNNER_TEMP/worker-deploy.log"
               exit 1
@@ -86,6 +103,29 @@ jobs:
             echo "url=$PREVIEW_URL" >> "$GITHUB_OUTPUT"
             echo "[Open system preview]($PREVIEW_URL)" >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Tell the preview it deployed
+        if: steps.deploy.outputs.url != ''
+        continue-on-error: true
+        uses: ./.github/actions/preview-event
+        with:
+          kind: build
+          state: deployed
+          version: ${{ github.event.pull_request.head.sha }}
+          pr: ${{ github.event.pull_request.number }}
+          origin: ${{ steps.deploy.outputs.url }}
+
+      - name: Tell the preview the build failed
+        if: failure() && github.event.action != 'closed' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: ./.github/actions/preview-event
+        with:
+          kind: build
+          state: failed
+          version: ${{ github.event.pull_request.head.sha }}
+          pr: ${{ github.event.pull_request.number }}
+          workers-subdomain: ${{ vars.PREVIEW_WORKERS_SUBDOMAIN || 'crvouga' }}
+          message: The preview build or deploy failed
 
       - name: Put preview links at the top of the PR
         if: steps.deploy.outputs.url != ''

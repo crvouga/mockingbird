@@ -1,4 +1,5 @@
 /// <reference lib="dom" />
+import { BUILD_CSS, mountPreviewCard, type SystemBuild } from "./system-build.js"
 import { paintIcon, type SystemIcon } from "./system-icons.js"
 import { summarizeServices } from "./system-rotation.js"
 
@@ -49,6 +50,8 @@ export type SystemScreenContext = {
   setOrder(ids: readonly string[]): void
   services?: SystemServices | undefined
   docsUrl?: string | undefined
+  /** The live preview's build status; its Preview card sits above the apps. */
+  build?: SystemBuild | undefined
 }
 
 const ICONS = {
@@ -131,6 +134,10 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     header.append(docs)
   }
   page.append(header)
+
+  // ---- preview: this tab's build, the latest deploy and how to update to it
+  const preview = context.build ? mountPreviewCard(doc, context.build, id) : undefined
+  if (preview) page.append(preview.element)
 
   // ---- apps
   const apps = el("section", "msh-section")
@@ -352,6 +359,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     panel.append(home)
     return () => {
       disposed = true
+      preview?.dispose()
       home.remove()
     }
   }
@@ -631,6 +639,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   void load()
   return () => {
     disposed = true
+    preview?.dispose()
     home.remove()
   }
 }
@@ -782,6 +791,7 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 .msh-empty-title{font-weight:600}
 .msh-empty-body{margin-top:4px!important;color:var(--msh-muted);font-size:13px;max-width:60ch}
 
+${BUILD_CSS}
 @keyframes msh-spin{to{transform:rotate(360deg)}}
 @keyframes msh-pulse{50%{opacity:.45}}
 @media (max-width:860px){

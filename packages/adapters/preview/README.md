@@ -96,6 +96,20 @@ The application must honor the boot/request AbortSignals to terminate work it st
 - `createDevResources({ proxyUrl?, storage?, fetch? })` is the browser side: `upstream(id)` for an
   emulator's `createRuntime({ upstream })` and `controls(services)` for the System screen.
   `DEV_MESSAGES` holds its status sentences and `DEV_STORAGE_KEYS` its storage keys.
+- `createPreviewStatusObject({ verify, pr?, upgrade? })`, from the `/preview-status` export (also
+  re-exported from the package root), returns a Durable Object class holding a preview's CI status
+  snapshot: `GET /status`, `GET /live` (hibernatable WebSocket: the snapshot on connect and on every
+  change, `ping` answered with `pong`) and `POST /events`. `previewStatusRoutes({ basePath?,
+  binding? })` forwards `/__preview/status|live|events` from the Worker to it (same-origin only for
+  status and live). `githubOidcVerifier({ repository, audience?, issuer?, fetch?, now? })` verifies
+  the GitHub Actions OIDC token CI posts events with, and `parsePreviewEvent(value)` validates an
+  event body. See [Live previews](#live-previews).
+- `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
+  browser side: it mounts `current`, follows the status object, and swaps in each newly deployed
+  build without reloading the page. Its result is structurally the UI package's `SystemBuild`
+  (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
+  `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
+  `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
 
 ## Cookies, redirects and trust
 
@@ -333,6 +347,125 @@ emulator's mode from `GET /__admin/upstream`, and its `unavailable` reason follo
 the spec's `unsupported`, no proxy configured, proxy unreachable or refusing the page
 (`cross_origin`), provider secrets missing, the provider's `blocked` reason. Chosen modes persist per viewer; because emulator state resets on reload, the
 first `list()` re-applies stored Dev choices that are still available.
+
+## Live previews
+
+A PR preview that knows what CI is doing to it and moves itself to every new deploy, with no hard
+refresh: the open tab shows when a newer commit is building, deployed or failed, the PR's checks,
+and how fresh it is, then swaps in the new build in place.
+
+```mermaid
+flowchart LR
+  CI["GitHub Actions"] -- "POST /__preview/events<br/>Bearer: GitHub OIDC JWT (aud = preview origin)" --> W["Worker"]
+  W --> DO["Durable Object PREVIEW_STATUS<br/>idFromName('status')<br/>snapshot in state.storage"]
+  DO -- "WebSocket /__preview/live<br/>snapshot on connect, then every change" --> B["Browser boot loader"]
+  B -. "GET /__preview/status every 15 s while the socket is down" .-> W
+  B -. "GET /version.json every 60 s (static, the deployed build)" .-> W
+  B -- "newer deployed version: dispose the running app,<br/>import the new hashed entry, mount it. Never location.reload()" --> B
+```
+
+Events are `{ kind: "build", state: "building" | "deployed" | "failed", version, at, runUrl?,
+message? }` and `{ kind: "checks", state: "running" | "passed" | "failed", version, at, runUrl?,
+summary? }` (`version` is the commit SHA, `at` an ISO time). An event older than the stored one of
+the same kind and version is ignored, so retried or reordered CI steps cannot move the status back.
+
+### Worker wiring
+
+```ts
+import {
+  createPreviewStatusObject,
+  githubOidcVerifier,
+  previewStatusRoutes,
+} from "@crvouga/mockingbird-preview/preview-status"
+
+export const PreviewStatus = createPreviewStatusObject({
+  verify: githubOidcVerifier({ repository: "owner/name" }), // aud defaults to the request origin
+  pr: (env) =>
+    typeof env.PR_NUMBER === "string"
+      ? { number: Number(env.PR_NUMBER), url: `https://github.com/owner/name/pull/${env.PR_NUMBER}` }
+      : undefined,
+})
+
+const status = previewStatusRoutes() // "/__preview", binding "PREVIEW_STATUS"
+
+export default {
+  fetch: (request: Request, env: Record<string, unknown> & { ASSETS: Fetcher }) =>
+    status(request, env) ?? env.ASSETS.fetch(request),
+}
+```
+
+```jsonc
+// wrangler.jsonc
+"durable_objects": { "bindings": [{ "name": "PREVIEW_STATUS", "class_name": "PreviewStatus" }] },
+"migrations": [{ "tag": "v1", "new_sqlite_classes": ["PreviewStatus"] }]
+```
+
+The verifier accepts only RS256 tokens from `https://token.actions.githubusercontent.com` whose
+`aud` is the preview's origin and whose `repository` claim matches, with 60 s of clock skew. Keys
+come from the issuer's JWKS, cached ten minutes and refetched (at most every 30 s) when a token
+names an unknown key. Failures answer 401 with a reason and never echo the token. There is no
+shared secret to store.
+
+### CI event step
+
+Give the job `permissions: { id-token: write }`, request a token for the preview's origin and post
+the event. Keep it best-effort: a status update must never fail CI.
+
+```yaml
+- name: Report build to the preview
+  if: always()
+  continue-on-error: true
+  env:
+    ORIGIN: https://my-app-pr-12.example.workers.dev
+    STATE: ${{ job.status == 'success' && 'deployed' || 'failed' }}
+  run: |
+    token=$(curl -sf -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+      "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$ORIGIN" | jq -r .value)
+    jq -n --arg state "$STATE" --arg version "$GITHUB_SHA" \
+      --arg at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg runUrl "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" \
+      '{kind: "build", state: $state, version: $version, at: $at, runUrl: $runUrl}' |
+      curl -sf -X POST "$ORIGIN/__preview/events" -H "Authorization: Bearer $token" \
+        -H "content-type: application/json" --data @- || true
+```
+
+### Browser boot loader
+
+The build emits hashed entries plus a static `/version.json` (`{ version, builtAt, entry }`); the
+page loads a small, stable boot script that never changes name:
+
+```ts
+import { createLivePreview, type PreviewVersion } from "@crvouga/mockingbird-preview"
+
+const current = (await (await fetch("/version.json", { cache: "no-store" })).json()) as PreviewVersion
+const host = document.getElementById("app") as HTMLElement
+
+const live = createLivePreview({
+  current,
+  storage: localStorage,
+  // Import the version's hashed entry and mount it; return its disposer.
+  load: async (version) => {
+    const app = (await import(version.entry)) as {
+      start(host: HTMLElement, options: { build: typeof live }): Promise<() => void>
+    }
+    return app.start(host, { build: live })
+  },
+})
+await live.start()
+```
+
+`start()` mounts `current`, then connects: WebSocket with backoff (1 s to 30 s, jittered) and a
+`ping` every 25 s; `/status` polled every 15 s while the socket is down (`connection: "polling"`);
+`/version.json` polled every 60 s regardless (`"offline"` when both fail); an immediate check when
+the tab becomes visible. An update is offered only once `/version.json` names the new build, so its
+assets are live. With auto-update on (the default, persisted per viewer) it applies after
+`countdownMs` (10 s), or at once while the tab is hidden; `postpone()` skips the countdown until
+the next new version. `applyUpdate()` disposes the running app and loads the new one; if that
+fails it remounts the previous build and reports `update.error` (no automatic retry of that
+version). A lazy chunk that fails to load (`Failed to fetch dynamically imported module`,
+`ChunkLoadError`, …) means the tab's build was replaced: the client checks `/version.json` and
+applies the new build at once. If the first mount fails, `start()` still connects and then
+rejects, so a fixed build replaces the broken one as soon as it deploys.
 
 ## Validation
 

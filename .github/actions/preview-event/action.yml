@@ -1,0 +1,67 @@
+name: Preview event
+description: Tell a PR's live preview about CI (a build or the checks), signed with the run's GitHub OIDC token.
+
+# The preview Worker's /__preview/events accepts an event only with a GitHub Actions OIDC token
+# whose audience is the preview's origin and whose repository is this one, so no secret is shared.
+# The calling job needs `permissions: id-token: write`. Best effort: a fork (no OIDC token), a first
+# deploy (no Worker yet) or a network error only prints a notice; CI never fails because of it.
+
+inputs:
+  kind:
+    description: "`build` or `checks`."
+    required: true
+  state:
+    description: "build: building | deployed | failed; checks: running | passed | failed."
+    required: true
+  version:
+    description: The commit SHA the event is about (the PR head).
+    required: true
+  pr:
+    description: The pull request number.
+    required: true
+  origin:
+    description: The preview's origin. Defaults to https://mockingbird-lab-pr-<pr>.<workers-subdomain>.workers.dev.
+    default: ""
+  workers-subdomain:
+    description: The Cloudflare account's workers.dev subdomain.
+    default: crvouga
+  summary:
+    description: "checks: a short summary, e.g. `5 of 6 jobs passed`."
+    default: ""
+  message:
+    description: "build: a short failure reason."
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        KIND: ${{ inputs.kind }}
+        STATE: ${{ inputs.state }}
+        VERSION: ${{ inputs.version }}
+        ORIGIN: ${{ inputs.origin || format('https://mockingbird-lab-pr-{0}.{1}.workers.dev', inputs.pr, inputs.workers-subdomain) }}
+        SUMMARY: ${{ inputs.summary }}
+        MESSAGE: ${{ inputs.message }}
+        RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      run: |
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::notice::No OIDC token for this run (a fork, or id-token: write is missing); the preview is not told."
+          exit 0
+        fi
+        audience=$(jq -rn --arg a "$ORIGIN" '$a | @uri')
+        token=$(curl -sS --max-time 10 -H "Authorization: bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=$audience" | jq -r '.value // empty') || token=""
+        if [ -z "$token" ]; then
+          echo "::notice::Could not get an OIDC token; the preview is not told."
+          exit 0
+        fi
+        echo "::add-mask::$token"
+        body=$(jq -n --arg kind "$KIND" --arg state "$STATE" --arg version "$VERSION" \
+          --arg runUrl "$RUN_URL" --arg summary "$SUMMARY" --arg message "$MESSAGE" '
+          {kind: $kind, state: $state, version: $version, at: (now | todate), runUrl: $runUrl}
+          + (if $summary != "" then {summary: $summary} else {} end)
+          + (if $message != "" then {message: $message} else {} end)')
+        status=$(curl -sS --max-time 10 -o /dev/null -w '%{http_code}' -X POST "$ORIGIN/__preview/events" \
+          -H "authorization: Bearer $token" -H "content-type: application/json" --data "$body") || status="error"
+        echo "Preview $ORIGIN told $KIND $STATE for ${VERSION:0:7}: HTTP $status"

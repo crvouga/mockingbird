@@ -3,6 +3,8 @@ export {
   mountSystemHarness,
   ORDER_KEY,
   ROTATION_KEY,
+  type SystemBuild,
+  type SystemBuildState,
   type SystemDevStatus,
   type SystemHarness,
   type SystemHarnessOptions,

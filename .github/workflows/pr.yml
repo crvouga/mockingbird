@@ -40,6 +40,9 @@ jobs:
     name: Changes
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
     outputs:
       shards: ${{ steps.plan.outputs.shards }}
       smoke: ${{ steps.plan.outputs.smoke }}
@@ -54,6 +57,18 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.4.0"
+
+      # An open preview of this PR shows its checks running, live (.github/actions/preview-event).
+      - name: Tell the preview checks started
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: ./.github/actions/preview-event
+        with:
+          kind: checks
+          state: running
+          version: ${{ github.event.pull_request.head.sha }}
+          pr: ${{ github.event.pull_request.number }}
+          workers-subdomain: ${{ vars.PREVIEW_WORKERS_SUBDOMAIN || 'crvouga' }}
 
       - id: plan
         run: bun scripts/ci-plan.ts changes ${{ github.event_name == 'pull_request' && '--base HEAD^1' || '--all' }}
@@ -261,8 +276,12 @@ jobs:
     needs: [changes, static, shard, smoke, fleet-container, npm-names]
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      id-token: write
     steps:
       - name: Every job this change needs passed
+        id: gate
         env:
           NEEDS: ${{ toJSON(needs) }}
         run: |
@@ -278,3 +297,27 @@ jobs:
             and ran_or_not_needed("shard"; "shards")
             and ran_or_not_needed("smoke"; "smoke")
           ' > /dev/null
+
+      # The action lives in the repo; fetch only it.
+      - if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: .github/actions
+      - name: Summarize the checks for the preview
+        id: summary
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          echo "text=$(echo "$NEEDS" | jq -r '[.[] | .result] | "\(map(select(. == "success" or . == "skipped")) | length) of \(length) jobs passed"')" >> "$GITHUB_OUTPUT"
+      - name: Tell the preview how the checks ended
+        if: always() && github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        continue-on-error: true
+        uses: ./.github/actions/preview-event
+        with:
+          kind: checks
+          state: ${{ steps.gate.outcome == 'success' && 'passed' || 'failed' }}
+          version: ${{ github.event.pull_request.head.sha }}
+          pr: ${{ github.event.pull_request.number }}
+          workers-subdomain: ${{ vars.PREVIEW_WORKERS_SUBDOMAIN || 'crvouga' }}
+          summary: ${{ steps.summary.outputs.text }}

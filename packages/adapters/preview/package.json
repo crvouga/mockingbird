@@ -23,6 +23,10 @@
     "./dev-proxy": {
       "types": "./dist/dev-proxy.d.ts",
       "default": "./dist/dev-proxy.js"
+    },
+    "./preview-status": {
+      "types": "./dist/preview-status.d.ts",
+      "default": "./dist/preview-status.js"
     }
   },
   "publishConfig": {
@@ -39,7 +43,8 @@
     "layer": "adapter",
     "entries": {
       "node": "node",
-      "dev-proxy": "portable"
+      "dev-proxy": "portable",
+      "preview-status": "portable"
     }
   },
   "scripts": {
