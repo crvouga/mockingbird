@@ -5,6 +5,7 @@ import {
   normalizeBootControls,
   normalizeIdBase,
   resolveAdminPrefix,
+  upstreamRequest,
 } from "@crvouga/mockingbird-service"
 import { checkSettings } from "./boot-settings.js"
 import type { MockingbirdConfig } from "./cli.js"
@@ -103,6 +104,22 @@ export async function preflightFleet(config: MockingbirdConfig, options: FleetOp
         if (protocol !== "http" || !("create" in target))
           throw new Error("settings: only HTTP services take boot settings")
         checkSettings(target, entry.settings, "settings")
+      }
+      if (entry.upstream) {
+        if (!("create" in target) || target.supportsUpstream !== true)
+          throw new Error("upstream forwarding is not supported by target")
+        if (!options.upstreams?.[name]?.fetch)
+          throw new Error("upstream requires a host-injected fetch")
+        const targetUrl = new URL(entry.upstream.baseUrl)
+        if (
+          !["http:", "https:"].includes(targetUrl.protocol) ||
+          targetUrl.username ||
+          targetUrl.password ||
+          targetUrl.search ||
+          targetUrl.hash
+        )
+          throw new Error("invalid upstream baseUrl")
+        upstreamRequest(new Request("http://fixture.invalid/"), entry.upstream.baseUrl)
       }
       const port = entry.port ?? target.defaultPort
       if (port !== 0) {

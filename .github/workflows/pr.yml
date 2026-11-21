@@ -141,6 +141,27 @@ jobs:
 
       - uses: ./.github/actions/setup
 
+      # Browser tests launch Chromium directly. Install it before any of them run, rather than
+      # relying on whichever test happens to install it first. The browser download is cached per
+      # Playwright version; like node_modules, it is saved only on main.
+      - id: playwright
+        shell: bash
+        run: echo "version=$(grep -o '"playwright-core@[0-9.]*"' bun.lock | head -1 | tr -d '"')" >> "$GITHUB_OUTPUT"
+      - id: chromium
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium
+      # From a package that depends on it, so bunx runs the pinned Playwright, not the latest.
+      - name: Install Chromium for browser tests
+        working-directory: packages/adapters/browser
+        run: bunx playwright install --with-deps chromium
+      - if: steps.chromium.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.chromium.outputs.cache-primary-key }}
+
       - name: Build, typecheck, test, pack, portability (shard ${{ matrix.shard }}/${{ strategy.job-total }})
         timeout-minutes: 20
         env:

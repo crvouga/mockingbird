@@ -9,6 +9,7 @@ import {
   outboxAdminRoutes,
   type RequestLog,
   type ServiceRuntime,
+  type UpstreamOptions,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { document } from "./generated/openapi.js"
@@ -99,6 +100,7 @@ export const SLACK_PRESETS: Record<string, FaultPreset> = {
 }
 
 export type SlackRuntimeOptions = Pick<SlackAPIOptions, "fixtures" | "baseUrl" | "tokens"> & {
+  upstream?: UpstreamOptions
   sqlite?: SqliteClient
   clock?: Clock
   seed?: number | string
@@ -358,6 +360,8 @@ const adminRoutes = (runtime: ServiceRuntime<SlackAPI>): AdminRoutes => ({
 export const createRuntime = (options: SlackRuntimeOptions = {}): SlackRuntime =>
   createServiceRuntime<SlackAPI>({
     name: SLACK_NAMESPACE,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    onForwardResponse: (api, request, response) => api.recordForwarded(request, response),
     document,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     ...(options.clock ? { clock: options.clock } : {}),

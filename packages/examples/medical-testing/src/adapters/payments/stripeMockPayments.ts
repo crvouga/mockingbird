@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import { createRuntime, type StripeWebhookEvent } from "@crvouga/mockingbird-service-stripe"
 import type { HostedFlowStep } from "../../app/ports/hostedFlow.js"
 import type {
@@ -57,11 +58,13 @@ const verifyWebhookSignature = async (
 export const createStripeMockPayments = (params: {
   dispatch: (request: Request) => Promise<Response>
   webhookUrl: string
+  upstream?: UpstreamOptions | undefined
 }): {
   client: PaymentsClient
   admin: { id: "stripe"; label: "Stripe"; fetch: (request: Request) => Promise<Response> }
 } => {
   const stripe = createRuntime({
+    ...(params.upstream ? { upstream: params.upstream } : {}),
     accounts: [{ id: ACCOUNT_ID, keys: [SECRET_KEY] }],
     onWebhook: (event: StripeWebhookEvent) => {
       if (!FORWARDED_EVENTS.includes(event.type)) return

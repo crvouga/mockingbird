@@ -47,7 +47,18 @@ describe("WearablesAPI", () => {
         log: () => {},
       })
       expect(report.walks).toBeGreaterThan(0)
-      expect(Object.keys(report.exercised).sort()).toEqual([...supportedOperationIds].sort())
+      // Consent helpers are emulator-only and parity-disabled; OAuth and Chromium fixtures
+      // exercise their state transitions without claiming live vendor response equivalence.
+      const browser = [
+        "AuthorizeProvider",
+        "PairUser",
+        "PairProvider",
+        "ConsentPage",
+        "DecideConsent",
+      ]
+      expect(Object.keys(report.exercised).sort()).toEqual(
+        supportedOperationIds.filter((id) => !browser.includes(id)).sort(),
+      )
     },
     { timeout: 120_000 },
   )

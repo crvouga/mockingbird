@@ -912,6 +912,24 @@ An emulator that is silent about its gaps is how a green suite starts lying. Spe
   - Operations outside the vendored OpenAPI subset: they return 404 and are counted as
     `unmatched` in `/__admin/metrics`.
 
+## Forwarding to the Junction sandbox
+
+`createRuntime({ upstream: { baseUrl, fetch, rewriteAuth?, mode? } })` opts into the shared
+forwarding controls. Mode starts as `emulated`; `PUT /__admin/upstream {"mode":"forward"}` (per
+namespace) sends API calls to `baseUrl` + path + query through `fetch`. Only the `/v2/` and
+`/v3/` API paths forward; anything else answers 501 in forward mode, and `/__admin/*` always
+stays local. Without `upstream`, `PUT /__admin/upstream {"mode":"forward"}` answers 409.
+Webhooks the real sandbox sends are not relayed back to the emulator.
+
+Authentication rewriting happens on a separate outgoing Request and is never kept in the journal
+or snapshots. Redirects come back unfollowed; the transport must honor the Request's abort
+signal, and a transport failure behaves like a dropped connection. Forwarded responses are
+relayed as-is and **not mirrored into emulator state** (there is no forwarded-response journal
+hook for this service), so switching back to emulated resumes the emulator's own records. Tested
+with injected transports only; this is not live-vendor parity evidence. In a browser preview,
+`createSandbox(...).upstream("junction")` from `@crvouga/mockingbird-preview` supplies the transport
+and the sandbox proxy attaches the real credentials server side.
+
 ## API
 
 Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):

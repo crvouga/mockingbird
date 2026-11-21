@@ -204,9 +204,18 @@ changing the mode. Invalid modes or base URLs return 400. Base URLs cannot conta
 queries or fragments. `x-mockingbird-upstream` with `emulated` or `forward` overrides just one request,
 requires the admin key when configured, and rejects any other value.
 
-FCM HTTP v1 send is the first exposed forwarding surface. Other FCM vendor routes return 501.
-Other messaging packages and declarative fleet upstream settings are not implemented.
+FCM HTTP v1 send, Resend, Twilio, Customer.io and Slack expose forwarding options. Other FCM
+vendor routes return 501. The four other messaging runtimes forward vendor operations to the
+explicit base URL and capture supported send receipts in their existing outboxes.
+Node fleet entries accept `upstream: {baseUrl, mode?}` with a separate host-only `upstreams`
+transport map; missing transports and unsupported targets fail preflight. The listener-free fleet
+passes the same configuration to its factory. Fleet controllers expose
+`GET|PUT /__admin/fleet/services/:name/upstream` (administrator-only on Node).
 Faults/latency still apply, admin requests stay local, and upstream errors drop the connection.
 The journal stores status and an `upstream` marker without rewritten credentials. Named
 snapshots preserve mode/base URL, and reset restores boot mode. FCM real sends appear in its
 existing outbox with `upstream` and `sentForReal`; they are never delivered to fixture devices.
+The other messaging outboxes use the same markers, skip failed sends and never invoke local
+delivery hooks. Redirects are returned manually; no unguarded redirected request is sent.
+Twilio removes its local product prefix before forwarding. See each package README for the
+covered send operations and limitations.

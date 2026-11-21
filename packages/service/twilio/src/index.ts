@@ -249,6 +249,41 @@ export class TwilioAPI implements FetchAPI {
     }
   }
 
+  async recordForwarded(request: Request, response: Response): Promise<void> {
+    const path = new URL(request.url).pathname
+    const sms = /\/(?:2010-04-01)\/Accounts\/[^/]+\/Messages\.json$/.test(path)
+    const verify = /\/v2\/Services\/[^/]+\/Verifications$/.test(path)
+    if (request.method !== "POST" || (!sms && !verify)) return
+    const fields = new URLSearchParams(await request.text())
+    const result: unknown = await response.json().catch(() => undefined)
+    if (
+      !result ||
+      typeof result !== "object" ||
+      !("sid" in result) ||
+      typeof result.sid !== "string"
+    )
+      return
+    const to = fields.get("To") ?? ""
+    this.state.outbox.record({
+      id: `upstream:${result.sid}`,
+      upstream: true,
+      sentForReal: true,
+      kind: verify ? "verify" : "sms",
+      sid: result.sid,
+      to,
+      from: fields.get("From"),
+      messagingServiceSid: fields.get("MessagingServiceSid"),
+      body: fields.get("Body") ?? "",
+      channel: verify
+        ? (fields.get("Channel") ?? "unknown")
+        : to.startsWith("whatsapp:")
+          ? "whatsapp"
+          : "sms",
+      ...(fields.getAll("MediaUrl").length ? { mediaUrls: fields.getAll("MediaUrl") } : {}),
+      createdAt: new Date(this.now()).toISOString(),
+    })
+  }
+
   fetch(request: Request): Promise<Response> {
     const result = this.tail.then(
       () => this.handleFetch(request),

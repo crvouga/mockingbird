@@ -24,9 +24,11 @@ export const fromFetchHandler = (handler: FetchHandler): FetchAPI => {
 export * from "./durability.js"
 export * from "./durability-browser.js"
 export * from "./durability-buffered.js"
+export * from "./fleet-archive.js"
 export { ForkMap } from "./fork-map.js"
 export type { MountedAPI } from "./mount.js"
 export { forwardMountContext, mount, requestBaseUrl } from "./mount.js"
+export { sha256Hex } from "./sha256.js"
 export type {
   Checkpoint,
   CheckpointId,

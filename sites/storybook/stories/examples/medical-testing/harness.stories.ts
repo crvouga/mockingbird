@@ -4,7 +4,10 @@ import { mountSystemHarness } from "../../../../../packages/ui/src/system-harnes
 
 export default {
   title: "Examples/System harness",
-  parameters: { layout: "fullscreen", sources: ["packages/ui/src/system-harness.ts"] },
+  parameters: {
+    layout: "fullscreen",
+    sources: ["packages/ui/src/system-harness.ts", "packages/ui/src/system-screen.ts"],
+  },
 } satisfies Meta
 
 const DOCK_KEY = "mockingbird.system-switcher.dock"
@@ -12,6 +15,7 @@ let stop: (() => void) | undefined
 const render = () => {
   stop?.()
   localStorage.removeItem(DOCK_KEY)
+  localStorage.removeItem("mockingbird.system-switcher.rotation")
   const host = document.createElement("div")
   host.style.height = "100vh"
   let attempts = 0
@@ -106,7 +110,9 @@ export const Switching: StoryObj = {
 export const Loading: StoryObj = {
   render,
   play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: "Loading" }))
+    await userEvent.click(
+      await within(canvasElement).findByRole("button", { name: "Open Loading" }),
+    )
     await expect(await within(canvasElement).findByText("Loading…")).toBeVisible()
   },
 }

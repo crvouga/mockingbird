@@ -1,18 +1,25 @@
 {
   "name": "@crvouga/mockingbird-ui",
   "version": "0.0.0-development",
-  "private": true,
-  "description": "The cross-browser CSS reset every Mockingbird HTML surface starts from.",
+  "description": "Reusable browser system preview shell and CSS reset.",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./reset.css": "./src/reset.css"
+    "./reset.css": {
+      "types": "./dist/reset-css.d.ts",
+      "default": "./src/reset.css"
+    },
+    "./system": {
+      "types": "./dist/system-harness.d.ts",
+      "default": "./dist/system-harness.js"
+    }
   },
   "mockingbird": {
     "runtime": "portable",
@@ -22,6 +29,22 @@
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "bun test"
-  }
+    "test": "bun test",
+    "pack:check": "bun ../../scripts/pack-check.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "src/reset.css"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "directory": "packages/ui"
+  },
+  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/ui#readme"
 }

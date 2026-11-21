@@ -119,7 +119,8 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-runtime": "workspace:*",
-    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-ui": "workspace:*"
   },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
@@ -127,7 +128,6 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-ui": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
     "fast-check": "4.5.3",

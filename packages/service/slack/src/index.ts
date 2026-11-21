@@ -295,6 +295,64 @@ export class SlackAPI implements FetchAPI {
     }
   }
 
+  async recordForwarded(request: Request, response: Response): Promise<void> {
+    const path = new URL(request.url).pathname
+    const webhook = path.startsWith("/services/")
+    const api = ["/api/chat.postMessage", "/api/chat.postEphemeral"].includes(path)
+    if (request.method !== "POST" || (!webhook && !api)) return
+    let payload: unknown
+    if (request.headers.get("content-type")?.includes("application/json"))
+      payload = await request.json().catch(() => undefined)
+    else {
+      const fields = new URLSearchParams(await request.text())
+      try {
+        payload = fields.has("payload")
+          ? JSON.parse(fields.get("payload") ?? "null")
+          : Object.fromEntries(fields)
+      } catch {
+        return
+      }
+    }
+    if (!isRecord(payload)) return
+    let ts = ""
+    let channel = typeof payload.channel === "string" ? payload.channel : ""
+    if (webhook) {
+      if ((await response.text()).trim() !== "ok") return
+    } else {
+      const result: unknown = await response.json().catch(() => undefined)
+      if (!isRecord(result) || result.ok !== true) return
+      ts =
+        typeof result.ts === "string"
+          ? result.ts
+          : typeof result.message_ts === "string"
+            ? result.message_ts
+            : ""
+      if (typeof result.channel === "string") channel = result.channel
+    }
+    this.state.outbox.record({
+      id: `upstream:${channel}:${ts || crypto.randomUUID()}`,
+      upstream: true,
+      sentForReal: true,
+      to: [webhook ? path : channel],
+      createdAt: this.iso(),
+      source: webhook ? "webhook" : "api",
+      method: webhook ? "incoming-webhook" : path.slice("/api/".length),
+      webhook: webhook ? path : null,
+      channel,
+      text: typeof payload.text === "string" ? payload.text : null,
+      blocks: Array.isArray(payload.blocks) ? payload.blocks : null,
+      attachments: Array.isArray(payload.attachments) ? payload.attachments : null,
+      thread_ts: typeof payload.thread_ts === "string" ? payload.thread_ts : null,
+      ts,
+      user: typeof payload.user === "string" ? payload.user : null,
+      ephemeral: path.endsWith("chat.postEphemeral"),
+      edited: null,
+      reactions: [],
+      unfurl_links: typeof payload.unfurl_links === "boolean" ? payload.unfurl_links : null,
+      workspace: "",
+    })
+  }
+
   fetch(request: Request): Promise<Response> {
     const result = this.tail.then(
       () => this.handleFetch(request),

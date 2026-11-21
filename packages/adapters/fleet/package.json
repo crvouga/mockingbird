@@ -60,7 +60,8 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-notifications": "workspace:*",
-    "yaml": "2.9.0"
+    "yaml": "2.9.0",
+    "@crvouga/mockingbird-runtime": "workspace:*"
   },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
@@ -69,6 +70,9 @@
     "@crvouga/mockingbird-service-postgres": "workspace:*",
     "@crvouga/mockingbird-service-redis": "workspace:*",
     "@crvouga/mockingbird-service-cognito": "workspace:*",
-    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
+    "@crvouga/mockingbird-service-oauth": "workspace:*"
   }
 }

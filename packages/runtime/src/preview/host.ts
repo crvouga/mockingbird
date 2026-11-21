@@ -1,3 +1,4 @@
+import { createPreviewHost as createHost } from "@crvouga/mockingbird-preview"
 import { attachPreviewHost, type PreviewPort } from "./bridge.js"
 import type { FetchHandler } from "./types.js"
 
@@ -8,53 +9,50 @@ export type PreviewState = {
   error?: string
 }
 
-/** Shared application lifetime, independent of any single page connection. */
+/** Preserve the original generation numbering and promise-shaped readiness on the shared host. */
 export function createPreviewHost(
   create: (generation: number) => Promise<PreviewApplication> | PreviewApplication,
 ) {
-  let state: PreviewState = { generation: 0, status: "starting" }
-  let application: PreviewApplication | undefined
-  let closed = false
-  const clients = new Set<ReturnType<typeof attachPreviewHost>>()
-  let work: Promise<void> = Promise.resolve()
-  const reset = () => {
-    if (closed) return Promise.reject(new Error("Preview host disposed"))
-    work = work
-      .catch(() => undefined)
-      .then(async () => {
-        if (closed) return
-        state = { generation: state.generation + 1, status: "starting" }
-        try {
-          const previous = application
-          application = undefined
-          await previous?.dispose()
-          const next = await create(state.generation)
-          if (closed) {
-            await next.dispose()
-            return
-          }
-          application = next
-          state = { generation: state.generation, status: "ready" }
-        } catch (error) {
-          state = { generation: state.generation, status: "error", error: String(error) }
-          throw error
-        }
-      })
-    return work
-  }
-  const ready = reset()
-  const fetch: FetchHandler = async (request) => {
+  let failure: unknown
+  const host = createHost({
+    artifact: "runtime-preview-compatibility",
+    boot: async ({ generation }) => {
+      failure = undefined
+      try {
+        return await create(generation + 1)
+      } catch (error) {
+        failure = error
+        throw error
+      }
+    },
+  })
+  const checked = async (work: Promise<void>) => {
     await work
-    if (closed || !application) throw new Error("Preview host unavailable")
-    return application.fetch(request)
+    if (host.status().state === "failed") throw failure ?? new Error("Preview host unavailable")
+  }
+  const ready = checked(host.ready())
+  const clients = new Set<ReturnType<typeof attachPreviewHost>>()
+  const fetch: FetchHandler = async (request) => {
+    await checked(host.ready())
+    if (host.status().state === "disposed") throw new Error("Preview host unavailable")
+    return host.fetch(request)
   }
   return {
     ready,
     fetch,
-    reset,
-    state: () => ({ ...state }),
+    reset: () => checked(host.reset()),
+    state(): PreviewState {
+      const current = host.status()
+      return {
+        generation: current.generation + 1,
+        status: current.state === "failed" ? "error" : current.state,
+        ...(current.state === "failed"
+          ? { error: String(failure ?? "Preview host unavailable") }
+          : {}),
+      }
+    },
     connect(port: PreviewPort) {
-      if (closed) throw new Error("Preview host disposed")
+      if (host.status().state === "disposed") throw new Error("Preview host disposed")
       const client = attachPreviewHost(port, fetch, { onDisconnect: () => clients.delete(client) })
       clients.add(client)
       return () => {
@@ -63,14 +61,9 @@ export function createPreviewHost(
       }
     },
     async dispose() {
-      if (closed) return
-      closed = true
       for (const client of clients) client.dispose()
       clients.clear()
-      await work.catch(() => undefined)
-      await application?.dispose()
-      application = undefined
-      state = { generation: state.generation, status: "disposed" }
+      await host.dispose()
     },
   }
 }

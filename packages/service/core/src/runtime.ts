@@ -134,6 +134,7 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   onForwardResponse?: (instance: T, request: Request, response: Response) => Promise<void>
   /** Reject unsupported forwarding surfaces before any network request. */
   canForward?: (request: Request) => boolean
+  upstreamRequest?: (request: Request, baseUrl: string) => Request
   /** Service name, e.g. `"junction"`. Also the default namespace's storage key. */
   name: string
   /** Build the instance backing one namespace. Called once per namespace, on first use. */
@@ -1563,7 +1564,7 @@ export const createRuntime = <T extends ServiceInstance>(
         forwarded = true
         let response: Response
         try {
-          let outgoing = upstreamRequest(request, upstream.baseUrl)
+          let outgoing = (options.upstreamRequest ?? upstreamRequest)(request, upstream.baseUrl)
           if (options.upstream.rewriteAuth) outgoing = await options.upstream.rewriteAuth(outgoing)
           response = await options.upstream.fetch(outgoing)
         } catch {

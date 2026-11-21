@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import { createRuntime } from "@crvouga/mockingbird-service-junction"
 import type {
   CreateLabOrderInput,
@@ -36,12 +37,16 @@ type JunctionCatalogResponse = { data: { id: string; method: string }[] }
 export const createJunctionMockLabTesting = (params: {
   dispatch: (request: Request) => Promise<Response>
   webhookUrl: string
+  upstream?: UpstreamOptions | undefined
 }): {
   client: LabTestingClient
   admin: { id: "junction"; label: "Junction"; fetch: (request: Request) => Promise<Response> }
 } => {
   // The runtime is what serves `/__admin/ui`. Vendor calls and `transitionOrder` share its instance.
-  const runtime = createRuntime({ identity: "adopt-users" })
+  const runtime = createRuntime({
+    identity: "adopt-users",
+    ...(params.upstream ? { upstream: params.upstream } : {}),
+  })
   const junction = runtime.instance()
 
   const request = (method: string, path: string, body?: unknown): Promise<Response> =>
@@ -83,8 +88,16 @@ export const createJunctionMockLabTesting = (params: {
     })
     if (!response.ok) throw new Error(`Lab order creation failed (${response.status})`)
     const created = (await response.json()) as JunctionOrderResponse
-    scheduleAutomaticProgress(created.order.id)
+    // A sandbox order lives at Junction; its progress comes from Junction, not this demo's timers.
+    if (!(await forwarding())) scheduleAutomaticProgress(created.order.id)
     return { labOrderId: created.order.id }
+  }
+
+  /** Whether the System screen switched this emulator to Junction's sandbox. */
+  const forwarding = async (): Promise<boolean> => {
+    if (!params.upstream) return false
+    const response = await runtime.fetch(new Request(`${BASE_URL}/__admin/upstream`))
+    return response.ok && ((await response.json()) as { mode?: string }).mode === "forward"
   }
 
   /**

@@ -137,26 +137,31 @@ const control = (
 test("namespace controls use native clock and snapshot stores", async () => {
   const fleet = createFleet(config())
   expect((await control(fleet, "/namespaces/tenant", {})).status).toBe(201)
-  expect(await (await control(fleet, "/namespaces")).json()).toEqual({
-    namespaces: ["tenant"],
-  })
+  expect(
+    (await (await control(fleet, "/namespaces")).json()).namespaces.map(
+      (entry: { namespace: string }) => entry.namespace,
+    ),
+  ).toEqual(["default", "tenant"])
   expect(
     (await control(fleet, "/clock?namespace=tenant", { set: 2000000000000, freeze: true })).status,
   ).toBe(200)
   const point = await (
     await control(fleet, "/namespaces/tenant/snapshots", { label: "fixture" })
   ).json()
-  expect(point.id).toBe("fixture")
+  expect(point.label).toBe("fixture")
+  expect(point.id).not.toBe("fixture")
   const clock = await (await control(fleet, "/clock?namespace=tenant")).json()
   expect((await control(fleet, "/clock?namespace=tenant", { advance: 1000 })).ok).toBe(true)
-  expect((await control(fleet, "/namespaces/tenant/snapshots/fixture/restore", {})).ok).toBe(true)
+  expect((await control(fleet, `/namespaces/tenant/snapshots/${point.id}/restore`, {})).ok).toBe(
+    true,
+  )
   expect(await (await control(fleet, "/clock?namespace=tenant")).json()).toEqual(clock)
   const snapshots = await (await control(fleet, "/namespaces/tenant/snapshots")).json()
-  expect(snapshots.services.twilio[0].id).toBe("fixture")
+  expect(snapshots.snapshots[0].id).toBe(point.id)
   expect((await control(fleet, "/namespaces/tenant/reset", { services: ["twilio"] })).ok).toBe(true)
-  expect(
-    (await (await control(fleet, "/namespaces/tenant/snapshots")).json()).services.twilio,
-  ).toEqual([])
+  expect((await (await control(fleet, "/namespaces/tenant/snapshots")).json()).snapshots).toEqual(
+    snapshots.snapshots,
+  )
 })
 
 test("invalid selection and failed archive decoding preserve boot status", async () => {

@@ -1,8 +1,12 @@
 {
   "name": "mockingbird-lab-preview",
   "compatibility_date": "2026-11-13",
+  // Serves /__sandbox/* (the sandbox proxy); everything else is a static file.
+  "main": "src/worker.ts",
   "assets": {
     "directory": "./preview-dist",
-    "not_found_handling": "single-page-application"
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/__sandbox", "/__sandbox/*"]
   }
 }

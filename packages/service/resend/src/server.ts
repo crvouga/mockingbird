@@ -36,6 +36,7 @@ const text = (value: string | boolean | undefined) =>
 
 /** How `serve` (and `serve --config`) builds the Resend mock from flags. */
 export const serveTarget: ServeTarget = {
+  supportsUpstream: true,
   name: "resend",
   defaultPort: DEFAULT_PORT,
   options: {
@@ -80,6 +81,7 @@ export const serveTarget: ServeTarget = {
             },
           }
         : {}),
+      ...(common.upstream ? { upstream: common.upstream } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),

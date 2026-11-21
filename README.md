@@ -383,6 +383,7 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | [AWS implementation and oracle coverage](docs/AWS_COVERAGE.md) | The LocalStack expansion is work in progress. No new LocalStack or live AWS oracle run was performed during integration. Implemented services have local transport and state tests; scaffold packages explicitly reject vendor operations. `bun run parity` fails when no scenario exists or the local oracle is unavailable. |
 | [Emulate coverage audit](docs/EMULATE_COVERAGE.md) | Mockingbird covers the 14 public providers in [Emulate](https://emulate.dev/) and [vercel-labs/emulate](https://github.com/vercel-labs/emulate). The comparison target is the npm package `emulate@0.12.1`, pinned in `packages/parity/package-oracle/package.json` and `bun.lock`. Licensed handler sources are pinned to commit `c77cb73e7ab525c5260dd36c04c91a54a23e7e75`; `packages/http/provider/port.json` records every source path and SHA-256 digest. |
 | [Infrastructure and orchestration emulators](docs/INFRASTRUCTURE_EMULATORS.md) | This document defines the boundaries and planned evidence for the Docker Engine, Hermes peer-run, and GitHub REST packages. |
+| [Sandbox mode](docs/SANDBOX_MODE.md) | Run an app against its emulators, then flip any one third-party service to the vendor's real sandbox without rebuilding, redeploying, or putting a secret in the browser. |
 
 ## License
 

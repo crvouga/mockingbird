@@ -41,8 +41,8 @@ into the application's HTTP client. Configure namespaces through `x-mockingbird-
 ## Supported contract and evidence
 
 This is a **best guess, not oracle-verified**. The source reviewed is upstream revision
-[`7ca121dd4e483ec2f397f141a326e2bc81a960bd`](https://github.com/the-momentum/open-wearables/tree/7ca121dd4e483ec2f397f141a326e2bc81a960bd/backend/app/api/routes/v1):
-`users.py`, `oauth.py`, `connections.py`, and `sync_data.py`.
+[`dbcdc6995ee70145d0138f6e587ce15511b6b482`](https://github.com/the-momentum/open-wearables/tree/dbcdc6995ee70145d0138f6e587ce15511b6b482/backend/app/api/routes/v1):
+`users.py`, `oauth.py`, `connections.py`, `sdk_sync.py`, and `sync_data.py`.
 No live server was available; the self-parity test compares two emulator instances,
 not the real vendor. Run `bun run parity:service -- open-wearables` in the repository
 with `OPEN_WEARABLES_BASE_URL` and `OPEN_WEARABLES_API_KEY` for a read-only provider probe.
@@ -67,6 +67,27 @@ All `/api/v1` routes require a key from `settings.apiKeys`, including unsupporte
 Missing/unknown keys get 401. This deliberately uniform fixture authentication is not a
 claim about upstream's mixed OAuth/developer/SDK authentication dependencies.
 
+## Browser pairing
+
+`GET /api/v1/oauth/{provider}/authorize?user_id=<id>&redirect_uri=<url>` returns
+`{authorization_url, state}`. Open the returned URL to consent; no connection exists until
+"Allow connection" is submitted. Cancellation does not connect. Approved consent redirects
+with 303 to the supplied HTTP(S) callback or shows a completion page. A state is single-use
+and expires after ten emulator-clock minutes; expired/replayed states return 409, unknown
+states 404. No external provider or credential is contacted.
+
+`GET /users/{user_id}/pair?redirect_url=<url>` lists enabled cloud providers. Its provider
+links (`/users/{user_id}/pair/{provider}`) open the same consent flow. The upstream frontend
+has a user pairing page, but this provider shortcut and `/mockingbird/oauth/{state}` are
+**emulator-only helpers**, not claims about vendor callback wire behavior. These public
+preview pages deliberately require no API key. Browser links carry the namespace prefix;
+state, expiry and connections stay in that namespace. Use isolated preview hosts, not real
+accounts. HTML escapes provider names and URLs and refuses non-HTTP(S) callbacks.
+
+Storybook includes pairing, consent, completion, cancellation and no-provider states. A real
+Chromium test follows the served page through consent and verifies persisted connection
+state. This is evidence for the stand-in, not live provider OAuth parity.
+
 ## Test controls
 
 - `POST /__admin/users/{user_id}/connections {provider, status?}` creates or updates a
@@ -79,7 +100,7 @@ claim about upstream's mixed OAuth/developer/SDK authentication dependencies.
 - Standard state, snapshots, reset, faults, request journal and admin UI are available.
   Standard fault presets include `unavailable`, `rate_limited` and `timeout`.
 
-Users, providers, connections, tasks, settings and ID sequences all use shared runtime
+Users, providers, connections, consent states, tasks, settings and ID sequences all use shared runtime
 state. Reset restores the initial settings/provider list. No wearable samples are stored.
 
 ## Deliberately not modelled
@@ -91,12 +112,9 @@ verified equivalents of public routes in the inspected upstream revision; we do 
 emulate a company's deployment-specific internal API. The public disconnection path is
 `DELETE /api/v1/users/{user_id}/connections/{provider}` instead.
 
-OAuth authorization (`/api/v1/oauth/{provider}/authorize`) and browser pairing
-(`/users/{user_id}/pair` and `/pair/{provider}`) also return explicit 501. The emulator does
-not claim consent or successful pairing without an implemented flow. Seed connections
-through the admin control for connection-state tests. Issue #780's browser acceptance
-criteria, idempotent SDK-user creation, registration, receipts and Apple Health upload
-are consequently **unsupported**, not successful parity. No consent page is rendered.
+The named deployment extensions in issue #780 remain unsupported. Upstream's public SDK
+upload is `/api/v1/sdk/users/{user_id}/sync`; it is not the deployment-specific
+`/sync/apple/healthion` schema, and this emulator does not fabricate a translation.
 
 Health data reading, SDK sample uploads, vendor webhooks, token refresh, developer
 accounts/dashboard, backend Celery/Redis behavior, real wearable providers and real

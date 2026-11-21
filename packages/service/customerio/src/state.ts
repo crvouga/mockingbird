@@ -54,6 +54,8 @@ export type SubscriptionPreferences = {
  * dropped when the request set `disable_message_retention` (Customer.io keeps no body then).
  */
 export type Delivery = OutboxItem & {
+  upstream?: true
+  sentForReal?: true
   channel: Channel
   transactionalMessageId: string
   /** The catalog message the id or trigger name resolved to, when it did. */
