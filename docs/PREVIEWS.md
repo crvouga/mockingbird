@@ -11,6 +11,8 @@ no GitHub token.
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
 - [Inputs](#inputs)
+- [Build on demand](#build-on-demand)
+- [Freshness for long-lived tabs](#freshness-for-long-lived-tabs)
 - [What a preview does not do](#what-a-preview-does-not-do)
 
 ## How it works
@@ -119,6 +121,54 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
          WORKER_SECRETS: |
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
+
+## Build on demand
+
+Building every push pays for previews nobody opens. Instead, link each PR to a **launcher page**
+that builds the preview when someone opens it:
+
+```mermaid
+flowchart LR
+  Tab["Launcher page<br/>/pr/&lt;n&gt;"] -- "GET / POST ?pr=n<br/>(every ~5 s)" --> Relay["Build relay<br/>(edge function)"]
+  Relay -- "PR facts, runs, steps;<br/>workflow_dispatch on the PR's branch" --> GH["GitHub Actions"]
+  GH -- "build, write preview-source.json,<br/>deploy" --> Preview["Preview &lt;name&gt;-pr-&lt;n&gt;"]
+  Relay -- "preview-source.json<br/>(which commit is live)" --> Preview
+  Tab -- "location.replace" --> Preview
+```
+
+1. **The relay.** `createBuildRelay()` from `@crvouga/mockingbird-preview/on-demand`, with the
+   GitHub Actions provider and a token that may read pull requests and actions and dispatch the
+   workflow, served from any Fetch runtime. It answers a `PreviewLaunch` (`idle`, `queued`,
+   `building`, `publishing`, `live`, `failed`, `unsupported`, `closed` or `unavailable`) for the
+   PR's current head commit, starts at most one build per commit, gives up after three failed
+   attempts, refuses new builds over a repository-wide cap of eight, and never returns the token,
+   the PR title, the branch or a provider error.
+2. **The workflow** takes a `workflow_dispatch` input named `pull_request`, builds the PR's branch
+   and writes `preview-source.json` (`createPreviewSourceFile`) next to the index, so the relay can
+   tell which commit is live. A branch created before the input existed answers `unsupported`:
+   merging the base branch fixes it. Give it `concurrency: preview-${{ inputs.pull_request }}`.
+3. **The launcher page.** `mountPreviewLauncher` from `@crvouga/mockingbird-ui/launcher`, served
+   by your static host at `/pr/<n>`: it starts the build, shows the steps, elapsed time and a
+   progress estimate, offers the previous live version meanwhile, and opens the preview when it
+   is ready.
+
+Only open, same-repository PRs are built, and only on their own branch, so PR code never writes
+the base branch's caches. The full state table is in the
+[preview package README](../packages/adapters/preview/README.md#on-demand-previews).
+
+## Freshness for long-lived tabs
+
+A tab open for hours should know when the code it runs was replaced. Each build carries an
+identity (`{ commit, builtAt, parts }`, a content pin per app) and publishes a small status
+document next to the deployment (`createFreshnessStatusFile`, served `no-store` with open CORS)
+saying which build is current and what is happening to the next one. On the page,
+`watchFreshness()` polls it every 30 s while visible (never while hidden, at once on focus) and
+answers `current`, `newer-live` (naming the apps whose part changed), `newer-building`,
+`newer-failed` or `unknown`. `mountFreshnessIndicator` and `freshnessBuild` from
+`@crvouga/mockingbird-ui` show it as a quiet dot on the switcher and a line with **Update now**,
+**What changed** and **Keep this version**. When only one app's part changed, Update now hands
+your app that one app to swap; otherwise it reloads the shell. Keeping emulator and database state
+across that reload is up to your app's snapshot support.
 
 ## What a preview does not do
 
