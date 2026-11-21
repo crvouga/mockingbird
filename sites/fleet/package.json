@@ -89,6 +89,7 @@
     "@crvouga/mockingbird-service-meta": "workspace:*",
     "@crvouga/mockingbird-service-microsoft": "workspace:*",
     "@crvouga/mockingbird-service-mongoatlas": "workspace:*",
+    "@crvouga/mockingbird-service-mosaic": "workspace:*",
     "@crvouga/mockingbird-service-notion": "workspace:*",
     "@crvouga/mockingbird-service-oauth": "workspace:*",
     "@crvouga/mockingbird-service-odx": "workspace:*",
