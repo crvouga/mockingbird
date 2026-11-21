@@ -35,8 +35,8 @@ PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` f
 directory. Deployment requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Actions
 repository secrets. No deployment is performed by the build command. The System preview workflow builds a downloadable
 artifact for every PR, deploys same-repository PRs when these secrets exist, and deletes their Worker
-when the PR closes. Successful deployments put Lab preview, System, Emulators and Notifications
-links at the top of the PR description, preserving the rest of its content. Fork PRs only receive artifacts. The docs site's existing fleet deployment remains separate.
+when the PR closes. Successful deployments put a single Preview link, opening the example app,
+at the top of the PR description, preserving the rest of its content. Fork PRs only receive artifacts. The docs site's existing fleet deployment remains separate.
 
 Standalone links use `?surface=app`, `?surface=system`, `?surface=emulators` or
 `?surface=notifications`; browser back/forward restores the selected surface. A reload starts a

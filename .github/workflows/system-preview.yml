@@ -73,12 +73,7 @@ jobs:
             const start = '<!-- system-preview:start -->';
             const end = '<!-- system-preview:end -->';
             const url = process.env.PREVIEW_URL;
-            const links = [
-              `[Lab preview](${url}/?surface=app)`,
-              `[System](${url}/?surface=system)`,
-              `[Emulators](${url}/?surface=emulators)`,
-              `[Notifications](${url}/?surface=notifications)`,
-            ].join(' · ');
+            const links = `[Preview](${url}/?surface=app)`;
             const body = (pr.body || '').replace(/<!-- system-preview:start -->[\s\S]*?<!-- system-preview:end -->\s*/g, '').trimStart();
             const next = `${start}\n${links}\n${end}\n\n${body}`;
             if (pr.body !== next) {
