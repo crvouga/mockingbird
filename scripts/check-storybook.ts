@@ -28,6 +28,8 @@ const NOT_UI: Record<string, string> = {
     "bundles the client the example's stories run",
   "packages/adapters/preview/src/build.ts":
     "writes the one-element host page for the boot loader; the app it boots is drawn by the System harness and lab stories",
+  "packages/adapters/preview/src/site.ts":
+    "a table of content types for uploading a built site's files; draws nothing",
   "packages/http/provider/src/vendor/core/http.ts": "response helpers the vendor pages call",
   "packages/service/s3/src/mimedb.generated.ts": "a table of MIME types",
   "packages/http/provider/src/vendor/google/helpers.ts": "Gmail message and MIME data, no page",
