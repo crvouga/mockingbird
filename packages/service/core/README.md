@@ -165,7 +165,8 @@ Types:
 Provider state must live in the shared `Collection` storage and receives version history only from
 the runtime's `Timeline`. Do not add service-local snapshot maps or rollback managers. For async
 all-or-nothing work that cannot remain inside a SQLite transaction, use
-`withNamespaceRollback`; it is a thin Timeline-based compatibility helper. The boundary gate
+`withNamespaceRollback`. It saves only the rows the work writes (every `Collection` write records
+into the open scope), so its cost follows the write, not the namespace size. The boundary gate
 enforces this rule.
 - `Stored<T>` / `ListRecordsOptions<T>`, `FieldResult<T>` (`{ ok: true; value } | { ok: false; reason }`),
   `ParsedForm` (`{ value; issues }`) and `FormIssue` (`{ kind, path, ... }`, bracket-notation paths).

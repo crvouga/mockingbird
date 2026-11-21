@@ -16,6 +16,8 @@ Every successful write checkpoints the namespace. Read the namespace as it was a
 
 A checkpoint holds the namespace's records, its clock and the emulator's random stream. For a named save that also holds faults and latency and can be exported, use a [snapshot](SNAPSHOT_AND_RESTORE.md).
 
+Each automatic checkpoint reads the whole namespace, so a write costs more the more the namespace holds. A long-running mock that never travels back in time can boot with `createRuntime({ checkpointMutations: false })`, or, for any service, with the boot control `adminControls: { checkpointMutations: false }` (a fleet entry's `adminControls` too): writes then record no checkpoint and carry no `x-mockingbird-checkpoint`, while `runtime.checkpoint()`, `POST /__admin/checkpoints`, branches and checkout still work from the checkpoints taken that way.
+
 ## Admin page
 
 Open `http://localhost:8787/__admin/ui#checkpoints`.

@@ -1,5 +1,5 @@
-import { Timeline } from "@crvouga/mockingbird-core"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+import { closeJournal, openJournal } from "./write-journal.js"
 
 /**
  * A point-in-time copy of everything a service namespace holds.
@@ -64,21 +64,25 @@ export const restoreNamespace = (
 }
 
 /**
- * Execute asynchronous service work atomically using the canonical Timeline rollback primitive.
- * This is the prescribed escape hatch when the SQLite adapter cannot hold a transaction across
- * `await`; service code should not coordinate raw namespace snapshots itself.
+ * Execute asynchronous service work atomically: on a throw, every record and collection
+ * sequence `run` wrote in `namespace` goes back to how it was. Only the rows the work touched
+ * are saved and restored, so the cost follows the write, not the size of the namespace. Every
+ * namespace write goes through {@link Collection}, which records into the open journal. This is
+ * the prescribed escape hatch when the SQLite adapter cannot hold a transaction across `await`;
+ * service code should not coordinate raw namespace snapshots itself.
  */
 export const withNamespaceRollback = async <T>(
   sqlite: SqliteClient,
   namespace: string,
   run: () => Promise<T>,
 ): Promise<T> => {
-  const rollback = new Timeline<NamespaceSnapshot>({ maxCheckpoints: 1 })
-  const before = rollback.commit(snapshotNamespace(sqlite, namespace))
+  const journal = openJournal(sqlite, namespace)
   try {
     return await run()
   } catch (error) {
-    restoreNamespace(sqlite, namespace, before.value)
+    journal.restore(sqlite, namespace)
     throw error
+  } finally {
+    closeJournal(sqlite, namespace, journal)
   }
 }

@@ -77,6 +77,7 @@ test(
       seed: 0,
       numRuns: 3,
       maxCommands: 3,
+      seed: 1,
       invalidProbability: 0,
       sleep: async () => {},
       log: () => {},

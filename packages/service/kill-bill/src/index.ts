@@ -1875,13 +1875,25 @@ export class KillBillAPI {
       )
   }
   private overdueState(accountId: string) {
-    const earliest = this.state.invoices
-      .list({
-        where: (invoice) =>
-          invoice.accountId === accountId && invoice.status !== "VOID" && this.owed(invoice) > 0,
-      })
-      .map(({ value }) => value.invoiceDate)
-      .sort()[0]
+    return this.overdueStateSince(this.earliestUnpaidInvoiceDates(accountId).get(accountId))
+  }
+  /** Each account's oldest unpaid invoice date, from one pass over the invoices. */
+  private earliestUnpaidInvoiceDates(accountId?: string) {
+    const earliest = new Map<string, string>()
+    const unpaid = this.state.invoices.list({
+      where: (invoice) =>
+        (accountId === undefined || invoice.accountId === accountId) &&
+        invoice.status !== "VOID" &&
+        this.owed(invoice) > 0,
+    })
+    for (const { value: invoice } of unpaid) {
+      const current = earliest.get(invoice.accountId)
+      if (current === undefined || invoice.invoiceDate < current)
+        earliest.set(invoice.accountId, invoice.invoiceDate)
+    }
+    return earliest
+  }
+  private overdueStateSince(earliest: string | undefined) {
     const ageDays =
       earliest === undefined
         ? undefined
@@ -3082,8 +3094,9 @@ export class KillBillAPI {
    * payment and clock events (issue #739).
    */
   private async syncOverdue() {
+    const earliest = this.earliestUnpaidInvoiceDates()
     for (const { value: account } of this.state.accounts.list({ order: "oldest" })) {
-      const name = this.overdueState(account.accountId).name
+      const name = this.overdueStateSince(earliest.get(account.accountId)).name
       const previous = this.state.overdue.get(account.accountId)?.name ?? CLEAR_OVERDUE_STATE
       if (name === previous) continue
       this.state.overdue.insert(account.accountId, { name })

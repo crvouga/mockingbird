@@ -8,6 +8,7 @@ export class IndexStore {
   private entries: Map<string, Rowid[]>;
   private keyValues: Map<string, SqlValue[]>;
   private sortedKeys: string[] | null;
+  private sortedKeysShared = false;
   private mapsShared = false;
   private ownedBuckets = new WeakSet<Rowid[]>();
   frozen = false;
@@ -56,7 +57,7 @@ export class IndexStore {
       this.ownedBuckets.add(bucket);
       this.entries.set(key, bucket);
       this.keyValues.set(key, [...values]);
-      this.sortedKeys = null;
+      this.insertSortedKey(key);
       return;
     }
     for (const id of existing) if (sameRowid(id, rowid)) return;
@@ -153,9 +154,9 @@ export class IndexStore {
     const existing = this.entries.get(key);
     if (!existing) return false;
     if (rowid === undefined) {
+      this.removeSortedKey(key);
       this.entries.delete(key);
       this.keyValues.delete(key);
-      this.sortedKeys = null;
       return true;
     }
     const index = existing.findIndex((id) => sameRowid(id, rowid));
@@ -164,9 +165,9 @@ export class IndexStore {
     remaining.splice(index, 1);
     this.entries.set(key, remaining);
     if (remaining.length === 0) {
+      this.removeSortedKey(key);
       this.entries.delete(key);
       this.keyValues.delete(key);
-      this.sortedKeys = null;
     }
     return true;
   }
@@ -187,6 +188,8 @@ export class IndexStore {
     copy.entries = this.entries instanceof ForkMap ? this.entries.fork() : this.entries;
     copy.keyValues = this.keyValues instanceof ForkMap ? this.keyValues.fork() : this.keyValues;
     copy.sortedKeys = this.sortedKeys;
+    copy.sortedKeysShared = true;
+    this.sortedKeysShared = true;
     copy.mapsShared = true;
     this.mapsShared = true;
     this.ownedBuckets = new WeakSet();
@@ -233,24 +236,72 @@ export class IndexStore {
   private orderedKeys(): string[] {
     if (this.sortedKeys) return this.sortedKeys;
     const keys = [...this.entries.keys()];
-    keys.sort((a, b) => {
-      const left = this.keyValues.get(a);
-      const right = this.keyValues.get(b);
-      if (!left || !right) return a < b ? -1 : a > b ? 1 : 0;
-      const n = Math.min(left.length, right.length);
-      for (let i = 0; i < n; i++) {
-        const a = left[i] ?? null;
-        const b = right[i] ?? null;
-        if (a === null && b === null) continue;
-        if (a === null) return -1;
-        if (b === null) return 1;
-        const cmp = compareSql(a, b);
-        if (cmp !== 0) return cmp ?? 0;
-      }
-      return left.length - right.length;
-    });
+    keys.sort((a, b) => this.compareKeys(a, b));
     this.sortedKeys = keys;
+    this.sortedKeysShared = false;
     return keys;
+  }
+
+  private compareKeys(a: string, b: string): number {
+    const left = this.keyValues.get(a);
+    const right = this.keyValues.get(b);
+    if (!left || !right) return a < b ? -1 : a > b ? 1 : 0;
+    const n = Math.min(left.length, right.length);
+    for (let i = 0; i < n; i++) {
+      const x = left[i] ?? null;
+      const y = right[i] ?? null;
+      if (x === null && y === null) continue;
+      if (x === null) return -1;
+      if (y === null) return 1;
+      const cmp = compareSql(x, y);
+      if (cmp !== 0) return cmp ?? 0;
+    }
+    return left.length - right.length;
+  }
+
+  /** Keeps a sorted key list in order across an insert, instead of sorting every key again. */
+  private insertSortedKey(key: string): void {
+    const keys = this.writableSortedKeys();
+    if (!keys) return;
+    let lo = 0;
+    let hi = keys.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.compareKeys(keys[mid]!, key) <= 0) lo = mid + 1;
+      else hi = mid;
+    }
+    keys.splice(lo, 0, key);
+  }
+
+  /** Takes a key out of a sorted key list; call it while the key's values are still known. */
+  private removeSortedKey(key: string): void {
+    const keys = this.writableSortedKeys();
+    if (!keys) return;
+    let lo = 0;
+    let hi = keys.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.compareKeys(keys[mid]!, key) < 0) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < keys.length; i++) {
+      if (keys[i] === key) {
+        keys.splice(i, 1);
+        return;
+      }
+      if (this.compareKeys(keys[i]!, key) !== 0) break;
+    }
+    this.sortedKeys = null;
+  }
+
+  /** The sorted key list, detached from a clone that shares it, or null when none is built. */
+  private writableSortedKeys(): string[] | null {
+    if (!this.sortedKeys) return null;
+    if (this.sortedKeysShared) {
+      this.sortedKeys = this.sortedKeys.slice();
+      this.sortedKeysShared = false;
+    }
+    return this.sortedKeys;
   }
 
   private assertMutable(): void {
@@ -273,7 +324,7 @@ export class IndexStore {
     if (!(this.entries instanceof ForkMap)) this.entries = new Map(this.entries);
     if (!(this.keyValues instanceof ForkMap)) this.keyValues = new Map(this.keyValues);
     this.mapsShared = false;
-    this.sortedKeys = null;
+    if (this.sortedKeys) this.sortedKeysShared = true;
   }
 }
 
