@@ -235,7 +235,8 @@ export const AllEmulated: StoryObj = {
     )
   },
 }
-const isHidden = (node: HTMLElement) => node.closest("[hidden]") !== null
+const isHidden = (node: HTMLElement) =>
+  node.closest("[hidden]") !== null || getComputedStyle(node).visibility === "hidden"
 
 /**
  * Stripe (test mode) and Junction (its sandbox) already on dev resources; Twilio joins them with
@@ -267,15 +268,37 @@ export const MixedDev: StoryObj = {
       /No allow-list pattern for RESEND_API_KEY/,
     )
     const twilio = row(canvasElement, "twilio")
-    await userEvent.click(twilio.getByRole("radio", { name: "Dev" }))
+    const twilioRow = canvasElement.querySelector<HTMLElement>('[data-service="twilio"]')
+    if (!twilioRow) throw new Error("no Twilio row")
+    // Switching never moves anything: same height, label in the same place.
+    const label = twilio.getByText("Twilio")
+    const layout = () => [
+      twilioRow.offsetHeight,
+      label.getBoundingClientRect().top - twilioRow.getBoundingClientRect().top,
+    ]
+    const before = layout()
+    // The control is a toggle: clicking the half that is already selected flips it too.
+    await userEvent.click(twilio.getByRole("radio", { name: "Emulated" }))
     await expect(twilio.getByRole("status")).toHaveTextContent("Switching to the dev resource…")
     await expect(twilio.getByRole("radiogroup")).toHaveAttribute("aria-busy", "true")
-    await waitFor(() => expect(twilio.queryByRole("status")).toBeNull(), { timeout: 3000 })
+    await expect(layout()).toEqual(before)
+    await waitFor(() => expect(twilio.getByRole("status").textContent).toBe(""), {
+      timeout: 3000,
+    })
     await expect(twilio.getByText("Dev resource")).toBeVisible()
-    await expect(canvasElement.querySelector('[data-service="twilio"]')).toHaveAttribute(
-      "data-mode",
-      "dev",
-    )
+    await expect(twilioRow).toHaveAttribute("data-mode", "dev")
+    await expect(layout()).toEqual(before)
+    await userEvent.click(twilio.getByRole("radio", { name: "Dev" }))
+    await waitFor(() => expect(twilioRow).toHaveAttribute("data-mode", "emulated"))
+    await waitFor(() => expect(twilio.getByRole("status").textContent).toBe(""), {
+      timeout: 3000,
+    })
+    await expect(layout()).toEqual(before)
+    await userEvent.click(twilio.getByRole("radio", { name: "Dev" }))
+    await waitFor(() => expect(twilioRow).toHaveAttribute("data-mode", "dev"))
+    await waitFor(() => expect(twilio.getByRole("status").textContent).toBe(""), {
+      timeout: 3000,
+    })
   },
 }
 
@@ -479,9 +502,21 @@ export const Reorder: StoryObj = {
           clientY: y,
         }),
       )
+    // The dragged row's own node must never move: moving it would release the real pointer
+    // capture mid-drag (dragging up used to drop the row one slot early).
+    const dragged = canvasElement.querySelector('li[data-app="emulators"]')
+    let movedDragged = false
+    const watch = new MutationObserver((records) => {
+      for (const record of records)
+        if ([...record.removedNodes].includes(dragged as Node)) movedDragged = true
+    })
+    watch.observe(dragged?.parentElement as Node, { childList: true })
     pointer("pointerdown", startY)
     for (let step = 1; step <= 8; step++)
       pointer("pointermove", startY + ((endY - startY) * step) / 8)
+    await Promise.resolve()
+    watch.disconnect()
+    await expect(movedDragged).toBe(false)
     pointer("pointerup", endY)
     await expect(rows(canvasElement)).toEqual(["system", "emulators", "notifications", "app"])
     await expect(JSON.parse(localStorage.getItem(ORDER_KEY) ?? "[]")).toEqual([

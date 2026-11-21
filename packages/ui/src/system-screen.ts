@@ -278,8 +278,10 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
             passed = previous
           if (!passed) break
           const passedTop = passed.offsetTop
+          // Always move the neighbour: moving the dragged row's own node would release its
+          // pointer capture and end the drag.
           if (passed === next) list.insertBefore(passed, row)
-          else list.insertBefore(row, passed)
+          else list.insertBefore(passed, row.nextSibling)
           slide(passed, passedTop)
           // Keep the row under the pointer now that its slot moved.
           drag.y += row.offsetTop - before
@@ -436,7 +438,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     group.append(...options)
     const note = el("p", "msh-svc-note")
     note.id = id("note")
-    const status = el("p", "msh-svc-status")
+    const status = el("p", "msh-sr")
     status.setAttribute("role", "status")
     const error = el("p", "msh-error msh-svc-error")
     error.setAttribute("role", "alert")
@@ -452,7 +454,9 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
         li.dataset.mode = service.mode
         li.toggleAttribute("data-pending", row.pending)
         label.textContent = service.label
-        badge.hidden = service.mode !== "dev"
+        // Reserve the badge's space either way, so switching never moves the row's text.
+        badge.style.visibility = service.mode === "dev" ? "visible" : "hidden"
+        badge.setAttribute("aria-hidden", String(service.mode !== "dev"))
         category.textContent = service.category ?? "Service"
         group.setAttribute("aria-label", `${service.label} mode`)
         group.setAttribute("aria-busy", String(row.pending))
@@ -478,7 +482,6 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
         status.textContent = row.pending
           ? `Switching to ${service.mode === "dev" ? "the dev resource" : "the emulator"}…`
           : ""
-        status.hidden = !row.pending
         error.hidden = row.error === undefined
         error.replaceChildren()
         if (row.error !== undefined) {
@@ -514,8 +517,9 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       if (group.contains(doc.activeElement) || doc.activeElement === doc.body)
         options.find((candidate) => candidate.dataset.mode === row.service.mode)?.focus()
     }
+    // The control is a toggle: a click on either half flips the mode.
     for (const option of options) {
-      option.onclick = () => void choose(option.dataset.mode as SystemServiceMode, false)
+      option.onclick = () => void choose(row.service.mode === "dev" ? "emulated" : "dev", false)
     }
     group.onkeydown = (event) => {
       const forward = event.key === "ArrowRight" || event.key === "ArrowDown"
@@ -756,12 +760,13 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 .msh-seg-option[aria-checked=true]{background:var(--msh-seg-on);color:var(--msh-text);box-shadow:0 1px 2px rgb(16 24 40/.12),0 0 0 1px var(--msh-line)}
 .msh-seg-option[data-mode=dev][aria-checked=true]{color:var(--msh-live)}
 .msh-seg-option:disabled{cursor:not-allowed;color:var(--msh-faint);opacity:.7}
+.msh-seg{position:relative}
 .msh-seg[aria-busy=true] .msh-seg-option[aria-checked=true]{opacity:.7}
-.msh-svc-note,.msh-svc-status,.msh-svc-error{flex-basis:100%;display:flex;align-items:flex-start;gap:6px;font-size:12.5px}
+/* Switching: a spinner over the control instead of a status line, so nothing moves. */
+.msh-seg[aria-busy=true]::after{content:"";position:absolute;top:50%;right:9px;width:12px;height:12px;margin-top:-6px;border-radius:50%;border:2px solid var(--msh-line-strong);border-top-color:var(--msh-accent);animation:msh-spin .7s linear infinite}
+.msh-svc-note,.msh-svc-error{flex-basis:100%;display:flex;align-items:flex-start;gap:6px;font-size:12.5px}
 .msh-svc-note{color:var(--msh-muted)}
 .msh-svc-note .msh-icon,.msh-error .msh-icon{width:14px;height:14px;margin-top:2px}
-.msh-svc-status{color:var(--msh-muted)}
-.msh-svc-status::before{content:"";flex:none;width:12px;height:12px;margin-top:3px;border-radius:50%;border:2px solid var(--msh-line-strong);border-top-color:var(--msh-accent);animation:msh-spin .7s linear infinite}
 .msh-error{display:flex;align-items:flex-start;gap:6px;color:var(--msh-danger);font-size:12.5px;font-weight:500}
 .msh-svc-error{padding:8px 10px;border-radius:8px;background:var(--msh-danger-soft)}
 .msh-svc-empty{color:var(--msh-muted)}
