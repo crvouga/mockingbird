@@ -57,7 +57,15 @@ jobs:
             exit 0
           fi
           if [ "$PR_ACTION" = "closed" ]; then
-            bunx wrangler@4.50.0 delete --name "mockingbird-lab-pr-$PR_NUMBER" --force
+            # Delete only the script. `wrangler delete` also lists the account's KV namespaces,
+            # which this deploy-scoped token cannot read. A Worker that is already gone is fine.
+            STATUS=$(curl --silent --show-error -o "$RUNNER_TEMP/worker-delete.json" -w '%{http_code}' -X DELETE \
+              -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+              "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/mockingbird-lab-pr-$PR_NUMBER?force=true")
+            case "$STATUS" in
+              200|404) echo "Removed mockingbird-lab-pr-$PR_NUMBER (HTTP $STATUS)" ;;
+              *) cat "$RUNNER_TEMP/worker-delete.json"; exit 1 ;;
+            esac
           else
             bunx wrangler@4.50.0 deploy --name "mockingbird-lab-pr-$PR_NUMBER" > "$RUNNER_TEMP/worker-deploy.log" 2>&1 || {
               cat "$RUNNER_TEMP/worker-deploy.log"
@@ -93,12 +101,7 @@ jobs:
             const start = '<!-- system-preview:start -->';
             const end = '<!-- system-preview:end -->';
             const url = process.env.PREVIEW_URL;
-            const links = [
-              `[Lab preview](${url}/?surface=app)`,
-              `[System](${url}/?surface=system)`,
-              `[Emulators](${url}/?surface=emulators)`,
-              `[Notifications](${url}/?surface=notifications)`,
-            ].join(' · ');
+            const links = `[Preview](${url}/?surface=app)`;
             const body = (pr.body || '').replace(/<!-- system-preview:start -->[\s\S]*?<!-- system-preview:end -->\s*/g, '').trimStart();
             const next = `${start}\n${links}\n${end}\n\n${body}`;
             if (pr.body !== next) {
