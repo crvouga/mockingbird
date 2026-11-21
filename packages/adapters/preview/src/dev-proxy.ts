@@ -14,6 +14,13 @@
  * Portable: Fetch API only. Runs in Cloudflare Workers, Bun, Node 18+ and Deno.
  */
 
+/** `value` without trailing slashes, in linear time (a `/\/+$/` regex backtracks on long runs). */
+const withoutTrailingSlashes = (value: string): string => {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--
+  return value.slice(0, end)
+}
+
 export type DevEnv = Record<string, string | undefined>
 
 /** How one vendor is reached and which secrets it needs. */
@@ -115,7 +122,7 @@ export const devBaseUrlName = (id: string): string =>
  */
 const on = (base: string, path: string, search: string): URL => {
   const url = new URL(base)
-  const prefix = url.pathname.replace(/\/+$/, "")
+  const prefix = withoutTrailingSlashes(url.pathname)
   url.pathname = `${prefix}${path.startsWith("/") ? path : `/${path}`}`
   url.search = search
   url.hash = ""
@@ -311,7 +318,7 @@ const parseBaseUrl = (value: string): string | undefined => {
   }
   if (url.protocol !== "https:" || url.username || url.password || url.search || url.hash)
     return undefined
-  return `${url.origin}${url.pathname.replace(/\/+$/, "")}`
+  return `${url.origin}${withoutTrailingSlashes(url.pathname)}`
 }
 
 /** Default deny: every value the provider reads must be allow-listed and not a production format. */
@@ -397,7 +404,7 @@ const buildHandler = (
   options: Omit<DevProxyOptions, "env">,
 ): ((request: Request, env: DevEnv) => Promise<Response>) => {
   const allow = compileAllow(options.allow)
-  const basePath = (options.basePath ?? "").replace(/\/+$/, "")
+  const basePath = withoutTrailingSlashes(options.basePath ?? "")
   const allowOrigins = options.allowOrigins ?? []
   const send = options.fetch ?? ((request: Request) => globalThis.fetch(request))
   const providers = new Map(options.providers.map((provider) => [provider.id, provider]))

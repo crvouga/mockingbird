@@ -10,6 +10,13 @@
  */
 import type { DevManifest } from "./dev-proxy.js"
 
+/** `value` without trailing slashes, in linear time (a `/\/+$/` regex backtracks on long runs). */
+const withoutTrailingSlashes = (value: string): string => {
+  let end = value.length
+  while (end > 0 && value.charCodeAt(end - 1) === 47) end--
+  return value.slice(0, end)
+}
+
 export type DevMode = "emulated" | "dev"
 
 export type DevServiceSpec = {
@@ -148,7 +155,7 @@ const resolveProxyUrl = (proxyUrl: string | undefined): string | undefined => {
   }
   url.search = ""
   url.hash = ""
-  return url.toString().replace(/\/+$/, "")
+  return withoutTrailingSlashes(url.toString())
 }
 
 /** Where emulators point when no proxy is configured: refused locally, never on the network. */
