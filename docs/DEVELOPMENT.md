@@ -253,7 +253,7 @@ The docs site (`sites/docs`) is hosted by `crvouga-organization/personal` as the
 [`sites/docs/Dockerfile`](../sites/docs/Dockerfile) builds the static Astro site and serves it
 with nginx on port 80. Its build context is the repo root, because the site renders every service
 package. On every push to `main`, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml)
-calls `crvouga-organization/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga-organization/chrisvouga-mockingbird-docs:<sha>`,
+calls `crvouga-organization/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga/chrisvouga-mockingbird-docs:<sha>`,
 and then `crvouga-organization/personal` deploys that exact image and health-checks it. Railway never builds this repo.
 
 To check the image locally, run `docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs`.
