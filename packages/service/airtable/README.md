@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-airtable
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Airtable OAuth and forms-integration emulator. Only synthetic fixtures belong here.
 

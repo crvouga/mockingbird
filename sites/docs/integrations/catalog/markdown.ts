@@ -183,7 +183,7 @@ export async function renderMarkdown(
           return ""
         }
         const inner = this.parser.parseInline(token.tokens)
-        const text = decodeEntities(inner.replace(/<[^>]+>/g, ""))
+        const text = plainText(token.tokens)
         const slug = slugger.slug(text)
         if (token.depth === 2 || token.depth === 3) toc.push({ depth: token.depth, slug, text })
         const level = Math.max(2, token.depth)
@@ -213,7 +213,7 @@ export async function renderMarkdown(
 }
 
 const GITHUB_SERVICE =
-  /^https:\/\/github\.com\/crvouga\/mockingbird\/(?:blob|tree)\/main\/packages\/service\/([a-z0-9-]+)(\/README\.md)?\/?(#.*)?$/
+  /^https:\/\/github\.com\/(?:crvouga|crvouga-organization)\/mockingbird\/(?:blob|tree)\/main\/packages\/service\/([a-z0-9-]+)(\/README\.md)?\/?(#.*)?$/
 
 export function rewriteHref(href: string, ctx: LinkContext, mode: "link" | "raw" = "link"): string {
   if (href.startsWith("#")) return href
@@ -248,6 +248,21 @@ const ENTITIES: Record<string, string> = {
 
 const decodeEntities = (s: string) =>
   s.replace(/&(?:amp|lt|gt|quot|#39);/g, (m) => ENTITIES[m] ?? m)
+
+/**
+ * Heading text for slugs and the table of contents, read from the inline tokens
+ * rather than by stripping tags from rendered HTML. Raw inline HTML contributes
+ * nothing, so no markup can survive into the text.
+ */
+function plainText(tokens: readonly Tokens.Generic[]): string {
+  return tokens
+    .map((t) => {
+      if (t.type === "html") return ""
+      if (t.tokens) return plainText(t.tokens)
+      return typeof t.text === "string" ? decodeEntities(t.text) : ""
+    })
+    .join("")
+}
 
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-whoop
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP WHOOP v2 emulator for synthetic workout, sleep, recovery and cycle synchronization.
 

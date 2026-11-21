@@ -112,4 +112,4 @@ Exported types: `OpenAPIDocument`, `Operation` (`{ operationId, method, path, op
 - [`@crvouga/mockingbird-openapi-arbitrary`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-arbitrary) — fast-check arbitraries from schemas.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — differential parity runner.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

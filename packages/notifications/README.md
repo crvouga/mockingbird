@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-notifications
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 A notification test harness for a Mockingbird fleet. It reads the same emulators your application
 sends through and shows every SMS, WhatsApp message, email, push and chat message the way the
@@ -201,7 +201,7 @@ share a harness, give each one its own namespace (`?namespace=`) or open a deep 
 recipient: a link with `to=` stays on that recipient instead of following new arrivals. Set
 `?follow=0` on any other link that should stay put.
 
-[`e2e/ui.e2e.ts`](https://github.com/crvouga/mockingbird/blob/main/packages/notifications/e2e/ui.e2e.ts)
+[`e2e/ui.e2e.ts`](https://github.com/crvouga-organization/mockingbird/blob/main/packages/notifications/e2e/ui.e2e.ts)
 in this repository is a complete, passing example with real Twilio, Resend, FCM and Slack emulators.
 
 ## Embed the UI
@@ -229,7 +229,7 @@ the shadow root that holds `panel`. Options: `harness`, or `fetch` and `baseUrl`
 another origin; `channels` (which devices to show); `layout` (`auto`, `tabs` or `grid`) and `tabs` (show the
 channel tabs); `chrome` (show the top bar); `scale` (draw the devices smaller, `0.5` to `1`); `sound`; `motion`
 (`auto`, `full` or `reduce`); `onArrive`; and `syncUrl`, which reads and writes `?view=`-style
-links on the page. The [lab ordering example](https://github.com/crvouga/mockingbird/tree/main/packages/examples/medical-testing)
+links on the page. The [lab ordering example](https://github.com/crvouga-organization/mockingbird/tree/main/packages/examples/medical-testing)
 mounts it as its Notifications tab.
 
 `mountDashboard` puts a tab bar over that UI and an emulators panel you draw:

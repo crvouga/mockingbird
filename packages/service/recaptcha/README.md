@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-recaptcha
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 A WIP reCAPTCHA v3 emulator: browser `grecaptcha.ready`/`execute`, deterministic single-use tokens,
 and form-encoded Siteverify. The contract follows Google's [verification](https://developers.google.com/recaptcha/docs/verify)

@@ -8,7 +8,7 @@
 
 Run your entire application system in the browser for pull-request previews, backed by local emulators with real API contracts. Inspect apps, services, databases and notifications in one harness.
 
-[![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-2563eb)](#license)
+[![CI](https://github.com/crvouga-organization/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga-organization/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-2563eb)](#license)
 
 [Quick start](#quick-start) · [Notifications](#notifications) · [Why](docs/WHY.md) · [Design](docs/DESIGN.md) · [Guides](#guides) · [Catalog](https://mockingbird.chrisvouga.dev/services) · [llms.txt](llms.txt)
 
@@ -76,7 +76,7 @@ A fleet is the default. These are for when it is more than the job needs:
 - **In-process, in a test.** `createRuntime().fetch(request)` answers the SDK inside the test process, with no port and no server. See the checkout below.
 - **Mounted in your app.** `createRuntime().mount("/api/mock/google")` serves an emulator under your own origin. See [Getting started](docs/GETTING_STARTED.md#mount-an-emulator-inside-your-app).
 - **From code.** `startFleet(config, { load, dashboard: true })` from `@crvouga/mockingbird-fleet` starts the same fleet inside a test runner's global setup. See [Fleets](docs/FLEETS.md#dashboard).
-- **Hosted.** [Fleet Cloud](https://github.com/crvouga/mockingbird/blob/main/sites/fleet/README.md) hosts fleets at stable URLs. `mockingbird-fleet plan` and `apply` send it a `mockingbird.yaml` declaration, and `serve --config mockingbird.yaml` runs the same file locally.
+- **Hosted.** [Fleet Cloud](https://github.com/crvouga-organization/mockingbird/blob/main/sites/fleet/README.md) hosts fleets at stable URLs. `mockingbird-fleet plan` and `apply` send it a `mockingbird.yaml` declaration, and `serve --config mockingbird.yaml` runs the same file locally.
 
 ### In-process, in a test
 
@@ -352,12 +352,12 @@ npx mockingbird-junction serve --port 8787                           # one servi
 
 ## For coding agents
 
-Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
+Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
 
 ## Contributing
 
 ```bash
-git clone https://github.com/crvouga/mockingbird.git && cd mockingbird
+git clone https://github.com/crvouga-organization/mockingbird.git && cd mockingbird
 bun run setup   # install, build every package, create .env.local
 bun test
 ```

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-google-ads
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 A **wip** portable emulator for Google Ads API v25 and Google Analytics 4. It provides deterministic
 GAQL reporting, campaign-budget mutations, click-conversion uploads, Measurement Protocol event

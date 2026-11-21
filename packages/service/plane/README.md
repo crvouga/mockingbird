@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-plane
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **Plane** REST API (v1) for test suites, covering what our bug-report
 dedup and resolution jobs call on one project: work items (Plane's cursor-paginated list, get,
@@ -8,7 +8,7 @@ create, patch), comments, links, states and labels, with Plane's rate limit and 
 Projects are provisioned on first use with Plane's default workflow (Backlog, Todo, In
 Progress, Done, Cancelled), so no setup is needed.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/plane/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/plane/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from Plane's API reference and the consumer's
   zod schemas (`plane-response.ts`).
 
@@ -138,7 +138,7 @@ never retried.
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--api-key`, `--rate-limit`); port 8821. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 ### External identities and attachments
 

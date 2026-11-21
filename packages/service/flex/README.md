@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-flex
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **Flex** (withflex.com) HSA/FSA payments API for test suites: products
 (answered from a recorded catalog corpus), checkout sessions in `payment` (one-time),
@@ -10,7 +10,7 @@ refunds, the **hosted checkout page**, and the Svix-signed webhooks Flex posts b
 milliseconds: the page is local, and the signed webhook reaches the app as soon as the card is
 accepted.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/flex/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/flex/SUPPORT.md)
 - Flex publishes no machine-readable spec: the contract (`openapi.yaml`) is hand-authored from
   the wire shapes our consumer reads and writes (`B/billing/flex/`), and every field its zod
   schemas require is served. Subscription mode, `price_data.recurring` and the subscription
@@ -246,4 +246,4 @@ so product names are synthesised.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (expiry ticks every 100 ms); the `serve` CLI target (`--webhook-url`, `--webhook-secret`, `--public-url`, `--event-naming`); port 8792. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

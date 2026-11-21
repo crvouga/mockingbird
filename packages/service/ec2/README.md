@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-ec2
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Transport scaffold for Amazon Elastic Compute Cloud. ESM; Node 22+ or Bun 1.2+.
 

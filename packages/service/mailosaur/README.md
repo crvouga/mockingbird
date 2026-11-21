@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-mailosaur
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **Mailosaur** email/SMS testing API for test suites, plus an HTTP ingest so
 anything that "sends" mail (the Resend emulator's `--forward-to-inbox`, the Twilio emulator, Cognito
@@ -8,7 +8,7 @@ hooks, a test) drops it into one inbox. The unmodified `mailosaur` SDK reads it:
 returns within ~20 ms of a message arriving instead of long-polling Mailosaur for up to 120 s,
 and `html.codes` / `text.codes` / `html.links` are parsed the way Mailosaur parses them.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/mailosaur/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/mailosaur/SUPPORT.md)
 - The vendor publishes no OpenAPI spec: `openapi.yaml` is hand-authored from `mailosaur@11.1.0`
   (the requests it sends and the fields its models read) and our consumer's client.
 
@@ -166,4 +166,4 @@ with `x-mockingbird-namespace` (the Resend emulator forwards with its own namesp
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`, plus `tls: true` for the HTTPS + CONNECT door (`tlsUrl`, `proxyUrl`, `cert`); the `serve` CLI target (`--tls-port`, `--tls-cert`, `--tls-key`, `--tls-cert-out`, `--poll-delay`); port 8793. |
 | `selfSignedCertificate`, `CERTIFICATE_HOSTS` (`./server`) | Node | Generate the in-memory certificate the door presents, and the hosts it names. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

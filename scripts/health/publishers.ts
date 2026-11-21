@@ -35,7 +35,7 @@ export async function runPublisherHealth(interactive = false) {
           pkg.error ??
           (gap
             ? {
-                missing: "No GitHub publisher matches crvouga/mockingbird and ci.yml.",
+                missing: "No GitHub publisher matches crvouga-organization/mockingbird and ci.yml.",
                 "stage-only": "Publisher allows staging but cannot run npm publish.",
                 environment: "Publisher requires an environment; the Release workflow sets none.",
                 "not-published":

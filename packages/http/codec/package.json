@@ -18,10 +18,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
     "directory": "packages/http/codec"
   },
-  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/http/codec#readme",
+  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/http/codec#readme",
   "keywords": [
     "mockingbird",
     "form-urlencoded",
