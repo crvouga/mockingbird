@@ -640,7 +640,9 @@ export const SYSTEM_CSS = `
 .msh{--msh-bg:#f4f5f7;--msh-card:#fff;--msh-text:#14181f;--msh-muted:#5b6576;--msh-faint:#8a93a3;--msh-line:#e3e6eb;--msh-line-strong:#cdd2da;--msh-hover:#f0f2f5;--msh-accent:#3451d1;--msh-accent-hover:#2a43b3;--msh-accent-text:#fff;--msh-accent-soft:#eceffd;--msh-ok:#14803c;--msh-ok-soft:#e6f5ec;--msh-warn:#a15c07;--msh-warn-soft:#fcf1dc;--msh-danger:#bf2530;--msh-danger-soft:#fdecec;--msh-off:#6b7483;--msh-off-soft:#eef0f3;--msh-live:#c2410c;--msh-live-soft:#ffefe5;--msh-shadow:0 1px 2px rgb(16 24 40/.05),0 1px 3px rgb(16 24 40/.07);--msh-ring:#3451d1;--msh-seg-bg:#eceef2;--msh-seg-on:#fff;
 position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasText;background:Canvas;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
 @media (prefers-color-scheme:dark){.msh{--msh-bg:#0e1116;--msh-card:#161a21;--msh-text:#e7eaf0;--msh-muted:#a0a8b6;--msh-faint:#737c8c;--msh-line:#262c36;--msh-line-strong:#353c48;--msh-hover:#1d222b;--msh-accent:#6f8cff;--msh-accent-hover:#89a0ff;--msh-accent-text:#0b1020;--msh-accent-soft:#1c2440;--msh-ok:#4ad07f;--msh-ok-soft:#12291c;--msh-warn:#f0b357;--msh-warn-soft:#2e2210;--msh-danger:#ff7b84;--msh-danger-soft:#33161a;--msh-off:#8d96a5;--msh-off-soft:#1f242c;--msh-live:#ff9a62;--msh-live-soft:#35190b;--msh-shadow:0 1px 2px rgb(0 0 0/.4);--msh-ring:#89a0ff;--msh-seg-bg:#0f1218;--msh-seg-on:#262c37}}
-.msh-panel{height:100%;overflow:auto}.msh [hidden]{display:none!important}
+/* Positioned, so absolutely placed descendants (screen-reader text) scroll and clip with the
+   panel instead of overflowing the shell and scrolling the page too. */
+.msh-panel{position:relative;height:100%;overflow:auto}.msh [hidden]{display:none!important}
 .msh-chrome{position:absolute;inset:0;pointer-events:none;z-index:1000}
 .msh-switcher{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid #ffffff2e;background:#17212f;color:white;box-shadow:0 4px 16px #0005;cursor:grab;user-select:none}
 .msh-switcher.msh-dragging{cursor:grabbing}

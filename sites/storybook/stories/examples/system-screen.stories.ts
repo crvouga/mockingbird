@@ -251,6 +251,8 @@ export const MixedDev: StoryObj = {
   }),
   play: async ({ canvasElement }) => {
     await loaded(canvasElement)
+    // One scroller: the System panel scrolls; the page around a full-height shell never does.
+    await expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight)
     await expect(await summary(canvasElement)).toHaveTextContent("8 services · 6 emulated · 2 dev")
     await expect(row(canvasElement, "stripe").getByText("Dev resource")).toBeVisible()
     await expect(row(canvasElement, "junction").getByText("Dev resource")).toBeVisible()
