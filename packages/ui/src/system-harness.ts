@@ -16,6 +16,8 @@ export type SystemHarness = {
  * One visible surface, with mounted surfaces retained while hidden. Resolving mount means ready;
  * rejecting means failed. Abort and late disposal make teardown safe during asynchronous loading.
  * The reserved System surface is always reachable. URL state is opt-in for embedded hosts.
+ * The switcher pill docks to the middle of the left edge until dragged; the edge and the
+ * position along it are kept in localStorage, so it returns there after a reload or resize.
  */
 export function mountSystemHarness(
   host: HTMLElement,
@@ -37,7 +39,15 @@ export function mountSystemHarness(
 .msh{position:relative;height:100%;min-height:240px;isolation:isolate;color:CanvasText;background:Canvas;font:14px system-ui}
 .msh-panel{height:100%;overflow:auto}.msh [hidden]{display:none!important}
 .msh-chrome{position:absolute;inset:0;pointer-events:none;z-index:1000}
-.msh-handle{position:absolute;pointer-events:auto;touch-action:none;width:44px;height:44px;border-radius:50%;border:1px solid #777;background:#17212f;color:white;box-shadow:0 2px 12px #0004;cursor:grab;font:20px system-ui}
+.msh-switcher{position:absolute;pointer-events:auto;touch-action:none;display:flex;align-items:center;gap:2px;padding:3px;border-radius:999px;border:1px solid #ffffff2e;background:#17212f;color:white;box-shadow:0 4px 16px #0005;cursor:grab;user-select:none}
+.msh-switcher.msh-dragging{cursor:grabbing}
+.msh-switcher button{display:grid;place-items:center;width:36px;height:36px;padding:0;border:0;border-radius:999px;background:transparent;color:inherit;cursor:pointer}
+.msh-switcher button:hover{background:#ffffff1f}
+.msh-switcher button:active{background:#ffffff33}
+.msh-switcher.msh-dragging button{cursor:grabbing;background:transparent}
+.msh-switcher hr{width:1px;height:20px;margin:0;border:0;background:#ffffff2e}
+.msh-switcher svg{width:18px;height:18px;pointer-events:none}
+.msh-tip{position:absolute;pointer-events:none;padding:5px 9px;border-radius:6px;background:#0b1220;color:white;font:12px/1.3 system-ui;white-space:nowrap;box-shadow:0 2px 10px #0006}
 .msh-home button,.msh-status button{display:block;padding:12px;width:100%;text-align:left;border:0;border-radius:6px;background:transparent;color:inherit;font:inherit;cursor:pointer}
 .msh-home button:hover{background:#8883}
 .msh-home,.msh-status{max-width:640px;padding:32px;margin:auto}
@@ -45,14 +55,29 @@ export function mountSystemHarness(
 `
   const chrome = doc.createElement("div")
   chrome.className = "msh-chrome"
-  const handle = doc.createElement("button")
-  handle.type = "button"
-  handle.className = "msh-handle"
-  handle.textContent = "▦"
-  handle.setAttribute("aria-label", "Switch apps")
-  handle.dataset.testid = "system-switcher"
-  handle.hidden = surfaces.length === 0
-  chrome.append(handle)
+  const switcher = doc.createElement("div")
+  switcher.className = "msh-switcher"
+  switcher.setAttribute("role", "group")
+  switcher.setAttribute("aria-label", "Switch apps")
+  switcher.dataset.testid = "system-switcher"
+  switcher.hidden = surfaces.length === 0
+  const arrow = (direction: "previous" | "next") => {
+    const button = doc.createElement("button")
+    button.type = "button"
+    button.setAttribute("aria-label", direction === "next" ? "Next app" : "Previous app")
+    button.dataset.testid = `system-switcher-${direction}`
+    const path = direction === "next" ? "M5 12h14M13 6l6 6-6 6" : "M19 12H5M11 6l-6 6 6 6"
+    button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`
+    return button
+  }
+  const previousButton = arrow("previous")
+  const nextButton = arrow("next")
+  switcher.append(previousButton, doc.createElement("hr"), nextButton)
+  const tip = doc.createElement("div")
+  tip.className = "msh-tip"
+  tip.setAttribute("role", "tooltip")
+  tip.hidden = true
+  chrome.append(switcher, tip)
   shell.append(style, chrome)
   host.append(shell)
   let destroyed = false
@@ -142,9 +167,15 @@ export function mountSystemHarness(
     const entry = entries.find((e) => e.spec.id === id) ?? entries[0]
     if (!entry) return
     current = entry.spec.id
-    const next = entries[(entries.indexOf(entry) + 1) % entries.length]
-    handle.title = `Switch to ${next?.spec.label ?? "System"}`
-    handle.setAttribute("aria-description", handle.title)
+    for (const [button, step] of [
+      [previousButton, -1],
+      [nextButton, 1],
+    ] as const) {
+      const label = `${step < 0 ? "Previous" : "Next"}: ${neighbour(step).spec.label}`
+      button.dataset.tip = label
+      button.setAttribute("aria-description", label)
+    }
+    if (tipFor) showTip(tipFor)
     for (const candidate of entries) {
       candidate.panel.hidden = candidate !== entry
       candidate.panel.inert = candidate !== entry
@@ -163,75 +194,166 @@ export function mountSystemHarness(
     }
     await load(entry)
   }
-  handle.onclick = () => {
-    if (dragged) {
-      dragged = false
-      return
-    }
-    const next =
-      entries[(entries.findIndex((entry) => entry.spec.id === current) + 1) % entries.length]
-    if (next) void show(next.spec.id)
+  function neighbour(step: -1 | 1): Entry {
+    const index = entries.findIndex((entry) => entry.spec.id === current)
+    return entries[(index + step + entries.length) % entries.length] ?? (entries[0] as Entry)
   }
-  let x = Infinity
-  let y = Infinity
+  let tipFor: HTMLButtonElement | undefined
+  function showTip(button: HTMLButtonElement) {
+    tipFor = button
+    tip.textContent = button.dataset.tip ?? ""
+    tip.hidden = false
+    const box = shell.getBoundingClientRect()
+    const target = button.getBoundingClientRect()
+    const pill = switcher.getBoundingClientRect()
+    const left = target.left - box.left + (target.width - tip.offsetWidth) / 2
+    const above = pill.top - box.top - tip.offsetHeight - 8
+    tip.style.left = `${Math.max(4, Math.min(left, shell.clientWidth - tip.offsetWidth - 4))}px`
+    tip.style.top = `${above >= 4 ? above : pill.bottom - box.top + 8}px`
+  }
+  const hideTip = () => {
+    tipFor = undefined
+    tip.hidden = true
+  }
+  for (const [button, step] of [
+    [previousButton, -1],
+    [nextButton, 1],
+  ] as const) {
+    button.onclick = () => {
+      if (dragged) return
+      void show(neighbour(step).spec.id)
+    }
+    button.onpointerenter = (event) => {
+      if (event.pointerType === "mouse" && !drag) showTip(button)
+    }
+    button.onpointerleave = () => {
+      if (tipFor === button) hideTip()
+    }
+    button.onfocus = () => {
+      if (button.matches(":focus-visible")) showTip(button)
+    }
+    button.onblur = () => {
+      if (tipFor === button) hideTip()
+    }
+  }
+  switcher.onkeydown = (event) => {
+    if (event.key === "Escape") hideTip()
+  }
+
+  // Where the pill rests: an edge, and how far along it (0 = start, 1 = end).
+  type Dock = { edge: "left" | "right" | "top" | "bottom"; at: number }
+  const DOCK_KEY = "mockingbird.system-switcher.dock"
+  const MARGIN = 8
+  const readDock = (): Dock => {
+    try {
+      const saved = JSON.parse(win.localStorage.getItem(DOCK_KEY) ?? "null") as Partial<Dock>
+      if (
+        saved &&
+        ["left", "right", "top", "bottom"].includes(saved.edge ?? "") &&
+        typeof saved.at === "number" &&
+        saved.at >= 0 &&
+        saved.at <= 1
+      )
+        return saved as Dock
+    } catch {
+      /* Storage can be unavailable or hold something else; fall back to the default. */
+    }
+    return { edge: "left", at: 0.5 }
+  }
+  const writeDock = (value: Dock) => {
+    try {
+      win.localStorage.setItem(DOCK_KEY, JSON.stringify(value))
+    } catch {
+      /* The position is a convenience; switching still works without storage. */
+    }
+  }
+  let dock = readDock()
+  let x = 0
+  let y = 0
+  const limits = () => {
+    const maxX = Math.max(0, shell.clientWidth - switcher.offsetWidth - MARGIN)
+    const maxY = Math.max(0, shell.clientHeight - switcher.offsetHeight - MARGIN)
+    return { minX: Math.min(MARGIN, maxX), minY: Math.min(MARGIN, maxY), maxX, maxY }
+  }
   const position = () => {
-    x = Math.max(0, Math.min(x, shell.clientWidth - 52))
-    y = Math.max(0, Math.min(y, shell.clientHeight - 52))
-    handle.style.left = `${x}px`
-    handle.style.top = `${y}px`
+    const { maxX, maxY } = limits()
+    x = Math.max(0, Math.min(x, maxX + MARGIN))
+    y = Math.max(0, Math.min(y, maxY + MARGIN))
+    switcher.style.left = `${x}px`
+    switcher.style.top = `${y}px`
+  }
+  const settle = () => {
+    const { minX, minY, maxX, maxY } = limits()
+    const along = (min: number, max: number) => min + (max - min) * dock.at
+    x = dock.edge === "left" ? minX : dock.edge === "right" ? maxX : along(minX, maxX)
+    y = dock.edge === "top" ? minY : dock.edge === "bottom" ? maxY : along(minY, maxY)
+    position()
   }
   const snap = () => {
-    const maxX = Math.max(0, shell.clientWidth - 52)
-    const maxY = Math.max(0, shell.clientHeight - 52)
-    const minX = Math.min(8, maxX)
-    const minY = Math.min(8, maxY)
+    const { minX, minY, maxX, maxY } = limits()
     x = Math.max(minX, Math.min(x, maxX))
     y = Math.max(minY, Math.min(y, maxY))
-    const distances = [x - minX, maxX - x, y - minY, maxY - y]
-    const edge = distances.indexOf(Math.min(...distances))
-    if (edge === 0) x = minX
-    else if (edge === 1) x = maxX
-    else if (edge === 2) y = minY
-    else y = maxY
-    handle.style.transition = win.matchMedia("(prefers-reduced-motion: reduce)").matches
+    const fraction = (value: number, min: number, max: number) =>
+      max > min ? (value - min) / (max - min) : 0.5
+    const distances = { left: x - minX, right: maxX - x, top: y - minY, bottom: maxY - y }
+    const edge = (Object.keys(distances) as Dock["edge"][]).reduce((a, b) =>
+      distances[b] < distances[a] ? b : a,
+    )
+    dock = {
+      edge,
+      at: edge === "left" || edge === "right" ? fraction(y, minY, maxY) : fraction(x, minX, maxX),
+    }
+    writeDock(dock)
+    switcher.style.transition = win.matchMedia("(prefers-reduced-motion: reduce)").matches
       ? "none"
       : "left 160ms ease-out, top 160ms ease-out"
-    position()
+    settle()
   }
   let drag: { x: number; y: number; left: number; top: number } | undefined
   let dragged = false
-  handle.onpointerdown = (event) => {
+  switcher.onpointerdown = (event) => {
     if (event.button !== 0) return
     dragged = false
-    handle.style.transition = "none"
+    switcher.style.transition = "none"
     drag = { x: event.clientX, y: event.clientY, left: x, top: y }
-    handle.setPointerCapture(event.pointerId)
   }
-  handle.onpointermove = (event) => {
+  switcher.onpointermove = (event) => {
     if (!drag) return
     const dx = event.clientX - drag.x
     const dy = event.clientY - drag.y
-    if (Math.hypot(dx, dy) > 5) dragged = true
+    if (!dragged && Math.hypot(dx, dy) > 5) {
+      dragged = true
+      hideTip()
+      switcher.classList.add("msh-dragging")
+      // Capture only once it is a drag, so a plain press still clicks the arrow under it.
+      switcher.setPointerCapture(event.pointerId)
+    }
     if (!dragged) return
     x = drag.left + dx
     y = drag.top + dy
     position()
   }
-  handle.onpointerup = () => {
+  const release = () => {
+    if (!drag) return
     drag = undefined
-    snap()
+    switcher.classList.remove("msh-dragging")
+    if (dragged) {
+      snap()
+      // The click that ends a drag arrives after pointerup; let it through on the next task.
+      win.setTimeout(() => {
+        dragged = false
+      })
+    }
   }
-  handle.onpointercancel = () => {
-    drag = undefined
-    dragged = false
-    snap()
-  }
-  handle.onlostpointercapture = () => {
-    drag = undefined
-    snap()
-  }
-  const resize = new ResizeObserver(snap)
+  switcher.onpointerup = release
+  switcher.onpointercancel = release
+  switcher.onlostpointercapture = release
+  const resize = new ResizeObserver(() => {
+    switcher.style.transition = "none"
+    settle()
+  })
   resize.observe(shell)
+  resize.observe(switcher)
   const fromUrl = () =>
     new URL(win.location.href).searchParams.get("surface") ?? options.initial ?? "system"
   const pop = () => {
