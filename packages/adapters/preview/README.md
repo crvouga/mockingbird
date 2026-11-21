@@ -389,7 +389,7 @@ export const PreviewStatus = createPreviewStatusObject({
 const status = previewStatusRoutes() // "/__preview", binding "PREVIEW_STATUS"
 
 export default {
-  fetch: (request: Request, env: Record<string, unknown> & { ASSETS: Fetcher }) =>
+  fetch: (request: Request, env: Record<string, unknown> & { ASSETS: { fetch(request: Request): Promise<Response> } }) =>
     status(request, env) ?? env.ASSETS.fetch(request),
 }
 ```

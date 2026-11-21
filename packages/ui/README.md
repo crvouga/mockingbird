@@ -42,9 +42,13 @@ The built-in System screen lists every surface, System included, in the order th
 Pass `build` (a `SystemBuild`, such as `createLivePreview(...)` from `@crvouga/mockingbird-preview`) on a live PR preview. The switcher pill gets a status dot in its corner, without changing its size: green when this tab is up to date (with a pulsing ring while the status socket is live), amber and spinning while a newer commit builds, blue when an update is ready, red when a build or update failed, grey when offline. The dot is a button labelled "Preview status: …"; hovering or focusing it shows the status, and clicking it opens System. While an update is available, a toast beside the pill (never over it) says "New version abc1234 ready · updating in 8s" with Update now and Not now, then "Updating…", or the error with Retry. The System screen gains a Preview card above Apps: this tab's version and age, the latest deployed version, the build and the CI checks with links to their runs, the connection, an Auto-update switch and Update now. Relative times tick in place (every second under a minute, then every 15 s), each a `<time>` with the absolute time as its title. Without `build`, none of this renders. Animations stop when the person prefers reduced motion.
 
 ```ts
-import type { SystemBuild, SystemBuildState } from "@crvouga/mockingbird-ui"
+import { mountSystemHarness, type SystemBuild, type SystemSurface } from "@crvouga/mockingbird-ui"
 
-mountSystemHarness(host, surfaces, { build: livePreview }) // livePreview: SystemBuild
+declare const host: HTMLElement
+declare const surfaces: SystemSurface[]
+declare const livePreview: SystemBuild // e.g. createLivePreview(...) from @crvouga/mockingbird-preview
+
+mountSystemHarness(host, surfaces, { build: livePreview })
 ```
 
 ## API
