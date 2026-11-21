@@ -104,22 +104,30 @@
   "dependencies": {
     "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-ui": "workspace:*",
     "hono": "4.13.11"
   },
   "devDependencies": {
-    "fast-check": "4.9.0",
-    "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "@crvouga/mockingbird-parity": "workspace:*",
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-core": "workspace:*",
     "@crvouga/mockingbird-credentials": "workspace:*",
+    "@crvouga/mockingbird-http-codec": "workspace:*",
+    "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-openapi-codegen": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
-    "@crvouga/mockingbird-core": "workspace:*",
-    "@crvouga/mockingbird-sqlite": "workspace:*",
-    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-parity": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-adapter-node": "workspace:*",
-    "@playwright/test": "1.65.0"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-sqlite": "workspace:*",
+    "@crvouga/mockingbird-testing": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@playwright/test": "1.65.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "fast-check": "4.9.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }

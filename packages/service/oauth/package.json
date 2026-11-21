@@ -130,9 +130,27 @@
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "fast-check": "4.5.3",
+    "hono": "4.13.11",
     "jose": "6.1.3",
     "oauth4webapi": "3.8.8",
-    "hono": "4.13.11"
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "imports": {
+    "#ui/server": {
+      "types": "./src/ui-trial/server.tsx",
+      "bun": "./src/ui-trial/server.tsx",
+      "default": "./dist-ui/server.js"
+    },
+    "#ui/client-bundle": {
+      "types": "./src/ui-trial/client-bundle.d.ts",
+      "default": "./dist-ui/client.bundle.js"
+    }
   }
 }

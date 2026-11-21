@@ -1659,3 +1659,4 @@ export class OAuthAPI {
     return json(result)
   }
 }
+export const __trial = async (name: string) => { const { trialPage } = await import("#ui/server"); const { BUNDLE } = await import("#ui/client-bundle"); return trialPage(name, { source: BUNDLE }) }

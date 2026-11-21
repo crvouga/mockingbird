@@ -1,0 +1,25 @@
+/*
+ * The entry `bun run build` compiles into dist/styles.css (`@crvouga/mockingbird-ui/styles.css`,
+ * and as a string, `MOCKINGBIRD_CSS` from `@crvouga/mockingbird-ui/styles`). One stylesheet for
+ * every Mockingbird surface, so the utilities any of them uses are in it: Tailwind only emits the
+ * classes it finds in these sources. A surface that moves or adds a UI directory adds it here
+ * (and to packages/ui/turbo.json's build inputs, so a change there rebuilds this file).
+ */
+
+@import "./theme.css";
+
+@source "./";
+@source "../../admin-ui/src";
+@source "../../notifications/src/ui";
+@source "../../examples/medical-testing/src/client";
+@source "../../http/provider/src";
+@source "../../service/core/src";
+@source "../../service/oauth/src";
+@source "../../service/open-wearables/src";
+@source "../../service/sqlite/src";
+@source "../../service/sqlite/benchmarks/harness";
+@source "../../service/postgres/src";
+@source "../../service/postgres/benchmarks/harness";
+@source "../../../sites/fleet/src/ui";
+@source "../../../sites/docs/src";
+@source "../../../sites/storybook/stories";

@@ -35,6 +35,10 @@
   "dependencies": {
     "@ant-design/cssinjs": "2.1.2",
     "@ant-design/icons": "6.3.4",
+    "@crvouga/mockingbird-ui": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
     "antd": "6.6.5",
     "react": "19.3.0",
     "react-dom": "19.3.0"

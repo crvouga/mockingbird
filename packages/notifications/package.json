@@ -91,12 +91,22 @@
     "@crvouga/mockingbird-service-slack": "workspace:*",
     "@crvouga/mockingbird-service-sns": "workspace:*",
     "@crvouga/mockingbird-service-twilio": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
     "@playwright/test": "1.65.0",
     "@storybook/html-vite": "10.6.6",
     "@types/bun": "1.4.0",
     "@types/node": "22.20.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "storybook": "10.6.6",
     "vite": "8.3.7"
+  },
+  "dependencies": {
+    "@crvouga/mockingbird-ui": "workspace:*"
   }
 }
