@@ -673,13 +673,14 @@ test("only Google skips consent after choosing an account; other providers keep 
   }
 })
 
-test("neutral UI offers all appearance modes and Apple form-post scripts share one CSP nonce", async () => {
+test("Mockingbird UI remembers the appearance and Apple form-post scripts share one CSP nonce", async () => {
   const api = make("apple")
   const { result, html, consent } = await login(api)
-  expect(consent).toContain("OAuth Emulator")
-  expect(consent).not.toContain("Mockingbird")
-  for (const mode of ["system", "light", "dark"])
-    expect(consent).toContain(`name="oauth-theme" value="${mode}"`)
+  // Mockingbird's own chrome, not an imitation of the provider's sign-in page.
+  expect(consent).toContain("<title>Review access · OAuth · Mockingbird</title>")
+  expect(consent).toContain("data-mockingbird-brand")
+  // The visitor's light or dark choice (`mb:theme`) applies before first paint.
+  expect(consent).toContain('localStorage.getItem("mb:theme")')
   const csp = result.headers.get("content-security-policy") ?? ""
   expect(csp.match(/script-src/g)?.length).toBe(1)
   const nonces = [...html.matchAll(/<script nonce="([^"]+)"/g)].map((match) => match[1])

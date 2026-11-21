@@ -3,11 +3,13 @@
  * inspector, a report). Import this module only through a dynamic `import()` on the request path
  * that serves the page, so a runtime that never serves it never loads React.
  *
- * It renders with `react-dom/server.browser`, the build of React's server renderer that needs no
- * Node API, so the same page renders in Node, Bun, Deno, Workers and browsers.
+ * It renders with `react-dom/server.edge`, the build of React's server renderer that needs no
+ * Node API and holds nothing open (the `server.browser` build listens on a MessageChannel from
+ * load, which keeps a Node or Bun process alive), so the same page renders in Node, Bun, Deno,
+ * Workers and browsers, and a test or script that renders one still exits.
  */
 import type { ReactNode } from "react"
-import { renderToString } from "react-dom/server.browser"
+import { renderToString } from "react-dom/server.edge"
 import { type DocumentOptions, renderDocument } from "../document.js"
 import { MockingbirdProvider } from "./provider.js"
 

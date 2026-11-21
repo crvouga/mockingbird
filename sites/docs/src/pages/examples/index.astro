@@ -1,142 +1,17 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
-import Icon from "../../components/Icon.astro"
 import Base from "../../layouts/Base.astro"
 import { APP_EXAMPLES } from "../../lib/appExamples.ts"
+import { ExamplesIndex, type ServiceRef } from "../../ui/examples/examples.tsx"
 
-const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
+const services: Record<string, ServiceRef> = Object.fromEntries(
+  catalog.services.map((s) => [s.name, { name: s.name, displayName: s.displayName }]),
+)
 ---
 
 <Base
   title="Examples"
   description="Full-stack demo apps built entirely on Mockingbird emulators — client, server and database, one process, no real network."
 >
-  <div class="container">
-    <header class="page-head">
-      <h1>Examples</h1>
-      <p class="lede">
-        Small, real full-stack apps that compose Mockingbird's emulators the way you would in production —
-        client, server, database, and every "vendor" call in one process, with no real network. Each one is
-        a working app you can run locally, not a snippet.
-      </p>
-    </header>
-
-    <div class="grid">
-      {
-        APP_EXAMPLES.map((example) => (
-          <article class="example-card">
-            <h2>
-              <a href={`/examples/${example.slug}`}>{example.title}</a>
-            </h2>
-            <p class="example-desc">{example.description}</p>
-            <div class="example-services">
-              {example.servicesUsed.map((name) => {
-                const service = servicesByName.get(name)
-                return service ? (
-                  <a class="chip" href={`/services/${service.name}`}>
-                    {service.displayName}
-                  </a>
-                ) : (
-                  <span class="chip">{name}</span>
-                )
-              })}
-            </div>
-            <div class="example-links">
-              <a class="btn btn-accent btn-sm" href={`/examples/${example.slug}`}>
-                <Icon name="play" /> Live demo
-              </a>
-              <a class="btn btn-secondary btn-sm" href={`${catalog.repo}/tree/main/${example.packagePath}`} target="_blank" rel="noopener">
-                <Icon name="github" /> Source
-              </a>
-            </div>
-          </article>
-        ))
-      }
-    </div>
-  </div>
+  <ExamplesIndex examples={APP_EXAMPLES} services={services} repo={catalog.repo} />
 </Base>
-
-<style>
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-    gap: 14px;
-    margin-top: 32px;
-  }
-
-  .example-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 20px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--bg);
-    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
-  }
-
-  .example-card:hover {
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-md);
-  }
-
-  .example-card h2 {
-    font-size: 17px;
-    letter-spacing: -0.01em;
-  }
-
-  /* The title is the card's link. Its box covers the article so the surface
-     navigates too; chips and the action buttons sit above it. */
-  .example-card h2 a::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-  }
-
-  .example-card h2 a:hover {
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
-  .example-desc {
-    color: var(--fg-muted);
-    font-size: 13.5px;
-    line-height: 1.55;
-  }
-
-  .example-services {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    height: 26px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--fg-muted);
-    font-size: 12.5px;
-    font-weight: 500;
-  }
-
-  a.chip:hover {
-    border-color: var(--border-strong);
-    color: var(--fg);
-  }
-
-  .example-links {
-    position: relative;
-    z-index: 1;
-    display: flex;
-    gap: 8px;
-    margin-top: auto;
-    padding-top: 4px;
-  }
-</style>

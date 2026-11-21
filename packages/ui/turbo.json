@@ -1,0 +1,33 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "!**/*.test.ts",
+        "!**/*.test.tsx",
+        "!README.md",
+        "$TURBO_ROOT$/packages/admin-ui/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/notifications/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/examples/medical-testing/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/http/provider/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/core/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/*/src/ui/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/oauth/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/oauth/examples/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/open-wearables/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/sqlite/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/sqlite/benchmarks/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/postgres/src/**/*.tsx",
+        "$TURBO_ROOT$/packages/service/postgres/benchmarks/**/*.tsx",
+        "$TURBO_ROOT$/sites/fleet/src/**/*.tsx",
+        "$TURBO_ROOT$/sites/storybook/stories/**/*.tsx"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["build", "^build", "generate"]
+    }
+  }
+}

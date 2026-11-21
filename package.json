@@ -29,7 +29,8 @@
     "sites/storybook"
   ],
   "overrides": {
-    "postcss": "^8.5.30"
+    "postcss": "^8.5.30",
+    "vite": "8.3.7"
   },
   "trustedDependencies": [
     "embedded-postgres",

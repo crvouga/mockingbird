@@ -12,7 +12,7 @@ import type {
   ServiceKind,
   SourceStatus,
 } from "../src/model.js"
-import type { AppOptions } from "../src/ui/app.js"
+import type { AppOptions } from "../src/ui/types.js"
 
 export const NOW = Date.parse("2026-11-09T17:41:00.000Z")
 export const PHONE = "+12025550123"

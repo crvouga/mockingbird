@@ -66,6 +66,13 @@
   },
   "overrides": [
     {
+      "includes": [
+        "packages/examples/medical-testing/src/client/**/*.ts",
+        "packages/examples/medical-testing/src/client/**/*.tsx"
+      ],
+      "linter": { "rules": { "correctness": { "useExhaustiveDependencies": "off" } } }
+    },
+    {
       "includes": ["packages/ui/src/reset.css"],
       "linter": {
         "rules": {

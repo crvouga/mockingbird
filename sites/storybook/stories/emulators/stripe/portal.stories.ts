@@ -16,6 +16,7 @@ export default {
     sources: [
       "packages/service/stripe/src/portal-page.ts",
       "packages/service/stripe/src/browser.ts",
+      "packages/service/stripe/src/ui/server.tsx",
       "packages/service/stripe/src/card-input.ts",
     ],
   },

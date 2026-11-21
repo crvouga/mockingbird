@@ -2,11 +2,8 @@
 import { createHash, randomBytes } from "../../core/crypto.js";
 import type { RouteContext, Store } from "../../core/index.js";
 import {
-  escapeHtml,
-  escapeAttr,
-  renderCardPage,
   renderErrorPage,
-  renderUserButton,
+  renderSignInPage,
   matchesRedirectUri,
   constantTimeSecretEqual,
   bodyStr,
@@ -48,7 +45,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
 
   // ---------- OAuth authorize page ----------
 
-  app.get("/oauth/authorize", (c) => {
+  app.get("/oauth/authorize", async (c) => {
     const client_id = c.req.query("client_id") ?? "";
     const redirect_uri = c.req.query("redirect_uri") ?? "";
     const scope = c.req.query("scope") ?? "";
@@ -61,8 +58,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     if (integrationsConfigured) {
       const integration = vs.integrations.findOneBy("client_id", client_id);
       if (!integration) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
@@ -70,8 +66,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
         console.warn(
           `[OAuth] redirect_uri mismatch: got "${redirect_uri}", registered: ${JSON.stringify(integration.redirect_uris)}`,
         );
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -83,14 +78,14 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     }
 
     const subtitleText = integrationName
-      ? `Authorize <strong>${escapeHtml(integrationName)}</strong> to access your account.`
+      ? ["Authorize ", { strong: integrationName }, " to access your account."]
       : "Choose a seeded user to continue.";
 
     const users = vs.users.all();
     const userButtons = users
       .map((user) => {
         const u = formatUser(user);
-        return renderUserButton({
+        return ({
           letter: (u.username[0] ?? "?").toUpperCase(),
           login: u.username,
           name: u.name ?? undefined,
@@ -106,12 +101,10 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
             code_challenge_method,
           },
         });
-      })
-      .join("\n");
+      });
 
-    const body = users.length === 0 ? '<p class="empty">No users in the emulator store.</p>' : userButtons;
 
-    return c.html(renderCardPage("Sign in to Vercel", subtitleText, body, SERVICE_LABEL));
+    return c.html(await renderSignInPage("Sign in to Vercel", subtitleText, userButtons, SERVICE_LABEL));
   });
 
   // ---------- OAuth callback ----------

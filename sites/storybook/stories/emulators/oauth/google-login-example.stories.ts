@@ -18,7 +18,9 @@ export default {
     layout: "fullscreen",
     sources: [
       "packages/service/oauth/examples/google-login/index.ts",
+      "packages/service/oauth/examples/google-login/harness.tsx",
       "packages/service/oauth/examples/google-login/app.ts",
+      "packages/service/oauth/examples/google-login/page.tsx",
       "packages/service/oauth/examples/google-login/paste.ts",
       "packages/service/oauth/examples/google-login/transport.ts",
     ],
@@ -111,21 +113,19 @@ export const Declined: StoryObj = {
     await toConsent(canvasElement)
     await press(canvasElement, '[data-testid="oauth-mock-deny"]', "Review access")
     await showing(canvasElement, "Sign in to continue")
-    const { root } = surfaces(canvasElement)
-    expect(root.querySelector(".status")?.textContent).toContain("did not complete")
+    // The status line is React state: it can commit a frame after the pasted page.
+    const status = () =>
+      surfaces(canvasElement).root.querySelector('[data-testid="example-status"]')?.textContent
+    for (let attempt = 0; attempt < 100 && !status()?.includes("did not complete"); attempt += 1)
+      await new Promise((resolve) => setTimeout(resolve, 30))
+    expect(status()).toContain("did not complete")
   },
 }
 
 /** The Apple profile: its consent card asks whether to share the email. */
 export const AppleProfile: StoryObj = {
-  ...example(),
+  ...example({ provider: "apple" }),
   play: async ({ canvasElement }) => {
-    const profile = surfaces(canvasElement).root.querySelector<HTMLSelectElement>(".profile")
-    if (!profile) throw new Error("No provider profile select")
-    profile.value = "apple"
-    profile.dispatchEvent(new Event("change"))
-    // The example resets and reloads the app; let that land before pressing Sign in.
-    await new Promise((resolve) => setTimeout(resolve, 300))
     await toConsent(canvasElement)
     await showing(canvasElement, "Choose what to share")
   },

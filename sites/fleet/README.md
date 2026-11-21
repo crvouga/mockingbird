@@ -250,8 +250,12 @@ create or change. `GET /admin/orgs` lists every organization with its usage.
 
 ## Storybook: every screen of the dashboard
 
-The dashboard (`src/ui`) is plain TypeScript: `router.ts` draws the screen for the address,
-`screens/` holds one module per screen and `routes.ts` lists them. Storybook mounts that same code
+The dashboard (`src/ui`) is React and [HeroUI](https://heroui.com), styled by Mockingbird's design
+system (`@crvouga/mockingbird-ui`: its `AppShell`, page headers, states and stylesheet) like every
+other Mockingbird UI. `router.tsx` draws the screen for the address, `screens/` holds one module per
+screen, `kit.tsx` the markup they share, `form.tsx` the one form layout, and `routes.ts` lists them.
+It ships as three files (`index.html`, `app.js`, `app.css`, the shared stylesheet) under a policy
+that allows no inline scripts or styles. Storybook mounts that same code
 over a mocked `fetch`, one story per screen and state, so the whole product can be browsed without
 a server.
 

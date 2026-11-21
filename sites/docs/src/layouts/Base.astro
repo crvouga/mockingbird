@@ -1,13 +1,13 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
-import BirdMark from "../components/BirdMark.astro"
-import Icon from "../components/Icon.astro"
+import { ThemeSwitch } from "@crvouga/mockingbird-ui/react"
 import InlineScript from "../components/InlineScript.astro"
-import Sprite from "../components/Sprite.astro"
 import { IDENTITY, MARK_HREF, RISK_DISCLAIMER, SOCIAL_CARD } from "../lib/content.ts"
 import { inline } from "../lib/inline.ts"
 import { metaDescription } from "../lib/meta.ts"
-import "../styles/global.css"
+import { SiteSearch } from "../ui/search.tsx"
+import { GithubAction, SiteShell } from "../ui/site-shell.tsx"
+import "../styles/app.css"
 
 interface Props {
   title?: string
@@ -31,17 +31,15 @@ const {
   noindex = false,
   canonicalPath,
 } = Astro.props
-// Runs before first paint so the page never flashes the wrong theme.
+// Runs before first paint so the page never flashes the wrong theme: the visitor's choice
+// (ThemeSwitch, `mb:theme`) pins light or dark; otherwise the page follows the system.
 const THEME_SCRIPT = `try {
   var mode = localStorage.getItem("mb:theme")
-  if (mode !== "light" && mode !== "dark" && mode !== "system") mode = "system"
-  var theme = mode === "system" ? (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light") : mode
-  document.documentElement.dataset.theme = theme
-  document.documentElement.dataset.themeMode = mode
-} catch (e) {
-  document.documentElement.dataset.theme = "light"
-  document.documentElement.dataset.themeMode = "system"
-}`
+  if (mode === "light" || mode === "dark") {
+    document.documentElement.classList.add(mode)
+    document.documentElement.dataset.theme = mode
+  }
+} catch (e) {}`
 const description = metaDescription(copy)
 const fullTitle = title
   ? `${title} · Mockingbird`
@@ -50,19 +48,6 @@ const path = Astro.url.pathname.replace(/\/$/, "") || "/"
 // Crawlers need absolute URLs, and the same page must not be shared under two addresses.
 const canonical = new URL(canonicalPath ?? path, IDENTITY.docs).href
 const socialImage = new URL(SOCIAL_CARD.href, IDENTITY.docs).href
-const nav = [
-  { href: "/services", label: "Emulators" },
-  { href: "/examples", label: "Examples" },
-  { href: "/coverage", label: "Coverage" },
-  { href: "/docs", label: "Guides" },
-  { href: "/docs/admin-controls", label: "Controls" },
-  { href: "/docs/notifications", label: "Notifications" },
-  { href: "/why", label: "Why" },
-]
-// `/docs` is a prefix of `/docs/admin-controls` and `/docs/notifications`, so the longest match is the one that's current.
-const currentNav = nav
-  .filter((item) => path === item.href || path.startsWith(`${item.href}/`))
-  .sort((a, b) => b.href.length - a.href.length)[0]?.href
 ---
 
 <!doctype html>
@@ -91,285 +76,24 @@ const currentNav = nav
     <meta name="twitter:description" content={description} />
     <meta name="twitter:image" content={socialImage} />
     <meta name="twitter:image:alt" content={SOCIAL_CARD.alt} />
-    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#f6f8fa" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)" />
     <link rel="icon" type="image/svg+xml" href={MARK_HREF} />
     <link rel="alternate" type="text/plain" href="/llms.txt" title="llms.txt" />
     {markdown && <link rel="alternate" type="text/markdown" href={markdown} />}
     <InlineScript code={THEME_SCRIPT} />
   </head>
-  <body>
-    <Sprite />
-    <a class="skip" href="#main">Skip to content</a>
-    {
-      RISK_DISCLAIMER.enabled && (
-        <div class="risk-banner" role="note">
-          <div class="container" set:html={`⚠️ ${inline(RISK_DISCLAIMER.text)}`} />
-        </div>
-      )
-    }
-    <header class="site-header" data-header>
-      <div class="container">
-        <a class="brand" href="/" aria-label="Mockingbird home">
-          <BirdMark />
-          <span class="wordmark">Mockingbird</span>
-        </a>
-        <nav class="nav" id="site-nav" aria-label="Primary" data-nav>
-          {
-            nav.map((item) => (
-              <a href={item.href} aria-current={item.href === currentNav ? "page" : undefined}>
-                {item.label}
-              </a>
-            ))
-          }
-          <a class="nav-gh" href={catalog.repo} target="_blank" rel="noopener">
-            <Icon name="github" />
-            GitHub
-          </a>
-        </nav>
-        <div class="header-actions">
-          <button class="search-trigger" type="button" data-palette-open aria-label="Search documentation">
-            <Icon name="search" />
-            <span>Search documentation…</span>
-            <kbd data-mod-key>⌘K</kbd>
-          </button>
-          <a class="icon-btn gh" href={catalog.repo} target="_blank" rel="noopener" aria-label="Mockingbird on GitHub">
-            <Icon name="github" />
-          </a>
-          <div class="theme-picker" data-theme-picker>
-            <button
-              class="icon-btn"
-              type="button"
-              data-theme-toggle
-              aria-haspopup="menu"
-              aria-expanded="false"
-              aria-label="Theme: system"
-            >
-              <Icon name="system" />
-              <Icon name="sun" />
-              <Icon name="moon" />
-            </button>
-            <div class="theme-menu" data-theme-menu role="menu" aria-label="Theme" hidden>
-              <button type="button" role="menuitemradio" data-theme-mode="system" aria-checked="true">System</button>
-              <button type="button" role="menuitemradio" data-theme-mode="light" aria-checked="false">Light</button>
-              <button type="button" role="menuitemradio" data-theme-mode="dark" aria-checked="false">Dark</button>
-            </div>
-          </div>
-          <button
-            class="icon-btn nav-toggle"
-            type="button"
-            data-nav-toggle
-            aria-controls="site-nav"
-            aria-expanded="false"
-            aria-label="Open menu"
-          >
-            <Icon name="menu" />
-            <Icon name="x" />
-          </button>
-        </div>
-      </div>
-    </header>
-
-    <main id="main">
+  <body class="bg-background text-foreground antialiased">
+    <SiteShell path={path} repo={catalog.repo} notice={RISK_DISCLAIMER.enabled ? `⚠️ ${inline(RISK_DISCLAIMER.text)}` : undefined}>
+      <Fragment slot="actions">
+        <SiteSearch client:load />
+        <GithubAction repo={catalog.repo} />
+        <ThemeSwitch client:load />
+      </Fragment>
       <slot />
-    </main>
-
-    <footer class="site-footer">
-      <div class="container">
-        <div class="footer-grid">
-          <div>
-            <a class="brand" href="/"><BirdMark /> Mockingbird</a>
-            <p class="footer-tagline">{IDENTITY.tagline}</p>
-            <p>Stateful emulators for the third-party APIs and databases your app depends on.</p>
-          </div>
-          <div>
-            <h2>Docs</h2>
-            <ul>
-              <li><a href="/services">Emulators</a></li>
-              <li><a href="/examples">Examples</a></li>
-              <li><a href="/coverage">Coverage</a></li>
-              <li><a href="/docs">Guides</a></li>
-              <li><a href="/why">Why Mockingbird</a></li>
-              <li><a href="/identity">Design system</a></li>
-            </ul>
-          </div>
-          <div>
-            <h2>For agents</h2>
-            <ul>
-              <li><a href="/llms.txt">llms.txt</a></li>
-              <li><a href="/llms-full.txt">llms-full.txt</a></li>
-              <li><a href="/catalog.json">catalog.json</a></li>
-            </ul>
-          </div>
-          <div>
-            <h2>Project</h2>
-            <ul>
-              <li><a href={catalog.repo} target="_blank" rel="noopener">GitHub</a></li>
-              <li><a href="https://www.npmjs.com/search?q=%40crvouga%2Fmockingbird-service" target="_blank" rel="noopener">npm</a></li>
-              <li><a href={`${catalog.repo}/blob/main/docs/AUTHORING_A_SERVICE.md`} target="_blank" rel="noopener">Add a service</a></li>
-            </ul>
-          </div>
-        </div>
-        <div class="footer-base">
-          <span>MIT licensed.</span>
-          <span>Every page is generated from the service packages at build time.</span>
-        </div>
-      </div>
-    </footer>
-
-    <dialog class="palette" data-palette aria-label="Search">
-      <div class="palette-box">
-        <label class="palette-input">
-          <Icon name="search" />
-          <input type="text" placeholder="Search documentation, operations, pages…" autocomplete="off" spellcheck="false" data-palette-input aria-controls="palette-results" />
-          <kbd>esc</kbd>
-        </label>
-        <ul class="palette-results" id="palette-results" role="listbox" data-palette-results></ul>
-        <div class="palette-foot">
-          <span><kbd>↑</kbd><kbd>↓</kbd> to navigate</span>
-          <span><kbd>↵</kbd> to open</span>
-        </div>
-      </div>
-    </dialog>
-
+    </SiteShell>
     <script>
       import "../client/site.ts"
     </script>
   </body>
 </html>
-
-<style is:global>
-  .palette {
-    width: min(640px, calc(100vw - 32px));
-    max-height: min(560px, calc(100dvh - 120px));
-    margin: 12vh auto auto;
-    padding: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg-elevated);
-    color: var(--fg);
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-  }
-
-  .palette::backdrop {
-    background: rgb(10 10 12 / 0.4);
-    backdrop-filter: blur(2px);
-  }
-
-  .palette[open] {
-    animation: palette-in 0.16s var(--ease);
-  }
-
-  @keyframes palette-in {
-    from {
-      opacity: 0;
-      transform: translateY(-6px) scale(0.99);
-    }
-  }
-
-  .palette-box {
-    display: flex;
-    flex-direction: column;
-    max-height: inherit;
-  }
-
-  .palette-input {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 0 14px;
-    border-bottom: 1px solid var(--border);
-    color: var(--fg-subtle);
-  }
-
-  .palette-input input {
-    flex: 1;
-    height: 54px;
-    border: 0;
-    outline: none;
-    background: transparent;
-    color: var(--fg);
-    font-size: 15.5px;
-  }
-
-  .palette-results {
-    list-style: none;
-    margin: 0;
-    padding: 6px;
-    overflow-y: auto;
-  }
-
-  .palette-results .group {
-    padding: 10px 10px 6px;
-    color: var(--fg-subtle);
-    font-size: 12px;
-    font-weight: 600;
-  }
-
-  .palette-results a {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 9px 10px;
-    border-radius: var(--radius);
-  }
-
-  .palette-results a[aria-selected="true"] {
-    background: var(--bg-muted);
-  }
-
-  .palette-results .monogram {
-    --size: 30px;
-  }
-
-  .palette-results .meta {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .palette-results .meta strong {
-    display: block;
-    font-weight: 600;
-    font-size: 14px;
-  }
-
-  .palette-results .meta span {
-    display: block;
-    color: var(--fg-subtle);
-    font-size: 12.5px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .palette-results .kind {
-    flex: none;
-    max-width: 14rem;
-    color: var(--fg-faint);
-    font-size: 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .palette-results .empty {
-    padding: 32px 12px;
-    text-align: center;
-    color: var(--fg-subtle);
-  }
-
-  .palette-foot {
-    display: flex;
-    gap: 16px;
-    padding: 10px 14px;
-    border-top: 1px solid var(--border);
-    background: var(--bg-subtle);
-    color: var(--fg-subtle);
-    font-size: 12px;
-  }
-
-  .palette-foot kbd {
-    margin-right: 3px;
-  }
-</style>

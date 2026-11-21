@@ -58,7 +58,7 @@
     "layer": "ui"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && bun scripts/build-css.ts",
+    "build": "bun scripts/build-css.ts && tsc -p tsconfig.build.json && bun scripts/build-system.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",

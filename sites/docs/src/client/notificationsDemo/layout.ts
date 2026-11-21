@@ -3,7 +3,7 @@
  * devices need `GRID_WIDTH` in a row and stand 760px tall, which no section of the page has room
  * for, so they are drawn smaller (`scale`), and below `TABS_BELOW` one at a time.
  *
- * `NotificationsDemo.astro` reserves the stage's height in CSS from the same numbers, so nothing
+ * `ui/landing/notifications-demo.tsx` reserves the stage's height in CSS from the same numbers, so nothing
  * moves when the UI mounts: keep the two in step.
  */
 

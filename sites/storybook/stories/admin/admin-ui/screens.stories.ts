@@ -137,8 +137,7 @@ RouteRun.play = async ({ canvasElement }) => {
   const page = within(canvasElement)
   await choose(canvasElement, "Admin route", "health", "GET /health")
   await userEvent.click(page.getByRole("button", { name: "Send request" }))
-  const answer = await page.findByLabelText<HTMLTextAreaElement>("JSON data")
-  await waitFor(() => expect(answer.value).toContain('"status"'))
+  await waitFor(() => expect(page.getByText(/"status"/)).toBeTruthy(), { timeout: 10_000 })
 }
 
 /**

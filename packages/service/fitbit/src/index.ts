@@ -144,8 +144,9 @@ const validDate = (value: string) => {
     parsed.getUTCFullYear() === y && parsed.getUTCMonth() === m - 1 && parsed.getUTCDate() === d
   )
 }
-const page = (status: number, message: string) =>
-  new Response(`<!doctype html><title>Fitbit</title><p>${message}</p>`, {
+/** An authorize error page (React, prebuilt in `#ui/server`, loaded only when one is served). */
+const page = async (status: number, message: string) =>
+  new Response((await import("#ui/server")).authorizeErrorPage(message), {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   })
@@ -290,7 +291,7 @@ export class FitbitAPI implements FetchAPI {
   }
 
   // --- OAuth -------------------------------------------------------------------------------
-  private authorize(c: OperationContext): Response {
+  private authorize(c: OperationContext): Response | Promise<Response> {
     const q = c.url.searchParams
     const client = this.clients.get(q.get("client_id") ?? "")
     if (!client) return page(400, "The client_id is not registered.")

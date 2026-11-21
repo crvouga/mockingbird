@@ -13,13 +13,16 @@ import { MockingbirdProvider, type MockingbirdProviderProps } from "./provider.j
 export type MountOptions = Omit<MockingbirdProviderProps, "children">
 
 /**
- * Render `element` into `container`, inside `MockingbirdProvider`. When the container already
- * holds server-rendered markup (`renderPage`), it is hydrated instead, so the page keeps what the
- * server drew and becomes interactive. Pass the same element (same props) the server rendered.
+ * Render `element` into `container`, inside `MockingbirdProvider`. When the container is the root
+ * of a server-rendered page (`renderPage`'s `[data-mockingbird-root]`) and already holds its
+ * markup, it is hydrated instead, so the page keeps what the server drew and becomes interactive;
+ * pass the same element (same props) the server rendered. Any other container is rendered into
+ * fresh, whatever it holds, so markup that React did not draw is never hydrated.
  */
 export function mount(container: Element, element: ReactNode, options: MountOptions = {}): Root {
   const tree = <MockingbirdProvider {...options}>{element}</MockingbirdProvider>
-  if (container.firstElementChild) return hydrateRoot(container, tree)
+  if (container.hasAttribute("data-mockingbird-root") && container.firstElementChild)
+    return hydrateRoot(container, tree)
   const root = createRoot(container)
   root.render(tree)
   return root

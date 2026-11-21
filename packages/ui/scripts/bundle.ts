@@ -65,8 +65,10 @@ const shared = (debug: boolean): BuildOptions => ({
   logLevel: "warning",
 })
 
-const notices = async (cwd: string, metafile: Metafile) =>
-  collectNotices(Object.keys(metafile.inputs).map((input) => resolve(cwd, input)))
+const notices = async (cwd: string, metafile: Metafile | undefined) => {
+  if (!metafile) throw new Error("esbuild returned no metafile")
+  return collectNotices(Object.keys(metafile.inputs).map((input) => resolve(cwd, input)))
+}
 
 const outName = (entry: string) => basename(entry, extname(entry))
 

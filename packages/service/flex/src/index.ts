@@ -1232,18 +1232,22 @@ export class FlexAPI implements FetchAPI {
     return { session, productNames, ...(errorMessage ? { error: errorMessage } : {}) }
   }
 
-  private render(session: SessionRecord, status = 200, errorMessage?: string): Response {
-    if (session.status !== "open") return html(409, closedPage(session))
+  private async render(
+    session: SessionRecord,
+    status = 200,
+    errorMessage?: string,
+  ): Promise<Response> {
+    if (session.status !== "open") return html(409, await closedPage(session))
     const input = this.pageInput(session, errorMessage)
     const body = session.next_action
-      ? nextActionPage(input, session.next_action.type)
-      : cardPage(input)
+      ? await nextActionPage(input, session.next_action.type)
+      : await cardPage(input)
     return annotateResponse(html(status, body), { ids: { sessionId: session.checkout_session_id } })
   }
 
-  private hostedPage(context: OperationContext): Response {
+  private async hostedPage(context: OperationContext): Promise<Response> {
     const session = this.state.sessions.get(context.params.sessionId ?? "")
-    if (!session) return html(404, notFoundPage())
+    if (!session) return html(404, await notFoundPage())
     return this.render(session)
   }
 
@@ -1257,11 +1261,11 @@ export class FlexAPI implements FetchAPI {
     )
   }
 
-  private submitHosted(context: OperationContext): Response {
+  private async submitHosted(context: OperationContext): Promise<Response> {
     const id = context.params.sessionId ?? ""
     const session = this.state.sessions.get(id)
-    if (!session) return html(404, notFoundPage())
-    if (session.status !== "open") return html(409, closedPage(session))
+    if (!session) return html(404, await notFoundPage())
+    if (session.status !== "open") return html(409, await closedPage(session))
     const form: Record<string, string> = {}
     if (context.body.kind === "form" || context.body.kind === "json") {
       for (const [key, value] of Object.entries(context.body.value as Record<string, unknown>)) {
@@ -1325,9 +1329,9 @@ export class FlexAPI implements FetchAPI {
     return this.redirect(session.success_url, settled ?? session)
   }
 
-  private cancelHosted(context: OperationContext): Response {
+  private async cancelHosted(context: OperationContext): Promise<Response> {
     const session = this.state.sessions.get(context.params.sessionId ?? "")
-    if (!session?.cancel_url) return html(404, notFoundPage())
+    if (!session?.cancel_url) return html(404, await notFoundPage())
     return this.redirect(session.cancel_url, session)
   }
 }

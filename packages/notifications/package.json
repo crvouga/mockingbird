@@ -32,6 +32,17 @@
       "default": "./dist/admin-gateway.js"
     }
   },
+  "imports": {
+    "#ui/embed": {
+      "types": "./src/ui/embed.ts",
+      "bun": "./src/ui/embed.ts",
+      "default": "./dist-ui/embed.js"
+    },
+    "#ui/client-bundle": {
+      "types": "./src/client-bundle.d.ts",
+      "default": "./dist-ui/browser.bundle.js"
+    }
+  },
   "bin": {
     "mockingbird-notifications": "./dist/cli.js"
   },
@@ -64,8 +75,7 @@
     }
   },
   "scripts": {
-    "generate": "bun scripts/build-ui.ts",
-    "build": "bun scripts/build-ui.ts && bun ../../scripts/bundle-service.ts",
+    "build": "bun ../ui/scripts/bundle.ts --ssr src/ui/embed.ts --client src/ui/browser.ts --global MockingbirdNotifications && bun ../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",

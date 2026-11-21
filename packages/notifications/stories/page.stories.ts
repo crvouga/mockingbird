@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
-import type { AppOptions } from "../src/ui/app.js"
+import type { AppOptions } from "../src/ui/types.js"
 import { allSources, base, everything, MAILBOX, PHONE, sms } from "./fixtures.js"
 import { mount } from "./mount.js"
 

@@ -14,6 +14,10 @@ export type CodeBlockProps = {
   maxHeight?: string
   /** Wrap long lines instead of scrolling sideways. Default false. */
   wrap?: boolean
+  /** The copy button's accessible name ("Copy mockingbird.yaml"). Default "Copy". */
+  copyLabel?: string
+  /** More buttons beside the copy button (a download, say). */
+  actions?: ReactNode
 }
 
 /**
@@ -27,6 +31,8 @@ export function CodeBlock({
   copyable = true,
   maxHeight,
   wrap = false,
+  copyLabel = "Copy",
+  actions,
 }: CodeBlockProps) {
   // The copy button needs JavaScript; a server-rendered page without a client bundle omits it.
   const hydrated = useIsHydrated()
@@ -43,7 +49,7 @@ export function CodeBlock({
         isIconOnly
         size="sm"
         variant="ghost"
-        aria-label={copied ? "Copied" : "Copy"}
+        aria-label={copied ? "Copied" : copyLabel}
         className="size-7 min-w-7"
         onPress={() => {
           void navigator.clipboard?.writeText(code).then(() => setCopied(true))
@@ -57,10 +63,13 @@ export function CodeBlock({
       className="min-w-0 overflow-hidden rounded-lg border border-border bg-surface-secondary"
       data-mockingbird-code
     >
-      {title || copyButton ? (
+      {title || copyButton || actions ? (
         <div className="flex min-h-9 items-center justify-between gap-2 border-b border-separator py-1 pr-1 pl-3">
           <span className="truncate font-mono text-xs text-muted">{title}</span>
-          {copyButton}
+          <span className="flex shrink-0 items-center gap-1">
+            {actions}
+            {copyButton}
+          </span>
         </div>
       ) : null}
       <pre

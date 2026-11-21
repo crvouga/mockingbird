@@ -15,7 +15,7 @@ import type {
   RedirectPolicy,
   Token,
 } from "./types.js"
-import { consentPage, escapeHtml, loginPage, page, redirectPage } from "./ui.js"
+import { consentPage, expiredPage, formPostPage, homePage, loginPage, redirectPage } from "./ui.js"
 
 export type {
   BehaviorEvent,
@@ -891,14 +891,7 @@ export class OAuthAPI {
           this.tokens.delete(row.id)
       return json({})
     }
-    if (request.method === "GET" && path === "/")
-      return page(
-        "Identity sandbox",
-        '<span class="eyebrow">Mockingbird Identity</span><h1 id="title">Make sign-in<br>feel real.</h1><p>Your identity sandbox is ready. Start sign-in from your application to choose an account, create a new identity, and review access.</p><div class="account"><span class="avatar" aria-hidden="true">✓</span><span class="identity"><strong>Ready when you are</strong><small>OAuth 2.0 · OpenID Connect</small></span></div>',
-        200,
-        undefined,
-        this.credentials.nonce(),
-      )
+    if (request.method === "GET" && path === "/") return homePage(this.credentials.nonce())
     return fail("not_found", "Unknown endpoint", 404)
   }
   private async form(request: Request): Promise<URLSearchParams | undefined> {
@@ -1065,7 +1058,7 @@ export class OAuthAPI {
     account: Account,
     auth: Authorization,
     issuer: string,
-  ): Response {
+  ): Promise<Response> {
     const existing = this.identities.get(this.identityKey(client, account.id))
     const denied = new Set(this.behavior.config.consent?.deniedScopes ?? [])
     const allowed = [...scopes(auth.scope)].filter((s) => !denied.has(s)).join(" ")
@@ -1102,15 +1095,7 @@ export class OAuthAPI {
     const id = p.get("transaction") ?? ""
     const auth = this.transactions.get(id)
     const client = auth && this.clients.get(auth.clientId)
-    if (!auth || auth.expires <= this.now() || !client)
-      return page(
-        "Session expired",
-        '<span class="eyebrow">Let’s try again</span><h1 id="title">This sign-in expired</h1><p>Return to your application and start sign-in again.</p>',
-        400,
-        undefined,
-        this.credentials.nonce(),
-        "oauth-mock-error",
-      )
+    if (!auth || auth.expires <= this.now() || !client) return expiredPage(this.credentials.nonce())
     const accounts = () =>
       this.accounts.list({ order: "oldest", where: (a) => !a.disabled }).map((a) => a.value)
     if (request.method === "GET")
@@ -1129,7 +1114,7 @@ export class OAuthAPI {
       this.transactions.delete(id)
       return this.browserHandoff(
         request,
-        this.callback(auth, {
+        await this.callback(auth, {
           error: "access_denied",
           error_description: "The user denied access",
         }),
@@ -1200,7 +1185,7 @@ export class OAuthAPI {
       ) {
         this.transactions.delete(id)
         return this.startSession(
-          this.browserHandoff(
+          await this.browserHandoff(
             request,
             await this.finish(auth as Authorization & { accountId: string }, issuer),
           ),
@@ -1227,7 +1212,7 @@ export class OAuthAPI {
         auth.emailChoice = choice
       this.transactions.delete(id)
       return this.startSession(
-        this.browserHandoff(
+        await this.browserHandoff(
           request,
           await this.finish(auth as Authorization & { accountId: string }, issuer),
         ),
@@ -1238,7 +1223,7 @@ export class OAuthAPI {
     }
     return fail("invalid_request", "Invalid interaction action")
   }
-  private browserHandoff(request: Request, result: Response): Response {
+  private async browserHandoff(request: Request, result: Response): Promise<Response> {
     const location = result.headers.get("location")
     if (
       request.headers.get("sec-fetch-mode")?.toLowerCase() !== "navigate" ||
@@ -1344,28 +1329,12 @@ export class OAuthAPI {
     }
     return this.callback(auth, values)
   }
-  private callback(auth: Authorization, values: Record<string, string>): Response {
+  private async callback(auth: Authorization, values: Record<string, string>): Promise<Response> {
     if (auth.state) values.state = auth.state
     const redirect = new URL(auth.redirectUri)
     if (auth.responseMode === "form_post") {
       const nonce = this.options.nonce?.() ?? this.credentials.nonce()
-      const result = page(
-        "Continue to your app",
-        `<span class="eyebrow">All set</span><h1 id="title">Back to your app</h1><p>Your sign-in response is ready.</p><form id="callback" method="post" action="${escapeHtml(auth.redirectUri)}">${Object.entries(
-          values,
-        )
-          .map(([k, v]) => `<input type="hidden" name="${escapeHtml(k)}" value="${escapeHtml(v)}">`)
-          .join(
-            "",
-          )}<button class="primary" data-testid="oauth-mock-form-post-continue">Continue</button></form><script nonce="${nonce}">document.getElementById('callback').submit()</script>`,
-        200,
-        // The callback may answer this POST with a redirect to an origin only it knows (its web
-        // app), and form-action would be applied to that hop too. No source list can allow it.
-        null,
-        nonce,
-        "oauth-mock-form-post",
-      )
-      return result
+      return formPostPage(auth.redirectUri, values, nonce)
     }
     let location: string
     if (!WEB_SCHEMES.has(redirect.protocol)) {
@@ -1659,4 +1628,3 @@ export class OAuthAPI {
     return json(result)
   }
 }
-export const __trial = async (name: string) => { const { trialPage } = await import("#ui/server"); const { BUNDLE } = await import("#ui/client-bundle"); return trialPage(name, { source: BUNDLE }) }
