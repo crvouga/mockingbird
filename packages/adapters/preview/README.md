@@ -256,7 +256,7 @@ const proxy = devProxyWorker({
 })
 
 export default {
-  fetch(request: Request, env: Record<string, string | undefined> & { ASSETS: Fetcher }) {
+  fetch(request: Request, env: Record<string, string | undefined> & { ASSETS: { fetch(request: Request): Promise<Response> } }) {
     const { pathname } = new URL(request.url)
     if (pathname === "/__dev" || pathname.startsWith("/__dev/")) {
       const { ASSETS: _assets, ...secrets } = env
