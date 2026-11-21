@@ -11,7 +11,8 @@
     "CHANGELOG.md",
     "DISCOVERY.md",
     "SUPPORT.md",
-    "openapi.yaml"
+    "openapi.yaml",
+    "BROWSER.md"
   ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,6 +24,14 @@
     "./server": {
       "types": "./dist/server.d.ts",
       "default": "./dist/server.js"
+    },
+    "./signal-state": {
+      "types": "./dist/signal-state.d.ts",
+      "default": "./dist/signal-state.js"
+    },
+    "./browser": {
+      "types": "./dist/browser.d.ts",
+      "default": "./dist/browser.js"
     }
   },
   "bin": {
@@ -100,7 +109,9 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-runtime": "workspace:*",
-    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@livekit/protocol": "1.50.4",
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
@@ -114,6 +125,12 @@
     "@crvouga/mockingbird-testing": "workspace:*",
     "fast-check": "4.9.0",
     "livekit-server-sdk": "2.19.1",
-    "livekit-reconciliation": "npm:livekit-server-sdk@2.19.0"
+    "livekit-reconciliation": "npm:livekit-server-sdk@2.19.0",
+    "livekit-client": "2.15.8",
+    "@playwright/test": "1.65.0",
+    "esbuild": "0.28.2",
+    "@types/ws": "8.18.1",
+    "werift": "0.27.0",
+    "opusscript": "0.1.1"
   }
 }

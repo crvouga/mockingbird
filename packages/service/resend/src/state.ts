@@ -7,6 +7,8 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
  * `toHeader` keeps them as sent. Attachments keep metadata only.
  */
 export type SentEmail = {
+  upstream?: true
+  sentForReal?: true
   id: string
   from: string
   to: string[]

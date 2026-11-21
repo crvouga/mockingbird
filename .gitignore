@@ -25,3 +25,4 @@ packages/service/*/CHANGELOG.md
 .performance/
 packages/examples/medical-testing/preview-dist/
 .wrangler/
+.dev.vars*

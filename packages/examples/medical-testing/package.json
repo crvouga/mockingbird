@@ -30,6 +30,8 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-notifications": "workspace:*",
+    "@crvouga/mockingbird-preview": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-service-fcm": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",
     "@crvouga/mockingbird-service-oauth": "workspace:*",

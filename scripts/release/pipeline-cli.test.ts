@@ -10,11 +10,11 @@ test("CI build and publish consume the frozen group without replanning or reconc
   const checkout = join(dir, "checkout")
   const calls = join(dir, "calls")
   const version = "7.8.9"
-  // The scenario is SQLite as the one prerequisite; the shared runtime is left out of it.
-  const RUNTIME = "@crvouga/mockingbird-runtime"
+  // This fixture isolates SQLite as the prerequisite; pipeline.test.ts covers the full package graph.
+  const shared = new Set(["@crvouga/mockingbird-runtime", "@crvouga/mockingbird-ui"])
   const packages = discoverPackages().map((p) => ({
     ...p,
-    runtimeDeps: p.runtimeDeps.filter((d) => d !== RUNTIME),
+    runtimeDeps: p.runtimeDeps.filter((d) => !shared.has(d)),
   }))
   const selected = packages.filter((p) => /-service-(sqlite|stripe|postgres)$/.test(p.name))
   const plan: Plan = {
@@ -52,7 +52,7 @@ Bun.sleep = async (ms) => { appendFileSync(process.env.TEST_RELEASE_CALLS, "slee
       const destination = join(checkout, pkg.relDir)
       mkdirSync(destination, { recursive: true })
       const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8"))
-      delete manifest.dependencies?.[RUNTIME]
+      for (const name of shared) delete manifest.dependencies?.[name]
       const copy = `${JSON.stringify(manifest, null, 2)}\n`
       copies.push(copy)
       writeFileSync(join(destination, "package.json"), copy)

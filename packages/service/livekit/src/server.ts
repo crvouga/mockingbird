@@ -1,14 +1,35 @@
 /// <reference types="node" />
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
 import { createRuntime, type LiveKitRuntime, type LiveKitRuntimeOptions } from "./runtime.js"
+import { createNodeSignals, type NodeSignalOptions } from "./signal-node.js"
 export const DEFAULT_PORT = 8819
-export type LiveKitServerOptions = LiveKitRuntimeOptions & { port?: number; host?: string }
+export type LiveKitServerOptions = LiveKitRuntimeOptions & {
+  port?: number
+  host?: string
+  signaling?: NodeSignalOptions
+}
 export const createServer = async (
   options: LiveKitServerOptions = {},
 ): Promise<Listening & { runtime: LiveKitRuntime }> => {
-  const { port, host, ...rest } = options
+  const { port, host, signaling, ...rest } = options
   const runtime = createRuntime(rest)
-  return { ...(await listen(runtime, { port: port ?? 0, ...(host ? { host } : {}) })), runtime }
+  const signals = signaling ? createNodeSignals(runtime, signaling) : undefined
+  const api = {
+    fetch: (request: Request) =>
+      signals && new URL(request.url).pathname === "/rtc/validate"
+        ? signals.validate(request)
+        : runtime.fetch(request),
+  }
+  const listening = await listen(api, { port: port ?? 0, ...(host ? { host } : {}) })
+  signals?.attach(listening.server)
+  return {
+    ...listening,
+    runtime,
+    close: async () => {
+      await signals?.close()
+      await listening.close()
+    },
+  }
 }
 export const serveTarget: ServeTarget = {
   name: "livekit",

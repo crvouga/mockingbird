@@ -1,4 +1,5 @@
 import { expect, test } from "bun:test"
+import { existsSync } from "node:fs"
 import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -17,12 +18,11 @@ const run = async (args: string[], cwd: string) => {
 test("packed neutral package boots Postgres/Redis/Cognito outside monorepo without Stripe or private workspaces (#453)", async () => {
   const work = await mkdtemp(join(tmpdir(), "mockingbird-neutral-consumer-"))
   try {
-    const tarballs: string[] = []
-    let sqliteTarball = ""
-    let runtimeTarball = ""
-    let notificationsTarball = ""
+    const tarballs = new Map<string, string>()
     for (const name of [
       "sqlite",
+      "ui",
+      "preview",
       "runtime",
       "postgres",
       "redis",
@@ -33,38 +33,39 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       const source =
         name === "fleet"
           ? import.meta.dir
-          : name === "notifications" || name === "runtime"
-            ? resolve(import.meta.dir, "../..", name)
-            : resolve(import.meta.dir, "../../service", name)
+          : name === "preview"
+            ? resolve(import.meta.dir, "../preview")
+            : ["notifications", "runtime", "ui"].includes(name)
+              ? resolve(import.meta.dir, "../..", name)
+              : resolve(import.meta.dir, "../../service", name)
       const stage = join(work, "pack", name)
       await mkdir(stage, { recursive: true })
-      await cp(join(source, "dist"), join(stage, "dist"), { recursive: true })
-      await cp(join(source, "README.md"), join(stage, "README.md"))
       const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"))
-      // Same manifest pinning as release:publish, with the packed local SQLite artifact.
+      for (const file of manifest.files) {
+        if (existsSync(join(source, file))) {
+          await mkdir(resolve(stage, file, ".."), { recursive: true })
+          await cp(join(source, file), join(stage, file), { recursive: true })
+        }
+      }
       manifest.version = "0.0.0-smoke"
-      if (manifest.dependencies?.["@crvouga/mockingbird-service-sqlite"])
-        manifest.dependencies["@crvouga/mockingbird-service-sqlite"] = `file:${sqliteTarball}`
-      // Every service shares the packed runtime.
-      if (manifest.dependencies?.["@crvouga/mockingbird-runtime"])
-        manifest.dependencies["@crvouga/mockingbird-runtime"] = `file:${runtimeTarball}`
-      // The dashboard (`serve --dashboard`) comes with the fleet: no second install.
-      if (manifest.dependencies?.["@crvouga/mockingbird-notifications"])
-        manifest.dependencies["@crvouga/mockingbird-notifications"] = `file:${notificationsTarball}`
+      for (const [dependency, tarball] of tarballs) {
+        if (manifest.dependencies?.[dependency])
+          manifest.dependencies[dependency] = `file:${tarball}`
+      }
       await writeFile(join(stage, "package.json"), JSON.stringify(manifest))
       const packed = JSON.parse(
         await run(["npm", "pack", "--json", "--ignore-scripts", "--pack-destination", work], stage),
       ) as { filename: string }[]
       const tarball = join(work, packed[0]?.filename ?? "missing")
-      tarballs.push(tarball)
-      if (name === "sqlite") sqliteTarball = tarball
-      if (name === "runtime") runtimeTarball = tarball
-      if (name === "notifications") notificationsTarball = tarball
+      tarballs.set(manifest.name, tarball)
     }
     const app = join(work, "app")
     await mkdir(app)
     await writeFile(join(app, "package.json"), JSON.stringify({ private: true, type: "module" }))
-    await run(["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", ...tarballs], app)
+    await run(
+      ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", ...tarballs.values()],
+      app,
+    )
     await writeFile(
       join(app, "smoke.mjs"),
       `

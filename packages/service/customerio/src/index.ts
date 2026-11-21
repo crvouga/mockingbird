@@ -415,6 +415,51 @@ export class CustomerIoAPI implements FetchAPI {
     this.sqlite = this.service.sqlite
   }
 
+  async recordForwarded(request: Request, response: Response): Promise<void> {
+    const channel = /^\/v1\/send\/(email|sms|push|inbox)$/.exec(new URL(request.url).pathname)?.[1]
+    if (request.method !== "POST" || !channel) return
+    const payload: unknown = await request.json().catch(() => undefined)
+    const result: unknown = await response.json().catch(() => undefined)
+    if (!isRecord(payload) || !isRecord(result) || typeof result.delivery_id !== "string") return
+    const identifiers = isRecord(payload.identifiers) ? payload.identifiers : {}
+    const identity: { id?: string; email?: string; cio_id?: string } = {}
+    for (const key of ["id", "email", "cio_id"] as const)
+      if (typeof identifiers[key] === "string") identity[key] = identifiers[key]
+    const retain = payload.disable_message_retention !== true
+    const now = this.now()
+    this.state.deliveries.record({
+      id: `upstream:${result.delivery_id}`,
+      upstream: true,
+      sentForReal: true,
+      to:
+        typeof payload.to === "string"
+          ? payload.to
+          : (identity.email ?? identity.id ?? identity.cio_id ?? ""),
+      createdAt: new Date(now).toISOString(),
+      channel: channel as Channel,
+      transactionalMessageId: String(payload.transactional_message_id ?? ""),
+      messageId: null,
+      identifiers: identity,
+      from: typeof payload.from === "string" ? payload.from : null,
+      subject: retain && typeof payload.subject === "string" ? payload.subject : null,
+      messageData: retain && isRecord(payload.message_data) ? payload.message_data : null,
+      links: [],
+      originalLinks: [],
+      tracked: false,
+      sendToUnsubscribed: payload.send_to_unsubscribed === true,
+      disableMessageRetention: !retain,
+      headers: {},
+      attachments: [],
+      state: "pending",
+      reason: null,
+      failureMessage: null,
+      metrics: {},
+      visibleAt: now,
+      queuedAt: Math.floor(now / 1000),
+      clicks: 0,
+    })
+  }
+
   fetch(request: Request): Promise<Response> {
     return this.service.fetch(request)
   }

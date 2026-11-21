@@ -7,6 +7,7 @@ import type {
   RequestLog,
   ServiceInstance,
   ServiceRuntime,
+  UpstreamOptions,
 } from "@crvouga/mockingbird-service"
 import {
   createClock,
@@ -70,6 +71,7 @@ export type FleetChild = {
     options: { offset: number; limit: number; collection?: string },
   ): Promise<unknown>
   configure?(namespace: string, controls: Record<string, unknown>): Promise<unknown>
+  upstream?(namespace: string, settings?: Record<string, unknown>): Promise<Response>
   unmatched?(namespace: string, limit: number): { entries: unknown[]; truncated: boolean }
   lastActivity?(namespace: string): number
   setAdmission?(allow: (namespace: string) => boolean): void
@@ -94,12 +96,14 @@ export type FleetHttpTarget = Pick<
   | "listening"
   | "parseSettings"
   | "maxBodyBytes"
+  | "supportsUpstream"
 > & {
   create(values: Parameters<ServeTarget["create"]>[0], common: CommonServeOptions): unknown
 }
 export type FleetTarget = FleetHttpTarget | ProtocolTarget
 
 export type FleetOptions = ManagementOptions & {
+  upstreams?: Record<string, Pick<UpstreamOptions, "fetch" | "rewriteAuth">>
   participants?: Record<string, FleetChild>
   load(name: string): Promise<FleetTarget>
   onLog?: CommonServeOptions["onLog"]
@@ -211,6 +215,7 @@ const removeOwned = async (path: string | undefined, id: string) => {
 }
 
 const httpChild = async (
+  name: string,
   target: FleetHttpTarget,
   entry: ConfigService,
   options: FleetOptions,
@@ -231,6 +236,9 @@ const httpChild = async (
 ): Promise<FleetChild> => {
   const requestLog = new AsyncLocalStorage<{ entry?: RequestLog }>()
   const created: unknown = await target.create(entry.options ?? {}, {
+    ...(entry.upstream && options.upstreams?.[name]
+      ? { upstream: { ...entry.upstream, ...options.upstreams[name] } }
+      : {}),
     adminPrefix: resolveAdminPrefix(entry.adminPrefix),
     adminKey: entry.adminKey,
     seed: entry.seed,
@@ -440,6 +448,19 @@ const httpChild = async (
       runtime.instance(namespace)
     },
     deleteNamespace: (namespace) => runtime.dropNamespace(namespace),
+    async upstream(namespace, settings) {
+      return runtime.fetch(
+        new Request(`http://fleet.internal${resolveAdminPrefix(entry.adminPrefix)}/upstream`, {
+          method: settings ? "PUT" : "GET",
+          headers: {
+            "content-type": "application/json",
+            "x-mockingbird-namespace": namespace,
+            ...(entry.adminKey ? { "x-mockingbird-admin-key": entry.adminKey } : {}),
+          },
+          ...(settings ? { body: JSON.stringify(settings) } : {}),
+        }),
+      )
+    },
     async configure(namespace, controls) {
       return runtime.configure(controls, namespace)
     },
@@ -964,6 +985,7 @@ export async function startFleet(config: MockingbirdConfig, options: FleetOption
                   : {}),
               })
             : await httpChild(
+                name,
                 target,
                 {
                   ...entry,

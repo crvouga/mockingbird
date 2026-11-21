@@ -29,8 +29,9 @@ The output is `packages/examples/medical-testing/preview-dist`. Serve it with an
 This build includes the [browser runtime adapter](../../adapters/browser/README.md): shared virtual
 files, Node library polyfills and browser-local Node/Bun/Deno servers. See its compatibility table
 for supported APIs and explicit limits; this does not turn the browser into a complete host OS.
-The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets; Cloudflare only
-serves files, while all application requests execute inside the browser. To publish a distinct
+The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets plus a small Worker
+(`src/worker.ts`) that only answers `/__sandbox/*`, the [sandbox proxy](#sandbox-mode). Every
+application request still executes inside the browser. To publish a distinct
 PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` from this package
 directory. Deployment requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Actions
 repository secrets. No deployment is performed by the build command. The System preview workflow builds a downloadable
@@ -43,12 +44,33 @@ Standalone links use `?surface=app`, `?surface=system`, `?surface=emulators` or
 fresh demonstration world. URLs do not contain patient data or session state.
 
 The reusable, framework-free `mountSystemHarness` export in `@crvouga/mockingbird-ui` accepts
-`{ id, label, mount(host, signal) }` entries. A mount resolves with a disposer when ready and
+`{ id, label, description?, mount(host, signal) }` entries, plus optional `services` and `docsUrl`
+for the System screen. A mount resolves with a disposer when ready and
 rejects on failure (the shell offers Retry). Use dynamic imports inside mount for optional UI.
 An adapter may mount a client, an iframe, or a controller/inspector for a non-client service.
 Abort cancels pending work on teardown, and late mount results are disposed. The host owns the
 system's topology and transports; the shell never imports application or emulator code.
 The current lab client has module-scoped ports and supports one system per document.
+
+### The System screen
+
+**System** (press **←** from the app) is the preview's control panel:
+
+- **Apps**: open any surface, and choose with **In switcher** which ones the arrow pill rotates
+  through. That choice is kept in the browser.
+- **Sandbox access**: the proxy's status, and where to enter the access key that unlocks it.
+- **Services**: every third-party service the app talks to (`src/composition/services.ts`), each
+  with an **Emulated | Sandbox** control, or the reason it can only be emulated.
+
+### Sandbox mode
+
+Switching a service to **Sandbox** sends its emulator's requests through the Worker's
+`/__sandbox` proxy to the vendor's test account, with the proxy's `<SERVICE>_*` secrets
+attached. Nothing is rebuilt and no secret reaches the browser. The workflow copies
+`SANDBOX_PROXY_TOKEN` and the sandbox keys from GitHub Actions secrets to each PR's Worker; without
+`SANDBOX_PROXY_TOKEN` the proxy refuses every request. How it works, the security model, the
+providers and their limits are in [Sandbox mode](../../../docs/SANDBOX_MODE.md). The wiring is
+`src/composition/sandbox.ts` (browser) and `src/worker.ts` (proxy).
 
 ## Ports and adapters
 

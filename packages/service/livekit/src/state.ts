@@ -38,6 +38,8 @@ export type DataMessage = {
   data: string
   kind: string
   topic?: string
+  packet?: string
+  senderIdentity?: string
   createdAt: number
 }
 export type AsyncResource = {
@@ -81,6 +83,22 @@ export class LiveKitState {
   readonly dispatches: Collection<AgentDispatch>
   readonly participants: Collection<LiveKitParticipant & { room: string }>
   readonly inbox: Collection<DataMessage & { participantSid: string }>
+  readonly connections: Collection<{
+    id: string
+    room: string
+    identity: string
+    state: "open" | "reconnecting" | "closed"
+    openedAt: number
+    updatedAt: number
+    resumes: number
+  }>
+  readonly media: Collection<{
+    room: string
+    identity: string
+    trackSid: string
+    packetsReceived: number
+    bytesReceived: number
+  }>
   readonly resources: Collection<AsyncResource>
   readonly ids: IdSequence
   constructor(sqlite: SqliteClient, namespace: string) {
@@ -88,6 +106,8 @@ export class LiveKitState {
     this.dispatches = new Collection(sqlite, namespace, "livekit_dispatches")
     this.participants = new Collection(sqlite, namespace, "livekit_participants")
     this.inbox = new Collection(sqlite, namespace, "livekit_inbox")
+    this.connections = new Collection(sqlite, namespace, "livekit_connections")
+    this.media = new Collection(sqlite, namespace, "livekit_media")
     this.resources = new Collection(sqlite, namespace, "livekit_resources")
     this.ids = new IdSequence(sqlite, namespace, "livekit")
   }

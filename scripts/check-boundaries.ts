@@ -120,6 +120,9 @@ const PUBLISHED_TOOLS = new Set([
   RUNTIME,
   "@crvouga/mockingbird-fleet",
   "@crvouga/mockingbird-notifications",
+  "@crvouga/mockingbird-adapter-browser",
+  "@crvouga/mockingbird-preview",
+  "@crvouga/mockingbird-ui",
 ])
 for (const pkg of packages.values()) {
   if (pkg.public && !SERVICE_NAME.test(pkg.name) && !PUBLISHED_TOOLS.has(pkg.name)) {

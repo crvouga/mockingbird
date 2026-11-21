@@ -118,7 +118,8 @@
   "dependencies": {
     "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.13.11"
+    "hono": "4.13.11",
+    "@crvouga/mockingbird-ui": "workspace:*"
   },
   "devDependencies": {
     "fast-check": "4.9.0",
@@ -138,10 +139,10 @@
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-ui": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
     "@crvouga/mockingbird-commands": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@crvouga/mockingbird-preview": "workspace:*",
     "stripe-v17": "npm:stripe@17.7.0"
   }
 }

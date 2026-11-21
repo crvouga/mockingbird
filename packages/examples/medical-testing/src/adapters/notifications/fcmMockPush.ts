@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import { createRuntime } from "@crvouga/mockingbird-service-fcm"
 import type { OutboundPush } from "../../app/ports/notifier.js"
 import type { MockAdmin } from "../admin.js"
@@ -17,8 +18,8 @@ const BASE_URL = "https://fcm.googleapis.com"
  * (`ios-…` or `android-…`, see `deviceTokenFor`). That platform lets the
  * notification harness draw the right phone.
  */
-export const createFcmMockPush = () => {
-  const runtime = createRuntime()
+export const createFcmMockPush = (upstream?: UpstreamOptions) => {
+  const runtime = createRuntime(upstream ? { upstream } : {})
   const registered = new Map<string, Promise<void>>()
 
   const register = (token: string): Promise<void> => {

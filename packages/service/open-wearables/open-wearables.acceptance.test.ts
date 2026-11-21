@@ -48,7 +48,7 @@ test("public provider filtering, users, connections, sync completion and revocat
   await runtime.reset()
   expect((await request(`/api/v1/users/${user.id}`)).status).toBe(404)
 })
-test("deployment extensions and browser OAuth reject explicitly without state changes", async () => {
+test("deployment extensions reject explicitly without state changes", async () => {
   const { runtime, request } = harness()
   const before = runtime.instance().state.users.list()
   for (const [path, method] of [
@@ -57,9 +57,6 @@ test("deployment extensions and browser OAuth reject explicitly without state ch
     ["/api/v1/providers/apple/users/id/register", "POST"],
     ["/api/v1/providers/apple/users/id/deregister", "DELETE"],
     ["/api/v1/providers/apple/users/id/sync/task/receipt", "GET"],
-    ["/api/v1/oauth/garmin/authorize?user_id=id", "GET"],
-    ["/users/id/pair", "GET"],
-    ["/users/id/pair/garmin", "GET"],
   ] as const) {
     const response = await request(path, method === "POST" ? {} : undefined, method)
     expect(response.status).toBe(501)

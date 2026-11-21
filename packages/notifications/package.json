@@ -26,6 +26,10 @@
     "./ui": {
       "types": "./dist/ui.d.ts",
       "default": "./dist/ui.js"
+    },
+    "./admin-gateway": {
+      "types": "./dist/admin-gateway.d.ts",
+      "default": "./dist/admin-gateway.js"
     }
   },
   "bin": {
@@ -54,7 +58,10 @@
   ],
   "mockingbird": {
     "runtime": "node",
-    "layer": "tool"
+    "layer": "tool",
+    "entries": {
+      "admin-gateway": "portable"
+    }
   },
   "scripts": {
     "generate": "bun scripts/build-ui.ts",

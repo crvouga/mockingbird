@@ -12,6 +12,7 @@ import {
   resolveAdminPrefix,
   type ServiceRuntime,
   signers,
+  type UpstreamOptions,
   type WebhookEndpoint,
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
@@ -184,6 +185,7 @@ export const forwardToInbox = async (
 }
 
 export type ResendRuntimeOptions = Pick<ResendAPIOptions, "fixtures" | "baseUrl" | "tokens"> & {
+  upstream?: UpstreamOptions
   sqlite?: SqliteClient
   clock?: Clock
   seed?: number | string
@@ -308,6 +310,8 @@ export const createRuntime = (options: ResendRuntimeOptions = {}): ResendRuntime
   let recordOutcome: (event: SendOutcomeEvent) => void = () => {}
   const runtime = createServiceRuntime<ResendAPI>({
     name: RESEND_NAMESPACE,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    onForwardResponse: (api, request, response) => api.recordForwarded(request, response),
     document,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     ...(options.clock ? { clock: options.clock } : {}),
