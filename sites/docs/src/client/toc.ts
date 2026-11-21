@@ -1,6 +1,7 @@
-// Highlight the table-of-contents entry for the heading nearest the top of the viewport.
+// Highlight the table-of-contents entry (`Toc` in src/ui/primitives.tsx) for the heading nearest the
+// top of the viewport.
 const links = new Map<string, HTMLAnchorElement>()
-for (const a of document.querySelectorAll<HTMLAnchorElement>(".toc a[href^='#']")) {
+for (const a of document.querySelectorAll<HTMLAnchorElement>("[data-toc] a[href^='#']")) {
   links.set(decodeURIComponent(a.hash.slice(1)), a)
 }
 const headings = [...links.keys()]

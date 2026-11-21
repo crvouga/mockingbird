@@ -13,7 +13,6 @@ import {
   type Service,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import { CSS_RESET } from "@crvouga/mockingbird-ui"
 import type { Hono } from "hono"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
 import { type InquiryRecord, type InquiryStatus, PersonaState, type Settings } from "./state.js"
@@ -137,20 +136,14 @@ export const inquiryResource = (inquiry: InquiryRecord) => ({
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value)
 
-const escapeHtml = (value: string) =>
-  value.replace(
-    /[&<>"']/g,
-    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string,
-  )
+/** The browser pages (React, prebuilt in `#ui/server`), loaded only when a page is served. */
+const pages = () => import("#ui/server")
 
 const html = (status: number, body: string) =>
-  new Response(
-    `<!doctype html><html><head><meta charset="utf-8"><title>Persona (mock)</title><style>${CSS_RESET}body{max-width:32rem;margin:2.5rem auto;padding:0 1.25rem}h1{font-size:1.5rem;font-weight:650;margin:0 0 .75rem}p{margin:0 0 .75rem}ul{display:grid;gap:.5rem;list-style:none;padding:0}</style></head><body>${body}</body></html>`,
-    {
-      status,
-      headers: { "content-type": "text/html; charset=utf-8" },
-    },
-  )
+  new Response(body, {
+    status,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  })
 
 /**
  * Stateful mock of Persona's inquiry API (the surface our EMR calls).
@@ -416,52 +409,55 @@ export class PersonaAPI implements FetchAPI {
     return inquiry
   }
 
-  private hostedFlow(context: OperationContext): Response {
+  private async hostedFlow(context: OperationContext): Promise<Response> {
     const id = context.url.searchParams.get("inquiry-id") ?? ""
     const inquiry = this.state.inquiries.get(id)
-    if (!inquiry) return html(404, "<h1>Inquiry not found</h1>")
+    const ui = await pages()
+    if (!inquiry) return html(404, ui.notFoundPage())
     if (inquiry.status === "created") this.transition(id, "start")
     const redirect = context.url.searchParams.get("redirect-uri") ?? inquiry.redirect_uri ?? ""
-    const link = (outcome: InquiryAction, label: string) => {
+    const outcome = (outcome: InquiryAction, label: string) => {
       const query = new URLSearchParams({ "inquiry-id": id, outcome })
       if (redirect) query.set("redirect-uri", redirect)
       // Relative to `…/verify`, so an `/__admin/ns/<name>` prefix survives.
-      return `<li><a data-outcome="${outcome}" href="verify/complete?${escapeHtml(query.toString())}">${label}</a></li>`
+      return { outcome, label, href: `verify/complete?${query.toString()}` }
     }
-    const prefix =
-      this.publicNamespace === "default" ? "" : ` (namespace ${escapeHtml(this.publicNamespace)})`
     return annotateResponse(
       html(
         200,
-        `<h1>Verify your identity</h1><p>Mock Persona hosted flow for <code>${escapeHtml(id)}</code>${prefix}.</p><ul>${[
-          link("approve", "Approve"),
-          link("decline", "Decline"),
-          link("needs_review", "Send to review"),
-          link("complete", "Complete (no decision)"),
-          link("fail", "Fail"),
-        ].join("")}</ul>`,
+        ui.hostedFlowPage({
+          inquiryId: id,
+          namespace: this.publicNamespace === "default" ? undefined : this.publicNamespace,
+          outcomes: [
+            outcome("approve", "Approve"),
+            outcome("decline", "Decline"),
+            outcome("needs_review", "Send to review"),
+            outcome("complete", "Complete (no decision)"),
+            outcome("fail", "Fail"),
+          ],
+        }),
       ),
       { ids: { inquiryId: id } },
     )
   }
 
-  private hostedFlowComplete(context: OperationContext): Response {
+  private async hostedFlowComplete(context: OperationContext): Promise<Response> {
     const params = context.url.searchParams
     const id = params.get("inquiry-id") ?? ""
     const outcome = params.get("outcome") as InquiryAction
-    if (!this.state.inquiries.get(id)) return html(404, "<h1>Inquiry not found</h1>")
+    if (!this.state.inquiries.get(id)) return html(404, (await pages()).notFoundPage())
     if (!["approve", "decline", "needs_review", "complete", "fail"].includes(outcome)) {
-      return html(409, "<h1>Unknown outcome</h1>")
+      return html(409, (await pages()).conflictPage("Unknown outcome"))
     }
     const moved = this.transition(id, outcome)
-    if (typeof moved === "string") return html(409, `<h1>${escapeHtml(moved)}</h1>`)
+    if (typeof moved === "string") return html(409, (await pages()).conflictPage(moved))
     const redirect = params.get("redirect-uri") ?? moved.redirect_uri
-    if (!redirect) return html(200, `<h1>Done: ${moved.status}</h1>`)
+    if (!redirect) return html(200, (await pages()).donePage(moved.status))
     let target: URL
     try {
       target = new URL(redirect)
     } catch {
-      return html(200, `<h1>Done: ${moved.status}</h1>`)
+      return html(200, (await pages()).donePage(moved.status))
     }
     target.searchParams.set("inquiry-id", moved.id)
     target.searchParams.set("status", moved.status)

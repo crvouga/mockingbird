@@ -22,7 +22,5 @@ const { guide } = Astro.props
   canonicalPath={guideCanonicalPath(guide.slug)}
   type="article"
 >
-  <div class="container">
-    <GuideArticle guide={guide} repo={catalog.repo} />
-  </div>
+  <GuideArticle guide={guide} repo={catalog.repo} />
 </Base>

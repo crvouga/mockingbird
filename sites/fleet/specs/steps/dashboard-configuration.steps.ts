@@ -16,17 +16,21 @@ import { Given, Then, When } from "./common.steps.js"
 
 const FILE = "mockingbird.yaml"
 
+/** The file's copy button, which says "Copied" for a moment after it is pressed. */
+const copyFile = (dash: Dashboard) =>
+  dash.page.getByRole("button", { name: new RegExp(`^(Copy ${FILE.replace(".", "\\.")}|Copied)$`) })
+
 /** The block of the Configuration tab that shows the file, found by the name above it. */
 const fileBlock = (dash: Dashboard) =>
   dash.page
     .getByRole("main")
     .locator("div")
-    .filter({ has: dash.button(`Copy ${FILE}`) })
+    .filter({ has: copyFile(dash) })
     .filter({ has: dash.page.locator("pre") })
     .last()
 
 const fileOnScreen = async (dash: Dashboard) => {
-  await expect(dash.button(`Copy ${FILE}`)).toBeVisible()
+  await expect(copyFile(dash).first()).toBeVisible()
   return fileBlock(dash).getByRole("code").innerText()
 }
 
@@ -173,7 +177,7 @@ Then("they are told it is configured by mockingbird.yaml", async ({ dash }) => {
 /** The one link drawn as the screen's main action, if any. */
 Then("the main action offered is {string}", async ({ dash }, name: string) => {
   await expect(dash.page.getByRole("heading", { level: 1 })).toBeVisible()
-  await expect(dash.page.getByRole("main").locator("a.button.primary")).toHaveText([name])
+  await expect(dash.page.getByRole("main").locator("a[data-action=primary]")).toHaveText([name])
 })
 
 Then("the form recommends mockingbird.yaml for {string}", async ({ dash }, what: string) => {

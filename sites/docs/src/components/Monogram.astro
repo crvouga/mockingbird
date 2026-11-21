@@ -1,23 +1,14 @@
 ---
-import { initials } from "../lib/format.ts"
+import { Monogram } from "../ui/primitives.tsx"
 
 interface Props {
   name: string
-  hue: number
+  hue?: number
   size?: number
   /** The vendor's logo; the initials are the fallback. */
   logo?: string | null
 }
-const { name, hue, size = 40, logo = null } = Astro.props
-const letters = initials(name)
+const { name, size = 40, logo = null } = Astro.props
 ---
 
-{
-  logo ? (
-    <span class="monogram monogram-logo" style={`--size:${size}px`} aria-hidden="true">
-      <img src={logo} alt="" width={size} height={size} loading="lazy" decoding="async" />
-    </span>
-  ) : (
-    <span class="monogram" style={`--h:${hue};--size:${size}px`} aria-hidden="true">{letters}</span>
-  )
-}
+<Monogram name={name} logo={logo} size={size <= 32 ? "sm" : size >= 48 ? "lg" : "md"} />

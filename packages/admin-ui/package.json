@@ -3,7 +3,7 @@
   "version": "0.0.0-development",
   "private": true,
   "type": "module",
-  "description": "The self-contained React and Ant Design admin client shared by every emulator.",
+  "description": "The self-contained React and HeroUI admin client shared by every emulator, on Mockingbird's design system.",
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -33,13 +33,10 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@ant-design/cssinjs": "2.1.2",
-    "@ant-design/icons": "6.3.4",
     "@crvouga/mockingbird-ui": "workspace:*",
     "@gravity-ui/icons": "2.23.1",
     "@heroui/react": "3.2.7",
     "@heroui/styles": "3.2.7",
-    "antd": "6.6.5",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },

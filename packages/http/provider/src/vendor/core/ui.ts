@@ -1,4 +1,24 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
+/**
+ * The pages the provider emulators serve. A route describes its page as data (`ProviderPage`,
+ * src/ui/model.ts) and these helpers render it with the Mockingbird design system (React and
+ * HeroUI, src/ui/page.tsx). The renderer is imported lazily, so React loads only when a page is
+ * served, never on an API request.
+ */
+import type { AccountOption, Block, Inline, NavItem, ProviderPage, Rich, Status } from "../../ui/model.js";
+
+export type {
+  AccountOption,
+  Block,
+  FormBlock,
+  Inline,
+  LinkItem,
+  NavItem,
+  ProviderPage,
+  Rich,
+  Status,
+} from "../../ui/model.js";
+
 export function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -7,342 +27,39 @@ export function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/'/g, "&#39;");
 }
 
-const CSS = `
-.inspector-json{white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8125rem;line-height:1.6;max-height:70vh;overflow:auto}
-.inspector-detail{padding:14px 0;border-bottom:1px solid #0a3300}
-.inspector-detail summary{cursor:pointer;overflow-wrap:anywhere}
-.inspector-action{display:inline-block;margin-top:12px;padding:8px 12px;border:1px solid #0a3300;border-radius:6px;background:#001a00;color:#33ff00;font:inherit;font-size:.8125rem;cursor:pointer}
-.inspector-action:hover{background:#0a3300}
-.inspector-scroll{overflow-x:auto}
-*{box-sizing:border-box;margin:0;padding:0}
-body{
-  font-family:'Geist',-apple-system,BlinkMacSystemFont,sans-serif;
-  background:#000;color:#33ff00;min-height:100vh;
-  -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
-}
-.emu-bar{
-  border-bottom:1px solid #0a3300;padding:10px 20px;
-  display:flex;align-items:center;gap:10px;font-size:.8125rem;color:#1a8c00;
-}
-.emu-bar-title{font-weight:600;color:#33ff00;font-family:'Geist Pixel',monospace;}
-.emu-bar-links{margin-left:auto;display:flex;gap:16px;}
-.emu-bar-links a{
-  color:#1a8c00;font-size:.75rem;text-decoration:none;transition:color .15s;
-}
-.emu-bar-links a:hover{color:#33ff00;}
-.emu-bar-links a .full{display:inline;}
-.emu-bar-links a .short{display:none;}
-@media(max-width:600px){
-  .emu-bar-links a .full{display:none;}
-  .emu-bar-links a .short{display:inline;}
+/**
+ * `page` as a complete HTML document: static, server-rendered HTML whose forms post natively.
+ * The visitor's light or dark choice from other Mockingbird pages still applies.
+ */
+export async function renderProviderPage(page: ProviderPage): Promise<string> {
+  const { renderProviderPage: render } = await import("#ui/server");
+  return render(page);
 }
 
-.content{
-  display:flex;align-items:center;justify-content:center;
-  min-height:calc(100vh - 42px);padding:24px 16px;
-}
-.content-inner{width:100%;max-width:420px;}
-.card-title{
-  font-family:'Geist Pixel',monospace;
-  font-size:1.125rem;font-weight:600;margin-bottom:4px;color:#33ff00;
-}
-.card-subtitle{color:#1a8c00;font-size:.8125rem;margin-bottom:18px;line-height:1.45;}
-.powered-by{
-  position:fixed;bottom:0;left:0;right:0;
-  text-align:center;padding:12px;font-size:.6875rem;color:#0a3300;
-  font-family:'Geist Pixel',monospace;
-}
-.powered-by a{color:#1a8c00;text-decoration:none;transition:color .15s;}
-.powered-by a:hover{color:#33ff00;}
-
-.error-title{
-  font-family:'Geist Pixel',monospace;
-  color:#ff4444;font-size:1.125rem;font-weight:600;margin-bottom:8px;
-}
-.error-msg{color:#1a8c00;font-size:.875rem;line-height:1.5;}
-.error-card{text-align:center;}
-
-.user-form{margin-bottom:8px;}
-.user-form:last-of-type{margin-bottom:0;}
-.user-btn{
-  width:100%;display:flex;align-items:center;gap:12px;
-  padding:10px 12px;border:1px solid #0a3300;border-radius:8px;
-  background:#000;color:inherit;cursor:pointer;text-align:left;
-  font:inherit;transition:border-color .15s;
-}
-.user-btn:hover{border-color:#33ff00;}
-.avatar{
-  width:36px;height:36px;border-radius:50%;
-  background:#0a3300;color:#33ff00;font-weight:600;font-size:.875rem;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  font-family:'Geist Pixel',monospace;
-}
-.user-text{min-width:0;}
-.user-login{font-weight:600;font-size:.875rem;display:block;color:#33ff00;}
-.user-meta{color:#1a8c00;font-size:.75rem;margin-top:1px;}
-.user-email{font-size:.6875rem;color:#116600;word-break:break-all;margin-top:1px;}
-
-.settings-layout{
-  max-width:920px;margin:0 auto;padding:28px 20px;
-  display:flex;gap:28px;
-}
-.settings-sidebar{width:200px;flex-shrink:0;}
-.settings-sidebar a{
-  display:block;padding:6px 10px;border-radius:6px;color:#1a8c00;
-  text-decoration:none;font-size:.8125rem;transition:color .15s;
-}
-.settings-sidebar a:hover{color:#33ff00;}
-.settings-sidebar a.active{color:#33ff00;font-weight:600;}
-.settings-main{flex:1;min-width:0;}
-
-.s-card{
-  padding:18px 0;margin-bottom:14px;border-bottom:1px solid #0a3300;
-}
-.s-card:last-child{border-bottom:none;}
-.s-card-header{display:flex;align-items:center;gap:14px;margin-bottom:14px;}
-.s-icon{
-  width:42px;height:42px;border-radius:8px;
-  background:#0a3300;display:flex;align-items:center;justify-content:center;
-  font-size:1.125rem;font-weight:700;color:#116600;flex-shrink:0;
-  font-family:'Geist Pixel',monospace;
-}
-.s-title{
-  font-family:'Geist Pixel',monospace;
-  font-size:1.25rem;font-weight:600;color:#33ff00;
-}
-.s-subtitle{font-size:.75rem;color:#1a8c00;margin-top:2px;}
-.section-heading{
-  font-size:.9375rem;font-weight:600;margin-bottom:10px;color:#33ff00;
-  display:flex;align-items:center;justify-content:space-between;
-}
-.perm-list{list-style:none;}
-.perm-list li{padding:5px 0;font-size:.8125rem;display:flex;align-items:center;gap:6px;color:#1a8c00;}
-.check{color:#33ff00;}
-.org-row{
-  display:flex;align-items:center;gap:8px;padding:7px 0;
-  border-bottom:1px solid #0a3300;font-size:.8125rem;
-}
-.org-row:last-child{border-bottom:none;}
-.org-icon{
-  width:22px;height:22px;border-radius:4px;background:#0a3300;
-  display:flex;align-items:center;justify-content:center;
-  font-size:.625rem;font-weight:700;color:#116600;flex-shrink:0;
-  font-family:'Geist Pixel',monospace;
-}
-.org-name{font-weight:600;color:#33ff00;}
-.badge{font-size:.6875rem;padding:1px 7px;border-radius:999px;font-weight:500;}
-.badge-granted{background:#0a3300;color:#33ff00;}
-.badge-denied{background:#1a0a0a;color:#ff4444;}
-.badge-requested{background:#0a3300;color:#1a8c00;}
-.btn-revoke{
-  display:inline-block;padding:5px 14px;border-radius:6px;
-  border:1px solid #0a3300;background:transparent;color:#ff4444;
-  font-size:.75rem;font-weight:600;cursor:pointer;transition:border-color .15s;
-}
-.btn-revoke:hover{border-color:#ff4444;}
-.info-text{color:#1a8c00;font-size:.75rem;line-height:1.5;margin-top:10px;}
-.app-link{
-  display:flex;align-items:center;gap:12px;padding:12px;
-  border:1px solid #0a3300;border-radius:8px;background:#000;
-  text-decoration:none;color:inherit;margin-bottom:8px;transition:border-color .15s;
-}
-.app-link:hover{border-color:#33ff00;}
-.app-link-name{font-weight:600;font-size:.875rem;color:#33ff00;}
-.app-link-scopes{font-size:.6875rem;color:#1a8c00;margin-top:1px;}
-.empty{color:#1a8c00;text-align:center;padding:28px 0;font-size:.875rem;}
-
-.inspector-layout{max-width:960px;margin:0 auto;padding:28px 20px;}
-.inspector-tabs{display:flex;gap:4px;margin-bottom:20px;}
-.inspector-tabs a{
-  padding:7px 16px;border-radius:6px;text-decoration:none;
-  font-size:.8125rem;color:#1a8c00;border:1px solid transparent;
-  transition:color .15s,border-color .15s;
-}
-.inspector-tabs a:hover{color:#33ff00;}
-.inspector-tabs a.active{color:#33ff00;font-weight:600;border-color:#0a3300;background:#0a3300;}
-.inspector-section{margin-bottom:24px;}
-.inspector-section h2{
-  font-family:'Geist Pixel',monospace;
-  font-size:1rem;font-weight:600;color:#33ff00;margin-bottom:10px;
-}
-.inspector-section h3{
-  font-family:'Geist Pixel',monospace;
-  font-size:.875rem;font-weight:600;color:#1a8c00;margin:16px 0 8px;
-}
-.inspector-table{width:100%;border-collapse:collapse;margin-bottom:12px;}
-.inspector-table th,.inspector-table td{
-  text-align:left;padding:8px 12px;border-bottom:1px solid #0a3300;
-  font-size:.8125rem;
-}
-.inspector-table th{color:#1a8c00;font-weight:600;font-size:.75rem;text-transform:uppercase;letter-spacing:.04em;}
-.inspector-table td{color:#33ff00;}
-.inspector-table tbody tr{transition:background .1s;}
-.inspector-table tbody tr:hover{background:#0a3300;}
-.inspector-empty{color:#1a8c00;text-align:center;padding:20px 0;font-size:.8125rem;}
-
-.checkout-layout{
-  display:flex;min-height:calc(100vh - 42px);
-}
-.checkout-summary{
-  flex:1;background:#020;padding:48px 40px 48px 10%;
-  display:flex;flex-direction:column;justify-content:center;
-  border-right:1px solid #0a3300;
-}
-.checkout-form-side{
-  flex:1;background:#000;padding:48px 10% 48px 40px;
-  display:flex;flex-direction:column;justify-content:center;
-}
-.checkout-merchant{
-  display:flex;align-items:center;gap:10px;margin-bottom:6px;
-}
-.checkout-merchant-name{
-  font-family:'Geist Pixel',monospace;
-  font-size:.9375rem;font-weight:600;color:#33ff00;
-}
-.checkout-test-badge{
-  font-size:.625rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
-  background:#0a3300;color:#1a8c00;padding:2px 8px;border-radius:4px;
-}
-.checkout-total{
-  font-family:'Geist Pixel',monospace;
-  font-size:2rem;font-weight:700;color:#33ff00;margin:8px 0 28px;
-}
-.checkout-line-item{
-  display:flex;align-items:center;gap:14px;padding:14px 0;
-  border-bottom:1px solid #0a3300;
-}
-.checkout-line-item:first-child{border-top:1px solid #0a3300;}
-.checkout-item-icon{
-  width:42px;height:42px;border-radius:6px;background:#0a3300;
-  display:flex;align-items:center;justify-content:center;flex-shrink:0;
-  font-family:'Geist Pixel',monospace;font-size:.875rem;font-weight:700;color:#116600;
-}
-.checkout-item-details{flex:1;min-width:0;}
-.checkout-item-name{font-size:.875rem;font-weight:600;color:#33ff00;}
-.checkout-item-qty{font-size:.75rem;color:#1a8c00;margin-top:2px;}
-.checkout-item-price{
-  font-size:.875rem;font-weight:600;color:#33ff00;text-align:right;white-space:nowrap;
-}
-.checkout-item-unit{font-size:.6875rem;color:#1a8c00;text-align:right;margin-top:2px;}
-.checkout-totals{margin-top:20px;}
-.checkout-totals-row{
-  display:flex;justify-content:space-between;padding:6px 0;
-  font-size:.8125rem;color:#1a8c00;
-}
-.checkout-totals-row.total{
-  border-top:1px solid #0a3300;margin-top:8px;padding-top:14px;
-  font-size:.9375rem;font-weight:600;color:#33ff00;
-}
-.checkout-form-section{margin-bottom:24px;}
-.checkout-form-label{
-  font-size:.8125rem;font-weight:600;color:#33ff00;margin-bottom:8px;display:block;
-}
-.checkout-input{
-  width:100%;padding:10px 12px;border:1px solid #0a3300;border-radius:6px;
-  background:#020;color:#33ff00;font:inherit;font-size:.875rem;
-  transition:border-color .15s;outline:none;
-}
-.checkout-input:focus{border-color:#33ff00;}
-.checkout-input::placeholder{color:#116600;}
-.checkout-card-box{
-  border:1px solid #0a3300;border-radius:6px;padding:14px;
-  background:#020;
-}
-.checkout-card-row{
-  display:flex;gap:12px;margin-top:10px;
-}
-.checkout-card-row .checkout-input{flex:1;}
-.checkout-sim-note{
-  font-size:.6875rem;color:#1a8c00;margin-top:10px;text-align:center;
-  font-style:italic;
-}
-.checkout-pay-btn{
-  width:100%;padding:14px;border:none;border-radius:8px;
-  background:#33ff00;color:#000;font:inherit;font-size:.9375rem;font-weight:700;
-  cursor:pointer;transition:background .15s;
-  font-family:'Geist Pixel',monospace;
-}
-.checkout-pay-btn:hover{background:#44ff22;}
-.checkout-cancel{
-  text-align:center;margin-top:14px;
-}
-.checkout-cancel a{
-  color:#1a8c00;text-decoration:none;font-size:.8125rem;
-  transition:color .15s;
-}
-.checkout-cancel a:hover{color:#33ff00;}
-@media(max-width:768px){
-  .checkout-layout{flex-direction:column;}
-  .checkout-summary{padding:32px 20px;border-right:none;border-bottom:1px solid #0a3300;}
-  .checkout-form-side{padding:32px 20px;}
-}
-`;
-
-const POWERED_BY = `<div class="powered-by">Powered by <a href="https://github.com/crvouga-organization/mockingbird" target="_blank" rel="noopener">Mockingbird</a></div>`;
-
-function emuBar(service?: string): string {
-  const title = service ? `${escapeHtml(service)} Emulator` : "Emulator";
-  return `<div class="emu-bar">
-  <span class="emu-bar-title">${title}</span>
-  <nav class="emu-bar-links">
-    <a href="https://github.com/crvouga-organization/mockingbird/issues" target="_blank" rel="noopener"><span class="full">Report Issue</span><span class="short">Report</span></a>
-    <a href="https://github.com/crvouga-organization/mockingbird" target="_blank" rel="noopener"><span class="full">Source Code</span><span class="short">Source</span></a>
-    <a href="https://github.com/crvouga-organization/mockingbird" target="_blank" rel="noopener"><span class="full">Learn More</span><span class="short">Learn</span></a>
-  </nav>
-</div>`;
+/** A single-purpose page: a title, an optional description and content, under the brand. */
+export function renderCardPage(title: string, description: Rich | undefined, blocks: Block[], service?: string) {
+  return renderProviderPage({
+    layout: "card",
+    title,
+    blocks,
+    ...(description === undefined ? {} : { description }),
+    ...(service ? { service } : {}),
+  });
 }
 
-function head(title: string): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-
-<title>${escapeHtml(title)} | Mockingbird</title>
-<style>${CSS}</style>
-</head>`;
+/** An account picker: one button per seeded user. */
+export function renderSignInPage(
+  title: string,
+  description: Rich,
+  accounts: AccountOption[],
+  service?: string,
+  empty = "No users in the emulator store.",
+) {
+  return renderCardPage(title, description, [{ type: "accounts", accounts, empty }], service);
 }
 
-export function renderCardPage(title: string, subtitle: string, body: string, service?: string): string {
-  return `${head(title)}
-<body>
-${emuBar(service)}
-<div class="content">
-  <div class="content-inner">
-    <div class="card-title">${escapeHtml(title)}</div>
-    <div class="card-subtitle">${subtitle}</div>
-    ${body}
-  </div>
-</div>
-${POWERED_BY}
-</body></html>`;
-}
-
-export function renderErrorPage(title: string, message: string, service?: string): string {
-  return `${head(title)}
-<body>
-${emuBar(service)}
-<div class="content">
-  <div class="content-inner error-card">
-    <div class="error-title">${escapeHtml(title)}</div>
-    <div class="error-msg">${escapeHtml(message)}</div>
-  </div>
-</div>
-${POWERED_BY}
-</body></html>`;
-}
-
-export function renderSettingsPage(title: string, sidebarHtml: string, bodyHtml: string, service?: string): string {
-  return `${head(title)}
-<body>
-${emuBar(service)}
-<div class="settings-layout">
-  <nav class="settings-sidebar">${sidebarHtml}</nav>
-  <div class="settings-main">${bodyHtml}</div>
-</div>
-${POWERED_BY}
-</body></html>`;
+export function renderErrorPage(title: string, message: string, service?: string) {
+  return renderProviderPage({ layout: "card", title, error: message, blocks: [], ...(service ? { service } : {}) });
 }
 
 export interface InspectorTab {
@@ -351,208 +68,85 @@ export interface InspectorTab {
   href: string;
 }
 
-export function renderJsonDetails(label: string, value: unknown, open = false): string {
-  const text = JSON.stringify(value, null, 2) ?? "";
-  const bounded = text.length > 65536 ? `${text.slice(0, 65536)}\n[remaining data omitted from preview]` : text;
-  return `<details class="inspector-detail"${open ? " open" : ""}><summary>${escapeHtml(label)}</summary><pre class="inspector-json">${escapeHtml(bounded)}</pre></details>`;
-}
-
-export function renderStateView(value: unknown): string {
-  if (!value || typeof value !== "object" || Array.isArray(value))
-    return renderJsonDetails("Current state", value, true);
-  return Object.entries(value)
-    .map(([key, item]) => {
-      if (
-        Array.isArray(item) &&
-        item.length &&
-        item.every((row) => row && typeof row === "object" && !Array.isArray(row))
-      ) {
-        const columns = [...new Set(item.slice(0, 100).flatMap(Object.keys))].slice(0, 12);
-        const rows = item
-          .slice(0, 100)
-          .map(
-            (row) =>
-              `<tr>${columns.map((column) => `<td>${escapeHtml((typeof row[column] === "string" ? row[column] : JSON.stringify(row[column]))?.slice(0, 500) ?? "")}</td>`).join("")}</tr>`,
-          )
-          .join("");
-        return `<div class="s-card"><h2 class="section-heading">${escapeHtml(key)} <span class="badge">${item.length}</span></h2><div class="inspector-scroll"><table class="inspector-table"><thead><tr>${columns.map((column) => `<th>${escapeHtml(column)}</th>`).join("")}</tr></thead><tbody>${rows}</tbody></table></div>${item.length > 100 ? '<p class="s-subtitle">Showing the first 100 records.</p>' : ""}</div>`;
-      }
-      return renderJsonDetails(key, item, true);
-    })
-    .join("");
-}
-
+/** A tool page: the tabs in the top bar, the active one's content below. */
 export function renderInspectorPage(
   title: string,
   tabs: InspectorTab[],
   activeTab: string,
-  body: string,
+  blocks: Block[],
   service?: string,
-): string {
-  const tabLinks = tabs
-    .map(
-      (t) => `<a href="${escapeAttr(t.href)}" class="${t.id === activeTab ? "active" : ""}">${escapeHtml(t.label)}</a>`,
-    )
-    .join("");
-
-  return `${head(title)}
-<body>
-${emuBar(service)}
-<div class="inspector-layout">
-  <nav class="inspector-tabs">${tabLinks}</nav>
-  ${body}
-</div>
-${POWERED_BY}
-</body></html>`;
+) {
+  const nav: NavItem[] = tabs.map((tab) => ({
+    label: tab.label,
+    href: tab.href,
+    ...(tab.id === activeTab ? { current: true } : {}),
+  }));
+  const active = tabs.find((tab) => tab.id === activeTab);
+  return renderProviderPage({
+    layout: "app",
+    title: active ? `${active.label} · ${title}` : title,
+    heading: active?.label ?? title,
+    description: title,
+    nav,
+    blocks,
+    ...(service ? { service } : {}),
+  });
 }
 
-export function renderFormPostPage(action: string, fields: Record<string, string>, service?: string): string {
-  const hiddens = Object.entries(fields)
-    .filter(([, v]) => v != null)
-    .map(([k, v]) => `<input type="hidden" name="${escapeAttr(k)}" value="${escapeAttr(v)}"/>`)
-    .join("\n");
-
-  return `${head("Redirecting")}
-<body onload="document.forms[0].submit()">
-${emuBar(service)}
-<div class="content">
-  <div class="content-inner" style="text-align:center">
-    <div class="card-subtitle">Redirecting&hellip;</div>
-    <form method="POST" action="${escapeAttr(action)}">
-${hiddens}
-    <noscript><button type="submit" class="user-btn" style="margin-top:12px;justify-content:center">
-      <span class="user-login">Continue</span>
-    </button></noscript>
-    </form>
-  </div>
-</div>
-${POWERED_BY}
-</body></html>`;
+/** The page that posts a response back to the app (`response_mode=form_post`): it submits itself. */
+export function renderFormPostPage(action: string, fields: Record<string, string>, service?: string) {
+  return renderProviderPage(formPostPage(action, fields, service));
 }
 
-export interface CheckoutLineItem {
-  name: string;
-  quantity: number;
-  unitPrice: number;
-  totalPrice: number;
-  currency: string;
+/** The form post page as data. */
+export function formPostPage(
+  action: string,
+  fields: Record<string, string>,
+  service?: string,
+): Extract<ProviderPage, { layout: "card" }> {
+  return {
+    layout: "card",
+    title: "Redirecting…",
+    description: "Returning you to the app.",
+    autoSubmit: true,
+    blocks: [
+      {
+        type: "form",
+        action,
+        label: "Continue",
+        fields: Object.fromEntries(Object.entries(fields).filter(([, value]) => value != null)),
+      },
+    ],
+    ...(service ? { service } : {}),
+  };
 }
 
-export interface CheckoutPageOptions {
-  merchantName?: string;
-  lineItems: CheckoutLineItem[];
-  subtotal: number;
-  total: number;
-  currency: string;
-  sessionId: string;
-  cancelUrl?: string | null;
+/** A table block, or its `empty` message when there are no rows. Inside `section`, it is labelled by the section's title. */
+export function table(columns: string[], rows: Rich[][], empty: string, label = ""): Block {
+  return { type: "table", label, columns, rows, empty };
 }
 
-export function renderCheckoutPage(opts: CheckoutPageOptions, service?: string): string {
-  const fmt = (cents: number, cur: string) => `$${(cents / 100).toFixed(2)} ${cur.toUpperCase()}`;
-  const fmtShort = (cents: number) => `$${(cents / 100).toFixed(2)}`;
-
-  const itemsHtml =
-    opts.lineItems.length > 0
-      ? opts.lineItems
-          .map((li) => {
-            const initial = li.name.charAt(0).toUpperCase();
-            const unitNote =
-              li.quantity > 1 ? `<div class="checkout-item-unit">${fmtShort(li.unitPrice)} each</div>` : "";
-            return `<div class="checkout-line-item">
-  <div class="checkout-item-icon">${escapeHtml(initial)}</div>
-  <div class="checkout-item-details">
-    <div class="checkout-item-name">${escapeHtml(li.name)}</div>
-    <div class="checkout-item-qty">Qty ${li.quantity}</div>
-  </div>
-  <div>
-    <div class="checkout-item-price">${fmtShort(li.totalPrice)}</div>
-    ${unitNote}
-  </div>
-</div>`;
-          })
-          .join("")
-      : '<p class="empty">No line items</p>';
-
-  const totalsHtml = `<div class="checkout-totals">
-  <div class="checkout-totals-row">
-    <span>Subtotal</span><span>${fmtShort(opts.subtotal)}</span>
-  </div>
-  <div class="checkout-totals-row total">
-    <span>Total due</span><span>${fmt(opts.total, opts.currency)}</span>
-  </div>
-</div>`;
-
-  const cancelHtml = opts.cancelUrl
-    ? `<div class="checkout-cancel"><a href="${escapeAttr(opts.cancelUrl)}">Cancel</a></div>`
-    : "";
-
-  const merchant = opts.merchantName ? escapeHtml(opts.merchantName) : "Checkout";
-
-  return `${head("Checkout")}
-<body>
-${emuBar(service)}
-<div class="checkout-layout">
-  <div class="checkout-summary">
-    <div class="checkout-merchant">
-      <span class="checkout-merchant-name">${merchant}</span>
-      <span class="checkout-test-badge">Test Mode</span>
-    </div>
-    <div class="checkout-total">${fmtShort(opts.total)}</div>
-    ${itemsHtml}
-    ${totalsHtml}
-  </div>
-  <div class="checkout-form-side">
-    <form method="post" action="/checkout/${escapeAttr(opts.sessionId)}/complete">
-      <div class="checkout-form-section">
-        <label class="checkout-form-label">Email</label>
-        <input type="email" name="email" class="checkout-input" placeholder="you@example.com"/>
-      </div>
-      <div class="checkout-form-section">
-        <label class="checkout-form-label">Card information</label>
-        <div class="checkout-card-box">
-          <input type="text" class="checkout-input" placeholder="1234 1234 1234 1234" disabled/>
-          <div class="checkout-card-row">
-            <input type="text" class="checkout-input" placeholder="MM / YY" disabled/>
-            <input type="text" class="checkout-input" placeholder="CVC" disabled/>
-          </div>
-        </div>
-        <div class="checkout-sim-note">Card fields are simulated. Payment will be auto-approved.</div>
-      </div>
-      <button type="submit" class="checkout-pay-btn">Pay ${fmtShort(opts.total)}</button>
-    </form>
-    ${cancelHtml}
-  </div>
-</div>
-${POWERED_BY}
-</body></html>`;
+/** A titled section of blocks. */
+export function section(title: string, ...blocks: Block[]): Block {
+  return {
+    type: "section",
+    title,
+    blocks: blocks.map((block) => (block.type === "table" && !block.label ? { ...block, label: title } : block)),
+  };
 }
 
-export interface UserButtonOptions {
-  letter: string;
-  login: string;
-  name?: string;
-  email?: string;
-  formAction: string;
-  hiddenFields: Record<string, string>;
+const OK = /^(ok|active|enabled|open|delivered|sent|received|read|approved|completed?|success(ful)?|available|granted|verified|2\d\d)$/i;
+const ERROR = /^(failed|error|revoked|inactive|disabled|closed|canceled|cancelled|bounced|denied|undelivered|archived|deleted|expired|used|busy|no-answer|[45]\d\d)$/i;
+const WARNING = /^(pending|queued|sending|accepted|scheduled|in-progress|ringing|initiated|requested|processing|delayed)$/i;
+
+/** A status as a chip, its color read from the word ("active", "failed", "queued", "200"). */
+export function chip(label: string, status: Status = statusOf(label)): Inline {
+  return { chip: label, status };
 }
 
-export function renderUserButton(opts: UserButtonOptions): string {
-  const hiddens = Object.entries(opts.hiddenFields)
-    .map(([k, v]) => `<input type="hidden" name="${escapeAttr(k)}" value="${escapeAttr(v)}"/>`)
-    .join("");
-
-  const nameLine = opts.name ? `<div class="user-meta">${escapeHtml(opts.name)}</div>` : "";
-  const emailLine = opts.email ? `<div class="user-email">${escapeHtml(opts.email)}</div>` : "";
-
-  return `<form class="user-form" method="post" action="${escapeAttr(opts.formAction)}">
-${hiddens}
-<button type="submit" class="user-btn">
-  <span class="avatar">${escapeHtml(opts.letter)}</span>
-  <span class="user-text">
-    <span class="user-login">${escapeHtml(opts.login)}</span>
-    ${nameLine}${emailLine}
-  </span>
-</button>
-</form>`;
+function statusOf(label: string): Status {
+  if (OK.test(label)) return "ok";
+  if (ERROR.test(label)) return "error";
+  if (WARNING.test(label)) return "warning";
+  return "neutral";
 }

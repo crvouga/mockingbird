@@ -109,7 +109,7 @@
     "generate": "bun ../../openapi/codegen/dist/cli.js",
     "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
-    "build": "bun ../../../scripts/bundle-service.ts",
+    "build": "bun ../../../packages/ui/scripts/bundle.ts --ssr src/ui/server.tsx && bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test --timeout 30000",
@@ -144,13 +144,10 @@
   },
   "imports": {
     "#ui/server": {
-      "types": "./src/ui-trial/server.tsx",
-      "bun": "./src/ui-trial/server.tsx",
+      "types": "./src/ui/server.tsx",
+      "bun": "./src/ui/server.tsx",
+      "browser": "./src/ui/server.tsx",
       "default": "./dist-ui/server.js"
-    },
-    "#ui/client-bundle": {
-      "types": "./src/ui-trial/client-bundle.d.ts",
-      "default": "./dist-ui/client.bundle.js"
     }
   }
 }

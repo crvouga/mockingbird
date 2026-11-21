@@ -8,12 +8,9 @@ import type { AppEnv, RouteContext, Store } from "../../core/index.js";
 import {
   bodyStr,
   constantTimeSecretEqual,
-  escapeAttr,
-  escapeHtml,
   matchesRedirectUri,
-  renderCardPage,
   renderErrorPage,
-  renderUserButton,
+  renderSignInPage,
 } from "../../core/index.js";
 import type { ClerkUser } from "../entities.js";
 import { userDisplayName } from "../helpers.js";
@@ -128,7 +125,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     });
   });
 
-  app.get("/oauth/authorize", (c) => {
+  app.get("/oauth/authorize", async (c) => {
     const clientId = c.req.query("client_id") ?? "";
     const redirectUri = c.req.query("redirect_uri") ?? "";
     const scope = c.req.query("scope") ?? "openid profile email";
@@ -139,15 +136,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const codeChallengeMethod = c.req.query("code_challenge_method") ?? "";
 
     if (responseType !== "code") {
-      return c.html(
-        renderErrorPage("Unsupported response_type", "Only response_type=code is supported.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Unsupported response_type", "Only response_type=code is supported.", SERVICE_LABEL),
         400,
       );
     }
 
     if (!redirectUri) {
-      return c.html(
-        renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
         400,
       );
     }
@@ -157,14 +152,12 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     if (oauthApps.length > 0) {
       const oauthApp = oauthApps.find((a) => a.client_id === clientId);
       if (!oauthApp) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (!matchesRedirectUri(redirectUri, oauthApp.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -180,7 +173,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
       .map((user) => {
         const emails = clerkStore.emailAddresses.findBy("user_id", user.clerk_id);
         const primaryEmail = emails.find((e) => e.is_primary) ?? emails[0];
-        return renderUserButton({
+        return ({
           letter: ((user.first_name ?? user.username ?? "?")[0] ?? "?").toUpperCase(),
           login: primaryEmail?.email_address ?? user.username ?? user.clerk_id,
           name: userDisplayName(user),
@@ -197,21 +190,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
             code_challenge_method: codeChallengeMethod,
           },
         });
-      })
-      .join("\n");
+      });
 
     const subtitle = appName
-      ? `Sign in to <strong>${escapeHtml(appName)}</strong> with your Clerk account.`
+      ? ["Sign in to ", { strong: appName }, " with your Clerk account."]
       : "Choose a seeded user to continue.";
 
-    return c.html(
-      renderCardPage(
-        "Sign in with Clerk",
-        subtitle,
-        users.length > 0 ? buttons : '<p class="empty">No users in the emulator store.</p>',
-        SERVICE_LABEL,
-      ),
-    );
+    return c.html(await renderSignInPage("Sign in with Clerk", subtitle, buttons, SERVICE_LABEL));
   });
 
   app.post("/oauth/authorize/callback", async (c) => {
@@ -226,29 +211,26 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const codeChallengeMethod = bodyStr(body.code_challenge_method);
 
     if (!redirectUri) {
-      return c.html(
-        renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
         400,
       );
     }
 
     const user = clerkStore.users.findOneBy("clerk_id", userRef);
     if (!user) {
-      return c.html(renderErrorPage("Unknown user", "The selected user is not available.", SERVICE_LABEL), 400);
+      return c.html(await renderErrorPage("Unknown user", "The selected user is not available.", SERVICE_LABEL), 400);
     }
 
     const oauthApps = clerkStore.oauthApps.all();
     if (oauthApps.length > 0) {
       const oauthApp = oauthApps.find((a) => a.client_id === clientId);
       if (!oauthApp) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (!matchesRedirectUri(redirectUri, oauthApp.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,

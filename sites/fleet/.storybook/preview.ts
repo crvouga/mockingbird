@@ -1,9 +1,9 @@
 import type { Preview } from "@storybook/html-vite"
-import "../src/ui/app.css"
+import "@crvouga/mockingbird-ui/styles.css"
 
 const preview: Preview = {
   parameters: {
-    // The dashboard is a whole page, and brings its own light and dark colours.
+    // The dashboard is a whole page, and brings its own light and dark colours (Mockingbird's theme).
     layout: "fullscreen",
     backgrounds: { disable: true },
     options: {

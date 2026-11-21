@@ -16,6 +16,7 @@ export default {
     sources: [
       "packages/http/provider/src/vendor/slack/routes/oauth.ts",
       "packages/http/provider/src/vendor/core/ui.ts",
+      "packages/http/provider/src/ui/page.tsx",
     ],
   },
 } satisfies Meta

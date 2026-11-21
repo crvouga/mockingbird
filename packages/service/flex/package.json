@@ -97,7 +97,7 @@
     "generate": "bun ../../openapi/codegen/dist/cli.js",
     "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
-    "build": "bun ../../../scripts/bundle-service.ts",
+    "build": "bun ../../../packages/ui/scripts/bundle.ts --ssr src/ui/server.tsx && bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
@@ -126,6 +126,21 @@
     "@crvouga/mockingbird-http-codec": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
     "svix": "1.41.0",
-    "zod": "3.25.76"
+    "zod": "3.25.76",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "imports": {
+    "#ui/server": {
+      "types": "./src/ui/server.tsx",
+      "bun": "./src/ui/server.tsx",
+      "browser": "./src/ui/server.tsx",
+      "default": "./dist-ui/server.js"
+    }
   }
 }

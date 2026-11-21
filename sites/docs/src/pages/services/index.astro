@@ -1,341 +1,40 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
-import BirdMark from "../../components/BirdMark.astro"
-import Icon from "../../components/Icon.astro"
-import InlineScript from "../../components/InlineScript.astro"
-import ServiceCard from "../../components/ServiceCard.astro"
+import { PageHeader } from "@crvouga/mockingbird-ui/react"
 import Base from "../../layouts/Base.astro"
+import { CATEGORIES, type CategorySlug } from "../../lib/categories.ts"
+import { Catalog, type CatalogEntry } from "../../ui/catalog.tsx"
+import { summarize } from "../../ui/service-card.tsx"
 
 const { services, categories, totals } = catalog
-const orderedServices = [...services].sort(
-  (a, b) => Number(b.featured) - Number(a.featured) || a.displayName.localeCompare(b.displayName),
-)
-// Restores the list view before the grid paints.
-const VIEW_SCRIPT = `try {
-  if (localStorage.getItem("mb:services:view") === "list") document.querySelector("[data-grid]").dataset.view = "list"
-} catch (e) {}`
+const entries: CatalogEntry[] = [...services]
+  .sort(
+    (a, b) => Number(b.featured) - Number(a.featured) || a.displayName.localeCompare(b.displayName),
+  )
+  .map((s) => ({
+    ...summarize(s),
+    text: [
+      s.packageName,
+      s.brand.vendor,
+      s.description,
+      CATEGORIES[s.category as CategorySlug].label,
+      s.parity,
+      s.featured ? "featured" : "",
+      ...s.keywords,
+      ...s.operations.map((o) => o.id),
+    ].join(" "),
+  }))
 ---
 
 <Base title="Emulators" description={`Search and filter ${totals.services} stateful emulators by category. Every emulator runs in the browser, in a worker, and on a server.`}>
-  <div class="container">
-    <header class="page-head">
-      <span class="eyebrow">Emulator catalog</span>
-      <h1>Emulators</h1>
-      <p class="lede">
-        {totals.services} stateful emulators. Each one declares the parity it keeps with its vendor.
-        Every emulator is isomorphic: the same package runs in the browser, in a worker, and on a server.
-        Open one for a live playground backed by the real package.
-      </p>
-    </header>
-
-    <div class="toolbar" data-local-search>
-      <label class="search">
-        <Icon name="search" />
-        <input type="search" class="input" placeholder={`Search ${totals.services} emulators, keywords, operation ids…`} data-q aria-label="Search emulators" autocomplete="off" spellcheck="false" />
-        <kbd>/</kbd>
-      </label>
-      <div class="toolbar-row">
-        <div class="chips" role="radiogroup" aria-label="Category">
-          <button type="button" class="chip" role="radio" data-cat="" aria-checked="true">All <span>{totals.services}</span></button>
-          {
-            categories.map((c) => (
-              <button type="button" class="chip" role="radio" data-cat={c.slug} aria-checked="false">
-                {c.label} <span>{c.count}</span>
-              </button>
-            ))
-          }
-        </div>
-        <div class="controls">
-          <button type="button" class="chip" data-featured-filter aria-pressed="false"><Icon name="star" /> Featured <span>{services.filter((s) => s.featured).length}</span></button>
-          <select class="select" data-sort aria-label="Sort">
-            <option value="relevance">Best match</option>
-            <option value="name">Name</option>
-            <option value="ops">Most operations</option>
-            <option value="category">Category</option>
-          </select>
-          <div class="seg" role="group" aria-label="View">
-            <button type="button" data-view="grid" aria-label="Grid view" aria-pressed="true"><Icon name="grid" /></button>
-            <button type="button" data-view="list" aria-label="List view" aria-pressed="false"><Icon name="list" /></button>
-          </div>
-        </div>
-      </div>
-      <p class="count" aria-live="polite" data-count>{totals.services} emulators</p>
-    </div>
-
-    <div class="grid" data-grid data-view="grid">
-      {orderedServices.map((s) => <ServiceCard service={s} />)}
-    </div>
-    <InlineScript code={VIEW_SCRIPT} />
-
-    <div class="empty" data-empty hidden>
-      <BirdMark size={56} />
-      <h2>No emulators match</h2>
-      <p>Try a vendor name, a keyword or an operation id, or clear the filters.</p>
-      <button type="button" class="btn btn-secondary btn-sm" data-clear>Clear filters</button>
-    </div>
-  </div>
+  <PageHeader
+    eyebrow="Emulator catalog"
+    title="Emulators"
+    description={`${totals.services} stateful emulators. Each one declares the parity it keeps with its vendor. Every emulator is isomorphic: the same package runs in the browser, in a worker, and on a server. Open one for a live playground backed by the real package.`}
+  />
+  <Catalog
+    client:load
+    services={entries}
+    categories={categories.map((c) => ({ slug: c.slug, label: c.label, count: c.count }))}
+  />
 </Base>
-
-<script>
-  import "../../client/services.ts"
-</script>
-
-<style>
-  .toolbar {
-    position: sticky;
-    top: var(--header-h);
-    z-index: 10;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    gap: 12px;
-    margin-inline: -24px;
-    padding: 12px 24px;
-    background: color-mix(in srgb, var(--bg) 92%, transparent);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-  }
-
-  .search {
-    position: relative;
-    display: block;
-  }
-
-  .search > :global(.i) {
-    position: absolute;
-    left: 13px;
-    top: 50%;
-    translate: 0 -50%;
-    color: var(--fg-subtle);
-  }
-
-  .search .input {
-    height: 44px;
-    padding-left: 38px;
-    padding-right: 44px;
-    font-size: 15px;
-  }
-
-  .search .input::-webkit-search-cancel-button {
-    display: none;
-  }
-
-  .search kbd {
-    position: absolute;
-    right: 12px;
-    top: 50%;
-    translate: 0 -50%;
-  }
-
-  .toolbar-row {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 10px;
-  }
-
-  .chips {
-    order: 3;
-    flex: 1 1 100%;
-    display: flex;
-    gap: 6px;
-    overflow-x: auto;
-    scrollbar-width: none;
-    min-width: 0;
-    mask-image: linear-gradient(90deg, #000 94%, transparent);
-  }
-
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 11px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg);
-    color: var(--fg-muted);
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-    transition: all 0.15s var(--ease);
-  }
-
-  .chip span {
-    color: var(--fg-faint);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .chip:hover {
-    border-color: var(--border-strong);
-    color: var(--fg);
-  }
-
-  .chip[aria-checked="true"],
-  .chip[aria-pressed="true"] {
-    border-color: var(--fg);
-    background: var(--fg);
-    color: var(--bg);
-  }
-
-  .chip[aria-checked="true"] span,
-  .chip[aria-pressed="true"] span {
-    color: color-mix(in srgb, var(--bg) 65%, transparent);
-  }
-
-  .controls {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 8px;
-  }
-
-  [data-featured-filter] :global(.i) { width: 13px; height: 13px; fill: currentColor; }
-
-  .select {
-    height: 32px;
-    padding: 0 8px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    background: var(--bg);
-    color: var(--fg-muted);
-    font-size: 13px;
-  }
-
-  .seg {
-    display: inline-flex;
-    padding: 2px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-  }
-
-  .seg button {
-    display: grid;
-    place-items: center;
-    width: 28px;
-    height: 26px;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--fg-subtle);
-  }
-
-  .seg-text button {
-    display: inline-flex;
-    gap: 6px;
-    align-items: center;
-    width: auto;
-    padding: 0 10px;
-    font-size: 13px;
-    font-weight: 500;
-    white-space: nowrap;
-  }
-
-  .seg-text .n {
-    color: var(--fg-faint);
-    font-variant-numeric: tabular-nums;
-  }
-
-  .seg button[aria-checked="true"],
-  .seg button[aria-pressed="true"] {
-    background: var(--bg-muted);
-    color: var(--fg);
-  }
-
-  .count {
-    color: var(--fg-subtle);
-    font-size: 13px;
-  }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 290px), 1fr));
-    gap: 14px;
-    margin-top: 8px;
-  }
-
-  .grid[data-view="list"] {
-    grid-template-columns: 1fr;
-    gap: 0;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    overflow: hidden;
-  }
-
-  .grid[data-view="list"] :global(.svc) {
-    display: grid;
-    grid-template-columns: minmax(220px, 280px) 1fr auto;
-    align-items: center;
-    gap: 20px;
-    padding: 12px 16px;
-    border: 0;
-    border-bottom: 1px solid var(--border);
-    border-radius: 0;
-    transform: none;
-    box-shadow: none;
-  }
-
-  .grid[data-view="list"] :global(.svc:last-child) {
-    border-bottom: 0;
-  }
-
-  .grid[data-view="list"] :global(.svc:hover) {
-    background: var(--bg-subtle);
-  }
-
-  .grid[data-view="list"] :global(.monogram) {
-    --size: 32px !important;
-  }
-
-  .grid[data-view="list"] :global(.svc-desc) {
-    -webkit-line-clamp: 1;
-  }
-
-  .grid[data-view="list"] :global(.svc-meta) {
-    margin: 0;
-    padding: 0;
-    border: 0;
-    flex-wrap: nowrap;
-    white-space: nowrap;
-  }
-
-  @media (max-width: 760px) {
-    .grid[data-view="list"] :global(.svc) {
-      grid-template-columns: 1fr;
-      gap: 8px;
-    }
-    .toolbar {
-      margin-inline: -16px;
-      padding-inline: 16px;
-    }
-    .controls {
-      width: 100%;
-    }
-    .select {
-      flex: 1;
-    }
-  }
-
-  .empty {
-    display: grid;
-    justify-items: center;
-    gap: 8px;
-    padding: 80px 16px;
-    text-align: center;
-    color: var(--fg-muted);
-  }
-
-  .empty .emoji {
-    font-size: 40px;
-    margin-bottom: 8px;
-  }
-
-  .empty h2 {
-    color: var(--fg);
-    font-size: 18px;
-  }
-
-  .empty .btn {
-    margin-top: 10px;
-  }
-</style>

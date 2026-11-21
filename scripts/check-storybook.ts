@@ -80,11 +80,11 @@ const candidates = [
   ),
   // Reports render HTML from benchmark runs; they live under benchmarks/ but are UI.
   ...["packages/service/postgres", "packages/service/sqlite"].map((dir) =>
-    join(root, dir, "benchmarks/harness/html-report.ts"),
+    join(root, dir, "benchmarks/harness/html-report.tsx"),
   ),
   ...walk(join(root, "sites/docs/src/pages")).filter((path) => path.endsWith(".astro")),
   join(root, "sites/docs/src/layouts/Base.astro"),
-  ...walk(join(root, "sites/fleet/src/ui")).filter((path) => /\.ts$/.test(path) && !isTest(path)),
+  ...walk(join(root, "sites/fleet/src/ui")).filter((path) => /\.tsx?$/.test(path) && !isTest(path)),
   ...walk(join(root, "packages/notifications/src/ui")).filter(
     (path) => /\.ts$/.test(path) && !isTest(path),
   ),

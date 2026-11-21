@@ -1,9 +1,7 @@
 /**
- * What every screen shares: the API client, the mounted root, the address bar, and the few
- * pieces of markup that mean the same thing everywhere.
+ * What every screen shares: the API client, the mounted root and the address bar. The markup that
+ * means the same thing everywhere is in `kit.tsx`.
  */
-import { type Child, h, type Props } from "./dom.js"
-import { to } from "./routes.js"
 import type { CatalogEntry, Json, Managed, Org } from "./types.js"
 
 export class ApiError extends Error {
@@ -111,7 +109,7 @@ export type Note = { about: string; text: string }
 /** A secret the API returns exactly once, held for its result screen and nowhere else. */
 export type Secret = { id: string; value: string; for?: string }
 
-/** The one mounted dashboard. `mount` (see `router.ts`) fills it in. */
+/** The one mounted dashboard. `mount` (see `router.tsx`) fills it in. */
 export const ui: {
   root: HTMLElement
   address: Address
@@ -128,16 +126,6 @@ export const ui: {
   catalog: undefined,
 }
 
-export const link = (href: string, props: Props, ...children: Child[]) =>
-  h("a", { href, ...props, onclick: (event) => navigate(event, href) }, ...children)
-
-/** A link that looks like a button: the one obvious next step on a query screen. */
-export const action = (
-  href: string,
-  label: Child,
-  kind: "primary" | "plain" | "danger" = "plain",
-) => link(href, { class: `button${kind === "plain" ? "" : ` ${kind}`}` }, label)
-
 /** Follow a link: whatever the last mutation left behind does not come along. */
 export function navigate(event: Event | undefined, href: string) {
   const mouse = event as MouseEvent | undefined
@@ -147,6 +135,25 @@ export function navigate(event: Event | undefined, href: string) {
   ui.secret = undefined
   ui.address.push(href)
   void ui.render()
+}
+
+/**
+ * Every link of the dashboard is an ordinary `<a href>`. A click on one that stays inside it is
+ * followed here, without loading the page again; the browser follows the rest itself: a link to
+ * sign-in or the API, one opened in a new tab or window, or one that downloads a file.
+ */
+export function followLinks(root: HTMLElement): () => void {
+  const listener = (event: MouseEvent) => {
+    if (event.defaultPrevented) return
+    const anchor = (event.target as Element | null)?.closest?.("a[href]")
+    if (!(anchor instanceof HTMLAnchorElement) || !root.contains(anchor)) return
+    if (anchor.hasAttribute("download") || (anchor.target && anchor.target !== "_self")) return
+    const href = anchor.getAttribute("href") ?? ""
+    if (!/^\/(?!\/)/.test(href) || /^\/(auth|api|f)\//.test(href)) return
+    navigate(event, href)
+  }
+  root.addEventListener("click", listener)
+  return () => root.removeEventListener("click", listener)
 }
 
 /**
@@ -165,10 +172,6 @@ export function returnTo(search: string): string {
   const wanted = new URLSearchParams(search).get("return_to") ?? ""
   return /^\/(?!\/)/.test(wanted) && !wanted.startsWith("/sign-") ? wanted : "/"
 }
-
-/** "Created just now", beside the thing a mutation just changed; nothing when it was not this. */
-export const justNow = (about: string) =>
-  ui.note?.about === about && h("span.just-now", { role: "status" }, ui.note.text)
 
 let working = 0
 
@@ -195,88 +198,6 @@ export const atLeast = (role: string | undefined, minimum: string) =>
 export const aRole = (role: string | undefined) =>
   `${role === "owner" || role === "admin" ? "an" : "a"} ${role ?? "member"}`
 
-/** A value with a button that copies it. Copying changes nothing on the server. */
-export function copyable(value: string, label = "Copy") {
-  const button = h("button.small", { type: "button", "data-local": "copy" }, label)
-  button.addEventListener("click", async () => {
-    await navigator.clipboard.writeText(value).catch(() => {})
-    button.textContent = "Copied"
-    setTimeout(() => (button.textContent = label), 1500)
-  })
-  return h(".copy", {}, h("code", { title: value }, value), button)
-}
-
-/** Breadcrumb trail; the last item is the current page. */
-export const crumbs = (...items: Child[]) =>
-  h(
-    "nav.crumbs",
-    { "aria-label": "Breadcrumb" },
-    items
-      .filter((item) => item !== false && item !== undefined && item !== null)
-      .map((item, index) => [
-        index > 0 && h("span.sep", { "aria-hidden": "true" }, "/"),
-        h("span", {}, item),
-      ]),
-  )
-
-/** The top of a screen: its heading, a sentence about it, and its one obvious action. */
-export const head = (title: Child, sub: Child, ...actions: Child[]) =>
-  h(
-    ".head",
-    {},
-    h("div.head-text", {}, h("h1", { tabindex: "-1" }, title), sub && h("p.sub", {}, sub)),
-    actions.some(Boolean) && h(".head-actions", {}, actions),
-  )
-
-/**
- * The current settings of a thing, as labelled values. Each row may carry the link to the screen
- * that changes it; a query screen never changes a value in place.
- */
-export const properties = (
-  label: string,
-  rows: (false | { name: string; value: Child; about?: string; change?: Child })[],
-) =>
-  h(
-    "dl.props",
-    { "aria-label": label },
-    rows.map(
-      (row) =>
-        row &&
-        h(
-          ".prop",
-          {},
-          h("dt", {}, row.name),
-          h("dd", {}, h(".prop-value", {}, row.value), row.about && justNow(row.about)),
-          row.change && h("dd.prop-change", {}, row.change),
-        ),
-    ),
-  )
-
-/** A section of a query screen: a heading, optionally its action, then its content. */
-export const section = (title: string, actions: Child, ...content: Child[]) =>
-  h(
-    "section",
-    {},
-    h(".section-head", {}, h("h2", {}, title), actions && h(".head-actions", {}, actions)),
-    content,
-  )
-
-/** What a list says when something was just taken out of it. */
-export const removed = (about: string) => {
-  const note = justNow(about)
-  return note && h("p.removed", {}, note)
-}
-
-/** A screen-sized statement: nothing here, not found, no access. */
-export const statement = (title: string, body: Child, ...links: Child[]) =>
-  h(
-    ".statement",
-    {},
-    h("h1", { tabindex: "-1" }, title),
-    h("p", {}, body),
-    links.some(Boolean) && h(".statement-links", {}, links),
-  )
-
 /** "Nov 10, 2026, 9:30 AM". */
 export const moment = (value: string) =>
   new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
@@ -284,42 +205,6 @@ export const moment = (value: string) =>
 /** "Last applied Nov 10, 2026, 9:30 AM by ada@example.com." */
 export const lastApplied = (managed: Managed) =>
   `Last applied ${moment(managed.appliedAt)} by ${managed.appliedBy}.`
-
-const file = () => h("code", {}, "mockingbird.yaml")
-
-/**
- * Said once on a screen that shows what the organization's `mockingbird.yaml` declares: it is
- * read-only here, and where to change it. Nothing when the organization is configured by hand.
- */
-export const managedNotice = (org: Org | undefined, readOnly: string) =>
-  org?.managed &&
-  h(
-    "p.notice.managed",
-    {},
-    h("strong", {}, "Configured by ", file(), "."),
-    ` ${readOnly} ${lastApplied(org.managed)} `,
-    link(to("org.configuration", { org: org.id }), {}, "How to change it"),
-  )
-
-/** Above a form that creates something by hand: the file is the prescribed way. */
-export const preferFile = (orgId: string, what: string) =>
-  h(
-    "p.notice.prefer",
-    {},
-    h("strong", {}, "Prefer ", file(), ":"),
-    ` declare ${what} in the file and apply it, and your repository holds the configuration. `,
-    link(to("org.configuration", { org: orgId }), {}, "Use mockingbird.yaml instead"),
-  )
-
-/** In an empty list: the prescribed way to fill it, ahead of doing it by hand. */
-export const declareIt = (orgId: string, what: string) => [
-  h("span", {}, "Declare ", what, " in ", file(), " and apply it."),
-  h(
-    "p.empty-action",
-    {},
-    action(to("org.configuration", { org: orgId }), "Start from mockingbird.yaml", "primary"),
-  ),
-]
 
 export const day = (value: unknown) =>
   typeof value === "string"

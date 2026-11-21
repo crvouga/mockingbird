@@ -1,28 +1,22 @@
-import { DeleteOutlined, DownloadOutlined, PlusOutlined } from "@ant-design/icons"
-import {
-  App,
-  Button,
-  Card,
-  Descriptions,
-  Flex,
-  Form,
-  Input,
-  InputNumber,
-  Segmented,
-  Select,
-  Space,
-  Statistic,
-  Switch,
-  Tag,
-  Typography,
-} from "antd"
+import { KeyValueList, StatusChip } from "@crvouga/mockingbird-ui/react"
+import { ArrowDownToLine, Plus, TrashBin } from "@gravity-ui/icons"
+import { Button, Card, Form, Tabs } from "@heroui/react"
+import type { ReactNode } from "react"
 import { useState } from "react"
 import {
+  Choose,
   DataTable,
   ErrorNotice,
+  FieldGroup,
   Json,
+  NumberInput,
   Refresh,
+  SearchSelect,
+  Section,
+  TextInput,
+  Toggle,
   useAction,
+  useChrome,
   useResource,
   ViewTitle,
 } from "./components.js"
@@ -46,24 +40,50 @@ const JOURNAL_WIDTHS = { at: 210, method: 90, status: 90, durationMs: 120, delay
 const wait = (rule: LatencyRule): string =>
   rule.jitterMs ? `${rule.delayMs} ms + 0–${rule.jitterMs} ms jitter` : `${rule.delayMs} ms`
 
+const required =
+  (message: string) =>
+  (value: string): string | null =>
+    value.trim() ? null : message
+
+const submitted = (handler: () => unknown) => (event: { preventDefault(): void }) => {
+  event.preventDefault()
+  handler()
+}
+
+function Stat({ title, value, loading }: { title: string; value: ReactNode; loading: boolean }) {
+  return (
+    <Card>
+      <Card.Content className="flex flex-col gap-1">
+        <span className="text-sm text-muted">{title}</span>
+        <span className="truncate text-2xl font-semibold text-foreground">
+          {loading ? "…" : value}
+        </span>
+      </Card.Content>
+    </Card>
+  )
+}
+
 export function Overview({ api, revision }: { api: Api; revision: number }) {
   const health = useResource<Record<string, unknown>>(api, "/health", revision)
   const state = useResource<StateView>(api, "/state", revision)
   const clock = useResource<Clock>(api, "/clock", revision)
   const controls = useResource<Controls>(api, "/controls", revision)
   const journal = useResource<Journal>(api, "/requests?limit=8", revision)
-  const { modal, message } = App.useApp()
+  const { confirm, notify } = useChrome()
   const reset = useAction(api, () => {
     state.reload()
     clock.reload()
     controls.reload()
     journal.reload()
-    void message.success("Namespace reset")
+    notify("Namespace reset")
   })
   const overrides = Object.keys(controls.data?.latency.operations ?? {}).length
+  const status = health.data?.status
   return (
-    <Flex vertical gap="large">
-      <ViewTitle>Overview</ViewTitle>
+    <div className="flex flex-col gap-6">
+      <ViewTitle description="The emulator at a glance: what it holds, its clock and controls, and the latest requests.">
+        Overview
+      </ViewTitle>
       <ErrorNotice
         error={
           health.error ??
@@ -81,110 +101,123 @@ export function Overview({ api, revision }: { api: Api; revision: number }) {
           journal.reload()
         }}
       />
-      <Flex gap="middle" wrap>
-        <Card loading={health.loading} style={{ flex: "1 1 200px" }}>
-          <Statistic title="Service" value={text(health.data?.service)} />
-        </Card>
-        <Card loading={state.loading} style={{ flex: "1 1 200px" }}>
-          <Statistic title="Collections" value={state.data?.collections.length ?? 0} />
-        </Card>
-        <Card loading={state.loading} style={{ flex: "1 1 200px" }}>
-          <Statistic
-            title="Records"
-            value={state.data?.collections.reduce((sum, item) => sum + item.count, 0) ?? 0}
-          />
-        </Card>
-      </Flex>
-      <Card title="Environment" loading={clock.loading || health.loading || controls.loading}>
-        <Descriptions
-          column={1}
-          bordered
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <Stat title="Service" value={text(health.data?.service)} loading={health.loading} />
+        <Stat
+          title="Collections"
+          value={state.data?.collections.length ?? 0}
+          loading={state.loading}
+        />
+        <Stat
+          title="Records"
+          value={state.data?.collections.reduce((sum, item) => sum + item.count, 0) ?? 0}
+          loading={state.loading}
+        />
+      </div>
+      <Section title="Environment">
+        <KeyValueList
           items={[
             {
-              key: "status",
               label: "Status",
-              children: <Tag color="success">{text(health.data?.status)}</Tag>,
+              value:
+                status === undefined ? (
+                  "—"
+                ) : (
+                  <StatusChip status={status === "ok" ? "ok" : "warning"}>
+                    {text(status)}
+                  </StatusChip>
+                ),
             },
-            { key: "namespace", label: "Namespace", children: api.namespace() },
+            { label: "Namespace", value: api.namespace(), mono: true },
             {
-              key: "time",
               label: "Clock",
-              children: clock.data
+              value: clock.data
                 ? `${new Date(clock.data.now).toLocaleString()} · ${clock.data.frozen ? "Frozen" : "Live"}`
                 : "—",
             },
-            { key: "seed", label: "Seed", children: text(controls.data?.seed) },
+            { label: "Seed", value: text(controls.data?.seed), mono: true },
             {
-              key: "virtualTime",
               label: "Virtual time",
-              children: controls.data ? (controls.data.virtualTime ? "On" : "Off") : "—",
+              value: controls.data ? (controls.data.virtualTime ? "On" : "Off") : "—",
             },
             {
-              key: "latency",
               label: "Latency",
-              children: controls.data
+              value: controls.data
                 ? `${wait(controls.data.latency)}${overrides ? ` · ${overrides} per-operation` : ""}`
                 : "—",
             },
           ]}
         />
-      </Card>
-      <Card title="Recent requests">
+      </Section>
+      <Section title="Recent requests">
         <DataTable
+          label="Recent requests"
           rows={journal.data?.requests ?? []}
           columns={["method", "path", "status", "operationId", "durationMs", "delayMs", "faultId"]}
           widths={JOURNAL_WIDTHS}
           loading={journal.loading}
+          searchable={false}
+          pagination={false}
         />
-      </Card>
-      <Card title="Reset namespace">
-        <Flex gap="middle" wrap align="center">
-          <Typography.Text type="secondary">
-            Return {api.namespace()} to its boot state. Other namespaces are unaffected.
-          </Typography.Text>
+      </Section>
+      <Section
+        title="Reset namespace"
+        description={`Return ${api.namespace()} to its boot state. Other namespaces are unaffected.`}
+        actions={
           <Button
-            danger
-            loading={reset.busy}
-            onClick={() =>
-              modal.confirm({
+            variant="danger"
+            isPending={reset.busy}
+            onPress={() =>
+              confirm({
                 title: `Reset ${api.namespace()}?`,
                 content:
                   "The namespace returns to its boot state: records, clock, faults, latency, snapshots and journal.",
                 okText: "Reset namespace",
-                okButtonProps: { danger: true },
-                onOk: async () => {
-                  if (!(await reset.run("POST", "/reset", {}))) throw new Error("Reset failed")
-                },
+                danger: true,
+                onOk: () => reset.run("POST", "/reset", {}),
               })
             }
           >
             Reset namespace
           </Button>
-        </Flex>
-      </Card>
-    </Flex>
+        }
+      />
+    </div>
   )
 }
+
+const ADVANCES = [
+  ["−1h", -3600000],
+  ["+1m", 60000],
+  ["+15m", 900000],
+  ["+1h", 3600000],
+  ["+1d", 86400000],
+] as const
 
 export function ClockView({ api, revision }: { api: Api; revision: number }) {
   const clock = useResource<Clock>(api, "/clock", revision)
   const controls = useResource<Controls>(api, "/controls", revision)
-  const { message } = App.useApp()
+  const { notify } = useChrome()
+  const [instant, setInstant] = useState("")
+  const [step, setStep] = useState("")
   const action = useAction(api, () => {
     clock.reload()
-    void message.success("Clock updated")
+    notify("Clock updated")
   })
   const virtual = useAction(api, () => {
     controls.reload()
-    void message.success("Virtual time updated")
+    notify("Virtual time updated")
   })
   const autoAdvance = clock.data?.autoAdvanceMs ? `${clock.data.autoAdvanceMs} ms` : "off"
   return (
-    <Flex vertical gap="large">
-      <Flex justify="space-between" gap="middle" wrap>
-        <ViewTitle page="clock">Clock</ViewTitle>
-        <Refresh loading={clock.loading} onClick={clock.reload} />
-      </Flex>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="clock"
+        description="The emulator's own clock: freeze it, move it, or let every request advance it."
+        actions={<Refresh loading={clock.loading} onClick={clock.reload} />}
+      >
+        Clock
+      </ViewTitle>
       <ErrorNotice
         error={clock.error ?? controls.error ?? action.error ?? virtual.error}
         retry={() => {
@@ -192,122 +225,150 @@ export function ClockView({ api, revision }: { api: Api; revision: number }) {
           controls.reload()
         }}
       />
-      <Card title="Current time" loading={clock.loading}>
-        <Flex vertical gap="middle">
-          <Typography.Title level={4} style={{ margin: 0 }}>
-            {clock.data?.iso ?? "—"}
-          </Typography.Title>
-          <Flex gap="middle" align="center">
-            <Switch
-              aria-label="Freeze clock"
-              checked={clock.data?.frozen ?? false}
-              loading={action.busy}
-              onChange={(freeze) => void action.run("POST", "/clock", { freeze })}
-            />
-            <Typography.Text>Freeze clock</Typography.Text>
-          </Flex>
-          <Space wrap>
-            {[
-              ["−1h", -3600000],
-              ["+1m", 60000],
-              ["+15m", 900000],
-              ["+1h", 3600000],
-              ["+1d", 86400000],
-            ].map(([label, advance]) => (
-              <Button
-                key={String(label)}
-                disabled={action.busy}
-                onClick={() => void action.run("POST", "/clock", { advance })}
-              >
-                {label}
-              </Button>
-            ))}
-          </Space>
+      <Section title="Current time">
+        <p className="m-0 break-all font-mono text-xl font-semibold text-foreground">
+          {clock.data?.iso ?? "—"}
+        </p>
+        <Toggle
+          label="Freeze clock"
+          ariaLabel="Freeze clock"
+          isSelected={clock.data?.frozen ?? false}
+          isDisabled={action.busy || !clock.data}
+          onChange={(freeze) => void action.run("POST", "/clock", { freeze })}
+        />
+        <div className="flex flex-wrap gap-2">
+          {ADVANCES.map(([label, advance]) => (
+            <Button
+              key={label}
+              variant="secondary"
+              size="sm"
+              isDisabled={action.busy}
+              onPress={() => void action.run("POST", "/clock", { advance })}
+            >
+              {label}
+            </Button>
+          ))}
           <Button
-            loading={action.busy}
-            onClick={() => void action.run("POST", "/clock", { reset: true })}
+            variant="tertiary"
+            size="sm"
+            isPending={action.busy}
+            onPress={() => void action.run("POST", "/clock", { reset: true })}
           >
             Reset clock
           </Button>
-        </Flex>
-      </Card>
-      <Flex gap="middle" wrap align="stretch">
-        <Card title="Set an instant" style={{ flex: "1 1 300px" }}>
+        </div>
+      </Section>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <Section title="Set an instant">
           <Form
-            layout="vertical"
-            onFinish={(values: { set: string }) =>
-              void action.run("POST", "/clock", { set: values.set })
-            }
+            className="flex flex-col gap-4"
+            onSubmit={submitted(() => void action.run("POST", "/clock", { set: instant }))}
           >
-            <Form.Item
+            <TextInput
               label="ISO 8601 timestamp"
               name="set"
-              rules={[
-                { required: true },
-                {
-                  validator: async (_, value: string) => {
-                    if (!Number.isFinite(Date.parse(value)))
-                      throw new Error("Enter an ISO timestamp")
-                  },
-                },
-              ]}
-            >
-              <Input placeholder="2026-01-01T00:00:00Z" />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" loading={action.busy}>
+              placeholder="2026-01-01T00:00:00Z"
+              value={instant}
+              onChange={setInstant}
+              isRequired
+              validate={(value) =>
+                Number.isFinite(Date.parse(value)) ? null : "Enter an ISO timestamp"
+              }
+            />
+            <Button type="submit" className="self-start" isPending={action.busy}>
               Set time
             </Button>
           </Form>
-        </Card>
-        <Card title="Auto-advance" style={{ flex: "1 1 300px" }}>
+        </Section>
+        <Section title="Auto-advance">
           <Form
-            layout="vertical"
-            onFinish={(values: { autoAdvance: string }) =>
-              void action.run("POST", "/clock", { autoAdvance: values.autoAdvance.trim() })
-            }
+            className="flex flex-col gap-4"
+            onSubmit={submitted(
+              () => void action.run("POST", "/clock", { autoAdvance: step.trim() }),
+            )}
           >
-            <Form.Item
+            <TextInput
               label="Step before every vendor request"
               name="autoAdvance"
-              rules={[{ required: true, message: "Enter a duration" }]}
-              extra={`Currently ${autoAdvance}. A duration such as 1s or 250ms; 0 turns it off.`}
-            >
-              <Input placeholder="1s" />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" loading={action.busy}>
+              placeholder="1s"
+              value={step}
+              onChange={setStep}
+              isRequired
+              validate={required("Enter a duration")}
+              description={`Currently ${autoAdvance}. A duration such as 1s or 250ms; 0 turns it off.`}
+            />
+            <Button type="submit" className="self-start" isPending={action.busy}>
               Set auto-advance
             </Button>
           </Form>
-        </Card>
-        <Card title="Virtual time" loading={controls.loading} style={{ flex: "1 1 300px" }}>
-          <Flex vertical gap="middle">
-            <Flex gap="middle" align="center">
-              <Switch
-                aria-label="Virtual time"
-                checked={controls.data?.virtualTime ?? false}
-                loading={virtual.busy}
-                onChange={(virtualTime) => void virtual.run("PUT", "/controls", { virtualTime })}
-              />
-              <Typography.Text>Virtual time</Typography.Text>
-            </Flex>
-            <Typography.Text type="secondary">
-              When on, latency, fault delays and timeouts are spent on this clock instead of the
-              wall clock: the request returns at once and the clock moves forward by the wait.
-            </Typography.Text>
-          </Flex>
-        </Card>
-      </Flex>
-    </Flex>
+        </Section>
+        <Section
+          title="Virtual time"
+          description="When on, latency, fault delays and timeouts are spent on this clock instead of the wall clock: the request returns at once and the clock moves forward by the wait."
+        >
+          <Toggle
+            label="Virtual time"
+            ariaLabel="Virtual time"
+            isSelected={controls.data?.virtualTime ?? false}
+            isDisabled={virtual.busy || !controls.data}
+            onChange={(virtualTime) => void virtual.run("PUT", "/controls", { virtualTime })}
+          />
+        </Section>
+      </div>
+    </div>
+  )
+}
+
+function BaselineForm({
+  latency,
+  busy,
+  onSubmit,
+}: {
+  latency: Latency
+  busy: boolean
+  onSubmit: (delay: string, jitter: string) => void
+}) {
+  const [delay, setDelay] = useState(`${latency.delayMs}ms`)
+  const [jitter, setJitter] = useState(`${latency.jitterMs}ms`)
+  return (
+    <Form
+      className="flex flex-col gap-4"
+      onSubmit={submitted(() => onSubmit(delay.trim(), jitter.trim()))}
+    >
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <TextInput
+          label="Delay"
+          name="delay"
+          placeholder="40ms"
+          value={delay}
+          onChange={setDelay}
+          isRequired
+          validate={required("Enter a duration")}
+          description="Added to every request."
+        />
+        <TextInput
+          label="Jitter"
+          name="jitter"
+          placeholder="10ms"
+          value={jitter}
+          onChange={setJitter}
+          description="A seeded extra wait from 0 up to this."
+        />
+      </div>
+      <Button type="submit" className="self-start" isPending={busy}>
+        Set baseline
+      </Button>
+    </Form>
   )
 }
 
 export function LatencyView({ api, revision }: { api: Api; revision: number }) {
   const latency = useResource<Latency>(api, "/latency", revision)
-  const [form] = Form.useForm<{ operationId: string; delay: string; jitter?: string }>()
-  const { message, modal } = App.useApp()
+  const { notify, confirm } = useChrome()
+  const [override, setOverride] = useState({ operationId: "", delay: "", jitter: "" })
   const action = useAction(api, () => {
     latency.reload()
-    void message.success("Latency updated")
+    notify("Latency updated")
   })
   const operations = latency.data?.operations ?? {}
   // PUT replaces the whole control, so every change sends the parts it leaves alone.
@@ -323,149 +384,128 @@ export function LatencyView({ api, revision }: { api: Api; revision: number }) {
       ...change,
     })
   return (
-    <Flex vertical gap="large">
-      <Flex wrap gap="middle" justify="space-between" align="center">
-        <ViewTitle page="latency-and-timeouts">Latency</ViewTitle>
-        <Space>
-          <Refresh loading={latency.loading} onClick={latency.reload} />
-          <Button
-            danger
-            loading={action.busy}
-            icon={<DeleteOutlined />}
-            onClick={() =>
-              modal.confirm({
-                title: "Clear this namespace's latency?",
-                content: "The baseline and every per-operation override are removed.",
-                onOk: async () => {
-                  if (!(await action.run("DELETE", "/latency"))) throw new Error("Clear failed")
-                },
-              })
-            }
-          >
-            Clear latency
-          </Button>
-        </Space>
-      </Flex>
-      <Typography.Paragraph type="secondary">
-        How long every vendor request in this namespace takes, before any fault is considered.
-        Durations are milliseconds or a string such as 250ms, 2s or 15m.
-      </Typography.Paragraph>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="latency-and-timeouts"
+        description="How long every vendor request in this namespace takes, before any fault is considered. Durations are milliseconds or a string such as 250ms, 2s or 15m."
+        actions={
+          <>
+            <Refresh loading={latency.loading} onClick={latency.reload} />
+            <Button
+              variant="danger-soft"
+              size="sm"
+              isPending={action.busy}
+              onPress={() =>
+                confirm({
+                  title: "Clear this namespace's latency?",
+                  content: "The baseline and every per-operation override are removed.",
+                  okText: "Clear latency",
+                  danger: true,
+                  onOk: () => action.run("DELETE", "/latency"),
+                })
+              }
+            >
+              <TrashBin className="size-4" />
+              Clear latency
+            </Button>
+          </>
+        }
+      >
+        Latency
+      </ViewTitle>
       <ErrorNotice error={latency.error ?? action.error} retry={latency.reload} />
-      <Card title="Baseline" loading={latency.loading}>
-        {latency.data && (
-          <Form
+      <Section title="Baseline">
+        {latency.data ? (
+          <BaselineForm
             // Remount with the stored values whenever they change.
             key={`${latency.data.delayMs}:${latency.data.jitterMs}`}
-            name="latency-baseline"
-            layout="vertical"
-            initialValues={{
-              delay: `${latency.data.delayMs}ms`,
-              jitter: `${latency.data.jitterMs}ms`,
-            }}
-            onFinish={(values: { delay: string; jitter?: string }) =>
-              void put({ delay: values.delay.trim(), jitter: values.jitter?.trim() || 0 })
-            }
-          >
-            <Flex gap="middle" wrap>
-              <Form.Item
-                label="Delay"
-                name="delay"
-                rules={[{ required: true, message: "Enter a duration" }]}
-                extra="Added to every request."
-                style={{ flex: "1 1 220px" }}
-              >
-                <Input placeholder="40ms" />
-              </Form.Item>
-              <Form.Item
-                label="Jitter"
-                name="jitter"
-                extra="A seeded extra wait from 0 up to this."
-                style={{ flex: "1 1 220px" }}
-              >
-                <Input placeholder="10ms" />
-              </Form.Item>
-            </Flex>
-            <Button type="primary" htmlType="submit" loading={action.busy}>
-              Set baseline
-            </Button>
-          </Form>
-        )}
-      </Card>
-      <Card title="Per-operation overrides">
-        <Flex vertical gap="middle">
-          <Typography.Text type="secondary">
-            An override replaces the baseline for one operation. The journal lists each request's
-            operationId.
-          </Typography.Text>
-          <Form
-            form={form}
-            name="latency-override"
-            layout="vertical"
-            onFinish={async (values) => {
-              const added = await put({
-                operations: {
-                  ...operations,
-                  [values.operationId.trim()]: {
-                    delay: values.delay.trim(),
-                    jitter: values.jitter?.trim() || 0,
-                  },
-                },
-              })
-              if (added) form.resetFields()
-            }}
-          >
-            <Flex gap="middle" wrap>
-              <Form.Item
-                label="operationId"
-                name="operationId"
-                rules={[{ required: true, whitespace: true, message: "Enter an operationId" }]}
-                style={{ flex: "2 1 240px" }}
-              >
-                <Input placeholder="CreateCharge" />
-              </Form.Item>
-              <Form.Item
-                label="Delay"
-                name="delay"
-                rules={[{ required: true, message: "Enter a duration" }]}
-                style={{ flex: "1 1 140px" }}
-              >
-                <Input placeholder="250ms" />
-              </Form.Item>
-              <Form.Item label="Jitter" name="jitter" style={{ flex: "1 1 140px" }}>
-                <Input placeholder="0ms" />
-              </Form.Item>
-            </Flex>
-            <Button htmlType="submit" icon={<PlusOutlined />} loading={action.busy}>
-              Set override
-            </Button>
-          </Form>
-          <DataTable
-            rows={Object.entries(operations).map(([operationId, rule]) => ({
-              operationId,
-              ...rule,
-            }))}
-            columns={["operationId", "delayMs", "jitterMs"]}
-            rowKeys={Object.keys(operations)}
-            loading={latency.loading}
-            action={(row) => (
-              <Button
-                danger
-                disabled={action.busy}
-                onClick={() =>
-                  void put({
-                    operations: Object.fromEntries(
-                      Object.entries(operations).filter(([id]) => id !== row.operationId),
-                    ),
-                  })
-                }
-              >
-                Remove
-              </Button>
-            )}
+            latency={latency.data}
+            busy={action.busy}
+            onSubmit={(delay, jitter) => void put({ delay, jitter: jitter || 0 })}
           />
-        </Flex>
-      </Card>
-    </Flex>
+        ) : (
+          <p className="text-sm text-muted">{latency.loading ? "Loading…" : "—"}</p>
+        )}
+      </Section>
+      <Section
+        title="Per-operation overrides"
+        description="An override replaces the baseline for one operation. The journal lists each request's operationId."
+      >
+        <Form
+          className="flex flex-col gap-4"
+          onSubmit={submitted(async () => {
+            const added = await put({
+              operations: {
+                ...operations,
+                [override.operationId.trim()]: {
+                  delay: override.delay.trim(),
+                  jitter: override.jitter.trim() || 0,
+                },
+              },
+            })
+            if (added) setOverride({ operationId: "", delay: "", jitter: "" })
+          })}
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-[2fr_1fr_1fr]">
+            <TextInput
+              label="operationId"
+              name="operationId"
+              placeholder="CreateCharge"
+              value={override.operationId}
+              onChange={(operationId) => setOverride({ ...override, operationId })}
+              isRequired
+              validate={required("Enter an operationId")}
+            />
+            <TextInput
+              label="Delay"
+              name="delay"
+              placeholder="250ms"
+              value={override.delay}
+              onChange={(delay) => setOverride({ ...override, delay })}
+              isRequired
+              validate={required("Enter a duration")}
+            />
+            <TextInput
+              label="Jitter"
+              name="jitter"
+              placeholder="0ms"
+              value={override.jitter}
+              onChange={(jitter) => setOverride({ ...override, jitter })}
+            />
+          </div>
+          <Button type="submit" variant="secondary" className="self-start" isPending={action.busy}>
+            <Plus className="size-4" />
+            Set override
+          </Button>
+        </Form>
+        <DataTable
+          label="Per-operation overrides"
+          rows={Object.entries(operations).map(([operationId, rule]) => ({
+            operationId,
+            ...rule,
+          }))}
+          columns={["operationId", "delayMs", "jitterMs"]}
+          rowKeys={Object.keys(operations)}
+          loading={latency.loading}
+          action={(row) => (
+            <Button
+              variant="danger-soft"
+              size="sm"
+              isDisabled={action.busy}
+              onPress={() =>
+                void put({
+                  operations: Object.fromEntries(
+                    Object.entries(operations).filter(([id]) => id !== row.operationId),
+                  ),
+                })
+              }
+            >
+              Remove
+            </Button>
+          )}
+        />
+      </Section>
+    </div>
   )
 }
 
@@ -544,19 +584,106 @@ const faultRow = (rule: Record<string, unknown>, namespace: string): Record<stri
   remaining: rule.remaining ?? "no limit",
 })
 
-const FAULT_FIELD = { flex: "1 1 170px" }
+const METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
+
+function FaultFields({ busy, onSubmit }: { busy: boolean; onSubmit: (values: FaultForm) => void }) {
+  const [values, setValues] = useState<FaultForm>({})
+  const textField = (name: keyof FaultForm, placeholder: string, description?: string) => (
+    <TextInput
+      label={name}
+      name={name}
+      placeholder={placeholder}
+      value={String(values[name] ?? "")}
+      onChange={(value) => setValues({ ...values, [name]: value })}
+      {...(description ? { description } : {})}
+    />
+  )
+  const numberField = (
+    name: keyof FaultForm,
+    description: string,
+    limits: { minValue?: number; maxValue?: number; step?: number },
+  ) => (
+    <NumberInput
+      label={name}
+      value={(values[name] as number | null | undefined) ?? null}
+      onChange={(value) => setValues({ ...values, [name]: value })}
+      description={description}
+      {...limits}
+    />
+  )
+  return (
+    <Form className="flex flex-col gap-6" onSubmit={submitted(() => onSubmit(values))}>
+      <FieldGroup title="Match">
+        {textField("operationId", "Any operation")}
+        <Choose
+          label="method"
+          value={values.method ?? ""}
+          onChange={(method) => setValues({ ...values, method })}
+          choices={[
+            { value: "", label: "Any method" },
+            ...METHODS.map((method) => ({ value: method, label: method })),
+          ]}
+        />
+        {textField("path", "/v1/charges", "Exact path.")}
+        {textField("pathPrefix", "/v1", "Paths starting with this.")}
+      </FieldGroup>
+      <FieldGroup title="Schedule">
+        {numberField("after", "Let this many matches through first.", { minValue: 0 })}
+        {numberField("every", "Then fault only every nth match.", { minValue: 1 })}
+        {numberField("count", "Retire the rule after this many faults.", { minValue: 0 })}
+        {numberField("rate", "Fraction to fault, 0 to 1, drawn from the seed.", {
+          minValue: 0,
+          maxValue: 1,
+          step: 0.1,
+        })}
+      </FieldGroup>
+      <FieldGroup title="Action">
+        {numberField("status", "Answer with this status instead of reaching the emulator.", {
+          minValue: 200,
+          maxValue: 599,
+        })}
+        {textField("delay", "2s", "Hold the response back.")}
+        {textField("jitter", "100ms", "A seeded extra wait from 0 up to this.")}
+        {textField("timeout", "30s", "Hold the request this long, then drop the connection.")}
+        {numberField("truncate", "Cut the body off after this many bytes.", { minValue: 0 })}
+        <div className="flex flex-col justify-center gap-1">
+          <Toggle
+            label="drop"
+            ariaLabel="Drop the connection"
+            isSelected={values.drop ?? false}
+            onChange={(drop) => setValues({ ...values, drop })}
+          />
+          <span className="text-xs text-muted">Drop the connection at once.</span>
+        </div>
+      </FieldGroup>
+      <TextInput
+        label="body"
+        name="body"
+        rows={3}
+        monospace
+        placeholder={'{"error": "unavailable"}'}
+        value={values.body ?? ""}
+        onChange={(body) => setValues({ ...values, body })}
+        description="The response body, as JSON. Quote a plain string."
+      />
+      <Button type="submit" className="self-start" isPending={busy}>
+        <Plus className="size-4" />
+        Add fault
+      </Button>
+    </Form>
+  )
+}
 
 export function FaultsView({ api, revision }: { api: Api; revision: number }) {
   const faults = useResource<{ faults: Record<string, unknown>[] }>(api, "/faults", revision)
   const presets = useResource<{ presets: FaultPreset[] }>(api, "/faults/presets", revision)
-  const [mode, setMode] = useState<"fields" | "json">("fields")
   const [custom, setCustom] = useState('{\n  "status": 503,\n  "count": 1\n}')
   const [parseError, setParseError] = useState<string | null>(null)
   const [presetCount, setPresetCount] = useState<number | null>(null)
-  const { message, modal } = App.useApp()
+  const { notify, confirm } = useChrome()
   const done = () => {
     faults.reload()
-    void message.success("Fault rules updated")
+    notify("Fault rules updated")
   }
   // One per card, so a rejected rule is reported beside the control that sent it.
   const add = useAction(api, done)
@@ -572,11 +699,14 @@ export function FaultsView({ api, revision }: { api: Api; revision: number }) {
   }
   const rules = faults.data?.faults ?? []
   return (
-    <Flex vertical gap="large">
-      <Flex justify="space-between" wrap gap="middle">
-        <ViewTitle page="faults">Faults</ViewTitle>
-        <Refresh loading={faults.loading} onClick={faults.reload} />
-      </Flex>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="faults"
+        description="Rules that make matching vendor requests fail, wait or break, now or on a schedule."
+        actions={<Refresh loading={faults.loading} onClick={faults.reload} />}
+      >
+        Faults
+      </ViewTitle>
       <ErrorNotice
         error={faults.error ?? presets.error ?? remove.error}
         retry={() => {
@@ -584,205 +714,59 @@ export function FaultsView({ api, revision }: { api: Api; revision: number }) {
           presets.reload()
         }}
       />
-      <Card
-        title="Add a fault"
-        extra={
-          <Segmented
-            aria-label="Fault input"
-            value={mode}
-            onChange={setMode}
-            options={[
-              { label: "Fields", value: "fields" },
-              { label: "JSON", value: "json" },
-            ]}
-          />
-        }
-      >
-        <Flex vertical gap="middle">
-          <ErrorNotice error={parseError ?? add.error} />
-          {mode === "fields" ? (
-            <Form layout="vertical" onFinish={submit}>
-              <Typography.Title level={5} style={{ marginTop: 0 }}>
-                Match
-              </Typography.Title>
-              <Flex gap="middle" wrap>
-                <Form.Item label="operationId" name="operationId" style={FAULT_FIELD}>
-                  <Input placeholder="Any operation" />
-                </Form.Item>
-                <Form.Item label="method" name="method" style={FAULT_FIELD}>
-                  <Select
-                    allowClear
-                    placeholder="Any method"
-                    options={["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"].map(
-                      (method) => ({ label: method, value: method }),
-                    )}
-                  />
-                </Form.Item>
-                <Form.Item label="path" name="path" extra="Exact path." style={FAULT_FIELD}>
-                  <Input placeholder="/v1/charges" />
-                </Form.Item>
-                <Form.Item
-                  label="pathPrefix"
-                  name="pathPrefix"
-                  extra="Paths starting with this."
-                  style={FAULT_FIELD}
-                >
-                  <Input placeholder="/v1" />
-                </Form.Item>
-              </Flex>
-              <Typography.Title level={5}>Schedule</Typography.Title>
-              <Flex gap="middle" wrap>
-                <Form.Item
-                  label="after"
-                  name="after"
-                  extra="Let this many matches through first."
-                  style={FAULT_FIELD}
-                >
-                  <InputNumber min={0} precision={0} style={{ width: "100%" }} />
-                </Form.Item>
-                <Form.Item
-                  label="every"
-                  name="every"
-                  extra="Then fault only every nth match."
-                  style={FAULT_FIELD}
-                >
-                  <InputNumber min={1} precision={0} style={{ width: "100%" }} />
-                </Form.Item>
-                <Form.Item
-                  label="count"
-                  name="count"
-                  extra="Retire the rule after this many faults."
-                  style={FAULT_FIELD}
-                >
-                  <InputNumber min={0} precision={0} style={{ width: "100%" }} />
-                </Form.Item>
-                <Form.Item
-                  label="rate"
-                  name="rate"
-                  extra="Fraction to fault, 0 to 1, drawn from the seed."
-                  style={FAULT_FIELD}
-                >
-                  <InputNumber min={0} max={1} step={0.1} style={{ width: "100%" }} />
-                </Form.Item>
-              </Flex>
-              <Typography.Title level={5}>Action</Typography.Title>
-              <Flex gap="middle" wrap>
-                <Form.Item
-                  label="status"
-                  name="status"
-                  extra="Answer with this status instead of reaching the emulator."
-                  style={FAULT_FIELD}
-                >
-                  <InputNumber min={200} max={599} precision={0} style={{ width: "100%" }} />
-                </Form.Item>
-                <Form.Item
-                  label="delay"
-                  name="delay"
-                  extra="Hold the response back."
-                  style={FAULT_FIELD}
-                >
-                  <Input placeholder="2s" />
-                </Form.Item>
-                <Form.Item
-                  label="jitter"
-                  name="jitter"
-                  extra="A seeded extra wait from 0 up to this."
-                  style={FAULT_FIELD}
-                >
-                  <Input placeholder="100ms" />
-                </Form.Item>
-                <Form.Item
-                  label="timeout"
-                  name="timeout"
-                  extra="Hold the request this long, then drop the connection."
-                  style={FAULT_FIELD}
-                >
-                  <Input placeholder="30s" />
-                </Form.Item>
-                <Form.Item
-                  label="truncate"
-                  name="truncate"
-                  extra="Cut the body off after this many bytes."
-                  style={FAULT_FIELD}
-                >
-                  <InputNumber min={0} precision={0} style={{ width: "100%" }} />
-                </Form.Item>
-                <Form.Item
-                  label="drop"
-                  name="drop"
-                  valuePropName="checked"
-                  extra="Drop the connection at once."
-                  style={FAULT_FIELD}
-                >
-                  <Switch aria-label="Drop the connection" />
-                </Form.Item>
-              </Flex>
-              <Form.Item
-                label="body"
-                name="body"
-                extra="The response body, as JSON. Quote a plain string."
-              >
-                <Input.TextArea
-                  placeholder={'{"error": "unavailable"}'}
-                  rows={3}
-                  spellCheck={false}
-                />
-              </Form.Item>
-              <Button type="primary" htmlType="submit" icon={<PlusOutlined />} loading={add.busy}>
-                Add fault
-              </Button>
-            </Form>
-          ) : (
-            <>
-              <Form layout="vertical">
-                <Form.Item
-                  label="Rule JSON"
-                  extra="Any rule field, including pathPattern, requestHeaders, query, requestBody, namespace, from, until, headers, effect and params."
-                >
-                  <Input.TextArea
-                    aria-label="Fault rule JSON"
-                    value={custom}
-                    onChange={(event) => setCustom(event.target.value)}
-                    rows={8}
-                    spellCheck={false}
-                  />
-                </Form.Item>
-              </Form>
-              <Button
-                type="primary"
-                icon={<PlusOutlined />}
-                loading={add.busy}
-                onClick={() => submit()}
-                style={{ alignSelf: "flex-start" }}
-              >
-                Add fault
-              </Button>
-            </>
-          )}
-        </Flex>
-      </Card>
-      <Card
+      <Section title="Add a fault">
+        <ErrorNotice error={parseError ?? add.error} />
+        <Tabs aria-label="Fault input">
+          <Tabs.ListContainer>
+            <Tabs.List aria-label="Fault input">
+              <Tabs.Tab id="fields">Fields</Tabs.Tab>
+              <Tabs.Tab id="json">JSON</Tabs.Tab>
+            </Tabs.List>
+          </Tabs.ListContainer>
+          <Tabs.Panel id="fields" className="pt-4">
+            <FaultFields busy={add.busy} onSubmit={submit} />
+          </Tabs.Panel>
+          <Tabs.Panel id="json" className="flex flex-col gap-4 pt-4">
+            <TextInput
+              label="Rule JSON"
+              ariaLabel="Fault rule JSON"
+              rows={8}
+              monospace
+              value={custom}
+              onChange={setCustom}
+              description="Any rule field, including pathPattern, requestHeaders, query, requestBody, namespace, from, until, headers, effect and params."
+            />
+            <Button className="self-start" isPending={add.busy} onPress={() => submit()}>
+              <Plus className="size-4" />
+              Add fault
+            </Button>
+          </Tabs.Panel>
+        </Tabs>
+      </Section>
+      <Section
         title="Active rules"
-        extra={
+        actions={
           <Button
-            danger
-            icon={<DeleteOutlined />}
-            disabled={!rules.length}
-            onClick={() =>
-              modal.confirm({
+            variant="danger-soft"
+            size="sm"
+            isDisabled={!rules.length}
+            onPress={() =>
+              confirm({
                 title: "Clear this namespace's fault rules?",
                 content: "Rules that apply to every namespace stay.",
-                onOk: async () => {
-                  if (!(await remove.run("DELETE", "/faults"))) throw new Error("Clear failed")
-                },
+                okText: "Clear all",
+                danger: true,
+                onOk: () => remove.run("DELETE", "/faults"),
               })
             }
           >
+            <TrashBin className="size-4" />
             Clear all
           </Button>
         }
       >
         <DataTable
+          label="Active fault rules"
           rows={rules.map((rule) => faultRow(rule, api.namespace()))}
           columns={["id", "match", "schedule", "injects", "hits", "seen", "remaining"]}
           widths={{
@@ -798,9 +782,10 @@ export function FaultsView({ api, revision }: { api: Api; revision: number }) {
           detail={(_, index) => rules[index]}
           action={(row) => (
             <Button
-              danger
-              disabled={remove.busy}
-              onClick={() =>
+              variant="danger-soft"
+              size="sm"
+              isDisabled={remove.busy}
+              onPress={() =>
                 void remove.run("DELETE", `/faults/${encodeURIComponent(text(row.id))}`)
               }
             >
@@ -808,56 +793,49 @@ export function FaultsView({ api, revision }: { api: Api; revision: number }) {
             </Button>
           )}
         />
-      </Card>
-      <Card
+      </Section>
+      <Section
         title="Presets"
-        loading={presets.loading}
-        extra={
-          <InputNumber
-            aria-label="Preset count"
+        description="A preset is a fault by name. Set a count to retire it after that many faults; without one it stays until removed."
+        actions={
+          <NumberInput
+            ariaLabel="Preset count"
             placeholder="count"
-            min={0}
-            precision={0}
+            minValue={0}
             value={presetCount}
             onChange={setPresetCount}
+            className="w-36"
           />
         }
       >
-        <Flex vertical gap="middle">
-          <Typography.Text type="secondary">
-            A preset is a fault by name. Set a count to retire it after that many faults; without
-            one it stays until removed.
-          </Typography.Text>
-          <ErrorNotice error={apply.error} />
-          <Flex gap="middle" wrap>
-            {presets.data?.presets.map((preset) => (
-              <Card
-                key={preset.name}
-                size="small"
-                title={preset.name}
-                style={{ flex: "1 1 260px" }}
-                extra={
-                  <Button
-                    size="small"
-                    disabled={apply.busy}
-                    onClick={() =>
-                      void apply.run("POST", "/faults", {
-                        preset: preset.name,
-                        ...(presetCount === null ? {} : { count: presetCount }),
-                      })
-                    }
-                  >
-                    Apply
-                  </Button>
-                }
-              >
-                <Typography.Text type="secondary">{preset.description}</Typography.Text>
-              </Card>
-            ))}
-          </Flex>
-        </Flex>
-      </Card>
-    </Flex>
+        <ErrorNotice error={apply.error} />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {presets.data?.presets.map((preset) => (
+            <Card key={preset.name} variant="secondary">
+              <Card.Header className="flex flex-row items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <Card.Title className="font-mono text-sm">{preset.name}</Card.Title>
+                  <Card.Description>{preset.description}</Card.Description>
+                </div>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isDisabled={apply.busy}
+                  onPress={() =>
+                    void apply.run("POST", "/faults", {
+                      preset: preset.name,
+                      ...(presetCount === null ? {} : { count: presetCount }),
+                    })
+                  }
+                >
+                  Apply
+                </Button>
+              </Card.Header>
+            </Card>
+          ))}
+        </div>
+      </Section>
+    </div>
   )
 }
 
@@ -868,12 +846,12 @@ export function SnapshotsView({ api, revision }: { api: Api; revision: number })
   const [pasted, setPasted] = useState("")
   const [shown, setShown] = useState<{ id: string; value: unknown } | null>(null)
   const [localError, setLocalError] = useState<string | null>(null)
-  const { message, modal } = App.useApp()
+  const { notify, confirm } = useChrome()
   const action = useAction(api, () => {
     snapshots.reload()
-    void message.success("Snapshots updated")
+    notify("Snapshots updated")
   })
-  const restore = useAction(api, () => void message.success("Snapshot restored"))
+  const restore = useAction(api, () => notify("Snapshot restored"))
   const path = (id: string) => `/snapshots/${encodeURIComponent(id)}`
   const show = async (id: string) => {
     setLocalError(null)
@@ -893,75 +871,73 @@ export function SnapshotsView({ api, revision }: { api: Api; revision: number })
   }
   const list = snapshots.data?.snapshots ?? []
   return (
-    <Flex vertical gap="large">
-      <Flex wrap gap="middle" justify="space-between">
-        <ViewTitle page="snapshot-and-restore">Snapshot and restore</ViewTitle>
-        <Refresh loading={snapshots.loading} onClick={snapshots.reload} />
-      </Flex>
-      <Typography.Paragraph type="secondary">
-        A snapshot is the whole namespace: records, id counters, the clock, random streams, fault
-        rules and latency. Resetting the namespace discards its snapshots.
-      </Typography.Paragraph>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="snapshot-and-restore"
+        description="A snapshot is the whole namespace: records, id counters, the clock, random streams, fault rules and latency. Resetting the namespace discards its snapshots."
+        actions={<Refresh loading={snapshots.loading} onClick={snapshots.reload} />}
+      >
+        Snapshot and restore
+      </ViewTitle>
       <ErrorNotice
         error={snapshots.error ?? localError ?? action.error ?? restore.error}
         retry={snapshots.reload}
       />
-      <Flex gap="middle" wrap align="stretch">
-        <Card title="Take a snapshot" style={{ flex: "1 1 320px" }}>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_2fr]">
+        <Section title="Take a snapshot">
           <Form
-            layout="vertical"
-            onFinish={() =>
-              void action.run("POST", "/snapshots", name.trim() ? { name: name.trim() } : {})
-            }
+            className="flex flex-col gap-4"
+            onSubmit={submitted(
+              () => void action.run("POST", "/snapshots", name.trim() ? { name: name.trim() } : {}),
+            )}
           >
-            <Form.Item
+            <TextInput
               label="Name"
-              extra="Optional. A name that is already used replaces that snapshot; without one the id is snap_1, snap_2, …"
-            >
-              <Input
-                aria-label="Snapshot name"
-                placeholder="baseline"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </Form.Item>
-            <Button type="primary" htmlType="submit" loading={action.busy}>
+              ariaLabel="Snapshot name"
+              placeholder="baseline"
+              value={name}
+              onChange={setName}
+              description="Optional. A name that is already used replaces that snapshot; without one the id is snap_1, snap_2, …"
+            />
+            <Button type="submit" className="self-start" isPending={action.busy}>
               Take snapshot
             </Button>
           </Form>
-        </Card>
-        <Card title="Import a snapshot" style={{ flex: "2 1 420px" }}>
-          <Form layout="vertical" onFinish={store}>
-            <Form.Item label="Id" extra="The document is stored under this id, not restored.">
-              <Input
-                aria-label="Imported snapshot id"
-                placeholder="baseline"
-                value={importId}
-                onChange={(event) => setImportId(event.target.value)}
-              />
-            </Form.Item>
-            <Form.Item label="Snapshot document">
-              <Input.TextArea
-                aria-label="Snapshot document JSON"
-                placeholder={'{\n  "format": "mockingbird.snapshot/v1",\n  "records": []\n}'}
-                value={pasted}
-                onChange={(event) => setPasted(event.target.value)}
-                rows={5}
-                spellCheck={false}
-              />
-            </Form.Item>
+        </Section>
+        <Section title="Import a snapshot">
+          <Form className="flex flex-col gap-4" onSubmit={submitted(store)}>
+            <TextInput
+              label="Id"
+              ariaLabel="Imported snapshot id"
+              placeholder="baseline"
+              value={importId}
+              onChange={setImportId}
+              description="The document is stored under this id, not restored."
+            />
+            <TextInput
+              label="Snapshot document"
+              ariaLabel="Snapshot document JSON"
+              rows={5}
+              monospace
+              placeholder={'{\n  "format": "mockingbird.snapshot/v1",\n  "records": []\n}'}
+              value={pasted}
+              onChange={setPasted}
+            />
             <Button
-              htmlType="submit"
-              disabled={!importId.trim() || !pasted.trim()}
-              loading={action.busy}
+              type="submit"
+              variant="secondary"
+              className="self-start"
+              isDisabled={!importId.trim() || !pasted.trim()}
+              isPending={action.busy}
             >
               Import snapshot
             </Button>
           </Form>
-        </Card>
-      </Flex>
-      <Card title="Saved snapshots">
+        </Section>
+      </div>
+      <Section title="Saved snapshots">
         <DataTable
+          label="Saved snapshots"
           rows={list.map((snapshot) => ({
             id: snapshot.id,
             records: snapshot.records,
@@ -971,69 +947,74 @@ export function SnapshotsView({ api, revision }: { api: Api; revision: number })
           columns={["id", "records", "at", "portable"]}
           rowKeys={list.map((snapshot) => snapshot.id)}
           loading={snapshots.loading}
-          actionWidth={270}
           action={(row) => {
             const id = text(row.id)
             return (
-              <Space>
-                <Button disabled={row.portable !== true} onClick={() => void show(id)}>
+              <>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  isDisabled={row.portable !== true}
+                  onPress={() => void show(id)}
+                >
                   View
                 </Button>
                 <Button
-                  onClick={() =>
-                    modal.confirm({
+                  size="sm"
+                  variant="secondary"
+                  onPress={() =>
+                    confirm({
                       title: `Restore ${id}?`,
                       content: `This replaces ${api.namespace()} with the snapshot: records, clock, fault rules and latency.`,
                       okText: "Restore",
-                      onOk: async () => {
-                        if (!(await restore.run("POST", `${path(id)}/restore`, {})))
-                          throw new Error("Restore failed")
-                      },
+                      onOk: () => restore.run("POST", `${path(id)}/restore`, {}),
                     })
                   }
                 >
                   Restore
                 </Button>
                 <Button
-                  danger
-                  onClick={() =>
-                    modal.confirm({
+                  size="sm"
+                  variant="danger-soft"
+                  onPress={() =>
+                    confirm({
                       title: `Delete snapshot ${id}?`,
                       okText: "Delete",
-                      okButtonProps: { danger: true },
-                      onOk: async () => {
-                        if (!(await action.run("DELETE", path(id))))
-                          throw new Error("Delete failed")
-                      },
+                      danger: true,
+                      onOk: () => action.run("DELETE", path(id)),
                     })
                   }
                 >
                   Delete
                 </Button>
-              </Space>
+              </>
             )
           }}
         />
-      </Card>
+      </Section>
       {shown && (
-        <Card
+        <Section
           title={`Snapshot ${shown.id}`}
-          extra={
-            <Space>
+          actions={
+            <>
               <Button
-                icon={<DownloadOutlined />}
-                onClick={() => downloadJson(`${shown.id}.json`, shown.value)}
+                size="sm"
+                variant="secondary"
+                onPress={() => downloadJson(`${shown.id}.json`, shown.value)}
               >
+                <ArrowDownToLine className="size-4" />
                 Download JSON
               </Button>
-              <Button onClick={() => setShown(null)}>Close</Button>
-            </Space>
+              <Button size="sm" variant="tertiary" onPress={() => setShown(null)}>
+                Close
+              </Button>
+            </>
           }
         >
-          <Json value={shown.value} />
-        </Card>
+          <Json value={shown.value} label={`${shown.id}.json`} />
+        </Section>
       )}
-    </Flex>
+    </div>
   )
 }
 
@@ -1048,54 +1029,48 @@ export function JournalView({
 }) {
   const [live, setLive] = useState(true)
   const journal = useResource<Journal>(api, journalPath(target), revision, live)
-  const { message, modal } = App.useApp()
+  const { notify, confirm } = useChrome()
   const action = useAction(api, () => {
     journal.reload()
-    void message.success("Journal cleared")
+    notify("Journal cleared")
   })
   return (
-    <Flex vertical gap="large">
-      <Flex wrap gap="middle" justify="space-between" align="center">
-        <ViewTitle page="journal-and-state">Request journal</ViewTitle>
-        <Space>
-          <Switch
-            aria-label="Live journal"
-            checked={live}
-            onChange={setLive}
-            checkedChildren="Live"
-            unCheckedChildren="Paused"
-          />
-          <Refresh loading={journal.loading} onClick={journal.reload} />
-          <Button
-            danger
-            loading={action.busy}
-            icon={<DeleteOutlined />}
-            onClick={() =>
-              modal.confirm({
-                title: "Clear this namespace's journal?",
-                onOk: async () => {
-                  if (!(await action.run("DELETE", "/requests"))) throw new Error("Clear failed")
-                },
-              })
-            }
-          >
-            Clear journal
-          </Button>
-        </Space>
-      </Flex>
-      <Typography.Paragraph type="secondary">
-        The latest 1,000 completed matching requests in this namespace, oldest first. Live updates
-        every 1.5 seconds. Requests appear after completion or failure, including timeouts. Status 0
-        means a dropped connection. Expand a row for metadata; request bodies are never stored.
-      </Typography.Paragraph>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="journal-and-state"
+        description="The latest 1,000 completed matching requests in this namespace, oldest first. Live updates every 1.5 seconds. Requests appear after completion or failure, including timeouts. Status 0 means a dropped connection. Open a row's details for its metadata; request bodies are never stored."
+        actions={
+          <>
+            <Toggle label="Live" ariaLabel="Live journal" isSelected={live} onChange={setLive} />
+            <Refresh loading={journal.loading} onClick={journal.reload} />
+            <Button
+              variant="danger-soft"
+              size="sm"
+              isPending={action.busy}
+              onPress={() =>
+                confirm({
+                  title: "Clear this namespace's journal?",
+                  okText: "Clear journal",
+                  danger: true,
+                  onOk: () => action.run("DELETE", "/requests"),
+                })
+              }
+            >
+              <TrashBin className="size-4" />
+              Clear journal
+            </Button>
+          </>
+        }
+      >
+        Request journal
+      </ViewTitle>
       <ErrorNotice error={journal.error ?? action.error} retry={journal.reload} />
-      <Card title="Request attempts">
-        <Typography.Paragraph type="secondary">
-          After clicking Retry in your app, look for an increased attempt count and a new journal
-          row with the same method, path and operation. Repeated requests can also come from polling
-          or other callers; the journal records what reached the emulator.
-        </Typography.Paragraph>
+      <Section
+        title="Request attempts"
+        description="After clicking Retry in your app, look for an increased attempt count and a new journal row with the same method, path and operation. Repeated requests can also come from polling or other callers; the journal records what reached the emulator."
+      >
         <DataTable
+          label="Request attempts"
           rows={requestAttempts(journal.data?.requests ?? [])}
           columns={[
             "method",
@@ -1108,23 +1083,26 @@ export function JournalView({
             "latestAt",
           ]}
         />
-      </Card>
-      <DataTable
-        rows={journal.data?.requests ?? []}
-        columns={[
-          "at",
-          "method",
-          "path",
-          "status",
-          "operationId",
-          "durationMs",
-          "delayMs",
-          "faultId",
-        ]}
-        widths={JOURNAL_WIDTHS}
-        loading={journal.loading}
-      />
-    </Flex>
+      </Section>
+      <Section title="Requests">
+        <DataTable
+          label="Requests"
+          rows={journal.data?.requests ?? []}
+          columns={[
+            "at",
+            "method",
+            "path",
+            "status",
+            "operationId",
+            "durationMs",
+            "delayMs",
+            "faultId",
+          ]}
+          widths={JOURNAL_WIDTHS}
+          loading={journal.loading}
+        />
+      </Section>
+    </div>
   )
 }
 
@@ -1148,12 +1126,12 @@ export function RoutesView({
   const routes = useResource<{ routes: string[] }>(api, "/", revision)
   const [selected, setSelected] = useState<string | undefined>(initialRoute)
   const [body, setBody] = useState(pretty(initialBody ?? {}))
+  const [values, setValues] = useState<Record<string, string>>({})
   const [result, setResult] = useState<unknown>()
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const [form] = Form.useForm<Record<string, string>>()
   const params = [...(selected ?? "").matchAll(/:([\w]+)/g)].map((match) => match[1] ?? "")
-  const send = async (values: Record<string, string>) => {
+  const send = async () => {
     if (!selected) return
     const [method = "GET", template = "/"] = selected.split(" ")
     const path = template.replace(/:([\w]+)/g, (_, name: string) =>
@@ -1176,63 +1154,65 @@ export function RoutesView({
       setBusy(false)
     }
   }
+  const choices = [...new Set([...(selected ? [selected] : []), ...(routes.data?.routes ?? [])])]
   return (
-    <Flex vertical gap="large">
-      <Flex wrap gap="middle" justify="space-between">
-        <Typography.Title level={3} style={{ margin: 0 }}>
-          {title}
-        </Typography.Title>
-        <Refresh loading={routes.loading} onClick={routes.reload} />
-      </Flex>
-      {description && <Typography.Paragraph>{description}</Typography.Paragraph>}
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        docs={false}
+        description={description ?? "Call any admin route of this emulator and read its answer."}
+        actions={<Refresh loading={routes.loading} onClick={routes.reload} />}
+      >
+        {title}
+      </ViewTitle>
       <ErrorNotice error={routes.error ?? error} retry={routes.reload} />
-      <Card title="Admin request runner">
-        <Flex vertical gap="middle">
-          <Select
-            aria-label="Admin route"
-            showSearch
-            optionFilterProp="label"
-            placeholder="Select a route"
-            value={selected}
-            disabled={Boolean(initialRoute)}
-            onChange={(route) => {
-              setSelected(route)
-              setResult(undefined)
-              setError(null)
-              form.resetFields()
-            }}
-            options={
-              routes.data?.routes.map((route) => ({
-                label: `${route}${standardRoutes.includes(route) ? "" : " · service"}`,
-                value: route,
-              })) ?? []
-            }
-          />
-          <Form form={form} layout="vertical" onFinish={send}>
-            {params.map((name) => (
-              <Form.Item key={name} name={name} label={name} rules={[{ required: true }]}>
-                <Input />
-              </Form.Item>
-            ))}
-            {selected && !selected.startsWith("GET ") && !selected.startsWith("DELETE ") && (
-              <Form.Item label="JSON body">
-                <Input.TextArea
-                  aria-label="Request body"
-                  value={body}
-                  onChange={(event) => setBody(event.target.value)}
-                  rows={8}
-                  spellCheck={false}
-                />
-              </Form.Item>
-            )}
-            <Button type="primary" htmlType="submit" disabled={!selected} loading={busy}>
-              Send request
-            </Button>
-          </Form>
-          {result !== undefined && <Json value={result} />}
-        </Flex>
-      </Card>
-    </Flex>
+      <Section title="Admin request runner">
+        <SearchSelect
+          label="Route"
+          ariaLabel="Admin route"
+          placeholder="Select a route"
+          value={selected ?? null}
+          isDisabled={Boolean(initialRoute)}
+          onChange={(route) => {
+            setSelected(route)
+            setResult(undefined)
+            setError(null)
+            setValues({})
+          }}
+          choices={choices.map((route) => ({
+            value: route,
+            label: `${route}${standardRoutes.includes(route) ? "" : " · service"}`,
+          }))}
+          className="max-w-xl"
+        />
+        <Form className="flex flex-col gap-4" onSubmit={submitted(() => void send())}>
+          {params.map((name) => (
+            <TextInput
+              key={name}
+              label={name}
+              name={name}
+              isRequired
+              value={values[name] ?? ""}
+              onChange={(value) => setValues({ ...values, [name]: value })}
+              className="max-w-xl"
+            />
+          ))}
+          {selected && !selected.startsWith("GET ") && !selected.startsWith("DELETE ") && (
+            <TextInput
+              label="JSON body"
+              ariaLabel="Request body"
+              rows={8}
+              monospace
+              value={body}
+              onChange={setBody}
+            />
+          )}
+          <Button type="submit" className="self-start" isDisabled={!selected} isPending={busy}>
+            Send request
+          </Button>
+        </Form>
+        {result !== undefined && <Json value={result} label="Response" />}
+      </Section>
+    </div>
   )
 }
 
@@ -1243,80 +1223,83 @@ export function TimelineView({ api, revision }: { api: Api; revision: number }) 
   }>(api, "/timeline", revision)
   const [branch, setBranch] = useState("main")
   const [fork, setFork] = useState("")
-  const { message, modal } = App.useApp()
+  const { notify, confirm } = useChrome()
   const action = useAction(api, () => {
     timeline.reload()
-    void message.success("Timeline updated")
+    notify("Timeline updated")
   })
   return (
-    <Flex vertical gap="large">
-      <Flex wrap gap="middle" justify="space-between">
-        <ViewTitle page="checkpoints-and-branches">Checkpoints</ViewTitle>
-        <Refresh loading={timeline.loading} onClick={timeline.reload} />
-      </Flex>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="checkpoints-and-branches"
+        description="Every successful write saves a checkpoint on the current branch. Restore one, or branch from it."
+        actions={<Refresh loading={timeline.loading} onClick={timeline.reload} />}
+      >
+        Checkpoints
+      </ViewTitle>
       <ErrorNotice error={timeline.error ?? action.error} retry={timeline.reload} />
-      <Card title="Branches">
-        <Flex vertical gap="middle">
-          <Select
-            aria-label="Branch"
-            style={{ width: "100%", maxWidth: 400 }}
+      <Section title="Branches">
+        <div className="flex flex-wrap items-end gap-3">
+          <Choose
+            label="Branch"
+            ariaLabel="Branch"
             value={branch}
             onChange={setBranch}
-            options={Object.keys(timeline.data?.branches ?? { main: "" }).map((name) => ({
-              label: name,
+            choices={Object.keys(timeline.data?.branches ?? { main: "" }).map((name) => ({
               value: name,
+              label: name,
             }))}
+            className="w-full max-w-xs"
           />
-          <Space wrap>
-            <Button
-              type="primary"
-              loading={action.busy}
-              onClick={() => void action.run("POST", "/checkpoints", { branch })}
-            >
-              Create checkpoint
-            </Button>
-          </Space>
-          <Flex gap="small" wrap>
-            <Input
-              aria-label="New branch name"
-              placeholder="New branch name"
-              value={fork}
-              onChange={(event) => setFork(event.target.value)}
-              style={{ maxWidth: 320 }}
-            />
-            <Button
-              disabled={!fork.trim()}
-              loading={action.busy}
-              onClick={() =>
-                void action.run("POST", `/branches/${encodeURIComponent(fork.trim())}`, {})
-              }
-            >
-              Create branch
-            </Button>
-          </Flex>
-        </Flex>
-      </Card>
-      <Card title="Saved checkpoints">
+          <Button
+            isPending={action.busy}
+            onPress={() => void action.run("POST", "/checkpoints", { branch })}
+          >
+            Create checkpoint
+          </Button>
+        </div>
+        <Form
+          className="flex flex-wrap items-end gap-3"
+          onSubmit={submitted(
+            () => void action.run("POST", `/branches/${encodeURIComponent(fork.trim())}`, {}),
+          )}
+        >
+          <TextInput
+            label="New branch"
+            ariaLabel="New branch name"
+            placeholder="New branch name"
+            value={fork}
+            onChange={setFork}
+            className="w-full max-w-xs"
+          />
+          <Button
+            type="submit"
+            variant="secondary"
+            isDisabled={!fork.trim()}
+            isPending={action.busy}
+          >
+            Create branch
+          </Button>
+        </Form>
+      </Section>
+      <Section title="Saved checkpoints">
         <DataTable
+          label="Saved checkpoints"
           rows={timeline.data?.checkpoints ?? []}
           loading={timeline.loading}
           action={(row) => (
             <Button
-              onClick={() =>
-                modal.confirm({
+              size="sm"
+              variant="secondary"
+              onPress={() =>
+                confirm({
                   title: "Restore checkpoint?",
                   content: `Replace ${branch} with ${text(row.id)}.`,
                   okText: "Restore",
-                  onOk: async () => {
-                    if (
-                      !(await action.run(
-                        "POST",
-                        `/branches/${encodeURIComponent(branch)}/checkout`,
-                        { checkpoint: row.id },
-                      ))
-                    )
-                      throw new Error("Restore failed")
-                  },
+                  onOk: () =>
+                    action.run("POST", `/branches/${encodeURIComponent(branch)}/checkout`, {
+                      checkpoint: row.id,
+                    }),
                 })
               }
             >
@@ -1324,7 +1307,7 @@ export function TimelineView({ api, revision }: { api: Api; revision: number }) 
             </Button>
           )}
         />
-      </Card>
-    </Flex>
+      </Section>
+    </div>
   )
 }

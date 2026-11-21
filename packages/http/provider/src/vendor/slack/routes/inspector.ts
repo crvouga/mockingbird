@@ -1,6 +1,6 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
 import type { InspectorTab, RouteContext, WebhookDelivery, WebhookSubscription } from "../../core/index.js";
-import { escapeAttr, escapeHtml, renderInspectorPage } from "../../core/index.js";
+import { chip, renderInspectorPage, section, table, type Block, type Inline, type Rich } from "../../core/index.js";
 import { getSlackStore } from "../store.js";
 import type {
   SlackBookmark,
@@ -98,37 +98,20 @@ function viewPreview(view: SlackView): string {
   return `${view.blocks.length} ${view.blocks.length === 1 ? "block" : "blocks"}`;
 }
 
-function renderSection(title: string, body: string): string {
-  return `<section class="inspector-section">
-  <h2>${escapeHtml(title)}</h2>
-  ${body}
-</section>`;
+type Tone = "granted" | "requested" | "denied";
+
+const TONE = { granted: "ok", requested: "neutral", denied: "error" } as const;
+
+function badge(label: string, tone: Tone = "requested"): Inline {
+  return chip(label, TONE[tone]);
 }
 
-function renderTable(headers: string[], rows: string[][], empty: string): string {
-  if (rows.length === 0) return `<p class="inspector-empty">${escapeHtml(empty)}</p>`;
-
-  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
-  const rowsHtml = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("\n");
-  return `<table class="inspector-table">
-  <thead><tr>${headerHtml}</tr></thead>
-  <tbody>
-${rowsHtml}
-  </tbody>
-</table>`;
+function renderReactionBadges(reactions: Array<{ name: string; count: number }>): Inline[] {
+  return reactions.map((reaction) => badge(`:${reaction.name}: ${reaction.count}`, "granted"));
 }
 
-function badge(label: string, tone: "granted" | "requested" | "denied" = "requested"): string {
-  return `<span class="badge badge-${tone}">${escapeHtml(label)}</span>`;
-}
-
-function renderReactionBadges(reactions: Array<{ name: string; count: number }>): string {
-  if (reactions.length === 0) return "";
-  return reactions.map((reaction) => badge(`:${reaction.name}: ${reaction.count}`, "granted")).join(" ");
-}
-
-function linkCell(href: string, label: string): string {
-  return `<a href="${escapeAttr(href)}">${escapeHtml(label)}</a>`;
+function linkCell(href: string, label: string): Inline {
+  return { link: label, href };
 }
 
 function scopePreview(scopes: string[] | undefined): string {
@@ -182,7 +165,7 @@ export function inspectorRoutes(ctx: RouteContext): void {
   const { app, store, webhooks } = ctx;
   const ss = () => getSlackStore(store);
 
-  app.get("/", (c) => {
+  app.get("/", async (c) => {
     const team = ss().teams.all()[0];
     const requestedTab = c.req.query("tab") ?? "messages";
     const activeTab = INSPECTOR_TABS.some((tab) => tab.id === requestedTab)
@@ -204,7 +187,7 @@ export function inspectorRoutes(ctx: RouteContext): void {
                 : renderMessagesView(c.req.query("channel") ?? "", users);
 
     return c.html(
-      renderInspectorPage(
+      await renderInspectorPage(
         `${team?.name ?? "Slack"} - Message Inspector`,
         INSPECTOR_TABS,
         activeTab,
@@ -227,13 +210,13 @@ export function inspectorRoutes(ctx: RouteContext): void {
     return userMap;
   }
 
-  function renderMessagesView(requestedChannel: string, users: Map<string, string>): string {
+  function renderMessagesView(requestedChannel: string, users: Map<string, string>): Block[] {
     const channels = sortedChannels(ss().channels.all());
     const visibleChannels = channels.filter((ch) => !ch.is_archived);
     const activeChannel =
       channels.find((ch) => ch.channel_id === requestedChannel) ?? visibleChannels[0] ?? channels[0];
     if (!activeChannel) {
-      return renderSection("Messages", '<p class="inspector-empty">No conversations in the emulator store.</p>');
+      return [section("Messages", { type: "empty", title: "No conversations in the emulator store." })];
     }
 
     const channelMessages = ss()
@@ -269,86 +252,86 @@ export function inspectorRoutes(ctx: RouteContext): void {
     const stats = `${ss().users.all().length} users, ${channels.length} conversations, ${ss().messages.all().length} messages, ${ss().views.all().length} views`;
     const body = [
       renderConversationSelector(channels, activeChannel.channel_id),
-      renderSection(
+      section(
         `Messages In ${channelLabel(activeChannel)}`,
-        `<p class="info-text">${escapeHtml(activeChannel.topic.value || "No topic set")} - ${escapeHtml(stats)}</p>` +
-          renderMessagesTable(
+        { type: "text", text: `${activeChannel.topic.value || "No topic set"} - ${stats}` },
+        renderMessagesTable(
             messages,
             users,
             "No messages yet. Post one with chat.postMessage or an incoming webhook.", store.now,
           ),
       ),
-      renderSection("Threads", renderMessagesTable(threads, users, "No thread replies for this conversation.", store.now)),
-      renderSection(
+      section("Threads", renderMessagesTable(threads, users, "No thread replies for this conversation.", store.now)),
+      section(
         "Ephemeral",
         renderEphemeralTable(ephemeralMessages, users, "No ephemeral messages for this conversation.", store.now),
       ),
-      renderSection(
+      section(
         "Scheduled",
         renderScheduledTable(scheduledMessages, users, "No scheduled messages for this conversation."),
       ),
-      renderSection("Pins", renderPinsTable(pins, channelMessages, users, "No pins for this conversation.")),
-      renderSection("Bookmarks", renderBookmarksTable(bookmarks, "No bookmarks for this conversation.")),
-      renderSection("App Home", renderViewsTable(homeViews, users, "No App Home views have been published.")),
-      renderSection("Modals", renderViewsTable(modalViews, users, "No modal views have been opened.")),
+      section("Pins", renderPinsTable(pins, channelMessages, users, "No pins for this conversation.")),
+      section("Bookmarks", renderBookmarksTable(bookmarks, "No bookmarks for this conversation.")),
+      section("App Home", renderViewsTable(homeViews, users, "No App Home views have been published.")),
+      section("Modals", renderViewsTable(modalViews, users, "No modal views have been opened.")),
     ];
-    return body.join("\n");
+    return body;
   }
 
-  function renderConversationSelector(channels: SlackChannel[], activeChannelId: string): string {
+  function renderConversationSelector(channels: SlackChannel[], activeChannelId: string): Block {
     const rows = channels.map((ch) => [
       ch.channel_id === activeChannelId ? badge("active", "granted") : "",
       linkCell(`/?tab=messages&channel=${encodeURIComponent(ch.channel_id)}`, channelLabel(ch)),
-      escapeHtml(channelKind(ch)),
-      escapeHtml(String(ch.num_members)),
+      channelKind(ch),
+      String(ch.num_members),
       ch.is_archived ? badge("archived", "denied") : badge("open", "granted"),
     ]);
-    return renderSection(
+    return section(
       "Conversations",
-      renderTable(["", "Name", "Type", "Members", "State"], rows, "No conversations in the emulator store."),
+      table(["", "Name", "Type", "Members", "State"], rows, "No conversations in the emulator store."),
     );
   }
 
-  function renderChannelsView(users: Map<string, string>): string {
+  function renderChannelsView(users: Map<string, string>): Block[] {
     const channels = sortedChannels(ss().channels.all());
     const conversations = channels.filter((channel) => !channel.is_im && !channel.is_mpim);
     const dms = channels.filter((channel) => channel.is_im || channel.is_mpim);
 
     return [
-      renderSection(
+      section(
         "Channels",
-        renderTable(
+        table(
           ["ID", "Name", "Type", "Members", "Topic", "Purpose", "State"],
           conversations.map((ch) => [
-            escapeHtml(ch.channel_id),
+            ch.channel_id,
             linkCell(`/?tab=messages&channel=${encodeURIComponent(ch.channel_id)}`, channelLabel(ch)),
-            escapeHtml(channelKind(ch)),
-            escapeHtml(ch.members.map((member) => userLabel(users, member)).join(", ")),
-            escapeHtml(ch.topic.value),
-            escapeHtml(ch.purpose.value),
+            channelKind(ch),
+            ch.members.map((member) => userLabel(users, member)).join(", "),
+            ch.topic.value,
+            ch.purpose.value,
             ch.is_archived ? badge("archived", "denied") : badge("open", "granted"),
           ]),
           "No channels in the emulator store.",
         ),
       ),
-      renderSection(
+      section(
         "Direct Messages",
-        renderTable(
+        table(
           ["ID", "Name", "Type", "Members", "Open State"],
           dms.map((ch) => [
-            escapeHtml(ch.channel_id),
+            ch.channel_id,
             linkCell(`/?tab=messages&channel=${encodeURIComponent(ch.channel_id)}`, channelLabel(ch)),
-            escapeHtml(channelKind(ch)),
-            escapeHtml(ch.members.map((member) => userLabel(users, member)).join(", ")),
-            escapeHtml(openStateLabel(ch, users)),
+            channelKind(ch),
+            ch.members.map((member) => userLabel(users, member)).join(", "),
+            openStateLabel(ch, users),
           ]),
           "No DMs or MPIMs in the emulator store.",
         ),
       ),
-    ].join("\n");
+    ];
   }
 
-  function renderFilesView(users: Map<string, string>): string {
+  function renderFilesView(users: Map<string, string>): Block[] {
     const files = ss()
       .files.all()
       .sort((a, b) => b.created - a.created || b.id - a.id);
@@ -358,41 +341,41 @@ export function inspectorRoutes(ctx: RouteContext): void {
       .sort((a, b) => b.id - a.id);
 
     return [
-      renderSection(
+      section(
         "Files",
-        renderTable(
+        table(
           ["ID", "Title", "User", "Channels", "Size", "State", "Created"],
           files.map((file) => [
-            escapeHtml(file.file_id),
-            escapeHtml(file.title || file.name),
-            escapeHtml(userLabel(users, file.user)),
-            escapeHtml([...file.channels, ...file.groups, ...file.ims].join(", ")),
-            escapeHtml(String(file.size)),
+            file.file_id,
+            file.title || file.name,
+            userLabel(users, file.user),
+            [...file.channels, ...file.groups, ...file.ims].join(", "),
+            String(file.size),
             file.deleted ? badge("deleted", "denied") : badge("available", "granted"),
-            escapeHtml(new Date(file.created * 1000).toISOString()),
+            new Date(file.created * 1000).toISOString(),
           ]),
           "No completed files in the emulator store.",
         ),
       ),
-      renderSection(
+      section(
         "Pending Uploads",
-        renderTable(
+        table(
           ["File ID", "Filename", "Title", "Length", "Uploaded", "Completed"],
           sessions.map((session) => [
-            escapeHtml(session.file_id),
-            escapeHtml(session.filename),
-            escapeHtml(session.title),
-            escapeHtml(String(session.length)),
+            session.file_id,
+            session.filename,
+            session.title,
+            String(session.length),
             session.uploaded ? badge("uploaded", "granted") : badge("pending"),
             session.completed ? badge("complete", "granted") : badge("pending"),
           ]),
           "No pending external upload sessions.",
         ),
       ),
-    ].join("\n");
+    ];
   }
 
-  function renderViewsView(users: Map<string, string>): string {
+  function renderViewsView(users: Map<string, string>): Block[] {
     const views = ss()
       .views.all()
       .sort((a, b) => b.updated - a.updated || b.id - a.id);
@@ -403,24 +386,24 @@ export function inspectorRoutes(ctx: RouteContext): void {
       .sort((a, b) => b.expires_at - a.expires_at || b.id - a.id);
 
     return [
-      renderSection("App Home", renderViewsTable(homeViews, users, "No App Home views have been published.")),
-      renderSection("Modals", renderViewsTable(modalViews, users, "No modal views have been opened.")),
-      renderSection("Trigger IDs", renderTriggerTable(triggers, users, store.now)),
-    ].join("\n");
+      section("App Home", renderViewsTable(homeViews, users, "No App Home views have been published.")),
+      section("Modals", renderViewsTable(modalViews, users, "No modal views have been opened.")),
+      section("Trigger IDs", renderTriggerTable(triggers, users, store.now)),
+    ];
   }
 
-  function renderAuthView(): string {
+  function renderAuthView(): Block[] {
     const subscriptions = webhooks.getSubscriptions("slack");
     return [
-      renderSection("OAuth Apps", renderOAuthAppsTable(ss().oauthApps.all())),
-      renderSection("Installations", renderInstallationsTable(ss().installations.all())),
-      renderSection("Tokens", renderTokensTable(ss().tokens.all())),
-      renderSection("Incoming Webhooks", renderIncomingWebhooksTable(ss().incomingWebhooks.all())),
-      renderSection("Event Subscriptions", renderSubscriptionsTable(subscriptions)),
-    ].join("\n");
+      section("OAuth Apps", renderOAuthAppsTable(ss().oauthApps.all())),
+      section("Installations", renderInstallationsTable(ss().installations.all())),
+      section("Tokens", renderTokensTable(ss().tokens.all())),
+      section("Incoming Webhooks", renderIncomingWebhooksTable(ss().incomingWebhooks.all())),
+      section("Event Subscriptions", renderSubscriptionsTable(subscriptions)),
+    ];
   }
 
-  function renderEventsView(): string {
+  function renderEventsView(): Block[] {
     const subscriptions = webhooks.getSubscriptions("slack");
     const slackHookIds = new Set(subscriptions.map((subscription) => subscription.id));
     const allDeliveries = webhooks
@@ -431,66 +414,66 @@ export function inspectorRoutes(ctx: RouteContext): void {
     const failed = allDeliveries.filter((delivery) => !delivery.success).slice(0, 100);
 
     return [
-      renderSection("Event Subscriptions", renderSubscriptionsTable(subscriptions)),
-      renderSection(
+      section("Event Subscriptions", renderSubscriptionsTable(subscriptions)),
+      section(
         "Event Deliveries",
         renderDeliveriesTable(deliveries, subscriptions, "No Slack event deliveries yet."),
       ),
-      renderSection("Last Errors", renderDeliveriesTable(failed, subscriptions, "No failed Slack event deliveries.")),
-    ].join("\n");
+      section("Last Errors", renderDeliveriesTable(failed, subscriptions, "No failed Slack event deliveries.")),
+    ];
   }
 }
 
-function renderMessagesTable(messages: SlackMessage[], users: Map<string, string>, empty: string, clockNow: () => number = Date.now): string {
-  return renderTable(
+function renderMessagesTable(messages: SlackMessage[], users: Map<string, string>, empty: string, clockNow: () => number = Date.now): Block {
+  return table(
     ["Time", "User", "Message", "Reactions", "TS"],
     messages.map((msg) => {
       const isBot = msg.subtype === "bot_message";
       const richBadge =
         msg.text.length === 0 && ((msg.blocks?.length ?? 0) > 0 || (msg.attachments?.length ?? 0) > 0)
-          ? ` ${badge("rich", "granted")}`
-          : "";
+          ? [badge("rich", "granted")]
+          : [];
       const threadBadge =
         msg.reply_count > 0
-          ? ` ${badge(`${msg.reply_count} ${msg.reply_count === 1 ? "reply" : "replies"}`, "requested")}`
-          : "";
+          ? [badge(`${msg.reply_count} ${msg.reply_count === 1 ? "reply" : "replies"}`, "requested")]
+          : [];
       const fileBadge = msg.files?.length
-        ? ` ${badge(`${msg.files.length} ${msg.files.length === 1 ? "file" : "files"}`, "granted")}`
-        : "";
-      const threadIndicator = msg.thread_ts && msg.thread_ts !== msg.ts ? `${badge("thread", "denied")} ` : "";
+        ? [badge(`${msg.files.length} ${msg.files.length === 1 ? "file" : "files"}`, "granted")]
+        : [];
+      const threadIndicator = msg.thread_ts && msg.thread_ts !== msg.ts ? [badge("thread", "denied")] : [];
       return [
-        escapeHtml(timeAgo(msg.created_at, clockNow)),
-        `${escapeHtml(userLabel(users, msg.user))}${isBot ? ` ${badge("bot", "granted")}` : ""}`,
-        `${threadIndicator}${escapeHtml(richMessagePreview(msg))}${richBadge}${fileBadge}${threadBadge}`,
+        timeAgo(msg.created_at, clockNow),
+        isBot ? [userLabel(users, msg.user), badge("bot", "granted")] : userLabel(users, msg.user),
+        [...threadIndicator, richMessagePreview(msg), ...richBadge, ...fileBadge, ...threadBadge],
         renderReactionBadges(msg.reactions),
-        escapeHtml(msg.ts),
+        msg.ts,
       ];
     }),
     empty,
   );
 }
 
-function renderEphemeralTable(messages: SlackEphemeralMessage[], users: Map<string, string>, empty: string, clockNow: () => number = Date.now): string {
-  return renderTable(
+function renderEphemeralTable(messages: SlackEphemeralMessage[], users: Map<string, string>, empty: string, clockNow: () => number = Date.now): Block {
+  return table(
     ["Time", "Target", "Message", "TS"],
     messages.map((msg) => [
-      escapeHtml(timeAgo(msg.created_at, clockNow)),
-      `${escapeHtml(userLabel(users, msg.target_user))} ${badge("ephemeral", "requested")}`,
-      escapeHtml(richMessagePreview(msg)),
-      escapeHtml(msg.ts),
+      timeAgo(msg.created_at, clockNow),
+      [userLabel(users, msg.target_user), badge("ephemeral", "requested")],
+      richMessagePreview(msg),
+      msg.ts,
     ]),
     empty,
   );
 }
 
-function renderScheduledTable(messages: SlackScheduledMessage[], users: Map<string, string>, empty: string): string {
-  return renderTable(
+function renderScheduledTable(messages: SlackScheduledMessage[], users: Map<string, string>, empty: string): Block {
+  return table(
     ["Post At", "User", "Message", "ID"],
     messages.map((msg) => [
-      escapeHtml(new Date(msg.post_at * 1000).toISOString()),
-      escapeHtml(userLabel(users, msg.user)),
-      escapeHtml(richMessagePreview(msg)),
-      escapeHtml(msg.scheduled_message_id),
+      new Date(msg.post_at * 1000).toISOString(),
+      userLabel(users, msg.user),
+      richMessagePreview(msg),
+      msg.scheduled_message_id,
     ]),
     empty,
   );
@@ -501,62 +484,62 @@ function renderPinsTable(
   channelMessages: SlackMessage[],
   users: Map<string, string>,
   empty: string,
-): string {
-  return renderTable(
+): Block {
+  return table(
     ["Created", "Creator", "Message", "TS"],
     pins.map((pin) => {
       const message = channelMessages.find((candidate) => candidate.ts === pin.message_ts);
       return [
-        escapeHtml(new Date(pin.created * 1000).toISOString()),
-        escapeHtml(userLabel(users, pin.created_by)),
-        escapeHtml(message ? richMessagePreview(message) : pin.message_ts),
-        escapeHtml(pin.message_ts),
+        new Date(pin.created * 1000).toISOString(),
+        userLabel(users, pin.created_by),
+        message ? richMessagePreview(message) : pin.message_ts,
+        pin.message_ts,
       ];
     }),
     empty,
   );
 }
 
-function renderBookmarksTable(bookmarks: SlackBookmark[], empty: string): string {
-  return renderTable(
+function renderBookmarksTable(bookmarks: SlackBookmark[], empty: string): Block {
+  return table(
     ["Title", "Type", "Link", "Rank"],
     bookmarks.map((bookmark) => [
-      escapeHtml(bookmark.title),
-      escapeHtml(bookmark.type),
-      escapeHtml(bookmark.link),
-      escapeHtml(bookmark.rank),
+      bookmark.title,
+      bookmark.type,
+      bookmark.link,
+      bookmark.rank,
     ]),
     empty,
   );
 }
 
-function renderViewsTable(views: SlackView[], users: Map<string, string>, empty: string): string {
-  return renderTable(
+function renderViewsTable(views: SlackView[], users: Map<string, string>, empty: string): Block {
+  return table(
     ["ID", "Type", "User", "App", "Preview", "Hash", "Root", "Previous"],
     views.map((view) => [
-      escapeHtml(view.view_id),
+      view.view_id,
       view.type === "home" ? badge("app home", "granted") : badge("modal", "requested"),
-      escapeHtml(userLabel(users, view.user_id)),
-      escapeHtml(view.app_id),
-      escapeHtml(viewPreview(view)),
-      escapeHtml(view.hash),
-      escapeHtml(view.root_view_id),
-      escapeHtml(view.previous_view_id ?? ""),
+      userLabel(users, view.user_id),
+      view.app_id,
+      viewPreview(view),
+      view.hash,
+      view.root_view_id,
+      view.previous_view_id ?? "",
     ]),
     empty,
   );
 }
 
-function renderTriggerTable(triggers: SlackViewTrigger[], users: Map<string, string>, clockNow: () => number = Date.now): string {
+function renderTriggerTable(triggers: SlackViewTrigger[], users: Map<string, string>, clockNow: () => number = Date.now): Block {
   const now = Math.floor(clockNow() / 1000);
-  return renderTable(
+  return table(
     ["Trigger ID", "User", "App", "View", "Expires", "State"],
     triggers.map((trigger) => [
-      escapeHtml(trigger.trigger_id),
-      escapeHtml(userLabel(users, trigger.user_id)),
-      escapeHtml(trigger.app_id),
-      escapeHtml(trigger.view_id ?? ""),
-      escapeHtml(new Date(trigger.expires_at * 1000).toISOString()),
+      trigger.trigger_id,
+      userLabel(users, trigger.user_id),
+      trigger.app_id,
+      trigger.view_id ?? "",
+      new Date(trigger.expires_at * 1000).toISOString(),
       trigger.used
         ? badge("used", "denied")
         : trigger.expires_at <= now
@@ -567,74 +550,74 @@ function renderTriggerTable(triggers: SlackViewTrigger[], users: Map<string, str
   );
 }
 
-function renderOAuthAppsTable(apps: SlackOAuthApp[]): string {
-  return renderTable(
+function renderOAuthAppsTable(apps: SlackOAuthApp[]): Block {
+  return table(
     ["App ID", "Client ID", "Name", "Bot", "Scopes", "User Scopes"],
     apps.map((app) => [
-      escapeHtml(app.app_id ?? ""),
-      escapeHtml(app.client_id),
-      escapeHtml(app.name),
-      escapeHtml(app.bot_id ?? app.bot_name ?? ""),
-      escapeHtml(scopePreview(app.scopes)),
-      escapeHtml(scopePreview(app.user_scopes)),
+      app.app_id ?? "",
+      app.client_id,
+      app.name,
+      app.bot_id ?? app.bot_name ?? "",
+      scopePreview(app.scopes),
+      scopePreview(app.user_scopes),
     ]),
     "No OAuth apps are configured.",
   );
 }
 
-function renderInstallationsTable(installations: SlackInstallation[]): string {
-  return renderTable(
+function renderInstallationsTable(installations: SlackInstallation[]): Block {
+  return table(
     ["Installation", "App", "Team", "Bot User", "Installer", "Scopes"],
     installations.map((installation) => [
-      escapeHtml(installation.installation_id),
-      escapeHtml(installation.app_id),
-      escapeHtml(installation.team_id),
-      escapeHtml(installation.bot_user_id),
-      escapeHtml(installation.installer_user_id),
-      escapeHtml(scopePreview(installation.scopes)),
+      installation.installation_id,
+      installation.app_id,
+      installation.team_id,
+      installation.bot_user_id,
+      installation.installer_user_id,
+      scopePreview(installation.scopes),
     ]),
     "No OAuth installations have been recorded.",
   );
 }
 
-function renderTokensTable(tokens: SlackToken[]): string {
-  return renderTable(
+function renderTokensTable(tokens: SlackToken[]): Block {
+  return table(
     ["Token", "Type", "Team", "User", "App", "Bot", "Scopes"],
     tokens.map((token) => [
-      escapeHtml(maskToken(token.token)),
-      escapeHtml(token.token_type),
-      escapeHtml(token.team_id),
-      escapeHtml(token.user_id),
-      escapeHtml(token.app_id ?? ""),
-      escapeHtml(token.bot_id ?? token.bot_user_id ?? ""),
-      escapeHtml(scopePreview(token.scopes)),
+      maskToken(token.token),
+      token.token_type,
+      token.team_id,
+      token.user_id,
+      token.app_id ?? "",
+      token.bot_id ?? token.bot_user_id ?? "",
+      scopePreview(token.scopes),
     ]),
     "No Slack token records have been seeded or exchanged.",
   );
 }
 
-function renderIncomingWebhooksTable(webhooks: SlackIncomingWebhook[]): string {
-  return renderTable(
+function renderIncomingWebhooksTable(webhooks: SlackIncomingWebhook[]): Block {
+  return table(
     ["Token", "Team", "Bot", "Default Channel", "Label", "URL"],
     webhooks.map((webhook) => [
-      escapeHtml(maskToken(webhook.token)),
-      escapeHtml(webhook.team_id),
-      escapeHtml(webhook.bot_id),
-      escapeHtml(webhook.default_channel),
-      escapeHtml(webhook.label),
-      escapeHtml(webhook.url),
+      maskToken(webhook.token),
+      webhook.team_id,
+      webhook.bot_id,
+      webhook.default_channel,
+      webhook.label,
+      webhook.url,
     ]),
     "No incoming webhooks are configured.",
   );
 }
 
-function renderSubscriptionsTable(subscriptions: WebhookSubscription[]): string {
-  return renderTable(
+function renderSubscriptionsTable(subscriptions: WebhookSubscription[]): Block {
+  return table(
     ["ID", "URL", "Events", "State"],
     subscriptions.map((subscription) => [
-      escapeHtml(String(subscription.id)),
-      escapeHtml(subscription.url),
-      escapeHtml(subscription.events.join(", ")),
+      String(subscription.id),
+      subscription.url,
+      subscription.events.join(", "),
       subscription.active ? badge("active", "granted") : badge("inactive", "denied"),
     ]),
     "No Slack event subscriptions are registered.",
@@ -645,22 +628,22 @@ function renderDeliveriesTable(
   deliveries: WebhookDelivery[],
   subscriptions: WebhookSubscription[],
   empty: string,
-): string {
+): Block {
   const subscriptionsById = new Map(subscriptions.map((subscription) => [subscription.id, subscription]));
-  return renderTable(
+  return table(
     ["ID", "Event", "Hook", "URL", "Status", "Duration", "Delivered"],
     deliveries.map((delivery) => {
       const subscription = subscriptionsById.get(delivery.hook_id);
       return [
-        escapeHtml(String(delivery.id)),
-        escapeHtml(delivery.event),
-        escapeHtml(String(delivery.hook_id)),
-        escapeHtml(subscription?.url ?? ""),
+        String(delivery.id),
+        delivery.event,
+        String(delivery.hook_id),
+        subscription?.url ?? "",
         delivery.success
           ? badge(String(delivery.status_code ?? "ok"), "granted")
           : badge(String(delivery.status_code ?? "failed"), "denied"),
-        escapeHtml(delivery.duration === null ? "" : `${delivery.duration}ms`),
-        escapeHtml(delivery.delivered_at),
+        delivery.duration === null ? "" : `${delivery.duration}ms`,
+        delivery.delivered_at,
       ];
     }),
     empty,

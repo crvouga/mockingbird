@@ -76,4 +76,6 @@ const module = (
 ).outputFiles?.[0]
 if (!module) throw new Error("Admin UI build produced no module")
 await writeFile("dist/browser.bundle.js", `${notice}${module.text}`)
-console.log(`admin-ui: bundled React + Ant Design (${Math.round(source.length / 1024)} KiB)`)
+console.log(
+  `admin-ui: bundled React + HeroUI + the Mockingbird stylesheet (${Math.round(source.length / 1024)} KiB)`,
+)

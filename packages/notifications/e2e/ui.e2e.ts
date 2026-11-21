@@ -199,7 +199,8 @@ describe("harness UI through its test ids", () => {
     const json = JSON.parse((await byId(TEST_IDS.inspectorJson).textContent()) ?? "{}")
     expect(json.raw).toBeDefined()
     await byId(TEST_IDS.inspectorClose).click()
-    expect(await byId(TEST_IDS.inspector).isHidden()).toBe(true)
+    // The drawer slides out before it leaves the page.
+    await byId(TEST_IDS.inspector).waitFor({ state: "hidden" })
   })
 
   test("a message sent while the page is open appears live", async () => {

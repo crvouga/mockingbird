@@ -190,7 +190,7 @@ test("each button makes a call that lands on its own device, and stops autoplay"
   await sendAndWait(page, "code", "sms-device", "twilio")
   expect((await demoState(page)).autoplay).toBe("off")
   expect(await page.locator("[data-demo-call] code").innerText()).toContain("verify.twilio.com")
-  expect(await page.locator("[data-demo-call] .badge").innerText()).toBe("201")
+  expect(await page.locator("[data-demo-call] [data-call-status]").innerText()).toBe("201")
 
   await sendAndWait(page, "whatsapp", "sms-device", "twilio")
   expect(await page.locator("[data-demo-call] code").innerText()).toContain("Messages.json")

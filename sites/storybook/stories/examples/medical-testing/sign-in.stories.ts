@@ -13,9 +13,8 @@ export default {
     layout: "fullscreen",
     sources: [
       ...SHELL,
-      "packages/examples/medical-testing/src/client/pages/Landing.ts",
-      "packages/examples/medical-testing/src/client/components/InboxHint.ts",
-      "packages/examples/medical-testing/src/client/components/OAuthButtons.ts",
+      "packages/examples/medical-testing/src/client/pages/Landing.tsx",
+      "packages/examples/medical-testing/src/client/components/InboxHint.tsx",
     ],
   },
 } satisfies Meta
@@ -74,7 +73,7 @@ export const ResendTooSoon: StoryObj = {
   ...cove(),
   play: async ({ canvasElement }) => {
     const page = await sendCode(canvasElement)
-    await page.click("button.cove-btn-link", "Use a different email")
+    await page.click('[data-testid="sign-in-start-over"]', "Use a different email")
     await page.click('[data-testid="sign-in-email-submit"]')
     expect((await page.find('[data-testid="sign-in-error"]')).textContent).toContain(
       "We just sent a code.",
@@ -90,6 +89,6 @@ export const SignedInWithCode: StoryObj = {
     const code = await signInCode((loaded as { demo: Demo }).demo, NEWCOMER)
     await page.type('[data-testid="sign-in-code"]', code)
     await page.click('[data-testid="sign-in-code-submit"]')
-    expect((await page.find(".cove-page h1")).textContent).toBe("Welcome back, Grace.")
+    expect((await page.find("main h1")).textContent).toBe("Welcome back, Grace.")
   },
 }

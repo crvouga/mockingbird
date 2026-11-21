@@ -1,28 +1,17 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
 import GuideArticle from "../components/GuideArticle.astro"
-import Icon from "../components/Icon.astro"
 import Base from "../layouts/Base.astro"
+import { Actions, ButtonLink } from "../ui/primitives.tsx"
 
 const guide = catalog.guides.find((g) => g.file === "WHY")
 if (!guide) throw new Error("docs/WHY.md is missing: the /why page renders it")
 ---
 
 <Base title={guide.title} description={guide.summary} markdown={`/docs/${guide.slug}.md`} type="article">
-  <div class="container">
-    <GuideArticle guide={guide} repo={catalog.repo}>
-      <div class="why-cta">
-        <a class="btn btn-primary" href="/services">Browse the {catalog.totals.services} emulators <Icon name="arrow-right" /></a>
-      </div>
-    </GuideArticle>
-  </div>
+  <GuideArticle guide={guide} repo={catalog.repo}>
+    <Actions className="mt-12">
+      <ButtonLink href="/services" variant="primary" arrow>Browse the {catalog.totals.services} emulators</ButtonLink>
+    </Actions>
+  </GuideArticle>
 </Base>
-
-<style>
-  .why-cta {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    margin-top: 48px;
-  }
-</style>

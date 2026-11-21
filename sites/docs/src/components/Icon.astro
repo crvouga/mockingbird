@@ -1,4 +1,7 @@
 ---
+// The React icon (src/ui/icon.tsx), for the few Astro components that draw one themselves.
+import { Icon as ReactIcon } from "../ui/icon.tsx"
+
 interface Props {
   name: string
   class?: string
@@ -7,6 +10,4 @@ interface Props {
 const { name, class: className, label } = Astro.props
 ---
 
-<svg class:list={["i", `i-${name}`, className]} aria-hidden={label ? undefined : "true"} role={label ? "img" : undefined} aria-label={label}>
-  <use href={`#i-${name}`}></use>
-</svg>
+<ReactIcon name={name} className={className ?? "size-4"} label={label} />

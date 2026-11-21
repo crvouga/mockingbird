@@ -3,14 +3,18 @@ import { api } from "../../../../../packages/examples/medical-testing/src/client
 import { CLINICIAN, cove, NEWCOMER, PATIENT, paidOrder, phone, SHELL } from "./cove.js"
 
 /**
- * The signed-in overview (`Dashboard`): the sidebar and top bar every signed-in screen shares,
+ * The signed-in overview (`Dashboard`): the top bar every signed-in screen shares,
  * order counts, recent activity, and the next step, for a patient and for care staff.
  */
 export default {
   title: "Examples/Medical testing/Overview",
   parameters: {
     layout: "fullscreen",
-    sources: [...SHELL, "packages/examples/medical-testing/src/client/pages/Dashboard.ts"],
+    sources: [
+      ...SHELL,
+      "packages/examples/medical-testing/src/client/pages/Dashboard.tsx",
+      "packages/examples/medical-testing/src/client/components/OrdersTable.tsx",
+    ],
   },
 } satisfies Meta
 

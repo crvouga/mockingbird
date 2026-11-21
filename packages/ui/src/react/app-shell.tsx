@@ -1,5 +1,5 @@
 import { Link } from "@heroui/react"
-import type { ReactNode } from "react"
+import type { HTMLAttributes, ReactNode } from "react"
 import { Brand } from "./brand.js"
 
 export type AppShellNavItem = {
@@ -27,6 +27,8 @@ export type AppShellProps = {
   fluid?: boolean
   /** Below the content, for a status line or links. */
   footer?: ReactNode
+  /** Attributes for the `<main>` element (test hooks, `data-*` that describe what it shows). */
+  mainProps?: HTMLAttributes<HTMLElement> & Record<`data-${string}`, string | undefined>
 }
 
 /**
@@ -42,6 +44,7 @@ export function AppShell({
   actions,
   fluid = false,
   footer,
+  mainProps,
 }: AppShellProps) {
   const width = fluid ? "w-full" : "mx-auto w-full max-w-[1280px]"
   return (
@@ -74,7 +77,12 @@ export function AppShell({
           {actions ? <div className="ml-auto flex items-center gap-2 py-2">{actions}</div> : null}
         </div>
       </header>
-      <main className={`${width} flex-1 px-4 py-6 sm:px-6`}>{children}</main>
+      <main
+        {...mainProps}
+        className={`${width} flex-1 px-4 py-6 sm:px-6 ${mainProps?.className ?? ""}`.trim()}
+      >
+        {children}
+      </main>
       {footer ? (
         <footer className="border-t border-separator">
           <div className={`${width} px-4 py-4 text-sm text-muted sm:px-6`}>{footer}</div>

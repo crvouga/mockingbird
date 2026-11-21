@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import type { Notification } from "../src/model.js"
-import type { AppOptions } from "../src/ui/app.js"
+import type { AppOptions } from "../src/ui/types.js"
 import { base, email, MAILBOX, mailbox, ORDER_HTML, RESET_HTML } from "./fixtures.js"
 import { mount } from "./mount.js"
 
