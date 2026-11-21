@@ -178,9 +178,13 @@ const numberArbitrary = (schema: SchemaObject): fc.Arbitrary<number> => {
         )
       : doubles
   // Rounding can land on an exclusive bound (0.1000000000001 → 0.1); keep the raw double then.
+  // fast-check orders -0 below 0, so an exclusive bound of 0 can still yield a zero (-0 for
+  // `exclusiveMaximum: 0`); the nearest double on the allowed side satisfies it instead.
   return arbitrary.map((n) => {
     const rounded = tidy(n, 12)
-    return inRange(rounded) ? rounded : n
+    if (inRange(rounded)) return rounded
+    if (n === 0) return [-Number.MIN_VALUE, Number.MIN_VALUE].find(inRange) ?? n
+    return n
   })
 }
 
