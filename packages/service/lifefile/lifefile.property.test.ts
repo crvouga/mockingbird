@@ -74,7 +74,6 @@ test(
       },
       only: ["CreateOrder"],
       includeUnsafe: true,
-      seed: 0,
       numRuns: 3,
       maxCommands: 3,
       seed: 1,
