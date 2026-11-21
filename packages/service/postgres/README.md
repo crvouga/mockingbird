@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-postgres
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Pure TypeScript, completely in-memory PostgreSQL engine aiming for **PostgreSQL 18 SQL dialect
 parity** (same statements, same results). Use it in tests (or the browser) wherever you want real
@@ -9,7 +9,7 @@ transactions, CTEs, window functions, JSONB, sequences, and copy-on-write snapsh
 isolation.
 
 > Formerly [`@crvouga/postgres-mem`](https://www.npmjs.com/package/@crvouga/postgres-mem)
-> ([archived repo](https://github.com/crvouga/postgres-mem)). Migrate by replacing the package
+> ([archived repo](https://github.com/crvouga-organization/postgres-mem)). Migrate by replacing the package
 > name; the API is unchanged.
 
 - Runs in modern browsers, Node.js and Bun
@@ -22,7 +22,7 @@ isolation.
   format (not `pg_dump`)
 
 It is not a Mockingbird HTTP emulator and is not the storage engine Mockingbird's HTTP emulators use (they
-use the SQLite-dialect [`@crvouga/mockingbird-service-sqlite`](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite#readme)
+use the SQLite-dialect [`@crvouga/mockingbird-service-sqlite`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite#readme)
 through the `SqliteClient` port). Use this package as the database for your own code under test.
 
 ### Documentation
@@ -34,12 +34,12 @@ Files marked (shipped) are included in the npm package next to this README.
 | [COMPATIBILITY.md](./COMPATIBILITY.md) (shipped) | Feature matrix + verify commands |
 | [COMPATIBILITY-AUDIT.md](./COMPATIBILITY-AUDIT.md) (shipped) | Audit evidence |
 | [AGENTS.md](./AGENTS.md) (shipped) | Contributor docs: architecture, how to change code, test/compat gates |
-| [DROP-IN-CONTRACT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/docs/DROP-IN-CONTRACT.md) | Falsifiable drop-in claim (what "same" means) |
-| [PROOF.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/docs/PROOF.md) | Evidence argument + what is not proven |
-| [GAP-ANALYSIS.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/docs/GAP-ANALYSIS.md) | Gap analysis vs the full PostgreSQL surface |
-| [GAP-CATALOG.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/docs/GAP-CATALOG.md) | Current unproven / thin / intentional inventory |
-| [DIVERGENCES.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/DIVERGENCES.md) | Auto-generated intentional divergences (machine-readable: `compat/divergences.json`, shipped) |
-| [PERFORMANCE.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/benchmarks/PERFORMANCE.md) | Performance notes |
+| [DROP-IN-CONTRACT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/docs/DROP-IN-CONTRACT.md) | Falsifiable drop-in claim (what "same" means) |
+| [PROOF.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/docs/PROOF.md) | Evidence argument + what is not proven |
+| [GAP-ANALYSIS.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/docs/GAP-ANALYSIS.md) | Gap analysis vs the full PostgreSQL surface |
+| [GAP-CATALOG.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/docs/GAP-CATALOG.md) | Current unproven / thin / intentional inventory |
+| [DIVERGENCES.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/DIVERGENCES.md) | Auto-generated intentional divergences (machine-readable: `compat/divergences.json`, shipped) |
+| [PERFORMANCE.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/benchmarks/PERFORMANCE.md) | Performance notes |
 
 ## Install
 
@@ -557,7 +557,7 @@ The engine is deterministic by default:
 
 Goal: **SQL dialect** behavioural parity vs PostgreSQL **18.3** for the sync API. Full matrix:
 [COMPATIBILITY.md](./COMPATIBILITY.md). Contract:
-[DROP-IN-CONTRACT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/postgres/docs/DROP-IN-CONTRACT.md).
+[DROP-IN-CONTRACT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/postgres/docs/DROP-IN-CONTRACT.md).
 
 The in-process API has no async client, no connection pooling and no `pg_dump` codec; the optional
 [wire-protocol server](#wire-protocol-server-separate-processes) adds a TCP listener, per-session
@@ -670,7 +670,7 @@ handle/wrapper to preserve serialization; do not mutate the database during an o
 The immediate durability opener encodes one full SQLM/PGMM snapshot per batch and compares fixed-size pages (default
 16 KiB). This targets small to moderate databases, not unbounded datasets. It avoids per-row
 storage IO, but encoding is still O(database size). It is not an SQLite file or OPFS VFS.
-See [the browser benchmark](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/benchmarks/DURABILITY.md) for measurements and limits.
+See [the browser benchmark](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/benchmarks/DURABILITY.md) for measurements and limits.
 
 For higher write throughput, use `openBufferedDurableDatabase({ key, backend?, ... })`.
 The returned `BufferedDurable<Database>` keeps the synchronous SQL API and schedules a save
@@ -858,12 +858,12 @@ POSTGRES_MEM_FUZZ_SEED=12345 POSTGRES_MEM_FUZZ_PATH='0:1' bun test tests/fuzz  #
 ```
 
 A React + Vite SQL playground lives in
-[`examples/react-vite`](https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres/examples/react-vite)
+[`examples/react-vite`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/postgres/examples/react-vite)
 (`bun run example` from this package after `bun install` there). More working examples:
-[`tests/contract/api/`](https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres/tests/contract/api)
-and [`tests/contract/parameters/`](https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres/tests/contract/parameters).
+[`tests/contract/api/`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/postgres/tests/contract/api)
+and [`tests/contract/parameters/`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/postgres/tests/contract/parameters).
 
-Released automatically from the [Mockingbird monorepo](https://github.com/crvouga/mockingbird)
-(see [Releasing](https://github.com/crvouga/mockingbird/blob/main/docs/RELEASING.md)). License: MIT ([LICENSE](./LICENSE)).
+Released automatically from the [Mockingbird monorepo](https://github.com/crvouga-organization/mockingbird)
+(see [Releasing](https://github.com/crvouga-organization/mockingbird/blob/main/docs/RELEASING.md)). License: MIT ([LICENSE](./LICENSE)).
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird) — agent integration guide: [README](https://github.com/crvouga-organization/mockingbird#readme) · [llms.txt](https://github.com/crvouga-organization/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md).

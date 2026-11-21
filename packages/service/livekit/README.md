@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-livekit
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful LiveKit emulator for `livekit-server-sdk`. It serves Twirp JSON room and agent-dispatch APIs, validates genuine HS256 LiveKit grants, models participant/track/data state, exposes deterministic SIP and egress controls, and emits correctly signed lifecycle webhooks.
 

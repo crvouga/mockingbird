@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-oura
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Oura v2 collection and OAuth emulator for synthetic wearable synchronization tests.
 

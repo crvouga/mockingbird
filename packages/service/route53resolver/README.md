@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-route53resolver
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Transport scaffold for Amazon Route 53 Resolver. ESM; Node 22+ or Bun 1.2+.
 

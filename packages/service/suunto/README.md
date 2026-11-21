@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-suunto
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Suunto Cloud API emulator: the OAuth 2.0 authorization-code flow, workouts, and the 24/7 sleep, activity and daily-statistics samples, behind the API management gateway's subscription key.
 

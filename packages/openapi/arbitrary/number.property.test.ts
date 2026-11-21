@@ -47,6 +47,11 @@ test("generated numbers satisfy bounds and multipleOf", () => {
 
 test("rounding never lands on an exclusive bound", () => {
   for (const s of [
+    // fast-check orders -0 below 0, so these used to yield -0 and 0 (seed -1204405255).
+    { type: "number", maximum: 1.5e-323, exclusiveMaximum: 0 },
+    { type: "number", exclusiveMaximum: 0 },
+    { type: "number", exclusiveMinimum: 0 },
+    { type: "number", exclusiveMinimum: -1e-300, exclusiveMaximum: 0 },
     { type: "number", exclusiveMinimum: 0.1 },
     { type: "number", exclusiveMinimum: 0.1, maximum: 0.1000000000001 },
     { type: "number", minimum: -0.2000000000001, exclusiveMaximum: -0.2 },

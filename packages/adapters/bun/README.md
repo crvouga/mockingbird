@@ -61,4 +61,4 @@ Requests and responses pass through unchanged (Bun is Fetch-native), so streamin
 - `@crvouga/mockingbird-core`: the `FetchAPI` contract.
 - `@crvouga/mockingbird-adapter-node`: the same adapter for `node:http`.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

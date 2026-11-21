@@ -60,7 +60,7 @@ test("workspace packages use Mockingbird names, bins, and repository URLs", () =
       expect(bin.startsWith("mockingbird-")).toBe(true)
     }
     const repo = manifest.repository?.url
-    if (repo) expect(repo).toContain("github.com/crvouga/mockingbird")
+    if (repo) expect(repo).toContain("github.com/crvouga-organization/mockingbird")
   }
 
   for (const entry of readdirSync(join(root, "packages/service"))) {

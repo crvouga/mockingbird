@@ -44,8 +44,11 @@ describe("CustomerIoAPI", () => {
           await reference.reset()
         },
         includeUnsafe: true,
-        numRuns: params.numRuns ?? 25,
+        numRuns: params.numRuns ?? 50,
         maxCommands: 20,
+        // 24 operations and two lookups that need a sent message or a listed template first: at 25
+        // walks an unlucky seed missed one (#819), so walk longer and draw the lookups more often.
+        weights: { GetMessage: 4, GetTransactionalMessage: 4 },
         latencyToleranceMs: 10_000,
         ...(params.seed === undefined ? {} : { seed: params.seed }),
         env: process.env,

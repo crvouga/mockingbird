@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-customerio
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of **Customer.io** for test suites, serving all three hosts our code talks to from
 one process: the Segment-compatible **CDP** (`identify`, `track`, `batch`, exactly as
@@ -10,7 +10,7 @@ push, inbox message), message catalog, profile attribute reads with device lists
 of); reporting events (`unsubscribed`, `subscribed`, `spammed`, subscription preferences,
 `clicked`) are posted to our reporting webhook, signed the way Customer.io signs them.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/customerio/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/customerio/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from Customer.io's CDP (Segment spec) and App API
   references, trimmed to what our consumers send.
 
@@ -183,7 +183,7 @@ Each of these is a **best guess, not oracle-verified**:
 
 ### Workspace reads and exports (best guess, not oracle-verified)
 
-Added for [#759](https://github.com/crvouga/mockingbird/issues/759). No live Customer.io workspace
+Added for [#759](https://github.com/crvouga-organization/mockingbird/issues/759). No live Customer.io workspace
 backs these routes (no parity keys); the shapes follow the vendor's published App API OpenAPI
 document (<https://docs.customer.io/files/journeys-app.json>, operations `listWebhooks`,
 `getTopics`, `exportPeopleData`, `getExport`, `downloadExport`, `listSnippets`, `listCampaigns`,
@@ -235,4 +235,4 @@ a **best guess, not oracle-verified**:
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8810. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

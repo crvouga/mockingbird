@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-aha
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **AHA (Advanced Health Academy) at-home phlebotomy** partner API for test
 suites: HMAC-signed create-order and cancel, and — its main job — the order-status webhooks AHA
@@ -8,7 +8,7 @@ posts back. The vendor has no pull API, so every downstream effect (EMR appointm
 storefront status, "blood drawn") starts with a webhook; the emulator emits one on demand, with every
 field our handler reads, so the ZIP-routed bloodwork path can finally be tested.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/aha/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/aha/SUPPORT.md)
 - The vendor publishes no spec: the contract (`openapi.yaml`) is hand-authored from our
   consumers' zod schemas and wire shapes.
 
@@ -225,4 +225,4 @@ Use `seed()` to install arbitrary binary fixtures or `publishResult(orderId, byt
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (autoSchedule ticks every 100 ms); the `serve` CLI target; port 8799. |
 | `createAhaSftpServer` (`./sftp`) | Node | Real SSH/SFTP endpoint with deterministic host key/filesystem, shared order state, transfer controls, and an ephemeral port. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

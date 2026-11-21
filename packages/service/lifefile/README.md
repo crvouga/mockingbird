@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-lifefile
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Work-in-progress LifeFile pharmacy order gateway for synthetic integration tests. This is a
 **best guess, not oracle-verified**. It models order submission, idempotency, configurable shipping

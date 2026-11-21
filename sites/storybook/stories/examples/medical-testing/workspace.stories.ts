@@ -62,7 +62,7 @@ const workspace = (
 const tab = async (page: Person, name: "app" | "emulators" | "notifications" | "system") => {
   const order = ["app", "emulators", "notifications", "system"]
   for (const id of order.slice(1)) {
-    await page.click('[data-testid="system-switcher"]')
+    await page.click('[data-testid="system-switcher-next"]')
     if (id === name) return
   }
 }
@@ -87,8 +87,6 @@ export const Notifications: StoryObj = workspace(async (page) => {
 export const OnAPhone: StoryObj = workspace(undefined, { globals: phone })
 
 export const System: StoryObj = workspace(async (page) => {
-  await page.click('[data-testid="system-switcher"]')
-  await page.click('[data-testid="system-switcher"]')
-  await page.click('[data-testid="system-switcher"]')
+  await page.click('[data-testid="system-switcher-previous"]')
   await page.find(".msh-home")
 })

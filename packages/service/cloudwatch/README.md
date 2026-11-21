@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-cloudwatch
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful local emulator of Amazon CloudWatch Metrics. ESM; Node 22+ or Bun 1.2+.
 

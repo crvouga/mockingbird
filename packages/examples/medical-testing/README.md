@@ -35,8 +35,8 @@ PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` f
 directory. Deployment requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Actions
 repository secrets. No deployment is performed by the build command. The System preview workflow builds a downloadable
 artifact for every PR, deploys same-repository PRs when these secrets exist, and deletes their Worker
-when the PR closes. Successful deployments put Lab preview, System, Emulators and Notifications
-links at the top of the PR description, preserving the rest of its content. Fork PRs only receive artifacts. The docs site's existing fleet deployment remains separate.
+when the PR closes. Successful deployments put a single Preview link, opening the example app,
+at the top of the PR description, preserving the rest of its content. Fork PRs only receive artifacts. The docs site's existing fleet deployment remains separate.
 
 Standalone links use `?surface=app`, `?surface=system`, `?surface=emulators` or
 `?surface=notifications`; browser back/forward restores the selected surface. A reload starts a
@@ -166,8 +166,9 @@ the resend cooldown and preferences.
 ## Run it
 
 **In the browser, no server:** visit `/examples/medical-testing` and click "Launch the app",
-or open the standalone static preview. Use **Switch apps** to open System, Lab workspace,
-Emulators or Notifications. These surfaces share the same running database and emulators.
+or open the standalone static preview. The arrows on the switcher pill (middle left until you
+drag it to another edge, where it stays) step through System, Lab workspace, Emulators and
+Notifications; hover one to see where it goes. These surfaces share the same running database and emulators.
 The emulator inspector includes SQL queries, state, clock, faults, journal and routes.
 
 **As a standalone dev server:**

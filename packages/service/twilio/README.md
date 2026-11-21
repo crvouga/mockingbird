@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-twilio
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of **Twilio** for test suites: Lookup v2 phone validation, Verify v2 phone OTP
 (with the real state machine: wrong codes, attempt limits, 10-minute expiry on the emulator clock),
@@ -8,7 +8,7 @@ Programmable Messaging with an outbox, and call Recordings. It also signs and po
 inbound SMS and voice webhooks to your app. Every product is served on one port. A suite reads the
 OTP from the admin plane instead of bypassing verification (`E2E_OTP_BYPASS_*`).
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/twilio/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/twilio/SUPPORT.md)
 - The contract (`openapi.yaml`) is trimmed from Twilio's API reference to what our consumer
   calls. Lookup v2 responses are checked byte for byte against the live API
   (`scripts/parity.ts`, recorded in `test/fixtures/lookups.live.json`).
@@ -211,4 +211,4 @@ can also come from the `x-mockingbird-namespace` header or a `/__admin/ns/<name>
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8798. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

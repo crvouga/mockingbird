@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-mosaic
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Emulate the Mosaic Diagnostics practitioner ordering API for patient records, sales orders,
 and lab results. The [OpenAPI contract](./openapi.yaml) uses the published v1 routes with corrections
@@ -118,7 +118,7 @@ Set `x-mockingbird-namespace` on vendor and admin requests, or add `/__admin/ns/
 the vendor base URL. You can also map an `ApiKey` to a namespace with
 `PUT /__admin/credentials` and `{ "credentials": { "mockingbird": "suite-a" } }`.
 If an admin key is configured, send it as `x-mockingbird-admin-key` on protected control routes.
-See [Admin controls](https://github.com/crvouga/mockingbird/blob/main/docs/ADMIN_CONTROLS.md) for
+See [Admin controls](https://github.com/crvouga-organization/mockingbird/blob/main/docs/ADMIN_CONTROLS.md) for
 the shared state, clock, snapshot, and Timeline APIs. The emulated ordering API is polled and
 emits no webhooks.
 
