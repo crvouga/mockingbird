@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-preview
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Reusable infrastructure for static application previews: a streaming Fetch bridge over MessagePort,
 shared worker lifecycle, verified compressed assets, a Node test adapter, and Cloudflare named

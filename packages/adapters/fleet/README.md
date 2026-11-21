@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-fleet
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 The recommended way to run Mockingbird: one `mockingbird.json`, one process, every emulator your
 application calls on its own port, one controller to reset and snapshot them together, and one
@@ -92,7 +92,7 @@ configuration has none. `fleet control`, `fleet render` and `fleet rehearse` are
 management commands; `mockingbird-fleet <command> --help` lists each one's options.
 
 `--dashboard` also serves one page with every emulator's admin UI and the
-[notifications](https://github.com/crvouga/mockingbird/tree/main/packages/notifications#readme)
+[notifications](https://github.com/crvouga-organization/mockingbird/tree/main/packages/notifications#readme)
 they sent, on port 8790 (`--dashboard-port <n>`; `0` picks a free one):
 
 ```sh

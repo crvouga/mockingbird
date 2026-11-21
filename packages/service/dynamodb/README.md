@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-dynamodb
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful Amazon DynamoDB emulator for the AWS SDK v3 low-level client and `DynamoDBDocumentClient`. It preserves DynamoDB attribute types while modelling CRUD, expressions, indexes, pagination, batches, transactions, TTL, streams, and conditional writes without contacting AWS.
 

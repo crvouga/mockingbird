@@ -12,7 +12,7 @@ bun run check   # every CI gate, no secrets
 ```
 
 Secrets are used by the workflows below, running on GitHub with the repo's own
-Actions secrets. Anyone with **write access** to `crvouga/mockingbird` can use them without
+Actions secrets. Anyone with **write access** to `crvouga-organization/mockingbird` can use them without
 seeing a value (GitHub never returns a secret's value, to anyone):
 
 | Workflow | Secrets it reads | How to run it |
@@ -191,7 +191,7 @@ bun run release:publish -- --dry-run
 Set by the local seed after the first publish. Manual equivalent, per package at
 `https://www.npmjs.com/package/<name>/access`:
 
-- Organization/user: `crvouga`
+- Organization/user: `crvouga-organization`
 - Repository: `mockingbird`
 - Workflow filename: `ci.yml`
 - Environment: (empty)

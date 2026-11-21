@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-caretalk
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of **CareTalk**'s external API (`/externalapi`) for test suites: client login,
 form definitions (`GetForm`) and saved form rounds (`SavePatientForm`, the form-submission
@@ -8,7 +8,7 @@ queue's call), patient search and insert (the account backfill), states, free sl
 appointments. The backend requires CareTalk keys at boot, so the emulator lets a stack boot and run
 the CareTalk paths without the beta environment.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/caretalk/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/caretalk/SUPPORT.md)
 - The vendor publishes no spec: the contract (`openapi.yaml`) is hand-authored from the
   consumer's zod schemas and interfaces (`caretalk.types.ts`, `caretalk-forms.type.ts`).
 
@@ -123,4 +123,4 @@ carry the API user they were issued to, so `PUT /__admin/credentials {"credentia
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--api-user`, `--api-key`); port 8823. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

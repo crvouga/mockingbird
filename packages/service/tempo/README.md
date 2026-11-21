@@ -1,13 +1,13 @@
 # @crvouga/mockingbird-service-tempo
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of **Grafana Tempo** for test suites: the OTLP/HTTP trace receiver
 (`POST /v1/traces`, JSON and protobuf) and the query routes a trace reader calls (TraceQL search,
 trace by id, tag names), over one store. A test exports spans the way its application does and
 reads them back with the requests its production reader sends, with no Docker and no Tempo.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/tempo/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/tempo/SUPPORT.md)
 - Status: **work in progress**. Tempo publishes no OpenAPI document and no instance was
   available while this was written, so the contract (`openapi.yaml`) follows Grafana's
   [HTTP API reference](https://grafana.com/docs/tempo/latest/api_docs/) and Tempo's source at
@@ -243,4 +243,4 @@ with a 400.
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8930. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

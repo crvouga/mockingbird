@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-brevo
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Brevo v3 contact lifecycle, based on the official contact reference. No messages are sent.
 

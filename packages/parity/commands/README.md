@@ -134,4 +134,4 @@ Exported types: `OperationPlan` (`{ operation, metadata, requires, produces, bod
 - [`@crvouga/mockingbird-openapi-arbitrary`](https://www.npmjs.com/package/@crvouga/mockingbird-openapi-arbitrary) — the value generators underneath.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — runs these commands against a real API and an emulator.
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

@@ -29,7 +29,7 @@ catalog is listed in [`llms.txt`](../llms.txt).
 4. File it:
 
    ```bash
-   gh issue create --repo crvouga/mockingbird \
+   gh issue create --repo crvouga-organization/mockingbird \
      --title "[stripe] parity: POST /v1/customers accepts an invalid email" \
      --label agent-reported,parity \
      --body-file issue.md
@@ -83,7 +83,7 @@ When you cannot show the problem without sensitive data, stop and ask your human
 ## 1. Search first
 
 ```bash
-gh issue list --repo crvouga/mockingbird --state all --search "<service or vendor> <operation or field> in:title,body"
+gh issue list --repo crvouga-organization/mockingbird --state all --search "<service or vendor> <operation or field> in:title,body"
 ```
 
 If an open issue covers the same thing, add a comment with your evidence (package version,
@@ -179,7 +179,7 @@ Copy the template for the kind (links below), fill in every section, delete the 
 and save it to a file. Then run:
 
 ```bash
-gh issue create --repo crvouga/mockingbird \
+gh issue create --repo crvouga-organization/mockingbird \
   --title "<title in the format from the quick reference>" \
   --label agent-reported,<kind> \
   --body-file issue.md
@@ -187,16 +187,16 @@ gh issue create --repo crvouga/mockingbird \
 
 | Kind | Template (raw, for copying) |
 | --- | --- |
-| `parity` | <https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/parity.md> |
-| `feature` | <https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/feature.md> |
-| `bug` | <https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/bug.md> |
-| `new-service` | <https://raw.githubusercontent.com/crvouga/mockingbird/main/.github/ISSUE_TEMPLATE/new-service.md> |
+| `parity` | <https://raw.githubusercontent.com/crvouga-organization/mockingbird/main/.github/ISSUE_TEMPLATE/parity.md> |
+| `feature` | <https://raw.githubusercontent.com/crvouga-organization/mockingbird/main/.github/ISSUE_TEMPLATE/feature.md> |
+| `bug` | <https://raw.githubusercontent.com/crvouga-organization/mockingbird/main/.github/ISSUE_TEMPLATE/bug.md> |
+| `new-service` | <https://raw.githubusercontent.com/crvouga-organization/mockingbird/main/.github/ISSUE_TEMPLATE/new-service.md> |
 
 Each template begins with a `---` front-matter block; leave it out of the body file.
 
 If `gh` is not installed or not authenticated, do not install it or log in on your own. Give your
 human the finished title and body and the link to the matching form, for example
-<https://github.com/crvouga/mockingbird/issues/new?template=new-service.md>.
+<https://github.com/crvouga-organization/mockingbird/issues/new?template=new-service.md>.
 
 ## What happens next
 
@@ -215,7 +215,7 @@ Agents in this repository run `/resolve-issues` on the `agent-reported` queue.
 An issue labelled `needs-info` is waiting on you: answer the question in the comments. Fixes ship
 in the next release of the package; see [RELEASING.md](RELEASING.md).
 
-[t-parity]: https://github.com/crvouga/mockingbird/blob/main/.github/ISSUE_TEMPLATE/parity.md
-[t-feature]: https://github.com/crvouga/mockingbird/blob/main/.github/ISSUE_TEMPLATE/feature.md
-[t-bug]: https://github.com/crvouga/mockingbird/blob/main/.github/ISSUE_TEMPLATE/bug.md
-[t-new]: https://github.com/crvouga/mockingbird/blob/main/.github/ISSUE_TEMPLATE/new-service.md
+[t-parity]: https://github.com/crvouga-organization/mockingbird/blob/main/.github/ISSUE_TEMPLATE/parity.md
+[t-feature]: https://github.com/crvouga-organization/mockingbird/blob/main/.github/ISSUE_TEMPLATE/feature.md
+[t-bug]: https://github.com/crvouga-organization/mockingbird/blob/main/.github/ISSUE_TEMPLATE/bug.md
+[t-new]: https://github.com/crvouga-organization/mockingbird/blob/main/.github/ISSUE_TEMPLATE/new-service.md

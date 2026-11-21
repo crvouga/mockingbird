@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-redshift
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Transport scaffold for Amazon Redshift. ESM; Node 22+ or Bun 1.2+.
 

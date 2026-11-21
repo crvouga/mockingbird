@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-app-store-connect
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP App Store Connect emulator for JSON:API apps, users, user invitations, beta groups and
 beta testers. ES256 signatures are actually verified; no real Apple account or emails.

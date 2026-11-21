@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-s3
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful S3 emulator that answers exactly as [MinIO](https://github.com/minio/minio) does, so it drops in for MinIO, Amazon S3 and other S3-compatible storage in tests. Every behavior is pinned by a differential oracle: 370 scripted scenarios (about 3,800 HTTP exchanges) were recorded against MinIO `RELEASE.2025-10-15T17-29-55Z`, and `bun test` replays each one against the emulator and requires the same status, headers and XML byte for byte.
 
@@ -70,7 +70,7 @@ Everything MinIO's S3 router serves, with MinIO's precedence, validation order, 
 
 ### The oracle
 
-`oracle/` in the repository holds the harness, the scenarios and the recorded MinIO transcripts. `bun oracle/run.ts` replays them against a live MinIO, `--record` refreshes the transcripts; see [oracle/README.md](https://github.com/crvouga/mockingbird/tree/main/packages/service/s3/oracle).
+`oracle/` in the repository holds the harness, the scenarios and the recorded MinIO transcripts. `bun oracle/run.ts` replays them against a live MinIO, `--record` refreshes the transcripts; see [oracle/README.md](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/s3/oracle).
 
 ### Admin and deterministic controls
 

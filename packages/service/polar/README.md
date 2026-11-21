@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-polar
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP Polar AccessLink v3 emulator: OAuth 2.0 authorization code, user registration and the exercise endpoints, with the 30-day visibility window.
 

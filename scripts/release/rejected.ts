@@ -7,7 +7,7 @@ export function rejectedPackages(log: string, publicNames: ReadonlySet<string>):
   const names = new Set<string>()
   const clean = stripVTControlCharacters(log)
   const reports = clean.matchAll(
-    /Check its Trusted Publisher \(repo crvouga\/mockingbird, workflow ci\.yml\): https:\/\/www\.npmjs\.com\/package\/(@[^\s/]+\/[^\s/]+)\/access/g,
+    /Check its Trusted Publisher \(repo crvouga-organization\/mockingbird, workflow ci\.yml\): https:\/\/www\.npmjs\.com\/package\/(@[^\s/]+\/[^\s/]+)\/access/g,
   )
   for (const match of reports) {
     const name = match[1]

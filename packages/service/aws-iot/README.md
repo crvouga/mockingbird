@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-aws-iot
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Stateful emulator of the **AWS IoT Core data plane** for test suites and local development:
 IoTDataPlane `Publish` over HTTP with Signature Version 4 verification, and the MQTT 5 message
@@ -9,7 +9,7 @@ session rules and its documented departures from the MQTT specification. It runs
 process on OS-assigned ports with no AWS account, and session expiry follows a clock the suite
 moves instead of waiting.
 
-- Operation coverage (HTTP): [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/aws-iot/SUPPORT.md)
+- Operation coverage (HTTP): [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/aws-iot/SUPPORT.md)
 - No AWS account was used as an oracle. Behaviour follows the
   [Publish API reference](https://docs.aws.amazon.com/iot/latest/apireference/API_iotdata_Publish.html),
   the [MQTT](https://docs.aws.amazon.com/iot/latest/developerguide/mqtt.html),
@@ -234,4 +234,4 @@ mistake it for the vendor's:
 | `document`, `operationIds`, `supportedOperationIds` | values | The HTTP contract and its operation ids. |
 | `createServer`, `connectStream`, `loadSettingsFile`, `serveTarget`, `DEFAULT_PORT`, `DEFAULT_MQTT_PORT` (`./server`) | Node | Serve HTTP, WebSocket and TCP (`{url, mqttUrl, mqttPort, wsUrl, runtime, close()}`; options add `port`, `mqttPort`, `host`, `sweepMs`); an in-process MQTT stream; read a `--settings` file; the `serve` CLI target; ports 8851 and 8883. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

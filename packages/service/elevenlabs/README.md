@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-elevenlabs
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 Emulator of **ElevenLabs text to speech** for test suites: `POST /v1/text-to-speech/{voice_id}`
 answers with audio that really is what `output_format` says (decodable MPEG Layer III frames,
@@ -8,7 +8,7 @@ headerless PCM samples, or a WAV file), with the vendor's error envelopes, and w
 a test queues. Nothing is synthesized by a model and nothing is billed: the default audio is a
 tone whose pitch and length are functions of the request.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/elevenlabs/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/elevenlabs/SUPPORT.md)
 - Status: **work in progress**. No vendor credentials were available, so several answers follow
   the vendor's documentation without a live check; each is marked **unverified** under
   [Errors](#errors) and [Audio](#audio).
@@ -297,4 +297,4 @@ run is what would settle the rows marked unverified above.
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8841. |
 
-Part of [mockingbird](https://github.com/crvouga/mockingbird).
+Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).

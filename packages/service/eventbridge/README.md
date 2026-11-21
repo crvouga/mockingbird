@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-eventbridge
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
 
 WIP AWS EventBridge control-plane discovery. Seeded rule and target reads use AWS JSON 1.1;
 no containers or infrastructure are executed. Follows the official
