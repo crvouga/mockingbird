@@ -3,7 +3,7 @@ import {
   defineSystem,
   type PreviewApp,
   type PreviewAppModule,
-  type PreviewPartsManifestLike,
+  type PreviewLoadManifestLike,
   PreviewRegistryError,
   planPartUpdate,
   systemSurfaces,
@@ -222,7 +222,7 @@ const recordingImport = (fail = new Set<string>()) => {
   }
   return { fetched, importModule }
 }
-const MANIFEST: PreviewPartsManifestLike = {
+const MANIFEST: PreviewLoadManifestLike = {
   version: 1,
   runtime: "rt-1",
   parts: {

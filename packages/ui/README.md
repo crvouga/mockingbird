@@ -68,7 +68,7 @@ const system = defineSystem({
 })
 
 declare const host: HTMLElement
-declare const manifest: import("@crvouga/mockingbird-ui").PreviewPartsManifestLike // parts.json
+declare const manifest: import("@crvouga/mockingbird-ui").PreviewLoadManifestLike // parts.json
 const preview = mountSystem(host, system, { manifest, syncUrl: true })
 ```
 
@@ -91,7 +91,7 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 - `SystemIcon`, `SYSTEM_ICONS`: a surface's icon, and Mockingbird's icons for the surfaces it provides.
 - `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`: the localStorage keys of the surfaces left out of the switcher, of its order, and of the off-by-default surfaces switched on.
 - `defineSystem`, `mountSystem`, `PreviewApp`, `PreviewSystem`, `PreviewRegistryError`: the app registry and the shell it mounts.
-- `systemSurfaces`, `planPartUpdate`, `PreviewPartsManifestLike`: the registry as surfaces with their part loader, and what a newer parts manifest takes to apply.
+- `systemSurfaces`, `planPartUpdate`, `PreviewLoadManifestLike`: the registry as surfaces with their part loader, and what a newer load manifest takes to apply.
 - `PREVIEW_FRAME_CONNECT`: the type of the message an iframe app receives with its bridge port.
 - `SystemHarness.update`, `SystemHarness.notify`, `SystemNotice`: swap one surface's code in place; show a notice over the apps.
 - `SystemBackends`, `SystemBackend`: the in-tab backends and emulators for the System screen's Backends list.

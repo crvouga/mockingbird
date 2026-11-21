@@ -75,6 +75,12 @@ The application must honor the boot/request AbortSignals to terminate work it st
 - `planPreviewSweep({ previews, openNames, owns, now, retentionMs, capacity })` is a pure plan
   listing managed names removed for orphaning, expiry or capacity. It never removes unmanaged
   names or performs cloud operations. Capacity eviction retains the newest managed previews.
+- `createPreviewPart`, `planPreviewParts`, `createPreviewPartsManifest`,
+  `parsePreviewPartsManifest`, `deployPreviewParts`, `planPreviewPartSweep`,
+  `sweepPreviewParts`, `loadPreviewPart`, `previewPartAssetFiles`, `previewPartPath` and
+  `PREVIEW_PARTS_MANIFEST` publish each app of a preview once under `parts/<app>/<pin>/` and
+  share it across previews, so a pull request rebuilds and uploads only the apps it changed. See
+  [Shared app parts](#shared-app-parts).
 - `createCloudflarePreviews({ accountId, workerName, token, fetch })` returns `deploy`, `list` and
   `remove`. `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
   callback. It checks current facts before upload and immediately before deployment, sends only
@@ -130,18 +136,23 @@ The application must honor the boot/request AbortSignals to terminate work it st
   and `backendControls(fetch, { url?, pollMs? })`: lazy, swappable in-tab backends and emulators,
   their control routes, and the tab's client; `PreviewBackendDrainError` and
   `PreviewBackendUpdateError` are their typed failures. See [System parts](#system-parts).
-- `PreviewPartsManifest`, `parsePartsManifest`, `gzipSize`, `checkPartBudgets`,
-  `formatPartSizes`, `PreviewPartBudgetError`, `partUpdatesResponse` and `followPartUpdates`: the
-  parts manifest, its size budgets and its update stream. `buildPreviewParts` and
+- `PreviewLoadManifest`, `parsePreviewLoadManifest`, `PREVIEW_LOAD_MANIFEST`, `gzipSize`,
+  `checkPartBudgets`, `formatPartSizes`, `PreviewPartBudgetError`, `partUpdatesResponse` and
+  `followPartUpdates`: the load manifest (`parts.json`, what the shell reads to load each part),
+  its size budgets and its update stream. `buildPreviewParts`, `buildPreviewPartSet` and
   `watchPreviewParts`, from the `/node` export (`esbuild` is a peer dependency, loaded on first
-  use), build it and run the dev loop. `acceptPreviewFrame()` connects an iframe app to the bridge.
+  use), build the content-addressed parts and the load manifest and run the dev loop.
+  `acceptPreviewFrame()` connects an iframe app to the bridge.
 
 ## System parts
 
 A system preview with several apps, backends and emulators loads each one only when it is first
 needed, and updates each one alone. The app registry (`defineSystem` / `mountSystem` in
 `@crvouga/mockingbird-ui`) declares the apps; this package builds their parts and runs the
-backends.
+backends. Each part is a [shared app part](#shared-app-parts): one content-addressed directory
+`parts/<app>/<pin>/`, so the pin the tab loads and swaps is the pin a deploy shares across
+previews. Two manifests point at parts: `parts.json` (the load manifest, for the tab) and
+`preview-parts.json` (the deploy manifest, for the host and the sweep).
 
 ```ts
 import { buildPreviewParts } from "@crvouga/mockingbird-preview/node"
@@ -156,13 +167,18 @@ await buildPreviewParts({
 })
 ```
 
-- **Parts manifest.** `buildPreviewParts` bundles every part with a `source` to
-  `parts/<id>-<pin>.js` (an iframe app also gets `parts/<id>-<pin>.html`), where the pin is the
-  content hash of the bytes, so unchanged parts keep their pin and URL across builds and stay
-  cached for good. It writes `parts.json`: per app its `entry`, `pin`, gzip `bytes`, `backends`
+- **Load manifest.** `buildPreviewParts` bundles every part with a `source` into its
+  content-addressed part (`createPreviewPart`): `parts/<id>/<pin>/index.js` (an iframe app also
+  gets `index.html`) next to its `part.json`, whose SHA-256 is the pin. Unchanged parts keep their
+  pin and URL across builds and stay cached for good; backends become parts named
+  `backend-<id>`. It writes `parts.json`: per app its `entry`, `pin`, gzip `bytes`, `backends`
   and `prefetch`; per backend its `entry`, `pin` and `bytes`; the `runtime` pin (given, or the
-  hash of the `shell` files) and `shellBytes`. Parts with only an `entry` are pinned by their
-  bytes in `outdir`, or by their URL when served from elsewhere.
+  hash of the `shell` files) and `shellBytes`. Parts with only an `entry` are pinned by the
+  SHA-256 of their bytes in `outdir`, or of their URL when served from elsewhere.
+- **Deploying the parts.** `buildPreviewPartSet(options)` builds the same way and also returns
+  the `PreviewPart`s, each with the input hash of the files esbuild read. Pass them to
+  `createPreviewPartsManifest`, `planPreviewParts({ built })` and `deployPreviewParts` (or
+  `previewPartAssetFiles`) to share them across previews; see [Shared app parts](#shared-app-parts).
 - **Budgets.** It prints a size table and throws `PreviewPartBudgetError` (code
   `preview_part_over_budget`, `over` lists each name, size and budget) when the shell or any part
   is over its compressed budget, so the build fails naming the part.
@@ -195,6 +211,60 @@ await buildPreviewParts({
 - **Iframe apps.** Inside an iframe app, `await acceptPreviewFrame()` waits for the shell's
   connect message (only from `parent`, and from `origin` when given) and returns a `fetch` over
   the same bridge inline apps use.
+
+## Shared app parts
+
+A preview of several apps need not be one standalone bundle. Each app is a **part**, published
+once under `parts/<app>/<pin>/…` (immutable, shared by every preview on the same host), and a
+preview is a small manifest (`preview-parts.json`, `PREVIEW_PARTS_MANIFEST`) mapping each app
+to the pin it runs, next to the shell. A pull request then rebuilds only the apps whose input
+changed and uploads only the pins the host does not already hold.
+
+- **Identity.** The consumer's build tool supplies each app's *input hash* (`buildPreviewPartSet`
+  computes one from the files esbuild read). The *pin* is the
+  SHA-256 of the part's canonical `part.json`, which lists each output file's path, size, SHA-256
+  and content type, so it depends only on the output: two builds that produce the same files
+  share a pin, whatever their inputs. `createPreviewPart({ app, input, files })` computes it;
+  `previewPartPath(app, pin, file?)` names where it is published.
+- **Plan.** `planPreviewParts({ base, candidate, built?, hosted? })` is pure: `build` lists the
+  apps whose input hash the base manifest does not know (or whose base pin has left the host),
+  `parts` the pins known so far (reused or built), and `upload` the known pins the host lacks,
+  each once. Call it with the candidate's input hashes, build what `build` names with
+  `createPreviewPart`, call it again with `built`, then
+  `createPreviewPartsManifest({ commit, parts: plan.parts })`. `parsePreviewPartsManifest`
+  validates a manifest read back from a host.
+- **Deploy.** `deployPreviewParts({ host, preview, manifest, built })` uploads the parts the host
+  lacks, then the manifest last. A pin already present is never uploaded again, so a retry after
+  an interrupted upload only finishes the job. A part the host lacks that was not built is refused
+  before the manifest is published.
+- **Host.** `PreviewPartsHost` is injected: `listParts()` (complete parts with an `updatedAt`),
+  `uploadPart(part, preview)` (idempotent; write the files, then `part.json` last, so a listed
+  part is always complete), `uploadManifest(preview, manifest)` and `deletePart({ app, pin })`.
+  A host without `listParts` has no shared storage (a plain static deploy): every part is then
+  uploaded into each preview, so reused parts' bytes must be in `built` too (for example from the
+  build tool's cache). Plans are otherwise the same.
+- **Garbage collection.** `planPreviewPartSweep({ parts, manifests, removed, now, retentionMs })`
+  lists the hosted parts no live manifest references and older than the retention window, which
+  also protects a deploy that has uploaded parts but not yet its manifest. `removed` takes the
+  names `planPreviewSweep` removes, so a removed preview's pins stay while another manifest
+  references them. A manifest that does not parse throws: nothing is deleted on an uncertain
+  reference. `sweepPreviewParts({ host, … })` runs the plan and deletes; it is a no-op on a host
+  without shared storage. Retention counts from a part's `updatedAt`, so a deploy that reuses an
+  old, currently unreferenced pin races a concurrent sweep: run sweeps apart from deploys (as the
+  sweep job of a preview workflow already is).
+- **Integrity.** `loadPreviewPart(manifest, app, { baseUrl, fetch?, maximumBytes?, signal? })` is
+  what the shell calls before executing an app: `part.json` must match the pin's size and
+  SHA-256, and every file the size and SHA-256 it lists, with the same no-store, no-credentials,
+  no-redirect and bounded download as `loadPreviewArtifact`. It returns the verified files by path.
+- **Cloudflare.** `previewPartAssetFiles(manifest, parts)` flattens a preview into static files
+  (`/parts/<app>/<pin>/…` and `/preview-parts.json`) for `createCloudflarePreviews().deploy`.
+  The Worker's asset upload session asks only for content it does not already hold, so a second
+  preview sends only the changed part's new files; the bytes of every part must still be present
+  locally to compute the asset manifest. For a shared object store (no local bytes for unchanged
+  parts), implement `PreviewPartsHost` on it instead.
+
+The acceptance tests (`parts.test.ts`, and `parts-load.test.ts` for the build side) use an injected in-memory host and a recorded Cloudflare
+asset-session flow; no live cloud credentials were used.
 
 ## Cookies, redirects and trust
 

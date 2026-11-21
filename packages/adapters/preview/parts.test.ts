@@ -1,284 +1,475 @@
-import { afterAll, describe, expect, test } from "bun:test"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { servePreviewPort } from "./src/bridge.js"
+import { expect, test } from "bun:test"
+import type { PreviewDownload } from "./src/artifacts.js"
+import { createCloudflarePreviews } from "./src/cloudflare.js"
+import { planPreviewSweep } from "./src/lifecycle.js"
 import {
-  checkPartBudgets,
-  followPartUpdates,
-  formatPartSizes,
-  gzipSize,
-  PreviewPartBudgetError,
+  createPreviewPart,
+  createPreviewPartsManifest,
+  deployPreviewParts,
+  type HostedPreviewPart,
+  loadPreviewPart,
+  PREVIEW_PARTS_MANIFEST,
+  type PreviewPart,
+  type PreviewPartsHost,
   type PreviewPartsManifest,
-  parsePartsManifest,
-  partUpdatesResponse,
+  parsePreviewPartsManifest,
+  planPreviewParts,
+  previewPartAssetFiles,
+  previewPartPath,
+  sweepPreviewParts,
 } from "./src/parts.js"
-import { buildPreviewParts, watchPreviewParts } from "./src/parts-build.js"
-import { acceptPreviewFrame } from "./src/worker-connect.js"
 
-const root = mkdtempSync(join(tmpdir(), "mockingbird-preview-parts-"))
-afterAll(() => rmSync(root, { recursive: true, force: true }))
-
-/** The three-app example: each app in its own directory, plus a module both share. */
-const fixture = (name: string) => {
-  const dir = join(root, name)
-  for (const app of ["member", "clinician", "partner", "shared"])
-    mkdirSync(join(dir, app), { recursive: true })
-  writeFileSync(join(dir, "shared", "theme.ts"), `export const theme = "teal"\n`)
-  writeFileSync(
-    join(dir, "member", "app.ts"),
-    `import { theme } from "../shared/theme.ts"\nexport const mount = (host: HTMLElement) => { host.textContent = "member " + theme; return () => {} }\n`,
-  )
-  writeFileSync(
-    join(dir, "clinician", "app.ts"),
-    `export const mount = (host: HTMLElement) => { host.textContent = "clinician v1"; return () => {} }\n`,
-  )
-  writeFileSync(
-    join(dir, "partner", "app.ts"),
-    `import { theme } from "../shared/theme.ts"\ndocument.body.textContent = "partner " + theme\n`,
-  )
-  return dir
-}
-const PARTS = [
-  { id: "member", source: "member/app.ts", backends: ["api"] },
-  { id: "clinician", source: "clinician/app.ts", prefetch: true },
-  { id: "partner", mount: "iframe" as const, source: "partner/app.ts" },
-]
-
-describe("#841 the build produces each declared app's part", () => {
-  test("1. every app in the registry gets a pinned part and a manifest entry", async () => {
-    const dir = fixture("build")
-    const tables: string[] = []
-    const manifest = await buildPreviewParts({
-      parts: PARTS,
-      outdir: "out",
-      workingDir: dir,
-      runtime: "rt-1",
-      log: (table) => tables.push(table),
-    })
-    expect(Object.keys(manifest.parts)).toEqual(["member", "clinician", "partner"])
-    expect(manifest.parts.member).toMatchObject({ backends: ["api"] })
-    expect(manifest.parts.member?.entry).toMatch(/^\.\/parts\/member-[0-9a-f]{16}\.js$/)
-    expect(manifest.parts.clinician).toMatchObject({ prefetch: true })
-    expect(manifest.parts.partner?.entry).toMatch(/^\.\/parts\/partner-[0-9a-f]{16}\.html$/)
-    expect(
-      parsePartsManifest(JSON.parse(readFileSync(join(dir, "out", "parts.json"), "utf8"))),
-    ).toEqual(manifest)
-    const member = readFileSync(join(dir, "out", manifest.parts.member?.entry ?? ""), "utf8")
-    expect(member).toContain("teal")
-    expect(tables[0]).toContain("member")
-    // Rebuilding the same sources yields the same pins: parts are content addressed.
-    const again = await buildPreviewParts({
-      parts: PARTS,
-      outdir: "out",
-      workingDir: dir,
-      runtime: "rt-1",
-      log: () => {},
-    })
-    expect(again).toEqual(manifest)
-  })
-})
-
-describe("#839 budgets", () => {
-  test("7. a part over its compressed budget fails the build, naming the part and its size", async () => {
-    const dir = fixture("budget")
-    writeFileSync(
-      join(dir, "clinician", "app.ts"),
-      `export const mount = (host: HTMLElement) => { host.textContent = ${JSON.stringify(
-        Array.from({ length: 4000 }, (_, index) => (index * 7919).toString(36)).join(" "),
-      )}; return () => {} }\n`,
-    )
-    const error = await buildPreviewParts({
-      parts: PARTS,
-      outdir: "out",
-      workingDir: dir,
-      runtime: "rt-1",
-      budgets: { part: 2048, parts: { clinician: 4096 } },
-      log: () => {},
-    }).catch((caught: unknown) => caught)
-    expect(error).toBeInstanceOf(PreviewPartBudgetError)
-    const over = (error as PreviewPartBudgetError).over
-    expect(over.map((entry) => [entry.name, entry.budget])).toEqual([["clinician", 4096]])
-    expect((error as Error).message).toMatch(/clinician is \d+\.\d KiB gzip, budget 4\.0 KiB/)
-    expect((error as Error).message).toContain("OVER")
-  })
-
-  test("the shell's initial payload has its own budget, and the table lists every part", () => {
-    const manifest: PreviewPartsManifest = {
-      version: 1,
-      runtime: "rt",
-      shellBytes: 300_000,
-      parts: { app: { entry: "./a.js", pin: "a", bytes: 1024 } },
-      backends: { api: { entry: "./b.js", pin: "b", bytes: 2048 } },
-    }
-    expect(() => checkPartBudgets(manifest, { shell: 200_000 })).toThrow(
-      /shell is 293\.0 KiB gzip, budget 195\.3 KiB/,
-    )
-    expect(() => checkPartBudgets(manifest, { shell: 400_000, part: 4096 })).not.toThrow()
-    expect(formatPartSizes(manifest, { part: 1500 }).split("\n")).toEqual([
-      "part              gzip   budget",
-      "(shell)      293.0 KiB        -",
-      "app            1.0 KiB  1.5 KiB",
-      "backend:api    2.0 KiB  1.5 KiB  OVER",
-    ])
-  })
-
-  test("gzip sizes are measured on the compressed bytes", async () => {
-    const repetitive = "a".repeat(100_000)
-    expect(await gzipSize(repetitive)).toBeLessThan(1_000)
-  })
-
-  test("a malformed manifest is refused, naming the field", () => {
-    expect(() => parsePartsManifest({ version: 2 })).toThrow("version must be 1")
-    expect(() =>
-      parsePartsManifest({ version: 1, runtime: "r", parts: { app: { entry: "./a.js" } } }),
-    ).toThrow("part app needs entry, pin and bytes")
-  })
-})
-
-describe("#838 the dev loop", () => {
-  test("6. changing one app's source rebuilds only that app's part and publishes it within seconds", async () => {
-    const dir = fixture("watch")
-    const watcher = watchPreviewParts({
-      parts: PARTS,
-      outdir: "out",
-      workingDir: dir,
-      runtime: "rt-1",
-      debounceMs: 50,
-      log: () => {},
-    })
-    try {
-      const first = await watcher.ready
-      const updates: PreviewPartsManifest[] = []
-      watcher.subscribe((manifest) => updates.push(manifest))
-      const started = Date.now()
-      writeFileSync(
-        join(dir, "clinician", "app.ts"),
-        `export const mount = (host: HTMLElement) => { host.textContent = "clinician v2"; return () => {} }\n`,
-      )
-      while (updates.length === 0 && Date.now() - started < 4_000) await Bun.sleep(25)
-      expect(Date.now() - started).toBeLessThan(4_000)
-      expect(watcher.rebuilds()).toEqual([{ parts: ["clinician"] }])
-      const next = updates[0] as PreviewPartsManifest
-      expect(next.parts.clinician?.pin).not.toBe(first.parts.clinician?.pin)
-      expect(next.parts.member).toEqual(
-        first.parts.member as NonNullable<typeof first.parts.member>,
-      )
-      expect(next.parts.partner).toEqual(
-        first.parts.partner as NonNullable<typeof first.parts.partner>,
-      )
-      expect(next.runtime).toBe(first.runtime)
-
-      // A file two apps import rebuilds both of them, and only them.
-      writeFileSync(join(dir, "shared", "theme.ts"), `export const theme = "plum"\n`)
-      const seen = updates.length
-      const again = Date.now()
-      while (updates.length === seen && Date.now() - again < 4_000) await Bun.sleep(25)
-      expect(watcher.rebuilds().at(-1)).toEqual({ parts: ["member", "partner"] })
-    } finally {
-      watcher.close()
-    }
-  })
-
-  test("each manifest reaches the tab over Server-Sent Events, in order", async () => {
-    const manifest = (pin: string): PreviewPartsManifest => ({
-      version: 1,
-      runtime: "rt",
-      parts: { app: { entry: `./app-${pin}.js`, pin, bytes: 1 } },
-    })
-    let publish: ((manifest: PreviewPartsManifest) => void) | undefined
-    const abort = new AbortController()
-    const response = partUpdatesResponse(
+const text = (value: string) => new TextEncoder().encode(value)
+const part = (app: string, input: string, source: string) =>
+  createPreviewPart({
+    app,
+    input,
+    files: [
       {
-        manifest: () => manifest("a"),
-        subscribe(listener) {
-          publish = listener
-          return () => {
-            publish = undefined
-          }
-        },
+        path: "app.js",
+        bytes: text(`export const app = ${JSON.stringify(source)}`),
+        contentType: "text/javascript",
       },
-      abort.signal,
-    )
-    expect(response.headers.get("content-type")).toBe("text/event-stream")
-    publish?.(manifest("b"))
-    abort.abort()
-    const text = await response.text()
-    expect(text.split("\n\n").filter(Boolean)).toEqual([
-      `event: parts\ndata: ${JSON.stringify(manifest("a"))}`,
-      `event: parts\ndata: ${JSON.stringify(manifest("b"))}`,
-    ])
+      { path: "assets/logo.svg", bytes: text(`<svg>${app}</svg>`), contentType: "image/svg+xml" },
+    ],
+  })
+const manifestOf = (commit: string, parts: PreviewPart[]) =>
+  createPreviewPartsManifest({
+    commit,
+    parts: Object.fromEntries(
+      parts.map((p) => [p.app, { input: p.input, pin: p.pin, bytes: p.bytes }]),
+    ),
+  })
 
-    // The tab side applies each manifest after the previous one settles.
-    const listeners = new Map<string, (event: MessageEvent<string>) => void>()
-    let closed = false
-    class FakeEventSource {
-      addEventListener(type: string, listener: (event: MessageEvent<string>) => void) {
-        listeners.set(type, listener)
-      }
-      removeEventListener(type: string) {
-        listeners.delete(type)
-      }
-      close() {
-        closed = true
-      }
-    }
-    const applied: string[] = []
-    const stop = followPartUpdates(
-      "/__preview/parts",
-      async (next) => {
-        await Bun.sleep(5)
-        applied.push(next.parts.app?.pin ?? "")
-      },
-      { EventSource: FakeEventSource as unknown as new (url: string) => EventSource },
-    )
-    const send = (data: string) => listeners.get("parts")?.(new MessageEvent("parts", { data }))
-    send(JSON.stringify(manifest("a")))
-    send("not json")
-    send(JSON.stringify(manifest("b")))
-    await Bun.sleep(30)
-    expect(applied).toEqual(["a", "b"])
-    stop()
-    expect(closed).toBe(true)
+/** An injected host with shared storage: a scripted object store of paths to bytes. */
+const memoryHost = (options: { shared?: boolean; clock?: () => number } = {}) => {
+  const objects = new Map<string, Uint8Array>()
+  const stamps = new Map<string, number>()
+  const manifests = new Map<string, PreviewPartsManifest>()
+  const uploads: string[] = []
+  let failAfter = Number.POSITIVE_INFINITY
+  const put = (path: string, bytes: Uint8Array) => {
+    if (uploads.length >= failAfter) throw new Error("upload interrupted")
+    uploads.push(path)
+    objects.set(path, bytes)
+  }
+  const host: PreviewPartsHost = {
+    uploadPart: async (item, preview) => {
+      const root = options.shared === false ? `previews/${preview}/` : ""
+      for (const file of item.files)
+        put(root + previewPartPath(item.app, item.pin, file.path), file.bytes)
+      put(root + previewPartPath(item.app, item.pin, "part.json"), item.indexBytes)
+      stamps.set(`${item.app}/${item.pin}`, options.clock?.() ?? 0)
+    },
+    uploadManifest: async (preview, manifest) => {
+      manifests.set(preview, manifest)
+    },
+    ...(options.shared === false
+      ? {}
+      : {
+          listParts: async (): Promise<HostedPreviewPart[]> =>
+            [...objects.keys()]
+              .filter((path) => path.endsWith("/part.json"))
+              .map((path) => {
+                const [, app = "", pin = ""] = path.split("/")
+                return { app, pin, updatedAt: stamps.get(`${app}/${pin}`) ?? 0 }
+              }),
+          deletePart: async ({ app, pin }: { app: string; pin: string }) => {
+            for (const path of [...objects.keys()])
+              if (path.startsWith(previewPartPath(app, pin))) objects.delete(path)
+          },
+        }),
+  }
+  const fetch: PreviewDownload = async (url) => {
+    const bytes = objects.get(new URL(String(url)).pathname.slice(1))
+    return bytes ? new Response(new Uint8Array(bytes)) : new Response(null, { status: 404 })
+  }
+  return {
+    host,
+    objects,
+    manifests,
+    uploads,
+    fetch,
+    failAfter: (count: number) => {
+      failAfter = count
+    },
+  }
+}
+
+test("1. a PR that changes only B builds only B, uploads only B's new pin and reuses A1 and C1", async () => {
+  const store = memoryHost()
+  const [a1, b1, c1] = await Promise.all([
+    part("a", "a-in-1", "a1"),
+    part("b", "b-in-1", "b1"),
+    part("c", "c-in-1", "c1"),
+  ])
+  const base = manifestOf("main-1", [a1, b1, c1])
+  await deployPreviewParts({
+    host: store.host,
+    preview: "main",
+    manifest: base,
+    built: [a1, b1, c1],
+  })
+
+  const candidate = { a: "a-in-1", b: "b-in-2", c: "c-in-1" }
+  const hosted = await store.host.listParts?.()
+  const first = planPreviewParts({ base, candidate, hosted })
+  expect(first.build).toEqual(["b"])
+  const b2 = await part("b", "b-in-2", "b2")
+  const plan = planPreviewParts({ base, candidate, built: [b2], hosted })
+  expect(plan.build).toEqual([])
+  expect(plan.upload).toEqual([{ app: "b", pin: b2.pin }])
+  expect(plan.parts.a?.pin).toBe(a1.pin)
+  expect(plan.parts.c?.pin).toBe(c1.pin)
+
+  const manifest = createPreviewPartsManifest({ commit: "pr-head", parts: plan.parts })
+  store.uploads.length = 0
+  const result = await deployPreviewParts({
+    host: store.host,
+    preview: "pr-7",
+    manifest,
+    built: [b2],
+  })
+  expect(result.uploaded).toEqual([{ app: "b", pin: b2.pin }])
+  expect(store.uploads.every((path) => path.startsWith(`parts/b/${b2.pin}/`))).toBe(true)
+  expect(store.uploads.at(-1)).toBe(`parts/b/${b2.pin}/part.json`)
+  expect(store.manifests.get("pr-7")?.parts).toEqual({
+    a: { input: "a-in-1", pin: a1.pin, bytes: a1.bytes },
+    b: { input: "b-in-2", pin: b2.pin, bytes: b2.bytes },
+    c: { input: "c-in-1", pin: c1.pin, bytes: c1.bytes },
   })
 })
 
-describe("#841 iframe apps share the bridge", () => {
-  test("6. an iframe app receives a port from its parent and fetches the same backends through it", async () => {
-    const listeners = new Set<(event: MessageEvent) => void>()
-    const scope = {
-      addEventListener: (_: string, listener: (event: MessageEvent) => void) =>
-        listeners.add(listener),
-      removeEventListener: (_: string, listener: (event: MessageEvent) => void) =>
-        listeners.delete(listener),
-    }
-    const parent = { name: "shell" }
-    const accepted = acceptPreviewFrame({ scope, parent })
-    const channel = new MessageChannel()
-    const served = servePreviewPort(channel.port1, (request) =>
-      Response.json({ path: new URL(request.url).pathname, from: "shared backend" }),
-    )
-    // A message from anything but the parent is ignored.
-    for (const listener of listeners)
-      listener({
-        data: { type: "mockingbird-preview-connect", app: "evil" },
-        ports: [new MessageChannel().port2],
-        source: {},
-        origin: "https://preview.example",
-      } as unknown as MessageEvent)
-    for (const listener of [...listeners])
-      listener({
-        data: { type: "mockingbird-preview-connect", app: "partner", path: "/partner/orders" },
-        ports: [channel.port2],
-        source: parent,
-        origin: "https://preview.example",
-      } as unknown as MessageEvent)
-    const frame = await accepted
-    expect(frame.app).toBe("partner")
-    expect(frame.path).toBe("/partner/orders")
-    const response = await frame.fetch(new Request("http://api.internal/orders"))
-    expect(await response.json()).toEqual({ path: "/orders", from: "shared backend" })
-    frame.dispose()
-    served.dispose()
+test("2. two PRs that produce the same B pin upload it once", async () => {
+  const store = memoryHost()
+  const a1 = await part("a", "a-in", "a1")
+  // Different input hashes (say, a comment-only change), identical output: the same pin.
+  const fromPr1 = await part("b", "b-in-pr1", "b2")
+  const fromPr2 = await part("b", "b-in-pr2", "b2")
+  expect(fromPr2.pin).toBe(fromPr1.pin)
+  await deployPreviewParts({
+    host: store.host,
+    preview: "main",
+    manifest: manifestOf("m", [a1]),
+    built: [a1],
   })
+  store.uploads.length = 0
+  await deployPreviewParts({
+    host: store.host,
+    preview: "pr-1",
+    manifest: manifestOf("p1", [a1, fromPr1]),
+    built: [fromPr1],
+  })
+  const second = await deployPreviewParts({
+    host: store.host,
+    preview: "pr-2",
+    manifest: manifestOf("p2", [a1, fromPr2]),
+    built: [fromPr2],
+  })
+  expect(second.uploaded).toEqual([])
+  expect(store.uploads.filter((path) => path === `parts/b/${fromPr1.pin}/part.json`)).toHaveLength(
+    1,
+  )
+})
+
+test("3. a pin already on the host is a no-op to deploy, and a retry after an interrupted upload finishes", async () => {
+  const store = memoryHost()
+  const [a1, b1] = await Promise.all([part("a", "a-in", "a1"), part("b", "b-in", "b1")])
+  const manifest = manifestOf("c1", [a1, b1])
+  store.failAfter(3)
+  await expect(
+    deployPreviewParts({ host: store.host, preview: "pr", manifest, built: [a1, b1] }),
+  ).rejects.toThrow("upload interrupted")
+  expect(store.manifests.has("pr")).toBe(false)
+  // a's files and part.json landed; b's part.json did not, so b is not listed as complete.
+  expect((await store.host.listParts?.())?.map((p) => p.app)).toEqual(["a"])
+  store.failAfter(Number.POSITIVE_INFINITY)
+  store.uploads.length = 0
+  const retry = await deployPreviewParts({
+    host: store.host,
+    preview: "pr",
+    manifest,
+    built: [a1, b1],
+  })
+  expect(retry.uploaded).toEqual([{ app: "b", pin: b1.pin }])
+  expect(store.uploads.some((path) => path.startsWith("parts/a/"))).toBe(false)
+  store.uploads.length = 0
+  const again = await deployPreviewParts({ host: store.host, preview: "pr", manifest })
+  expect(again.uploaded).toEqual([])
+  expect(again.reused.map((p) => p.app)).toEqual(["a", "b"])
+  expect(store.uploads).toEqual([])
+  // A missing part that was not built is refused before anything is published.
+  const c1 = await part("c", "c-in", "c1")
+  await expect(
+    deployPreviewParts({ host: store.host, preview: "pr", manifest: manifestOf("c2", [a1, c1]) }),
+  ).rejects.toThrow(`Preview part c@${c1.pin} is not on the host and was not built`)
+  expect(store.manifests.get("pr")?.commit).toBe("c1")
+})
+
+test("4. a removed preview's pins stay while another manifest references them, and go after retention", async () => {
+  let now = 1_000
+  const store = memoryHost({ clock: () => now })
+  const [a1, b1, b2] = await Promise.all([
+    part("a", "a", "a1"),
+    part("b", "b1", "b1"),
+    part("b", "b2", "b2"),
+  ])
+  await deployPreviewParts({
+    host: store.host,
+    preview: "pr-1",
+    manifest: manifestOf("x", [a1, b1]),
+    built: [a1, b1],
+  })
+  await deployPreviewParts({
+    host: store.host,
+    preview: "pr-2",
+    manifest: manifestOf("y", [a1, b2]),
+    built: [b2],
+  })
+  now = 10_000
+  const removed = planPreviewSweep({
+    previews: [
+      { name: "pr-1", updatedAt: 1_000 },
+      { name: "pr-2", updatedAt: 1_000 },
+    ],
+    openNames: new Set(["pr-2"]),
+    owns: () => true,
+    now,
+    retentionMs: 60_000,
+    capacity: 10,
+  }).map((entry) => entry.name)
+  expect(removed).toEqual(["pr-1"])
+  const manifests = [...store.manifests].map(([name, manifest]) => ({ name, manifest }))
+  // Within retention, nothing goes.
+  expect(
+    await sweepPreviewParts({ host: store.host, manifests, removed, now, retentionMs: 60_000 }),
+  ).toEqual([])
+  // After retention, only b1 (referenced by pr-1 alone) goes; a1 is still referenced by pr-2.
+  now = 100_000
+  const swept = await sweepPreviewParts({
+    host: store.host,
+    manifests,
+    removed,
+    now,
+    retentionMs: 60_000,
+  })
+  expect(swept).toEqual([{ app: "b", pin: b1.pin, reason: "unreferenced" }])
+  expect((await store.host.listParts?.())?.map((p) => `${p.app}/${p.pin}`).sort()).toEqual(
+    [`a/${a1.pin}`, `b/${b2.pin}`].sort(),
+  )
+  // An unreadable manifest never lets a sweep delete.
+  await expect(
+    sweepPreviewParts({
+      host: store.host,
+      manifests: [{ name: "x", manifest: { format: 2 } }],
+      now,
+      retentionMs: 0,
+    }),
+  ).rejects.toThrow("Invalid preview parts manifest")
+})
+
+test("5. a host without shared storage degrades to full uploads, with the same plans otherwise", async () => {
+  const store = memoryHost({ shared: false })
+  const [a1, b1, b2] = await Promise.all([
+    part("a", "a", "a1"),
+    part("b", "b1", "b1"),
+    part("b", "b2", "b2"),
+  ])
+  const base = manifestOf("main", [a1, b1])
+  const plan = planPreviewParts({ base, candidate: { a: "a", b: "b2" }, built: [b2] })
+  expect(plan.shared).toBe(false)
+  expect(plan.build).toEqual([])
+  expect(plan.upload).toEqual([
+    { app: "a", pin: a1.pin },
+    { app: "b", pin: b2.pin },
+  ])
+  const manifest = createPreviewPartsManifest({ commit: "pr", parts: plan.parts })
+  // Every part is uploaded into the preview itself, so the reused part's bytes are needed too.
+  await expect(
+    deployPreviewParts({ host: store.host, preview: "pr-1", manifest, built: [b2] }),
+  ).rejects.toThrow(`Preview part a@${a1.pin} is not on the host and was not built`)
+  const result = await deployPreviewParts({
+    host: store.host,
+    preview: "pr-1",
+    manifest,
+    built: [a1, b2],
+  })
+  expect(result).toMatchObject({ shared: false, reused: [] })
+  expect(result.uploaded.map((p) => p.app)).toEqual(["a", "b"])
+  expect(store.uploads.every((path) => path.startsWith("previews/pr-1/parts/"))).toBe(true)
+  expect(
+    await sweepPreviewParts({ host: store.host, manifests: [], now: 1e9, retentionMs: 0 }),
+  ).toEqual([])
+  // As static files for a plain deploy: every part plus the manifest.
+  const files = previewPartAssetFiles(manifest, [a1, b2])
+  expect(files.map((file) => file.path)).toEqual([
+    `/parts/a/${a1.pin}/app.js`,
+    `/parts/a/${a1.pin}/assets/logo.svg`,
+    `/parts/a/${a1.pin}/part.json`,
+    `/parts/b/${b2.pin}/app.js`,
+    `/parts/b/${b2.pin}/assets/logo.svg`,
+    `/parts/b/${b2.pin}/part.json`,
+    `/${PREVIEW_PARTS_MANIFEST}`,
+  ])
+})
+
+test("6. the shell verifies each part against its pin, size and SHA-256 before executing it", async () => {
+  const store = memoryHost()
+  const a1 = await part("a", "a", "a1")
+  const manifest = manifestOf("c", [a1])
+  await deployPreviewParts({ host: store.host, preview: "pr", manifest, built: [a1] })
+  const options = { baseUrl: "https://preview.example/", fetch: store.fetch }
+  const loaded = await loadPreviewPart(manifest, "a", options)
+  expect(loaded.pin).toBe(a1.pin)
+  expect(new TextDecoder().decode(loaded.files.get("app.js")?.bytes)).toBe(
+    'export const app = "a1"',
+  )
+  expect(loaded.files.get("assets/logo.svg")?.contentType).toBe("image/svg+xml")
+
+  // A tampered file (same size) fails its SHA-256 check.
+  const app = previewPartPath("a", a1.pin, "app.js")
+  const original = store.objects.get(app) as Uint8Array
+  store.objects.set(app, text('export const app = "XX"'))
+  await expect(loadPreviewPart(manifest, "a", options)).rejects.toThrow(
+    "Preview asset integrity mismatch",
+  )
+  // A truncated file fails its size check.
+  store.objects.set(app, original.subarray(0, 4))
+  await expect(loadPreviewPart(manifest, "a", options)).rejects.toThrow(
+    "Preview asset integrity mismatch",
+  )
+  store.objects.set(app, original)
+  // A part.json rewritten to list other hashes no longer matches the pin.
+  const index = previewPartPath("a", a1.pin, "part.json")
+  const forged = JSON.stringify({ ...a1.index, files: a1.index.files.slice(0, 1) })
+  store.objects.set(index, text(forged.padEnd(a1.bytes, " ")))
+  await expect(loadPreviewPart(manifest, "a", options)).rejects.toThrow(
+    "Preview asset integrity mismatch",
+  )
+  await expect(loadPreviewPart(manifest, "missing", options)).rejects.toThrow("not in the manifest")
+})
+
+test("parts are validated: app names, paths, duplicates and manifests", async () => {
+  await expect(createPreviewPart({ app: "../x", input: "i", files: [] })).rejects.toThrow(
+    "Invalid preview part app",
+  )
+  for (const path of ["/abs.js", "a/../b.js", "a\\b.js", "part.json", ""])
+    await expect(
+      createPreviewPart({
+        app: "a",
+        input: "i",
+        files: [{ path, bytes: text("x"), contentType: "text/plain" }],
+      }),
+    ).rejects.toThrow("Invalid preview part file path")
+  await expect(
+    createPreviewPart({
+      app: "a",
+      input: "i",
+      files: [
+        { path: "x.js", bytes: text("1"), contentType: "text/javascript" },
+        { path: "x.js", bytes: text("2"), contentType: "text/javascript" },
+      ],
+    }),
+  ).rejects.toThrow("Duplicate preview part file")
+  // File order does not change the pin.
+  const files = [
+    { path: "b.js", bytes: text("b"), contentType: "text/javascript" },
+    { path: "a.js", bytes: text("a"), contentType: "text/javascript" },
+  ]
+  const forward = await createPreviewPart({ app: "a", input: "1", files })
+  const reverse = await createPreviewPart({ app: "a", input: "2", files: [...files].reverse() })
+  expect(reverse.pin).toBe(forward.pin)
+  expect(() =>
+    parsePreviewPartsManifest({
+      format: 1,
+      commit: "c",
+      parts: { a: { input: "i", pin: "nope", bytes: 1 } },
+    }),
+  ).toThrow("Invalid preview parts manifest entry a")
+  expect(() => planPreviewParts({ candidate: { a: "1" }, built: [reverse] })).toThrow(
+    "different input",
+  )
+})
+
+test("recorded Cloudflare flow: a second preview sends only the changed part's assets", async () => {
+  const known = new Set<string>()
+  const sessions: string[][] = []
+  const uploaded: string[] = []
+  const previews = new Map<string, string>()
+  const result = (value: unknown) => Response.json({ success: true, result: value })
+  const fetch: PreviewDownload = async (url, init) => {
+    const request = new Request(url, init)
+    const path = new URL(request.url).pathname
+    const named = path.match(/\/previews\/([^/]+)$/)?.[1]
+    if (named && request.method === "GET")
+      return previews.has(named)
+        ? result({ id: previews.get(named), name: named, updated_on: "2026-11-21T00:00:00Z" })
+        : new Response(null, { status: 404 })
+    if (path.endsWith("/previews") && request.method === "POST") {
+      const { name } = (await request.json()) as { name: string }
+      previews.set(name, `id-${name}`)
+      return result({ id: `id-${name}`, name, updated_on: "2026-11-21T00:00:00Z" })
+    }
+    if (path.endsWith("/deployments/latest")) return new Response(null, { status: 404 })
+    if (path.endsWith("/assets-upload-session")) {
+      // The worker's asset store is shared by its previews: only unknown hashes are requested.
+      const { manifest } = (await request.json()) as { manifest: Record<string, { hash: string }> }
+      const missing = [...new Set(Object.values(manifest).map((entry) => entry.hash))].filter(
+        (hash) => !known.has(hash),
+      )
+      sessions.push(
+        Object.keys(manifest).filter((file) => missing.includes(manifest[file]?.hash ?? "")),
+      )
+      return result({ jwt: "upload", buckets: missing.length ? [missing] : [] })
+    }
+    if (path.endsWith("/assets/upload")) {
+      for (const [hash] of await request.formData()) {
+        known.add(hash)
+        uploaded.push(hash)
+      }
+      return result({ jwt: "completion" })
+    }
+    if (path.endsWith("/deployments")) return result({ id: "deployment" })
+    throw new Error(`Unexpected ${request.method} ${path}`)
+  }
+  const cloudflare = createCloudflarePreviews({
+    accountId: "acct",
+    workerName: "w",
+    token: "t",
+    fetch,
+  })
+  const [a1, b1, c1, b2] = await Promise.all([
+    part("a", "a", "a1"),
+    part("b", "b1", "b1"),
+    part("c", "c", "c1"),
+    part("b", "b2", "b2"),
+  ])
+  const deploy = (name: string, manifest: PreviewPartsManifest, parts: PreviewPart[]) =>
+    cloudflare.deploy({
+      name,
+      commit: manifest.commit,
+      files: previewPartAssetFiles(manifest, parts),
+      currentPullRequest: async () => ({
+        state: "open",
+        repository: "o/r",
+        headRepository: "o/r",
+        head: manifest.commit,
+      }),
+    })
+  expect((await deploy("main", manifestOf("m", [a1, b1, c1]), [a1, b1, c1])).action).toBe(
+    "deployed",
+  )
+  const before = uploaded.length
+  expect((await deploy("pr-7", manifestOf("p", [a1, b2, c1]), [a1, b2, c1])).action).toBe(
+    "deployed",
+  )
+  expect(sessions[1]?.sort()).toEqual(
+    [
+      `/parts/b/${b2.pin}/app.js`,
+      `/parts/b/${b2.pin}/part.json`,
+      `/${PREVIEW_PARTS_MANIFEST}`,
+    ].sort(),
+  )
+  // b's logo did not change, so even inside the changed part it is not sent again.
+  expect(uploaded.length - before).toBe(3)
 })

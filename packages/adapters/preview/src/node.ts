@@ -82,6 +82,8 @@ export async function listenPreview(
 }
 export {
   type BuildPreviewPartsOptions,
+  type BuiltPreviewParts,
+  buildPreviewPartSet,
   buildPreviewParts,
   type PreviewPartSource,
   type PreviewPartsWatcher,

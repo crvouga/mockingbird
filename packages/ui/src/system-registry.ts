@@ -20,7 +20,7 @@ export type PreviewAppContext = {
   app: string
   /** The route the app owns, when it declares one. */
   route?: string | undefined
-  /** The content pin of the code being mounted (from the parts manifest), when known. */
+  /** The content pin of the code being mounted (from the load manifest), when known. */
   version?: string | undefined
   signal: AbortSignal
 }
@@ -34,7 +34,7 @@ export type PreviewAppPart = {
   source?: string
   /**
    * Load: the built entry URL, relative to the page. Inline: an ES module exporting `mount`;
-   * iframe: an HTML document. The parts manifest's entry for this app wins over it.
+   * iframe: an HTML document. The load manifest's entry for this app wins over it.
    */
   entry?: string
   /** Load: code the shell's own bundle imports on first open (`() => import("./app.js")`). Inline only. */
@@ -70,10 +70,11 @@ export type PreviewBackendDeclaration = {
 }
 
 /**
- * The parts manifest the build writes (`parts.json`). Structurally identical to
- * `PreviewPartsManifest` in `@crvouga/mockingbird-preview`.
+ * The load manifest the build writes (`parts.json`). Structurally identical to
+ * `PreviewLoadManifest` in `@crvouga/mockingbird-preview`; its pins are the content-addressed
+ * part pins (`parts/<app>/<pin>/`) a deploy shares across previews.
  */
-export type PreviewPartsManifestLike = {
+export type PreviewLoadManifestLike = {
   version: 1
   /** Content pin of the shared runtime (the shell, the worker host, the bridge). */
   runtime: string
@@ -246,7 +247,7 @@ export function defineSystem(definition: PreviewSystemDefinition): PreviewSystem
   }
 }
 
-/** What applying a newer parts manifest to an open tab takes. */
+/** What applying a newer load manifest to an open tab takes. */
 export type PreviewPartUpdatePlan =
   | { kind: "none" }
   | { kind: "parts"; apps: string[]; backends: string[] }
@@ -259,12 +260,12 @@ const sameKeys = (a: Record<string, unknown> = {}, b: Record<string, unknown> = 
 }
 
 /**
- * Compares two parts manifests. Only the apps and backends whose pin changed are swapped; a
+ * Compares two load manifests. Only the apps and backends whose pin changed are swapped; a
  * change to the shared runtime, or apps or backends added or removed, needs a full reload.
  */
 export function planPartUpdate(
-  current: PreviewPartsManifestLike,
-  next: PreviewPartsManifestLike,
+  current: PreviewLoadManifestLike,
+  next: PreviewLoadManifestLike,
 ): PreviewPartUpdatePlan {
   if (current.runtime !== next.runtime)
     return {
@@ -288,8 +289,8 @@ export function planPartUpdate(
 
 /** What the shell needs at run time to turn a registry into surfaces. */
 export type PreviewSystemRuntime = {
-  /** The parts manifest (`parts.json`); its entries and pins win over the registry's. */
-  manifest?: PreviewPartsManifestLike | (() => PreviewPartsManifestLike | undefined)
+  /** The load manifest (`parts.json`); its entries and pins win over the registry's. */
+  manifest?: PreviewLoadManifestLike | (() => PreviewLoadManifestLike | undefined)
   /** Where relative entries resolve. Default the document's URL. */
   baseUrl?: string
   /** Imports an inline part's entry. Default dynamic `import()`. */

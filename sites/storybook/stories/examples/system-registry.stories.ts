@@ -8,7 +8,7 @@ import {
 import {
   defineSystem,
   type PreviewAppModule,
-  type PreviewPartsManifestLike,
+  type PreviewLoadManifestLike,
 } from "../../../../packages/ui/src/system-registry.js"
 import {
   INCLUDED_KEY,
@@ -58,7 +58,7 @@ addEventListener("message", (event) => {
 })
 </script></body></html>`
 
-const MANIFEST: PreviewPartsManifestLike = {
+const MANIFEST: PreviewLoadManifestLike = {
   version: 1,
   runtime: "rt-1",
   parts: {

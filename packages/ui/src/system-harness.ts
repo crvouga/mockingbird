@@ -3,8 +3,8 @@
 import { mountBuildChrome, type SystemBuild } from "./system-build.js"
 import { paintIcon, SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
 import {
+  type PreviewLoadManifestLike,
   type PreviewPartLoader,
-  type PreviewPartsManifestLike,
   type PreviewSystem,
   type PreviewSystemRuntime,
   planPartUpdate,
@@ -37,8 +37,8 @@ export {
   type PreviewAppMountKind,
   type PreviewAppPart,
   type PreviewBackendDeclaration,
+  type PreviewLoadManifestLike,
   type PreviewPartLoader,
-  type PreviewPartsManifestLike,
   type PreviewPartUpdatePlan,
   PreviewRegistryError,
   type PreviewRegistryErrorCode,
@@ -652,7 +652,7 @@ export function mountSystemHarness(
   }
 }
 
-/** What applying a newer parts manifest did. */
+/** What applying a newer load manifest did. */
 export type PreviewPartUpdateResult =
   | { status: "unchanged" }
   | { status: "updated"; apps: string[]; backends: string[] }
@@ -661,8 +661,8 @@ export type PreviewPartUpdateResult =
 
 export type MountSystemOptions = Omit<SystemHarnessOptions, "backends"> &
   Omit<PreviewSystemRuntime, "manifest"> & {
-    /** The parts manifest this tab starts from (`parts.json`). */
-    manifest?: PreviewPartsManifestLike
+    /** The load manifest this tab starts from (`parts.json`). */
+    manifest?: PreviewLoadManifestLike
     /** The backends' state for the System screen; defaults to the registry's list without state. */
     backends?: SystemBackends
     /**
@@ -683,15 +683,15 @@ export type MountSystemOptions = Omit<SystemHarnessOptions, "backends"> &
 export type SystemPreview = SystemHarness & {
   /** The part loader: what has been fetched so far, and prefetching. */
   loader: PreviewPartLoader
-  /** The parts manifest the tab runs now. */
-  manifest(): PreviewPartsManifestLike | undefined
+  /** The load manifest the tab runs now. */
+  manifest(): PreviewLoadManifestLike | undefined
   /**
-   * Takes a newer parts manifest: swaps only the backends and apps whose pin changed (backends
+   * Takes a newer load manifest: swaps only the backends and apps whose pin changed (backends
    * first, so a new app never talks to an old backend), and keeps every other app, backend and
    * emulator as it is. A change to the shared runtime is refused with a notice saying why and a
    * Reload button. A backend that fails to boot leaves the old one serving and shows Retry.
    */
-  applyManifest(next: PreviewPartsManifestLike): Promise<PreviewPartUpdateResult>
+  applyManifest(next: PreviewLoadManifestLike): Promise<PreviewPartUpdateResult>
 }
 
 /**
@@ -746,9 +746,7 @@ export function mountSystem(
   }
   const harness = mountSystemHarness(host, wrapped, { ...options, backends })
   const reload = options.reload ?? (() => win.location.reload())
-  const applyManifest = async (
-    next: PreviewPartsManifestLike,
-  ): Promise<PreviewPartUpdateResult> => {
+  const applyManifest = async (next: PreviewLoadManifestLike): Promise<PreviewPartUpdateResult> => {
     if (!manifest) {
       manifest = next
       return { status: "unchanged" }
