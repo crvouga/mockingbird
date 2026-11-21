@@ -1,29 +1,38 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import { expect } from "storybook/test"
 import {
+  type AccountOption,
+  chip,
+  formPostPage,
   renderCardPage,
-  renderCheckoutPage,
   renderErrorPage,
-  renderFormPostPage,
   renderInspectorPage,
-  renderJsonDetails,
-  renderSettingsPage,
-  renderStateView,
-  renderUserButton,
+  renderProviderPage,
+  renderSignInPage,
+  section,
+  table,
 } from "../../../../../packages/http/provider/src/vendor/core/ui.js"
 import { frameDocument } from "../../../src/frame.js"
 import { markup } from "../../../src/story.js"
 
 /**
  * The page kit the ported provider emulators (GitHub, Google, Apple, Okta, Linear, Slack, Twilio,
- * Resend, AWS, Vercel, …) draw their hosted pages with: the emulator bar, card, error, settings
- * and inspector layouts, the account picker button, the auto-submitting form post, and a
- * checkout. Each layout is drawn here with representative content; the pages built on them are
- * stories of their emulators and in `Admin/Inspectors`.
+ * Resend, AWS, Vercel, …) draw their hosted pages with: a route describes the page as data and
+ * the Mockingbird design system draws it, `CenteredCard` for sign-in, error and redirect pages
+ * and `AppShell` for inspectors and settings. Each layout is drawn here with representative
+ * content; the pages built on them are stories of their emulators and in `Admin/Inspectors`.
  */
 export default {
   title: "Admin/Shared provider UI/Layouts",
-  parameters: { layout: "fullscreen", sources: ["packages/http/provider/src/vendor/core/ui.ts"] },
+  parameters: {
+    layout: "fullscreen",
+    sources: [
+      "packages/http/provider/src/vendor/core/ui.ts",
+      "packages/http/provider/src/ui/model.ts",
+      "packages/http/provider/src/ui/page.tsx",
+      "packages/http/provider/src/ui/server.tsx",
+    ],
+  },
 } satisfies Meta
 
 const shows =
@@ -33,39 +42,55 @@ const shows =
     await expect(doc.body.textContent).toContain(text)
   }
 
-const account = (letter: string, login: string, name: string, email: string) =>
-  renderUserButton({
-    letter,
-    login,
-    name,
-    email,
-    formAction: "/login/oauth/authorize",
-    hiddenFields: { client_id: "Iv1.storybook", state: "xyz" },
-  })
+const account = (letter: string, login: string, name: string, email: string): AccountOption => ({
+  letter,
+  login,
+  name,
+  email,
+  formAction: "/login/oauth/authorize",
+  hiddenFields: { client_id: "Iv1.storybook", state: "xyz" },
+})
 
-/** A card: the account picker an OAuth emulator shows, built from user buttons. */
+/** An account picker: one button per seeded user. */
 export const CardWithAccounts: StoryObj = markup(
   () =>
-    renderCardPage(
+    renderSignInPage(
       "Sign in to Gamezilla",
-      "Choose an account to continue to <strong>gamezilla.dev</strong>",
-      account("A", "alice", "Alice Liddell", "alice@gmail.com") +
+      ["Choose an account to continue to ", { strong: "gamezilla.dev" }],
+      [
+        account("A", "alice", "Alice Liddell", "alice@gmail.com"),
         account("B", "bob", "Bob Marley", "bob@example.com"),
+      ],
       "GitHub",
     ),
   { play: shows("bob@example.com") },
 )
 
-/** A card with nothing in it yet. */
+/** An account picker with no seeded users. */
 export const CardEmpty: StoryObj = markup(
+  () => renderSignInPage("Sign in to Gamezilla", "Choose a seeded user to continue.", [], "GitHub"),
+  { play: shows("No users in the emulator store.") },
+)
+
+/** A card with other content: details and a JSON block. */
+export const CardWithDetails: StoryObj = markup(
   () =>
     renderCardPage(
-      "Inbox",
-      "0 emails sent",
-      '<div class="empty">No emails sent yet.</div>',
-      "Resend",
+      "Device authorized",
+      "You can close this window.",
+      [
+        {
+          type: "details",
+          items: [
+            { label: "Client", value: "Gamezilla CLI" },
+            { label: "Code", value: "WDJB-MJHT", mono: true },
+            { label: "Status", value: chip("approved") },
+          ],
+        },
+      ],
+      "GitHub",
     ),
-  { play: shows("No emails sent yet.") },
+  { play: shows("WDJB-MJHT") },
 )
 
 export const ErrorPage: StoryObj = markup(
@@ -78,92 +103,98 @@ export const ErrorPage: StoryObj = markup(
   { play: shows("Redirect URI mismatch") },
 )
 
-/** Settings: a sidebar of sections and the page body. */
+/** Settings: a list of links, and a section with a destructive action. */
 export const SettingsPage: StoryObj = markup(
   () =>
-    renderSettingsPage(
-      "Authorized OAuth Apps",
-      '<a class="active" href="#">Applications</a><a href="#">Developer settings</a>',
-      `<div class="s-card"><h2 class="section-heading">Authorized OAuth Apps</h2><p class="s-subtitle">You have granted 1 application access to your account.</p>${account("G", "Gamezilla", "Read access to profile", "Last used today")}</div>`,
-      "GitHub",
-    ),
-  { play: shows("Developer settings") },
+    renderProviderPage({
+      layout: "app",
+      service: "GitHub",
+      title: "Authorized OAuth Apps",
+      description: "Applications you have granted access to your account.",
+      nav: [{ label: "Authorized apps", href: "#", current: true }],
+      blocks: [
+        {
+          type: "links",
+          empty: "No authorized applications.",
+          items: [
+            {
+              href: "#gamezilla",
+              title: "Gamezilla",
+              description: "read:user, user:email",
+              letter: "G",
+            },
+          ],
+        },
+        {
+          type: "section",
+          title: "Permissions",
+          action: { type: "form", action: "#", label: "Revoke access", variant: "danger" },
+          blocks: [
+            {
+              type: "checklist",
+              items: ["Read all user profile data", "Access user email addresses (read-only)"],
+              empty: "No specific permissions granted.",
+            },
+          ],
+        },
+      ],
+    }),
+  { play: shows("Revoke access") },
 )
 
-/** An inspector: tabs, a state table and JSON details. */
+/** An inspector: tabs in the top bar, tables with status chips, an empty table and JSON. */
 export const InspectorPage: StoryObj = markup(
   () =>
     renderInspectorPage(
-      "Inspector",
+      "Example Inspector",
       [
         { id: "state", label: "State", href: "#state" },
         { id: "raw", label: "Raw", href: "#raw" },
       ],
       "state",
-      renderStateView({
-        customers: [
-          { id: "cus_1", email: "alice@gmail.com", name: "Alice Liddell" },
-          { id: "cus_2", email: "bob@example.com", name: "Bob Marley" },
-        ],
-        settings: { currency: "usd", livemode: false },
-      }) +
-        renderJsonDetails("Last request", { method: "POST", path: "/v1/customers", status: 200 }),
+      [
+        section(
+          "Customers",
+          table(
+            ["ID", "Email", "Name", "Status"],
+            [
+              ["cus_1", "alice@gmail.com", "Alice Liddell", chip("active")],
+              ["cus_2", "bob@example.com", "Bob Marley", chip("deleted")],
+            ],
+            "No customers.",
+          ),
+        ),
+        section("Invoices", table(["ID", "Amount"], [], "No invoices.")),
+        section("Last request", {
+          type: "json",
+          label: "POST /v1/customers",
+          value: { method: "POST", path: "/v1/customers", status: 200 },
+        }),
+      ],
       "Example",
     ),
   { play: shows("alice@gmail.com") },
 )
 
-/** A value that is not a table of records: one open JSON block. */
-export const StateAsJson: StoryObj = markup(
-  () => renderInspectorPage("Inspector", [], "", renderStateView(["queued", "sent"]), "Example"),
-  { play: shows("Current state") },
-)
-
 /**
  * The page that posts a response back to the app (`response_mode=form_post`). It submits itself
- * on load; here its action is `javascript:void 0`, so it stays on screen.
+ * on load; here that is turned off, so it stays on screen.
  */
 export const FormPostRedirect: StoryObj = markup(
   () =>
-    renderFormPostPage(
-      "javascript:void 0",
-      { code: "c0de", state: "xyz", id_token: "eyJhbGciOi…" },
-      "Apple",
-    ),
+    renderProviderPage({
+      ...formPostPage("#", { code: "c0de", state: "xyz", id_token: "eyJhbGciOi…" }, "Apple"),
+      autoSubmit: false,
+    }),
   { play: shows("Redirecting") },
-)
-
-export const Checkout: StoryObj = markup(
-  () =>
-    renderCheckoutPage({
-      merchantName: "Gamezilla",
-      lineItems: [
-        { name: "Unlimited plan", quantity: 1, unitPrice: 700, totalPrice: 700, currency: "usd" },
-        { name: "Sticker pack", quantity: 3, unitPrice: 200, totalPrice: 600, currency: "usd" },
-      ],
-      subtotal: 1300,
-      total: 1300,
-      currency: "usd",
-      sessionId: "cs_test_storybook",
-      cancelUrl: "https://gamezilla.dev/cart",
-    }),
-  { play: shows("Pay $13.00") },
-)
-
-/** A checkout with no line items. */
-export const CheckoutEmpty: StoryObj = markup(
-  () =>
-    renderCheckoutPage({
-      lineItems: [],
-      subtotal: 0,
-      total: 0,
-      currency: "usd",
-      sessionId: "cs_test_empty",
-    }),
-  { play: shows("No line items") },
 )
 
 export const CardOnAPhone: StoryObj = {
   ...CardWithAccounts,
+  globals: { viewport: { value: "phone", isRotated: false } },
+}
+
+export const InspectorOnAPhone: StoryObj = {
+  ...InspectorPage,
   globals: { viewport: { value: "phone", isRotated: false } },
 }

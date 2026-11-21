@@ -1,3 +1,14 @@
+import {
+  AppShell,
+  EmptyState,
+  ErrorState,
+  KeyValueList,
+  PageHeader,
+  StatusChip,
+  ThemeSwitch,
+} from "@crvouga/mockingbird-ui/react";
+import { ArrowRotateLeft, DatabaseMagnifier, FloppyDisk, Play, TrashBin } from "@gravity-ui/icons";
+import { Alert, Button, Card, Kbd, Label, Tag, TagGroup, TextArea, TextField } from "@heroui/react";
 import { type KeyboardEvent, useCallback, useState } from "react";
 import {
   engineVersion,
@@ -11,10 +22,12 @@ import {
 import { ResultTable } from "./ResultTable.tsx";
 import { DEFAULT_SQL, runSql, SAMPLES, type SqlOutcome } from "./sql.ts";
 
+type Notice = { text: string; status: "accent" | "danger" };
+
 export function App() {
   const [sql, setSql] = useState(DEFAULT_SQL);
   const [outcome, setOutcome] = useState<SqlOutcome | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const [saved, setSaved] = useState(hasSavedSnapshot);
   const [snapshotBytes, setSnapshotBytes] = useState(savedSnapshotBytes);
   const [, setTick] = useState(0);
@@ -31,7 +44,7 @@ export function App() {
     const useTransaction = sample?.label === "transaction()";
     setOutcome(runSql(sql, { useTransaction }));
     if (useTransaction) {
-      setNotice("Ran inside Database.transaction() (BEGIN/COMMIT or ROLLBACK).");
+      setNotice({ text: "Ran inside Database.transaction() (BEGIN/COMMIT or ROLLBACK).", status: "accent" });
     }
     refresh();
   }, [refresh, sql]);
@@ -45,7 +58,10 @@ export function App() {
 
   const onSave = () => {
     const bytes = saveSnapshot();
-    setNotice(`Saved PGMM snapshot (${bytes.toLocaleString()} bytes) to localStorage. Not a PostgreSQL data dir.`);
+    setNotice({
+      text: `Saved PGMM snapshot (${bytes.toLocaleString()} bytes) to localStorage. Not a PostgreSQL data dir.`,
+      status: "accent",
+    });
     setOutcome(null);
     refresh();
   };
@@ -53,126 +69,171 @@ export function App() {
   const onRestore = () => {
     try {
       if (!restoreSnapshot()) {
-        setNotice("No snapshot in localStorage. Save one first.");
+        setNotice({ text: "No snapshot in localStorage. Save one first.", status: "accent" });
         return;
       }
-      setNotice("Restored PGMM snapshot from localStorage.");
+      setNotice({ text: "Restored PGMM snapshot from localStorage.", status: "accent" });
       setOutcome(null);
       refresh();
     } catch (err) {
-      setNotice(err instanceof Error ? err.message : String(err));
+      setNotice({ text: err instanceof Error ? err.message : String(err), status: "danger" });
     }
   };
 
   const onReset = () => {
     resetDatabase();
-    setNotice("Reset to the seed schema. localStorage snapshot cleared.");
+    setNotice({ text: "Reset to the seed schema. localStorage snapshot cleared.", status: "accent" });
     setOutcome(null);
     refresh();
   };
 
   const db = getDb();
+  const currentSample = SAMPLES.find((sample) => sample.sql === sql)?.label;
 
   return (
-    <div className="page">
-      <header className="hero">
-        <p className="eyebrow">@crvouga/mockingbird-service-postgres</p>
-        <h1>SQL playground</h1>
-        <p className="lede">
-          Pure TypeScript PostgreSQL in the browser. Synchronous API, no WASM, no workers, no filesystem. The whole
-          database lives in JS memory.
-        </p>
-      </header>
+    <AppShell
+      product="postgres-mem playground"
+      actions={<ThemeSwitch />}
+      footer={
+        <>
+          This demo passes <code className="font-mono">{`now: "system"`}</code> so{" "}
+          <code className="font-mono">now()</code> is wall-clock. The library default is a fixed{" "}
+          <code className="font-mono">2000-01-01</code> clock. Snapshots use the custom PGMM codec — they are not
+          on-disk PostgreSQL files.
+        </>
+      }
+    >
+      <PageHeader
+        eyebrow={<code className="font-mono">@crvouga/mockingbird-service-postgres</code>}
+        title="SQL playground"
+        description="Pure TypeScript PostgreSQL in the browser. Synchronous API, no WASM, no workers, no filesystem. The whole database lives in JS memory."
+      />
 
-      <section className="toolbar" aria-label="Database snapshot">
-        <div className="meta">
-          <span>
-            changes <strong>{db.changes}</strong>
-          </span>
-          <span>
-            engine <strong>{engineVersion()}</strong>
-          </span>
-          <span>
-            saved snapshot{" "}
-            <strong>{saved && snapshotBytes !== null ? `${snapshotBytes.toLocaleString()} B` : "none"}</strong>
-          </span>
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+        <div className="flex min-w-0 flex-col gap-6">
+          {notice ? (
+            <Alert status={notice.status} role="status">
+              <Alert.Indicator />
+              <Alert.Content>
+                <Alert.Description>{notice.text}</Alert.Description>
+              </Alert.Content>
+            </Alert>
+          ) : null}
+
+          <Card>
+            <Card.Header>
+              <Card.Title>Query</Card.Title>
+            </Card.Header>
+            <Card.Content className="flex flex-col gap-4">
+              <TagGroup
+                aria-label="Sample queries"
+                selectionMode="single"
+                selectedKeys={currentSample ? [currentSample] : []}
+                onSelectionChange={(keys) => {
+                  const [key] = [...keys];
+                  const sample = SAMPLES.find((s) => s.label === key);
+                  if (!sample) return;
+                  setSql(sample.sql);
+                  setNotice(null);
+                }}
+              >
+                <TagGroup.List className="flex-wrap">
+                  {SAMPLES.map((sample) => (
+                    <Tag key={sample.label} id={sample.label}>
+                      {sample.label}
+                    </Tag>
+                  ))}
+                </TagGroup.List>
+              </TagGroup>
+
+              <TextField value={sql} onChange={setSql} className="flex flex-col gap-1.5">
+                <Label>SQL</Label>
+                <TextArea
+                  rows={9}
+                  spellCheck={false}
+                  onKeyDown={onEditorKeyDown}
+                  className="min-h-48 resize-y font-mono text-[13px] leading-relaxed"
+                />
+              </TextField>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <Button onPress={run}>
+                  <Play className="size-4" />
+                  Run
+                </Button>
+                <Kbd>⌘ / Ctrl + Enter</Kbd>
+              </div>
+            </Card.Content>
+          </Card>
+
+          <section aria-live="polite" aria-label="Result" className="flex min-w-0 flex-col gap-3">
+            {outcome === null ? (
+              <Card>
+                <EmptyState
+                  icon={<DatabaseMagnifier />}
+                  title="No result yet"
+                  description="Run a statement to see rows, or an error with its PostgresError category."
+                />
+              </Card>
+            ) : outcome.ok ? (
+              <ResultTable result={outcome.result} />
+            ) : (
+              <ErrorState
+                title={
+                  <span className="flex flex-wrap items-center gap-2">
+                    PostgresError
+                    {outcome.error.category ? (
+                      <StatusChip status="error">
+                        <span className="font-mono">{outcome.error.category}</span>
+                      </StatusChip>
+                    ) : null}
+                    {outcome.error.sqlState ? (
+                      <StatusChip status="neutral">
+                        <span className="font-mono">{outcome.error.sqlState}</span>
+                      </StatusChip>
+                    ) : null}
+                  </span>
+                }
+                error={outcome.error.message}
+              />
+            )}
+          </section>
         </div>
-        <div className="actions">
-          <button type="button" onClick={onSave}>
-            Save snapshot
-          </button>
-          <button type="button" onClick={onRestore} disabled={!saved}>
-            Restore
-          </button>
-          <button type="button" className="danger" onClick={onReset}>
-            Reset
-          </button>
-        </div>
-      </section>
 
-      {notice ? (
-        <p className="notice" role="status">
-          {notice}
-        </p>
-      ) : null}
-
-      <section className="editor-panel">
-        <nav className="samples" aria-label="Sample queries">
-          {SAMPLES.map((sample) => (
-            <button
-              key={sample.label}
-              type="button"
-              className={sql === sample.sql ? "chip active" : "chip"}
-              onClick={() => {
-                setSql(sample.sql);
-                setNotice(null);
-              }}
-            >
-              {sample.label}
-            </button>
-          ))}
-        </nav>
-
-        <label className="sql-label" htmlFor="sql">
-          SQL
-        </label>
-        <textarea
-          id="sql"
-          spellCheck={false}
-          value={sql}
-          onChange={(event) => setSql(event.target.value)}
-          onKeyDown={onEditorKeyDown}
-        />
-        <div className="run-row">
-          <button type="button" className="primary" onClick={run}>
-            Run
-          </button>
-          <span className="hint">⌘ / Ctrl + Enter</span>
-        </div>
-      </section>
-
-      <section className="results" aria-live="polite">
-        {outcome === null ? (
-          <p className="placeholder">Run a statement to see rows, or an error with its PostgresError category.</p>
-        ) : outcome.ok ? (
-          <ResultTable result={outcome.result} />
-        ) : (
-          <div className="error" role="alert">
-            <p className="error-title">PostgresError</p>
-            <p>{outcome.error.message}</p>
-            <p className="error-meta">
-              {outcome.error.category ? <code>{outcome.error.category}</code> : null}
-              {outcome.error.sqlState ? <code>{outcome.error.sqlState}</code> : null}
-            </p>
-          </div>
-        )}
-      </section>
-
-      <footer>
-        This demo passes <code>{`now: "system"`}</code> so <code>now()</code> is wall-clock. The library default is a
-        fixed <code>2000-01-01</code> clock. Snapshots use the custom PGMM codec — they are not on-disk PostgreSQL
-        files.
-      </footer>
-    </div>
+        <Card className="h-fit" aria-label="Database snapshot">
+          <Card.Header>
+            <Card.Title>Database</Card.Title>
+            <Card.Description>Save the whole database to localStorage, then restore or reset it.</Card.Description>
+          </Card.Header>
+          <Card.Content>
+            <KeyValueList
+              items={[
+                { label: "changes", value: db.changes, mono: true },
+                { label: "engine", value: engineVersion(), mono: true },
+                {
+                  label: "saved snapshot",
+                  value: saved && snapshotBytes !== null ? `${snapshotBytes.toLocaleString()} B` : "none",
+                  mono: true,
+                },
+              ]}
+            />
+          </Card.Content>
+          <Card.Footer className="flex flex-wrap gap-2">
+            <Button variant="secondary" size="sm" onPress={onSave}>
+              <FloppyDisk className="size-4" />
+              Save snapshot
+            </Button>
+            <Button variant="secondary" size="sm" onPress={onRestore} isDisabled={!saved}>
+              <ArrowRotateLeft className="size-4" />
+              Restore
+            </Button>
+            <Button variant="danger-soft" size="sm" onPress={onReset}>
+              <TrashBin className="size-4" />
+              Reset
+            </Button>
+          </Card.Footer>
+        </Card>
+      </div>
+    </AppShell>
   );
 }

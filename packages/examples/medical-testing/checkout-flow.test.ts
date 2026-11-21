@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { buildApp } from "./src/composition/build.js"
+import { extractForms } from "./testing/inProcessFlow.js"
 
 /**
  * Exercises the same buy → pay → fulfill cycle a real visitor drives through
@@ -26,42 +27,6 @@ const request = async (
   const setCookie = response.headers.get("set-cookie")
   if (setCookie) cookieBox.value = setCookie.split(";")[0] ?? cookieBox.value
   return response
-}
-
-type ParsedForm = {
-  method: string
-  action: string
-  fields: Record<string, string>
-  submitters: { name: string; value: string }[]
-}
-
-const decodeEntities = (value: string): string =>
-  value
-    .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-
-/** Parses a hosted page's real server-rendered HTML `<form>`s — the production counterpart to
- * this is `src/client/pasteHtml.ts`'s DOM-based form interception. A form with no
- * `action` attribute (the hosted checkout page's form) submits to its own URL — see the caller. */
-const extractForms = (html: string): ParsedForm[] => {
-  const forms: ParsedForm[] = []
-  for (const match of html.matchAll(
-    /<form\s+method="([^"]+)"(?:\s+action="([^"]*)")?[^>]*>([\s\S]*?)<\/form>/gi,
-  )) {
-    const [, method, action, inner] = match
-    if (!method || inner === undefined) continue
-    const fields: Record<string, string> = {}
-    for (const field of inner.matchAll(/<input[^>]*\bname="([^"]+)"[^>]*\bvalue="([^"]*)"/gi))
-      fields[field[1] as string] = decodeEntities(field[2] as string)
-    const submitters: { name: string; value: string }[] = []
-    for (const btn of inner.matchAll(/<button[^>]*\bname="([^"]+)"[^>]*\bvalue="([^"]+)"/gi))
-      submitters.push({ name: btn[1] as string, value: decodeEntities(btn[2] as string) })
-    forms.push({ method, action: action ?? "", fields, submitters })
-  }
-  return forms
 }
 
 /**

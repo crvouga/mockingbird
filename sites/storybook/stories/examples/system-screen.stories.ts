@@ -1,14 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import { expect, userEvent, waitFor, within } from "storybook/test"
-import { mountSystemHarness } from "../../../../packages/ui/src/system-harness.js"
+import {
+  mountSystemHarness,
+  type SystemDevStatus,
+  type SystemService,
+  type SystemServiceMode,
+  type SystemServices,
+} from "../../../../packages/ui/src/system-harness.js"
 import { SYSTEM_ICONS } from "../../../../packages/ui/src/system-icons.js"
 import { ORDER_KEY, ROTATION_KEY } from "../../../../packages/ui/src/system-rotation.js"
-import type {
-  SystemDevStatus,
-  SystemService,
-  SystemServiceMode,
-  SystemServices,
-} from "../../../../packages/ui/src/system-screen.js"
 
 /**
  * The System screen of the preview shell: the apps in this tab, the dev proxy's status, and every
@@ -22,7 +22,8 @@ export default {
     layout: "fullscreen",
     sources: [
       "packages/ui/src/system-harness.ts",
-      "packages/ui/src/system-screen.ts",
+      "packages/ui/src/system-view.tsx",
+      "packages/ui/src/system-screen.tsx",
       "packages/ui/src/system-rotation.ts",
       "packages/ui/src/system-icons.ts",
     ],
@@ -188,7 +189,10 @@ export const AllEmulated: StoryObj = {
   render: screen({ state: "ready" }),
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
-    await expect(page.getByRole("heading", { level: 1, name: "System" })).toBeVisible()
+    // The harness's UI loads lazily, a moment after it mounts.
+    await expect(
+      await page.findByRole("heading", { level: 1, name: "System" }, { timeout: 3000 }),
+    ).toBeVisible()
     await expect(page.getByText("Everything this preview runs, in this browser tab.")).toBeVisible()
     await expect(page.getByRole("link", { name: /How dev resources work/ })).toBeVisible()
     // Without a live build, no status dot, update toast or Preview card.
@@ -228,7 +232,9 @@ export const AllEmulated: StoryObj = {
     )
     // The switch is optimistic; the row stays busy until the proxy answers.
     await waitFor(() =>
-      expect(stripe.getByRole("radiogroup")).toHaveAttribute("aria-busy", "false"),
+      expect(canvasElement.querySelector('[data-service="stripe"]')).not.toHaveAttribute(
+        "data-pending",
+      ),
     )
     await userEvent.keyboard("{ArrowLeft}")
     await waitFor(() =>
@@ -286,7 +292,7 @@ export const MixedDev: StoryObj = {
     // The control is a toggle: clicking the half that is already selected flips it too.
     await userEvent.click(twilio.getByRole("radio", { name: "Emulated" }))
     await expect(twilio.getByRole("status")).toHaveTextContent("Switching to the dev resource…")
-    await expect(twilio.getByRole("radiogroup")).toHaveAttribute("aria-busy", "true")
+    await expect(twilioRow).toHaveAttribute("data-pending")
     await expect(layout()).toEqual(before)
     await waitFor(() => expect(twilio.getByRole("status").textContent).toBe(""), {
       timeout: 3000,
@@ -376,7 +382,7 @@ export const NoServices: StoryObj = {
   render: screen(undefined, { docs: false }),
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
-    await expect(page.getByText("No services listed")).toBeVisible()
+    await expect(await page.findByText("No services listed", {}, { timeout: 3000 })).toBeVisible()
     await expect(page.getByText(/The host app supplies them/)).toBeVisible()
     await expect(page.queryByTestId("system-dev-proxy")).toBeNull()
     await expect(page.queryByRole("link", { name: /How dev resources work/ })).toBeNull()
@@ -389,7 +395,7 @@ export const Rotation: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     const toggle = await page.findByRole("switch", { name: "Emulators in switcher" })
-    await expect(toggle).toHaveAttribute("aria-checked", "true")
+    await expect(toggle).toBeChecked()
     await expect(page.queryByRole("switch", { name: /System/ })).toBeNull()
     await userEvent.click(page.getByRole("button", { name: "Open Lab workspace" }))
     await expect(page.getByRole("button", { name: "Next app" })).toHaveAttribute(
@@ -401,7 +407,7 @@ export const Rotation: StoryObj = {
     // Keyboard: Space flips the switch.
     toggle.focus()
     await userEvent.keyboard(" ")
-    await expect(toggle).toHaveAttribute("aria-checked", "false")
+    await expect(toggle).not.toBeChecked()
     await expect(JSON.parse(localStorage.getItem(ROTATION_KEY) ?? "[]")).toEqual(["emulators"])
     await expect(page.getByText(/3 apps · 2 in the switcher/)).toBeVisible()
 
@@ -437,7 +443,7 @@ export const Rotation: StoryObj = {
       const fresh = within(host)
       await expect(
         await fresh.findByRole("switch", { name: "Emulators in switcher" }),
-      ).toHaveAttribute("aria-checked", "false")
+      ).not.toBeChecked()
       await userEvent.click(fresh.getByRole("button", { name: "Open Lab workspace" }))
       await expect(fresh.getByRole("button", { name: "Next app" })).toHaveAttribute(
         "aria-description",
@@ -483,7 +489,7 @@ export const Reorder: StoryObj = {
     page.getByRole("button", { name: "Reorder Notifications" }).focus()
     await userEvent.keyboard("{Home}")
     await expect(rows(canvasElement)).toEqual(["notifications", "system", "app", "emulators"])
-    await expect(page.getByRole("status")).toHaveTextContent(
+    await expect(page.getByTestId("system-apps-status")).toHaveTextContent(
       "Notifications moved to position 1 of 4.",
     )
     await expect(page.getByRole("button", { name: "Reorder Notifications" })).toHaveFocus()
@@ -546,10 +552,7 @@ export const Reorder: StoryObj = {
     await userEvent.click(page.getByRole("button", { name: "Previous app" }))
     await userEvent.click(page.getByRole("button", { name: "Previous app" }))
     await userEvent.click(page.getByText("The admin UI of every emulator", { exact: false }))
-    await expect(page.getByRole("switch", { name: "Emulators in switcher" })).toHaveAttribute(
-      "aria-checked",
-      "false",
-    )
+    await expect(page.getByRole("switch", { name: "Emulators in switcher" })).not.toBeChecked()
     await expect(JSON.parse(localStorage.getItem(ROTATION_KEY) ?? "[]")).toEqual(["emulators"])
 
     // A fresh mount reads the same order and rotation.
@@ -565,7 +568,7 @@ export const Reorder: StoryObj = {
       await expect(rows(host)).toEqual(["system", "emulators", "notifications", "app"])
       await expect(
         within(host).getByRole("switch", { name: "Emulators in switcher" }),
-      ).toHaveAttribute("aria-checked", "false")
+      ).not.toBeChecked()
       await expect(within(host).getByRole("button", { name: "Next app" })).toHaveAttribute(
         "aria-description",
         "Next: Notifications",
@@ -592,5 +595,24 @@ export const Phone: StoryObj = {
       document.documentElement.clientWidth,
     )
     await expect(row(canvasElement, "stripe").getByText("Dev resource")).toBeVisible()
+  },
+}
+
+/** Dark: the host page pins `data-theme="dark"` on <html>, and the System screen follows it. */
+export const Dark: StoryObj = {
+  render: screen({ state: "ready", dev: ["stripe", "junction"] }),
+  beforeEach: () => {
+    const root = document.documentElement
+    root.dataset.theme = "dark"
+    root.classList.add("dark")
+    return () => {
+      root.removeAttribute("data-theme")
+      root.classList.remove("dark")
+    }
+  },
+  play: async ({ canvasElement }) => {
+    await loaded(canvasElement)
+    const wrapper = canvasElement.querySelector(".msh-home")?.closest("[data-mockingbird]")
+    await expect(wrapper).toHaveAttribute("data-theme", "dark")
   },
 }

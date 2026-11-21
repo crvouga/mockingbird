@@ -1,14 +1,13 @@
-import { CSS_RESET } from "@crvouga/mockingbird-ui"
 import { type Context, Hono } from "hono"
 import * as oauth from "oauth4webapi"
 import { type BehaviorInput, OAuthAPI, type Provider } from "../../src/index.js"
-import { escapeHtml } from "../../src/ui.js"
+import { type AppUser, appPage } from "./page.js"
 import { COOKIE_HEADERS, ORIGIN_HEADER } from "./transport.js"
 
 export const APP = "https://app.example.test"
 export const IDENTITY = "https://accounts.example.test"
 export type Trace = { sequence: number; actor: string; method: string; url: string; status: number }
-type Identity = { sub: string; name?: string; email?: string }
+type Identity = AppUser
 const callback = `${APP}/auth/callback`
 const client = { client_id: "example-app" }
 const secret = "example-only-client-secret"
@@ -127,7 +126,7 @@ export function createExample(
     const session = cookie ? sessions.get(cookie) : undefined
     return session && session.expires > Date.now() ? session.user : undefined
   }
-  app.get("/", (c) => c.html(document(current(cookie(c, "session")))))
+  app.get("/", (c) => c.html(appPage(current(cookie(c, "session")))))
   app.get("/api/session", (c) => c.json({ user: current(cookie(c, "session")) ?? null }))
   app.get("/auth/start", async (c) => {
     const as = await metadata()
@@ -250,7 +249,7 @@ export function createExample(
       return c.redirect("/")
     } catch {
       return c.html(
-        document(
+        appPage(
           undefined,
           "Sign-in could not be completed. Permission may have been declined, the provider may be unavailable, or the login may have expired. You can safely try again.",
         ),
@@ -297,16 +296,6 @@ export function createExample(
     return c.redirect("/", 303)
   })
   return { dispatch, app, provider, preferences, providerProfile }
-}
-
-function document(user?: Identity, error?: string) {
-  const e = escapeHtml
-  const account = user
-    ? `<section class="card"><div class="row"><div><h1 tabindex="-1">Welcome, ${e(user.name?.split(" ")[0] ?? "friend")}.</h1><p>You are signed in.</p></div><form method="post" action="/auth/logout"><button type="submit">Sign out</button></form></div><dl><dt>Name</dt><dd>${e(user.name ?? "Name not shared")}</dd><dt>Email</dt><dd>${e(user.email ?? "Email not shared")}</dd><dt>Account ID</dt><dd>${e(user.sub)}</dd></dl></section>`
-    : `<section class="card"><h1 tabindex="-1">Example app</h1><p>Sign in to continue.</p><a class="primary" href="/auth/start">Sign in</a></section>`
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>Example app</title><style>
-  :root{color-scheme:light dark;--bg:#fafafa;--card:#fff;--ink:#18181b;--muted:#62626b;--line:#dedee3;--accent:#27272a;--on:#fff}${CSS_RESET}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}header{padding:16px 20px;border-bottom:1px solid var(--line);background:var(--card);font-weight:600}main{max-width:560px;margin:0 auto;padding:32px 20px}h1{font-size:24px;font-weight:650;letter-spacing:0;margin:0 0 8px}p{margin:0 0 16px;color:var(--muted)}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:20px}.row{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}.primary{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:0 16px;background:var(--accent);color:var(--on);border-radius:8px;text-decoration:none;font-weight:600}button{font:inherit;background:transparent;border:1px solid var(--line);color:var(--ink);border-radius:8px;min-height:36px;padding:0 12px;cursor:pointer}dl{margin:8px 0 0;font-size:13px}dt{color:var(--muted)}dd{margin:0 0 8px;overflow-wrap:anywhere}.notice{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:12px;color:var(--ink);margin:0 0 16px}:is(a,button):focus-visible{outline:2px solid var(--accent);outline-offset:2px}@media(prefers-color-scheme:dark){:root{--bg:#111113;--card:#19191c;--ink:#f4f4f5;--muted:#a9a9b2;--line:#36363c;--accent:#e4e4e7;--on:#18181b}}
-  </style></head><body><header>Example app</header><main>${error ? `<p class="notice" role="alert">${e(error)}</p>` : ""}${account}</main></body></html>`
 }
 
 // Explicit local cookie envelope: browser Fetch strips native Cookie/Set-Cookie headers.

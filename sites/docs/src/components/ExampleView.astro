@@ -1,5 +1,5 @@
 ---
-import Icon from "./Icon.astro"
+import { ExampleView } from "../ui/examples/example-view.tsx"
 
 interface Props {
   title: string
@@ -7,23 +7,6 @@ interface Props {
   fit?: "app" | "panel"
 }
 const { title, fit = "panel" } = Astro.props
-const titleId = `example-view-${crypto.randomUUID()}`
 ---
 
-<dialog class="example-modal" data-example-modal data-fit={fit} aria-labelledby={titleId}>
-  <header class="example-modal-bar">
-    <span class="example-modal-dot" aria-hidden="true"></span>
-    <strong id={titleId}>{title}</strong>
-    <span class="example-modal-note">Running in this tab · no server required</span>
-    <button type="button" class="icon-btn" data-example-close aria-label="Close example">
-      <Icon name="x" />
-    </button>
-  </header>
-  <div class="example-modal-body">
-    <div class="example-modal-status" data-example-state>
-      <p data-example-status role="status" aria-live="polite"></p>
-      <button type="button" class="btn btn-secondary btn-sm" data-example-retry hidden>Try again</button>
-    </div>
-    <div class="example-modal-host" data-example-host></div>
-  </div>
-</dialog>
+<ExampleView title={title} fit={fit} titleId={`example-view-${crypto.randomUUID()}`} />

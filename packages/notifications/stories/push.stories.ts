@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import type { Notification } from "../src/model.js"
-import type { AppOptions, PushSkin } from "../src/ui/app.js"
+import type { AppOptions, PushSkin } from "../src/ui/types.js"
 import { ANDROID_TOKEN, art, base, IOS_TOKEN, push } from "./fixtures.js"
 import { mount } from "./mount.js"
 

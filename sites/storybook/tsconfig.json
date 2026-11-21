@@ -5,8 +5,20 @@
     "noEmit": true,
     "declaration": false,
     "declarationMap": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
-  "include": ["src/**/*.ts", "stories/**/*.ts", "scripts/**/*.ts", ".storybook/**/*.ts"],
+  "include": [
+    "src/**/*.ts",
+    "stories/**/*.ts",
+    "scripts/**/*.ts",
+    ".storybook/**/*.ts",
+    "src/**/*.tsx",
+    "stories/**/*.tsx",
+    "scripts/**/*.tsx",
+    ".storybook/**/*.tsx"
+  ],
   "exclude": ["storybook-static"]
 }

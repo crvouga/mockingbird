@@ -1,35 +1,8 @@
 ---
-import BirdMark from "../components/BirdMark.astro"
-import Icon from "../components/Icon.astro"
 import Base from "../layouts/Base.astro"
+import { NotFound } from "../ui/not-found.tsx"
 ---
 
 <Base title="Not found" noindex>
-  <div class="container notfound">
-    <BirdMark size={64} />
-    <h1>Page not found.</h1>
-    <p class="lede">The link may be old, or the service may have a different name. Search from the header, or start from the catalog.</p>
-    <div class="actions">
-      <a class="btn btn-primary" href="/services">Browse services <Icon name="arrow-right" /></a>
-      <button type="button" class="btn btn-secondary" data-palette-open><Icon name="search" /> Search</button>
-    </div>
-  </div>
+  <NotFound />
 </Base>
-
-<style>
-  .notfound {
-    display: grid;
-    justify-items: center;
-    gap: 14px;
-    padding-block: 120px 40px;
-    text-align: center;
-  }
-  .notfound h1 {
-    font-size: 36px;
-  }
-  .actions {
-    display: flex;
-    gap: 10px;
-    margin-top: 8px;
-  }
-</style>

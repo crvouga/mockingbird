@@ -30,12 +30,19 @@ export function auditSurface(root: Element, kind?: SurfaceKind): string[] {
 
   const name = (element: Element) =>
     `<${element.tagName.toLowerCase()}> "${(element.getAttribute("aria-label") ?? element.textContent ?? "").trim().slice(0, 40)}"`
-  const all = (selector: string) => [...root.querySelectorAll(selector)]
+  // The rules are about the surface. The page's chrome around it (the top bar, its theme switch)
+  // changes nothing on the server and is the same on every screen.
+  const all = (selector: string) => [...surface.querySelectorAll(selector)]
   const forms = all("form")
-  const buttons = all("button, input[type=submit], input[type=button], input[type=image]")
-  // A button does something to this page only (copy a value, download a file) when it says so.
+  // A button that opens a field's list of options (a select) is part of that field.
+  const buttons = all("button, input[type=submit], input[type=button], input[type=image]").filter(
+    (button) => !button.hasAttribute("aria-haspopup"),
+  )
+  // A button does something to this page only (copy a value, download a file) when it says so,
+  // and a code block's copy button does nothing else.
   const local = (button: Element) =>
-    button.getAttribute("type") === "button" && button.hasAttribute("data-local")
+    (button.getAttribute("type") === "button" && button.hasAttribute("data-local")) ||
+    (button.getAttribute("type") === "button" && button.closest("[data-mockingbird-code]") !== null)
   const submits = buttons.filter((button) => !local(button))
 
   if (expected === "query") {
@@ -65,13 +72,23 @@ export function auditSurface(root: Element, kind?: SurfaceKind): string[] {
       problems.push("the form has no Cancel link (a[data-cancel])")
     for (const field of all("[aria-invalid=true]")) {
       const described = (field.getAttribute("aria-describedby") ?? "").split(/\s+/)
-      if (!described.some((id) => id && root.querySelector(`#${id}.field-error`)))
+      const document = root.ownerDocument
+      const error = (id: string) => {
+        // Not in a document yet (a story being drawn): look in the root itself.
+        const found =
+          document.getElementById(id) ??
+          [...root.querySelectorAll("[id]")].find((element) => element.id === id)
+        return found?.classList.contains("field-error") === true
+      }
+      if (!described.some((id) => id && error(id)))
         problems.push(`an invalid field is not described by its error: ${name(field)}`)
     }
   }
 
   // Feedback belongs where it happened: in the form, or beside the thing it is about.
-  for (const live of all("[role=alert], [role=status], [role=log], [aria-live]")) {
+  for (const live of root.querySelectorAll(
+    "[role=alert], [role=status], [role=log], [aria-live]",
+  )) {
     const where = live.closest("form") ? "form" : surface.contains(live) ? "surface" : "page"
     if (where === "page")
       problems.push(`feedback outside the surface (a toast or banner): ${name(live)}`)

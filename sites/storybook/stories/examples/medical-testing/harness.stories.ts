@@ -6,7 +6,11 @@ export default {
   title: "Examples/System harness",
   parameters: {
     layout: "fullscreen",
-    sources: ["packages/ui/src/system-harness.ts", "packages/ui/src/system-screen.ts"],
+    sources: [
+      "packages/ui/src/system-harness.ts",
+      "packages/ui/src/system-view.tsx",
+      "packages/ui/src/system-screen.tsx",
+    ],
   },
 } satisfies Meta
 
@@ -59,7 +63,8 @@ export const Switching: StoryObj = {
       for (let step = 0; step < 4; step++) {
         const current = canvasElement.querySelector("section[data-surface]:not([hidden])")
         if (current?.getAttribute("aria-label") === name) return
-        await userEvent.click(page.getByRole("button", { name: "Next app" }))
+        // The harness's UI loads lazily, a moment after it mounts.
+        await userEvent.click(await page.findByRole("button", { name: "Next app" }))
       }
       throw new Error(`Could not cycle to ${name}`)
     }

@@ -9,13 +9,20 @@ import type { MockAdmin } from "../adapters/admin.js"
 const ADMIN_ORIGIN = "https://emulator.local"
 const ADMIN_URL = `${ADMIN_ORIGIN}/__admin/ui`
 
-/** An open Ant Design overlay: a dialog, drawer, select list or menu. */
+/**
+ * An open overlay in the admin UI: a HeroUI (React Aria) modal, alert dialog, drawer, or the
+ * popover of a select, combo box, autocomplete or menu.
+ */
 const ADMIN_OVERLAY = [
-  ".ant-modal-wrap:not([style*='display: none'])",
-  ".ant-drawer-open",
-  ".ant-select-open",
-  ".ant-dropdown:not(.ant-dropdown-hidden)",
-  ".ant-picker-dropdown:not(.ant-picker-dropdown-hidden)",
+  "[data-slot='modal-backdrop']",
+  "[data-slot='alert-dialog-backdrop']",
+  "[data-slot='drawer-backdrop']",
+  "[data-slot='popover']",
+  "[data-slot='popover-dialog']",
+  "[data-slot='select-popover']",
+  "[data-slot='combo-box-popover']",
+  "[data-slot='autocomplete-popover']",
+  "[data-slot='dropdown-popover']",
 ].join(",")
 
 /** Relative admin calls stay in-process. Absolute catalog URLs use the network. */

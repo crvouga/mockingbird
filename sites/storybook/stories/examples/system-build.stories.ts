@@ -1,7 +1,10 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import { expect, userEvent, waitFor, within } from "storybook/test"
-import type { SystemBuild, SystemBuildState } from "../../../../packages/ui/src/system-build.js"
-import { mountSystemHarness } from "../../../../packages/ui/src/system-harness.js"
+import {
+  mountSystemHarness,
+  type SystemBuild,
+  type SystemBuildState,
+} from "../../../../packages/ui/src/system-harness.js"
 import { SYSTEM_ICONS } from "../../../../packages/ui/src/system-icons.js"
 import { ORDER_KEY, ROTATION_KEY } from "../../../../packages/ui/src/system-rotation.js"
 
@@ -15,10 +18,10 @@ export default {
   parameters: {
     layout: "fullscreen",
     sources: [
-      "packages/ui/src/system-build.ts",
+      "packages/ui/src/system-build.tsx",
       "packages/ui/src/system-build-status.ts",
       "packages/ui/src/system-harness.ts",
-      "packages/ui/src/system-screen.ts",
+      "packages/ui/src/system-view.tsx",
     ],
   },
 } satisfies Meta
@@ -307,10 +310,7 @@ export const UpToDate: StoryObj = {
       within(value(canvasElement, "checks")).getByRole("link", { name: /View checks/ }),
     ).toHaveAttribute("href", `${PR.url}/checks`)
     await expect(value(canvasElement, "connection")).toHaveTextContent("Live")
-    await expect(preview.getByRole("switch", { name: "Auto-update" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    )
+    await expect(preview.getByRole("switch", { name: "Auto-update" })).toBeChecked()
     await expect(preview.getByRole("button", { name: "Update now" })).toBeDisabled()
 
     // The dot's tooltip, then a click opens System from another app.
@@ -334,7 +334,7 @@ export const Building: StoryObj = {
     await expect(dot(canvasElement)).toHaveAttribute("data-tone", "building")
     await expect(dot(canvasElement)).toHaveAccessibleName("Preview status: Building b81e07c")
     await expect(value(canvasElement, "build")).toHaveTextContent("Building")
-    await expect(value(canvasElement, "build").querySelector(".msh-spinner")).not.toBeNull()
+    await expect(value(canvasElement, "build").querySelector("[data-busy]")).not.toBeNull()
     await expect(value(canvasElement, "latest")).toHaveTextContent("This tab is up to date")
     await expect(toast(canvasElement)).not.toBeVisible()
 
@@ -422,15 +422,15 @@ export const AutoUpdateOff: StoryObj = {
     await expect(note).toHaveTextContent("New version b81e07c ready")
     await expect(note).not.toHaveTextContent("updating in")
     const toggle = preview.getByRole("switch", { name: "Auto-update" })
-    await expect(toggle).toHaveAttribute("aria-checked", "false")
+    await expect(toggle).not.toBeChecked()
     await userEvent.click(toggle)
     await expect(control().calls.auto).toEqual([true])
-    await expect(toggle).toHaveAttribute("aria-checked", "true")
+    await expect(toggle).toBeChecked()
     await expect(note).toHaveTextContent(/updating in \d+s/)
     toggle.focus()
     await userEvent.keyboard(" ")
     await expect(control().calls.auto).toEqual([true, false])
-    await expect(toggle).toHaveAttribute("aria-checked", "false")
+    await expect(toggle).not.toBeChecked()
     await expect(toggle).toHaveFocus()
     await expect(note).not.toHaveTextContent("updating in")
   },
@@ -445,7 +445,9 @@ export const BuildFailed: StoryObj = {
     await expect(dot(canvasElement)).toHaveAccessibleName(
       "Preview status: Build for b81e07c failed",
     )
-    await expect(preview.getByText("Build failed", { selector: ".msh-chip" })).toBeVisible()
+    await expect(
+      within(preview.getByTestId("system-preview-state")).getByText("Build failed"),
+    ).toBeVisible()
     await expect(value(canvasElement, "build")).toHaveTextContent("Failed")
     await expect(value(canvasElement, "build")).toHaveTextContent(
       "bun run build-preview exited with code 1",
@@ -507,7 +509,9 @@ export const Applying: StoryObj = {
     await expect(toast(canvasElement)).toHaveTextContent("Updating…")
     await expect(within(toast(canvasElement)).queryByRole("button")).toBeNull()
     await expect(preview.getByRole("button", { name: "Updating…" })).toBeDisabled()
-    await expect(preview.getByText("Updating", { selector: ".msh-chip" })).toBeVisible()
+    await expect(
+      within(preview.getByTestId("system-preview-state")).getByText("Updating"),
+    ).toBeVisible()
   },
 }
 

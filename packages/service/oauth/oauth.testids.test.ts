@@ -35,9 +35,8 @@ describe("data-testid hooks on the interaction pages", () => {
     const html = await (await authorize(api)).text()
     const found = ids(html)
     expect(found.filter((id) => id === "oauth-mock-chooser")).toHaveLength(1)
-    expect(html).toContain(
-      '<section class="card" aria-labelledby="title" data-testid="oauth-mock-chooser">',
-    )
+    // the root wraps the page's one heading
+    expect(html).toMatch(/data-testid="oauth-mock-chooser".*<h1[^>]*>Choose an account<\/h1>/)
     expect(found).toContain("oauth-mock-account-ada")
     expect(found).toContain("oauth-mock-account-grace-1")
     expect(found).toContain("oauth-mock-create-account")
@@ -154,10 +153,10 @@ describe("data-testid hooks on the interaction pages", () => {
     const response = await api.fetch(post("/interaction", { transaction: tx, action: "allow" }))
     const html = await response.text()
     expect(ids(html)).toContain("oauth-mock-form-post")
-    expect(tag(html, "oauth-mock-form-post-continue")).toContain('class="primary"')
+    expect(tag(html, "oauth-mock-form-post-continue")).toContain('type="submit"')
     // the Continue button sits inside the hand-off form that posts to the client
     expect(html).toMatch(
-      /<form id="callback" method="post" action="https:\/\/app\.test\/callback">.*data-testid="oauth-mock-form-post-continue".*<\/form>/,
+      /<form id="callback" action="https:\/\/app\.test\/callback" method="post">.*data-testid="oauth-mock-form-post-continue".*<\/form>/,
     )
   })
 

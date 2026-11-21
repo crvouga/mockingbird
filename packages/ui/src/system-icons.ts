@@ -1,5 +1,3 @@
-/// <reference lib="dom" />
-
 /**
  * An app's icon on the System screen and in the switcher's tooltips.
  *
@@ -42,39 +40,4 @@ export function iconSources(icon: SystemIcon | undefined): string[] {
   } catch {
     return []
   }
-}
-
-/**
- * Draws `icon` into `mark` (a sized box), trying each image source in turn and ending at the
- * label's first letter.
- */
-export function paintIcon(mark: HTMLElement, icon: SystemIcon | undefined, label: string): void {
-  const letter = () => {
-    mark.dataset.icon = "letter"
-    mark.textContent = (label.trim()[0] ?? "?").toUpperCase()
-  }
-  if (icon && "svg" in icon) {
-    mark.dataset.icon = "svg"
-    mark.innerHTML = icon.svg
-    return
-  }
-  const sources = iconSources(icon)
-  if (sources.length === 0) {
-    letter()
-    return
-  }
-  const img = mark.ownerDocument.createElement("img")
-  img.alt = ""
-  img.decoding = "async"
-  img.referrerPolicy = "no-referrer"
-  let next = 0
-  const attempt = () => {
-    const source = sources[next++]
-    if (source === undefined) letter()
-    else img.src = source
-  }
-  img.onerror = attempt
-  mark.dataset.icon = "image"
-  mark.replaceChildren(img)
-  attempt()
 }

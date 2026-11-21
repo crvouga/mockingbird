@@ -112,18 +112,18 @@ Then(
 )
 
 Then("{word} is no longer listed as a member", async ({ dash, world }, person: string) => {
-  await expect(dash.page.getByRole("list", { name: "Members", exact: true })).toBeVisible()
+  await expect(dash.list("Members")).toBeVisible()
   await expect(member(dash, world.email(person))).toHaveCount(0)
 })
 
 Then("nobody's role can be changed", async ({ dash }) => {
-  const list = dash.page.getByRole("list", { name: "Members", exact: true })
+  const list = dash.list("Members")
   await expect(list).toBeVisible()
   await expect(list.getByText("Change role", { exact: true })).toHaveCount(0)
 })
 
 Then("the only link among the members is {string}", async ({ dash }, name: string) => {
-  const list = dash.page.getByRole("list", { name: "Members", exact: true })
+  const list = dash.list("Members")
   await expect(list.getByRole("link")).toHaveText([name])
   await expect(list.getByRole("button")).toHaveCount(0)
 })
@@ -152,8 +152,7 @@ Then("{word} cannot be removed", async ({ dash, world }, person: string) => {
 
 // ---- invites -------------------------------------------------------------------------------
 
-const pending = (dash: Dashboard) =>
-  dash.page.getByRole("list", { name: "Pending invites", exact: true })
+const pending = (dash: Dashboard) => dash.list("Pending invites")
 
 /** From the Members tab: open the invite form, fill it in and create the link. */
 async function invite(dash: Dashboard, world: World, person: string, role: string) {
@@ -161,7 +160,7 @@ async function invite(dash: Dashboard, world: World, person: string, role: strin
   await dash.page.getByRole("link", { name: "Invite someone", exact: true }).click()
   await dash.idle()
   await dash.field("Email").fill(world.email(person))
-  await dash.choice("Role", role).check()
+  await dash.choose("Role", role)
   await dash.button("Create invite link").click()
   await dash.idle()
 }
@@ -187,7 +186,7 @@ Then(
 )
 
 Then("there are no pending invites", async ({ dash }) => {
-  await expect(dash.page.getByRole("list", { name: "Members", exact: true })).toBeVisible()
+  await expect(dash.list("Members")).toBeVisible()
   await expect(pending(dash)).toHaveCount(0)
   await expect(dash.page.getByText("No invite is waiting to be accepted.")).toBeVisible()
 })
@@ -228,10 +227,7 @@ When(
 // ---- usage ---------------------------------------------------------------------------------
 
 const limit = (dash: Dashboard, label: string) =>
-  dash.page
-    .getByRole("list", { name: "Limits", exact: true })
-    .getByRole("listitem")
-    .filter({ has: dash.page.getByText(label, { exact: true }) })
+  dash.rows("Limits").filter({ has: dash.page.getByText(label, { exact: true }) })
 
 Then("the limit {string} reads {string}", async ({ dash }, label: string, text: string) => {
   await expect(limit(dash, label).getByText(text, { exact: true })).toBeVisible()
@@ -327,9 +323,7 @@ Then(
 )
 
 Then("the first audit entry is {string}", async ({ dash }, action: string) => {
-  const entries = dash.page
-    .getByRole("list", { name: "Audit log", exact: true })
-    .getByRole("listitem")
+  const entries = dash.rows("Audit log")
   await expect(entries.first()).toContainText(action)
 })
 

@@ -2,7 +2,7 @@ import { createRuntime } from "@crvouga/mockingbird-service-stripe"
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import { expect, userEvent, within } from "storybook/test"
 import { SECRET_KEY } from "../../emulators/stripe/stripe.js"
-import { type AdminVisit, admin, SHELL_SOURCES, shows } from "./admin.js"
+import { type AdminVisit, admin, choose, SHELL_SOURCES, shows } from "./admin.js"
 import { fresh, ORIGIN, store } from "./store.js"
 
 /**
@@ -25,7 +25,7 @@ export const Empty: StoryObj = admin(fresh, { ready: "Reset namespace" })
 
 export const DarkTheme: StoryObj = admin(store(), { dark: true, ready: "PostSubscriptions" })
 
-/** Under 760px the navigation collapses to icons and the header wraps. */
+/** Under 760px the screens move into a picker and the header wraps. */
 export const OnAPhone: StoryObj = {
   ...admin(store(), { width: 390, ready: "PostSubscriptions" }),
   globals: phone,
@@ -55,14 +55,23 @@ Namespaces.play = async ({ canvasElement }) => {
   await shows(canvasElement, "checkout-e2e")
 }
 
-/** The navigation collapsed to icons by its trigger. */
-export const SidebarCollapsed: StoryObj = admin(store())
-SidebarCollapsed.play = async ({ canvasElement }) => {
+/** On a phone the screens are a picker instead of a sidebar: Journal chosen from it. */
+export const ScreenPickerOnAPhone: StoryObj = {
+  ...admin(store(), { width: 390 }),
+  globals: phone,
+}
+ScreenPickerOnAPhone.play = async ({ canvasElement }) => {
   await shows(canvasElement, "PostSubscriptions")
-  const trigger = canvasElement.querySelector<HTMLElement>(".ant-layout-sider-trigger")
-  if (!trigger) throw new Error("No sider trigger")
-  await userEvent.click(trigger)
-  await expect(canvasElement.querySelector(".ant-layout-sider-collapsed")).not.toBeNull()
+  await choose(canvasElement, "Screen", "", "Journal")
+  await shows(canvasElement, "Request attempts")
+}
+
+/** The sidebar: another screen picked from it. */
+export const Sidebar: StoryObj = admin(store())
+Sidebar.play = async ({ canvasElement }) => {
+  await shows(canvasElement, "PostSubscriptions")
+  await userEvent.click(within(canvasElement).getByRole("option", { name: "Clock" }))
+  await shows(canvasElement, "Current time")
 }
 
 /** Waiting on the first answer from the emulator. */
@@ -124,7 +133,7 @@ CommandPalette.play = async ({ canvasElement }) => {
 async function openPalette(canvas: HTMLElement): Promise<HTMLElement> {
   await shows(canvas, "PostSubscriptions")
   await userEvent.click(within(canvas).getByRole("button", { name: /Jump/ }))
-  const search = await within(canvas).findByRole("combobox", { name: "Admin command palette" })
+  const search = await within(canvas).findByRole("searchbox", { name: "Admin command palette" })
   await shows(canvas, "stripe · Snapshot & restore")
   return search
 }
@@ -137,14 +146,15 @@ PaletteShortcut.play = async ({ canvasElement }) => {
   canvasElement.firstElementChild?.firstElementChild?.dispatchEvent(
     new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true }),
   )
-  await within(canvasElement).findByRole("combobox", { name: "Admin command palette" })
+  await within(canvasElement).findByRole("searchbox", { name: "Admin command palette" })
 }
 
 /** Typing narrows the commands; keywords match too ("rollback" finds Snapshot & restore). */
 export const PaletteSearch: StoryObj = admin(store())
 PaletteSearch.play = async ({ canvasElement }) => {
   await userEvent.type(await openPalette(canvasElement), "rollback")
-  await expect(within(canvasElement).getAllByRole("option")).toHaveLength(1)
+  const commands = within(canvasElement).getByRole("listbox", { name: "Commands" })
+  await expect(within(commands).getAllByRole("option")).toHaveLength(1)
 }
 
 export const PaletteNoMatches: StoryObj = admin(store())

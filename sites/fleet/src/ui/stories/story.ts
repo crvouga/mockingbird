@@ -59,45 +59,58 @@ export type Page = {
 
 const text = (element: Element | null | undefined) => element?.textContent?.trim() ?? ""
 
+/** Set a control's value the way typing does, so React sees the change. */
+function setValue(control: HTMLInputElement | HTMLSelectElement, value: string) {
+  const prototype = Object.getPrototypeOf(control) as object
+  const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set
+  if (setter) setter.call(control, value)
+  else control.value = value
+  control.dispatchEvent(
+    new Event(control instanceof HTMLSelectElement ? "change" : "input", {
+      bubbles: true,
+    }),
+  )
+}
+
 function page(root: HTMLElement, mock: Mock): Page {
   const fill = (label: string, value: string) => {
-    // A choice: a fieldset whose legend is the label, one radio per option.
-    const fieldset = [...root.querySelectorAll("fieldset")].find(
-      (element) => text(element.querySelector("legend")) === label,
+    // A field of a form: its holder carries `data-field`, and its label or legend names it.
+    const holder = [...root.querySelectorAll("[data-field]")].find((element) =>
+      [...element.querySelectorAll("label, legend, [data-slot=label]")].some(
+        (named) => named.closest("[data-field]") === element && text(named) === label,
+      ),
     )
-    if (fieldset) {
-      const radio = [...fieldset.querySelectorAll<HTMLInputElement>("input[type=radio]")].find(
+    // A choice: one radio per option, chosen by its value or the start of its label.
+    const radios = [...(holder?.querySelectorAll<HTMLInputElement>("input[type=radio]") ?? [])]
+    if (holder && radios.length > 0) {
+      const radio = radios.find(
         (input) => input.value === value || text(input.closest("label")).startsWith(value),
       )
       if (!radio) throw new Error(`"${label}" has no option "${value}"`)
-      radio.checked = true
-      radio.dispatchEvent(new Event("change", { bubbles: true }))
+      radio.click()
       return
     }
-    const labelled = [...root.querySelectorAll("label[for]")].find(
-      (element) => text(element) === label,
-    )
-    const control =
-      (labelled &&
-        root.querySelector<HTMLInputElement | HTMLSelectElement>(
-          `#${labelled.getAttribute("for")}`,
-        )) ||
-      root.querySelector<HTMLInputElement>(`[aria-label="${label}"]`)
-    if (!control) throw new Error(`No field named "${label}"`)
-    if (control instanceof HTMLSelectElement) {
-      const option = [...control.options].find(
+    // A select: its options are those of the native select it keeps for the form.
+    const select = holder?.querySelector("select")
+    if (select) {
+      const option = [...select.options].find(
         (entry) => entry.value === value || entry.text.startsWith(value),
       )
       if (!option) throw new Error(`"${label}" has no option "${value}"`)
-      control.value = option.value
-      control.dispatchEvent(new Event("change", { bubbles: true }))
+      setValue(select, option.value)
       return
     }
-    control.value = value
-    control.dispatchEvent(new Event("input", { bubbles: true }))
+    const control =
+      holder?.querySelector<HTMLInputElement>("input") ??
+      root.querySelector<HTMLInputElement>(`[aria-label="${label}"]`) ??
+      [...root.querySelectorAll<HTMLInputElement>("input")].find(
+        (input) => input.labels && [...input.labels].some((named) => text(named) === label),
+      )
+    if (!control) throw new Error(`No field named "${label}"`)
+    setValue(control, value)
   }
   const press = async (button: HTMLButtonElement) => {
-    // The dashboard is not in the document yet, where a browser would not submit a form.
+    // Submit the way a browser does, without waiting for the frame to reach its place.
     if (button.form && button.type === "submit")
       button.form.dispatchEvent(
         new SubmitEvent("submit", { submitter: button, bubbles: true, cancelable: true }),
@@ -149,6 +162,9 @@ export async function present(scenario: Scenario): Promise<HTMLElement> {
   root.id = "app"
   root.innerHTML = BOOT_MARKUP
   frame.append(root)
+  // React Aria ties a field to its description and error only once they are in the document, so
+  // the dashboard is drawn in it from the start; Storybook then moves the frame where it belongs.
+  document.body.append(frame)
   // Links the dashboard leaves to the browser (sign-in, a modified click) lead nowhere here.
   frame.addEventListener("click", (event) => {
     if (!event.defaultPrevented && (event.target as Element).closest("a[href]"))

@@ -1,6 +1,6 @@
 ---
+import { ExampleLaunch } from "../ui/examples/example-view.tsx"
 import ExampleView from "./ExampleView.astro"
-import Icon from "./Icon.astro"
 
 interface Props {
   /** Custom element that owns the loader lookup: `service-example` or `app-example`. */
@@ -21,13 +21,7 @@ const {
 } = Astro.props
 ---
 
-<Element data-example={example}>
-  <div class="example-launch">
-    <button type="button" class="btn btn-accent" data-example-open aria-haspopup="dialog">
-      <Icon name="play" />
-      {launchLabel}
-    </button>
-    <p>Opens fullscreen. The example runs in this tab.</p>
-  </div>
+<Element data-example={example} class="block min-w-0">
+  <ExampleLaunch label={launchLabel} />
   <ExampleView title={title} fit={fit} />
 </Element>

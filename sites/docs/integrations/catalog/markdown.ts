@@ -4,6 +4,7 @@ import { Marked, type Tokens } from "marked"
 import { createHighlighter, type Highlighter, type ThemedToken } from "shiki"
 import { guideSlug } from "../../src/lib/guides.ts"
 import type { TocEntry } from "../../src/lib/types.ts"
+import { codeFrameHtml } from "../../src/ui/code-frame.ts"
 
 const LANGS = [
   "typescript",
@@ -94,7 +95,7 @@ function renderSource(h: Highlighter, code: string, rawLang: string | undefined)
 
 function renderCode(h: Highlighter, code: string, rawLang: string | undefined): string {
   const { html, label } = renderSource(h, code, rawLang)
-  return `<figure class="code"><figcaption><span>${escapeHtml(label)}</span><button type="button" class="copy" data-copy aria-label="Copy code"><svg class="i i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="i i-check" aria-hidden="true"><use href="#i-check"/></svg></button></figcaption>${html}</figure>`
+  return codeFrameHtml(label, html)
 }
 
 /** TypeScript and JavaScript blocks recolor SQL inside template strings with the SQL grammar. */
