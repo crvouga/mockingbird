@@ -712,9 +712,11 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
   root.dataset.testid = TEST_IDS.app
   root.dataset.ready = "false"
   root.innerHTML = `
+<div class="mbn-head">
 <header class="topbar" data-region="topbar" ${tid(TEST_IDS.topbar)}></header>
 <div data-region="notice"></div>
 <div class="channel-tabs" data-region="tabs" role="tablist" aria-label="Notification channels" ${tid(TEST_IDS.channelTabs)} hidden></div>
+</div>
 <div class="mbn-scroll" data-region="scroll">
 <section class="devices" data-region="devices">
   <div class="device-col" data-region="col-sms" id="${uid}-panel-sms"></div>
@@ -743,6 +745,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
       motion: motion(),
       layout: compact ? "tabs" : "grid",
       tab: tab(),
+      menu: state.menu ? "open" : "closed",
     })
   }
 
@@ -757,7 +760,7 @@ export function createApp(root: HTMLElement, options: AppOptions = {}): AppHandl
     <div class="brand"><span class="brand-mark">${icons.bell()}</span><span class="brand-name">${esc(title())} <small>Mockingbird</small></span></div>
     <div class="field search">${icons.search("#9aa1b1", 14)}<input type="search" data-action="search" ${tid(TEST_IDS.search)} aria-label="Filter notifications" placeholder="${root.dataset.size === "phone" ? "Filter notifications…" : "Filter by recipient, sender, text…"}" value="${esc(state.search)}"></div>
     <span class="live" ${tid(TEST_IDS.connection)} data-state="${state.connected ? "live" : "reconnecting"}" role="status"><span class="dot ${state.connected ? "ok" : "bad"}"></span><span class="live-label">${state.connected ? "Live" : "Reconnecting"}</span></span>
-    <button class="menu-btn" data-action="menu" ${tid(TEST_IDS.menu)} aria-expanded="${state.menu}" aria-controls="${uid}-more" aria-label="More options">${state.menu ? icons.close(18) : icons.tune(20)}</button>
+    <button class="menu-btn ${state.search ? "filtered" : ""}" data-action="menu" ${tid(TEST_IDS.menu)} aria-expanded="${state.menu}" aria-controls="${uid}-more" aria-label="${state.search ? "More options (filter on)" : "More options"}">${state.menu ? icons.close(18) : icons.tune(20)}</button>
     <div class="topbar-more" id="${uid}-more">
     <label class="field namespace">Namespace <select data-action="namespace" ${tid(TEST_IDS.namespace)} aria-label="Namespace">${namespaces
       .map((ns) => `<option ${ns === state.namespace ? "selected" : ""}>${esc(ns)}</option>`)

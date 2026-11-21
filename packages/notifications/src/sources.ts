@@ -508,6 +508,34 @@ const customerio: Reader = async (context) =>
           })),
         },
       )
+    if (m.channel === "push") {
+      // One per device the send reached; a person with no devices still gets one row, under their id.
+      const push = row(m.push)
+      const devices = strings(push.devices)
+      const app = "Customer.io"
+      return (devices.length ? devices : [str(push.to) ?? to]).map((device) =>
+        pushNotification(
+          {
+            ...common,
+            providerId: `${str(m.id) ?? ""}:${device}`,
+            to: device,
+            from: { name: app, address: templateId },
+          },
+          {
+            title: str(push.title),
+            body: str(push.message),
+            imageUrl: str(push.image_url),
+            app,
+            platform: "unknown",
+            data: Object.fromEntries(
+              Object.entries(row(push.custom_data)).map(([k, v]) => [k, String(v)]),
+            ),
+            badge: null,
+            sound: str(push.sound),
+          },
+        ),
+      )
+    }
     return []
   })
 

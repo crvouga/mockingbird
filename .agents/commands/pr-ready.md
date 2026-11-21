@@ -1,6 +1,6 @@
 ---
 name: pr-ready
-description: Take the current branch to a merge-ready PR (commit, publish, sync with main, resolve conflicts, open the PR, fix every failing check — CI and third-party) and stop there; never merges.
+description: Take the current branch to a green PR with squash auto-merge on (commit, publish, sync with main, resolve conflicts, open the PR, fix every failing check — CI and third-party), so it lands itself.
 ---
 
 # /pr-ready
@@ -13,8 +13,11 @@ All mechanical git/GitHub work is done by `bun scripts/pr-ready.ts`; your job is
 conflict resolution, PR title/body, and root-cause fixes for every failing check.
 
 The job is done when the PR is ready: the branch is pushed, synced with `main`, not a draft, and
-**every** check on the PR has passed. **Never merge it** — not with the script, `gh pr merge`, auto-merge,
-or the GitHub UI. Merging to `main` publishes, and that call belongs to the user.
+**every** check on the PR has passed. The script's `pr` step turns on **squash auto-merge**, so
+GitHub merges the PR (and deletes its branch) as soon as the required checks pass; `ready` then
+reports `merged: true`. That is the normal outcome, not an error. Never merge any other way (a
+direct `gh pr merge` without `--auto`, the GitHub UI, an admin bypass), never approve, and pass
+`--no-auto-merge` only when the user asked to hold the PR.
 
 Run it as `bun run pr:ready <command>` (or `bun scripts/pr-ready.ts <command>`). Every command except
 `logs` prints exactly one JSON object on stdout — parse that; never scrape raw `git`/`gh` text.
@@ -239,15 +242,15 @@ bun run pr:ready status
 ```
 
 Report exactly: branch, PR number and URL, base branch, the PR `state` (must be `OPEN`, not a draft),
-every check name with its bucket, and the required contexts. Say the PR is ready for the user to
-merge. Success requires `ready: true` — never report success on a partial, queued, or filtered run.
+every check name with its bucket, and the required contexts. Say whether it already merged
+(`merged: true`) or will auto-merge when the last check passes. Success requires `ready: true` — never report success on a partial, queued, or filtered run.
 
 ## Rules
 
 - Never `git push --force`; only `--force-with-lease`, and only to fix an unpushed-tip message via `--amend`.
 - Never push the base branch.
 - Never `git reset --hard` or `git checkout .` to discard work.
-- Never merge the PR, enable auto-merge, or approve it — stop at ready.
+- Never merge the PR directly or approve it. Squash auto-merge (on by default through the script) is the only way it lands.
 - Never disable or bypass a check. A check that ran is required.
 - Keep each fix minimal and focused on the failing check's root cause.
 - Use the script's JSON instead of raw `git`/`gh` output.

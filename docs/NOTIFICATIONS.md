@@ -30,7 +30,7 @@ The [lab ordering example](https://mockingbird.chrisvouga.dev/examples/medical-t
 | SMS | Twilio (Messages and Verify codes), Amazon SNS (direct `PhoneNumber` and `sms` topic subscribers), Customer.io, Mailosaur | Messages app: threads per sender, bubbles, one-time code suggestion |
 | WhatsApp | Twilio (Messages to a `whatsapp:` address, and Verify with `Channel=whatsapp`) | The same phone, as a WhatsApp chat. The channel is `sms` with `sms.via: "whatsapp"`; `to` is the bare number |
 | Email | Resend, Amazon SES (`SendEmail` and MIME `SendRawEmail`), Amazon SNS (`email` / `email-json` subscribers), Customer.io, Mailosaur, Twilio Verify email | Webmail: inbox per recipient (to, cc, bcc), rendered HTML, attachments, headers |
-| Push | Firebase Cloud Messaging | iOS lock screen or Android shade, chosen from the device token's platform |
+| Push | Firebase Cloud Messaging, Customer.io (`/v1/send/push`, one per device reached) | iOS lock screen or Android shade, chosen from the device token's platform |
 | Chat | Slack (`chat.postMessage`, `chat.postEphemeral` and incoming webhooks) | Team chat window: a channel list, bot messages with mrkdwn, Block Kit blocks, attachments and reactions |
 
 The device art is generic: no vendor logos. On a narrow screen the devices become tabs, one at a time; see [Devices](notifications/DEVICES.md#channel-tabs).

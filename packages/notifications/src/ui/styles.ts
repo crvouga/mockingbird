@@ -523,36 +523,47 @@ button { cursor: pointer; }
 &[data-size="phone"]:not(.embedded) { height: 100dvh; max-height: 100%; min-height: 0; }
 &[data-size="phone"] .mbn-scroll { flex: 1; min-height: 0; overflow: auto; display: flex; flex-direction: column; overscroll-behavior: contain; }
 &[data-size="phone"] input, &[data-size="phone"] select { font-size: 16px; }
-&[data-size="phone"] .topbar { position: relative; flex: none; gap: 8px; padding: 8px 10px; }
-&[data-size="phone"] .brand { margin: 0; }
-&[data-size="phone"] .brand-name { display: none; }
+/* One row: channel tabs, the live dot and the menu. Search and the rest open below it. */
+.mbn-head { display: contents; }
+&[data-size="phone"] .mbn-head { flex: none; display: flex; flex-wrap: wrap; align-items: center; background: var(--panel); border-bottom: 1px solid var(--line); }
+&[data-size="phone"] .topbar { display: contents; }
+&[data-size="phone"] .brand { order: 0; display: none; margin: 0 auto 0 12px; height: 44px; }
+&[data-size="phone"] .brand-mark { width: 24px; height: 24px; }
+&[data-size="phone"] .mbn-head:has(> .channel-tabs[hidden]) .brand { display: flex; }
+&[data-size="phone"] .channel-tabs { order: 1; flex: 1 1 0; min-width: 0; border-bottom: 0; background: none; }
+&[data-size="phone"] .channel-tabs[data-layout="tabs"] { padding: 0 0 0 4px; }
+&[data-size="phone"] .channel-tabs [role="tab"] { padding: 12px 4px 11px; gap: 4px; font-size: 13.5px; }
+&[data-size="phone"] .channel-tabs .tab-unread { min-width: 16px; padding: 0 4px; font-size: 10px; line-height: 16px; }
+&[data-size="phone"] .live { order: 2; padding: 0 2px 0 6px; }
+&[data-size="phone"] .live-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+&[data-size="phone"] .menu-btn { order: 3; display: grid; position: relative; width: 40px; height: 40px; margin-right: 4px; border: 0; background: none; }
+&[data-size="phone"] .menu-btn.filtered::after { content: ""; position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
 &[data-size="phone"] .field { height: 36px; border-radius: 9px; }
 &[data-size="phone"] .field select, &[data-size="phone"] .field input { height: 34px; }
-&[data-size="phone"] .topbar .search { flex: 1 1 0; min-width: 0; max-width: none; }
-&[data-size="phone"] .live-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-&[data-size="phone"] .live { padding: 0 4px; }
-&[data-size="phone"] .menu-btn { display: grid; order: 8; }
-&[data-size="phone"] .topbar-more { display: none; order: 9; flex-basis: 100%; flex-wrap: wrap; align-items: center; gap: 8px; padding: 2px 0 2px; }
-&[data-size="phone"] .menu-btn[aria-expanded="true"] + .topbar-more { display: flex; }
+&[data-size="phone"] .topbar .search { order: 8; display: none; flex: 1 1 calc(100% - 20px); max-width: none; margin: 2px 10px 8px; }
+&[data-size="phone"][data-menu="open"] .topbar .search { display: flex; }
+&[data-size="phone"] .topbar-more { display: none; order: 9; flex: 1 1 calc(100% - 20px); flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 10px 10px; }
+&[data-size="phone"][data-menu="open"] .topbar-more { display: flex; }
+&[data-size="phone"] .mbn-head > [data-region="notice"] { order: 10; flex-basis: 100%; }
 &[data-size="phone"] .topbar-more .namespace { flex: 1 1 100%; }
 &[data-size="phone"] .topbar-more .namespace select { flex: 1; }
 &[data-size="phone"] .topbar-more .tabs button { padding: 7px 14px; }
 &[data-size="phone"] .topbar-more .icon-toggle { height: 36px; }
 &[data-size="phone"] .topbar-more .toggle { min-height: 36px; }
 &[data-size="phone"] .topbar-more .sources { flex-basis: 100%; margin: 0; }
-&[data-size="phone"] .channel-tabs[data-layout="tabs"] { padding: 0 4px; }
-&[data-size="phone"] .channel-tabs [role="tab"] { padding: 11px 6px 10px; }
-&[data-size="phone"] .notice { margin: 8px 10px 0; }
-&[data-size="phone"] .devices { zoom: 1; flex: 1 0 auto; min-height: 440px; flex-wrap: nowrap; align-items: stretch; padding: 0 10px 10px; gap: 0; }
+&[data-size="phone"] .notice { margin: 0 10px 8px; }
+/* Drawn a little under life size, so more of each screen fits. */
+&[data-size="phone"] .devices { zoom: calc(var(--mbn-scale, 1) * .9); flex: 1 0 auto; min-height: 420px; flex-wrap: nowrap; align-items: stretch; padding: 0 8px 8px; gap: 0; }
 &[data-size="phone"] .device-col, &[data-size="phone"] .device-col.wide { flex: 1 1 100%; width: 100%; max-width: none; min-width: 0; align-items: stretch; gap: 0; }
-&[data-size="phone"] .device-head, &[data-size="phone"][data-layout="tabs"] .device-col:not(.wide) .device-head { display: flex; align-items: center; gap: 8px; width: 100%; height: auto; padding: 8px 0; }
+&[data-size="phone"] .device-head, &[data-size="phone"][data-layout="tabs"] .device-col:not(.wide) .device-head { display: flex; align-items: center; gap: 8px; width: 100%; height: 46px; padding: 0; }
 &[data-size="phone"] .device-head h2 { display: none; }
 &[data-size="phone"] .device-head .head-row { order: 2; width: auto; height: auto; flex: none; }
 &[data-size="phone"] .device-head .head-row:not(:has(> :not(h2))) { display: none; }
-&[data-size="phone"] .device-head > .field { flex: 1; min-width: 0; height: 36px; }
+&[data-size="phone"] .device-head > .field { flex: 1; min-width: 0; height: 34px; }
 &[data-size="phone"] .device-head .field select { flex: 1; width: 100%; max-width: none; }
-&[data-size="phone"] .seg button { padding: 6px 10px; }
-&[data-size="phone"] .iphone, &[data-size="phone"] .pixel { zoom: 1; display: flex; flex: 1; width: 100%; height: auto; min-height: 0; border-radius: 40px; padding: 7px;
+&[data-size="phone"] .seg { height: 34px; align-items: stretch; }
+&[data-size="phone"] .seg button { padding: 0 10px; }
+&[data-size="phone"] .iphone, &[data-size="phone"] .pixel { zoom: 1; display: flex; flex: 1; width: 100%; height: auto; min-height: 0; border-radius: 38px; padding: 5px;
   box-shadow: 0 0 0 1.5px #3a3a3c, 0 18px 40px rgba(0,0,0,.45); }
 &[data-size="phone"] .iphone::before, &[data-size="phone"] .iphone::after, &[data-size="phone"] .pixel::after { display: none; }
 &[data-size="phone"] .iphone .screen, &[data-size="phone"] .pixel .screen { flex: 1; height: auto; border-radius: 33px; clip-path: inset(0 round 33px); }

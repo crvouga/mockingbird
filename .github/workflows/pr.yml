@@ -75,7 +75,8 @@ jobs:
         with:
           turbo-cache: "false"
 
-      # Merge commits land on main, and each PR commit drives the release bump.
+      # PRs are squash-merged: the squash commit is the PR title (checked below) over these
+      # commit messages, so a BREAKING CHANGE footer here still drives the release bump.
       - name: Validate PR commits
         run: |
           git rev-list --first-parent --reverse \

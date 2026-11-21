@@ -14,6 +14,8 @@ The top bar holds the **Namespace** select, a search box that filters by recipie
 
 The **channel tabs** under the top bar (`All | Text | Push | Email | Chat`) pick one device or all of them. A tab whose device is not on screen counts what arrived there. When the harness has less than 800px to itself (a phone, a side panel, a narrow embed) there is no room for two devices, so it shows one at a time and the tabs switch between them; this follows the width of the element the UI is mounted on, not the window. Every device has the same header above it, so the frames always line up along the top.
 
+Under 640px (a phone) the harness gives the open device every pixel it can: the channel tabs, the live dot and a menu button share one row, and the menu opens search, the namespace, the Devices/Timeline switch, Follow new, Sound and the emulator pills (a dot on the button means a filter is on). The device fills the rest of the screen, drawn at 90% so more of it fits. The timeline turns into one card per message. The root reports `data-size="phone"` (otherwise `"wide"`), and `TEST_IDS.menu` is the menu button.
+
 The tabs are a real tab list: Left and Right move between them, Home and End jump to the ends. `layout: "tabs"` or `"grid"` and `tabs: false` on [the embedded UI](EMBED.md) fix the layout instead of following the width.
 
 ## Links

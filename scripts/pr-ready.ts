@@ -2,8 +2,12 @@
 /**
  * Agentic PR-ready engine. Mechanical git/GitHub work for the /pr-ready command
  * (see .agents/commands/pr-ready.md); the agent only supplies judgment: commit
- * message, conflict resolution, PR title/body, and CI root-cause fixes. It never
- * merges: a human lands the PR once `ready` reports it green.
+ * message, conflict resolution, PR title/body, and CI root-cause fixes. It never merges by
+ * itself: `pr` turns on squash auto-merge (under the caller's own GitHub login), so GitHub
+ * squash-merges the PR the moment its required checks pass and deletes the branch.
+ *
+ * Auto-merge must be enabled by a person or app token, never the workflow GITHUB_TOKEN: a merge
+ * done for github-actions starts no push workflows, so main would never release or deploy.
  *
  *   bun scripts/pr-ready.ts <command> [flags]   # or: bun run pr:ready <command>
  *
@@ -40,21 +44,22 @@ const REQUIRED_CHECK_CONTEXTS = REQUIRED_CHECKS.map((check) => check.context)
 const GATE_WORKFLOW = "CI"
 /** advisory.yml's workflow name: non-blocking checks, never a merge requirement. */
 const ADVISORY_WORKFLOW = "Advisory"
-const ALLOWED_MERGE_METHODS = ["merge"]
+const ALLOWED_MERGE_METHODS = ["squash"]
 
 const EXIT = { ok: 0, fail: 1, usage: 2, conflicts: 3, pending: 4 } as const
 
 const USAGE = `bun scripts/pr-ready.ts <command> [flags]
 
 commands:
-  advance   sync, publish, upsert PR, wait for checks, verify ready
-            (--title, --body-file, --timeout)
+  advance   sync, publish, upsert PR (squash auto-merge on), wait for checks, verify ready
+            (--title, --body-file, --timeout, --no-auto-merge)
   status    snapshot: worktree, upstream, base, PR, checks
   context   compact commit/diff context for message generation
   commit    validate + stage + commit   (-m|--message-file, --amend, --path)
   publish   push the branch             (-u when new, --force-with-lease)
   sync      merge remote head and base (--continue after resolving conflicts)
-  pr        view or create the PR       (--title, --body|--body-file, --ready)
+  pr        view or create the PR and enable squash auto-merge
+            (--title, --body|--body-file, --ready, --no-auto-merge)
   comments  unresolved review threads and recent PR comments
   reply     reply to a review thread   (--thread, --body|--body-file)
   resolve   mark an addressed thread resolved (--thread)
@@ -64,7 +69,7 @@ commands:
   rerun     re-run a failed check       (<check>, --name)
   ruleset   verify/apply merge gate     (--apply)
   repo      verify/apply repo settings  (--apply)
-  ready     verify the PR is pushed, synced, every check green and mergeable (never merges)
+  ready     verify the PR is pushed, synced, every check green and mergeable, or already merged
 
 common flags:
   --base <branch>   trunk branch (${TRUNK_BRANCH}); any other value is rejected`
@@ -459,12 +464,16 @@ async function removeLegacyRulesets(slug: string): Promise<string[]> {
 
 const REPO_SETTINGS = {
   default_branch: TRUNK_BRANCH,
-  allow_merge_commit: true,
-  allow_squash_merge: false,
+  allow_merge_commit: false,
+  allow_squash_merge: true,
   allow_rebase_merge: false,
   allow_auto_merge: true,
   allow_update_branch: true,
   delete_branch_on_merge: true,
+  // The squash commit is the PR title (Commitlint checks it) over the PR's commit messages, so
+  // the release bump and any BREAKING CHANGE footers survive the squash.
+  squash_merge_commit_title: "PR_TITLE",
+  squash_merge_commit_message: "COMMIT_MESSAGES",
 }
 
 async function repoDrift(
@@ -497,6 +506,7 @@ type PrView = {
   baseRefName?: string
   headRefName?: string
   headRefOid?: string
+  autoMergeRequest?: { mergeMethod?: string } | null
 }
 
 type Check = { name: string; state: string; bucket: string; link: string; workflow?: string }
@@ -638,10 +648,45 @@ async function readPr(branch: string): Promise<PrView | null> {
     "--limit",
     "1",
     "--json",
-    "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName,headRefOid",
+    "number,url,state,title,isDraft,mergeable,mergeStateStatus,reviewDecision,baseRefName,headRefName,headRefOid,autoMergeRequest",
   ])
   if (res.code !== 0) return null
   return (JSON.parse(res.stdout) as PrView[])[0] ?? null
+}
+
+/** The PR auto-merge already landed for this exact commit (its branch is gone by then). */
+async function mergedPr(branch: string): Promise<{ number: number; url: string } | null> {
+  const head = await git(["rev-parse", "HEAD"])
+  const res = await gh([
+    "pr",
+    "list",
+    "--state",
+    "merged",
+    "--head",
+    branch,
+    "--base",
+    TRUNK_BRANCH,
+    "--limit",
+    "1",
+    "--json",
+    "number,url,headRefOid",
+  ])
+  if (res.code !== 0) return null
+  const pr = (JSON.parse(res.stdout) as (PrView & { headRefOid: string })[])[0]
+  return pr && pr.headRefOid === head.stdout.trim() ? { number: pr.number, url: pr.url } : null
+}
+
+/**
+ * Squash auto-merge, unless `--no-auto-merge`. GitHub refuses it on a draft, so a draft gets it
+ * when `pr --ready` takes it out of draft. Returns the PR's auto-merge state.
+ */
+async function enableAutoMerge(branch: string, pr: PrView | null): Promise<string> {
+  if (flag("--no-auto-merge")) return "off (--no-auto-merge)"
+  if (!pr) return "unknown (PR not found)"
+  if (pr.isDraft) return "off (draft)"
+  if (pr.autoMergeRequest) return "on"
+  const res = await gh(["pr", "merge", branch, "--auto", "--squash"])
+  return res.code === 0 ? "on" : `failed: ${(res.stderr || res.stdout).trim()}`
 }
 
 type ReviewThread = {
@@ -808,6 +853,7 @@ async function cmdAdvance(): Promise<void> {
     return data
   }
 
+  const noAutoMerge = flag("--no-auto-merge") ? ["--no-auto-merge"] : []
   await step("sync")
   await step("publish")
   const existing = await readPr(branch)
@@ -826,9 +872,11 @@ async function cmdAdvance(): Promise<void> {
       "--title",
       title,
       ...(bodyFile ? ["--body-file", bodyFile] : ["--body", body]),
+      ...noAutoMerge,
     ])
-  } else if (existing.isDraft) {
-    await step("pr", ["--ready"])
+  } else {
+    // Out of draft, and auto-merge on for a PR opened before it was the default.
+    await step("pr", [...(existing.isDraft ? ["--ready"] : []), ...noAutoMerge])
   }
 
   await step("checks", ["--timeout", opt("--timeout") ?? "1800"])
@@ -1141,7 +1189,7 @@ async function cmdPr(): Promise<void> {
       const ready = await gh(["pr", "ready", branch])
       if (ready.code === 0) pr = { ...existing, isDraft: false }
     }
-    emit({ ok: true, created: false, ...pr })
+    emit({ ok: true, created: false, ...pr, autoMerge: await enableAutoMerge(branch, pr) })
     return
   }
 
@@ -1191,6 +1239,7 @@ async function cmdPr(): Promise<void> {
     url: pr?.url ?? created.stdout,
     baseRefName: pr?.baseRefName ?? base,
     headRefName: pr?.headRefName ?? branch,
+    autoMerge: await enableAutoMerge(branch, pr),
   })
 }
 
@@ -1478,7 +1527,12 @@ async function cmdReady(): Promise<void> {
   const base = await baseBranch()
   requireTrunk(base)
   const existing = await readPr(branch)
-  if (!existing) die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+  if (!existing) {
+    const merged = await mergedPr(branch)
+    if (merged) emit({ ok: true, ready: true, merged: true, ...merged })
+    else die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
+    return
+  }
 
   const { blockers, pending, mergeStateStatus } = await mergeReadiness(branch, base, existing)
   if (blockers.length > 0)

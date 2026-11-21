@@ -221,7 +221,7 @@ export const snsTopicFanout = async (t: Target) => {
 
 export const customerioSend = (
   t: Target,
-  channel: "email" | "sms",
+  channel: "email" | "sms" | "push",
   body: Record<string, unknown>,
 ) =>
   ok(

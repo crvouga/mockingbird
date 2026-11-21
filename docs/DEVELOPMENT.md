@@ -155,15 +155,23 @@ Advisory checks ([`advisory.yml`](../.github/workflows/advisory.yml)) are not re
 required review, no required approval, and an unresolved review thread does not block the merge. A green pull request is releasable: merging it to `main` publishes. The Release
 workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds (replaying main's turbo
 cache) and publishes. It does not re-run the pull-request checks. The branch must be up
-to date with `main` before merge, so those checks ran against the code that lands. Only merge
-commits are allowed, because each commit on the pull request is a release input. Head branches
-are deleted on merge. PRs use the template in `.github/pull_request_template.md`.
+to date with `main` before merge, so those checks ran against the code that lands.
+
+Pull requests are the whole workflow, and they land themselves. Only squash merges are allowed:
+the squash commit is the PR title (a Conventional Commit, checked by Commitlint) over the PR's
+commit messages, and it is the release input ([Releasing](RELEASING.md)). `bun run pr:ready pr`
+(and `advance`) turns on squash auto-merge for every PR it opens or takes out of draft, so GitHub
+merges it the moment the required checks pass, and deletes the head branch. Pass
+`--no-auto-merge` to hold one for a human. Auto-merge is enabled with your own `gh` login (or the
+resolve-issues run's app token), never a workflow's `GITHUB_TOKEN`: GitHub starts no workflows
+for a push made by `github-actions`, so a bot-enabled merge would never release or deploy. PRs
+use the template in `.github/pull_request_template.md`.
 
 The gate is codified in `scripts/pr-ready.ts` (`REQUIRED_CHECKS` is the ruleset list — rename a
 job in [`.github/workflows/pr.yml`](../.github/workflows/pr.yml) and update that list together):
 
 ```bash
-bun run pr:ready repo                            # verify merge settings / auto-delete / auto-merge
+bun run pr:ready repo                            # verify squash-only merges / auto-delete / auto-merge
 bun run pr:ready repo --apply
 bun run pr:ready ruleset                         # verify the `Protect main` ruleset
 bun run pr:ready ruleset --apply
@@ -188,7 +196,8 @@ canonical file; `bun run agents:sync` creates missing links and `bun run check:a
 
 `/pr-ready` takes the current branch to a merge-ready PR: commit, push, merge `origin/main`,
 resolve conflicts, open the PR, and fix every failing check (CI and third-party checks).
-It never merges; a human lands the PR once `bun run pr:ready ready` reports it green.
+It turns on squash auto-merge, so the PR lands by itself once every required check passes;
+`bun run pr:ready ready` reports it green (or `merged: true` when it already landed).
 For a clean, committed branch, `bun run pr:ready advance` performs the mechanical steps in one call
 and returns JSON for the next blocker. `bun run pr:ready comments` lists review threads and recent
 comments when you want to read them.
