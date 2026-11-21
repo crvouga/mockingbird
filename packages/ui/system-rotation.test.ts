@@ -52,10 +52,10 @@ test("rotation survives storage round trips and ignores junk", () => {
 })
 
 test("the services summary counts each mode", () => {
-  expect(summarizeServices([{ mode: "emulated" }, { mode: "sandbox" }, { mode: "emulated" }])).toBe(
-    "3 services · 2 emulated · 1 sandbox",
+  expect(summarizeServices([{ mode: "emulated" }, { mode: "dev" }, { mode: "emulated" }])).toBe(
+    "3 services · 2 emulated · 1 dev",
   )
-  expect(summarizeServices([{ mode: "emulated" }])).toBe("1 service · 1 emulated · 0 sandbox")
+  expect(summarizeServices([{ mode: "emulated" }])).toBe("1 service · 1 emulated · 0 dev")
 })
 
 test("a saved order survives apps being added and removed", () => {

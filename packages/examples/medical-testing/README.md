@@ -30,7 +30,7 @@ This build includes the [browser runtime adapter](../../adapters/browser/README.
 files, Node library polyfills and browser-local Node/Bun/Deno servers. See its compatibility table
 for supported APIs and explicit limits; this does not turn the browser into a complete host OS.
 The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets plus a small Worker
-(`src/worker.ts`) that only answers `/__sandbox/*`, the [sandbox proxy](#sandbox-mode). Every
+(`src/worker.ts`) that only answers `/__dev/*`, the [dev proxy](#dev-resources). Every
 application request still executes inside the browser. To publish a distinct
 PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` from this package
 directory. Deployment requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Actions
@@ -60,19 +60,24 @@ The current lab client has module-scoped ports and supports one system per docum
   Drag a row by its grip (or use the arrow keys on it) to reorder, and click a row to take it
   out of the switcher or put it back. Open still reaches any of them. The order, those choices
   and the pill's position are kept in the browser.
-- **Sandbox access**: the proxy's status, and where to enter the access key that unlocks it.
+- **Dev proxy**: whether the dev proxy on this origin is reachable, and that it only uses
+  allow-listed non-production credentials.
 - **Services**: every third-party service the app talks to (`src/composition/services.ts`), each
-  with an **Emulated | Sandbox** control, or the reason it can only be emulated.
+  with an **Emulated | Dev** control, or the reason it can only be emulated.
 
-### Sandbox mode
+### Dev resources
 
-Switching a service to **Sandbox** sends its emulator's requests through the Worker's
-`/__sandbox` proxy to the vendor's test account, with the proxy's `<SERVICE>_*` secrets
-attached. Nothing is rebuilt and no secret reaches the browser. The workflow copies
-`SANDBOX_PROXY_TOKEN` and the sandbox keys from GitHub Actions secrets to each PR's Worker; without
-`SANDBOX_PROXY_TOKEN` the proxy refuses every request. How it works, the security model, the
-providers and their limits are in [Sandbox mode](../../../docs/SANDBOX_MODE.md). The wiring is
-`src/composition/sandbox.ts` (browser) and `src/worker.ts` (proxy).
+Switching a service to **Dev** sends its emulator's requests through the Worker's `/__dev` proxy
+to a real non-production resource: Stripe test mode, Junction's sandbox, a dev Resend account. The
+proxy attaches the `<SERVICE>_*` credentials, and only ones that match the non-production
+allow-list in `src/worker.ts`. That list holds Stripe test keys and Junction's sandbox keys, whose
+format proves they are not production. Pin your dev account's identifier there to enable Twilio,
+FCM, Resend or Slack. A production key is refused even if a pattern would match it. Nothing is
+rebuilt, and no credential reaches the browser: the proxy, on the page's own origin, injects them
+and refuses requests from any other site. The workflow copies the credentials from GitHub Actions
+secrets to each PR's Worker. How it works, the safety model, the providers and their limits are in
+[Dev resources](../../../docs/DEV_RESOURCES.md). The wiring is `src/composition/dev.ts` (browser)
+and `src/worker.ts` (proxy).
 
 ## Ports and adapters
 

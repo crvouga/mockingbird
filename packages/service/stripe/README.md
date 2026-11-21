@@ -535,8 +535,8 @@ signal, and a transport failure behaves like a dropped connection. Forwarded res
 relayed as-is and **not mirrored into emulator state** (there is no forwarded-response journal
 hook for this service), so switching back to emulated resumes the emulator's own records. Tested
 with injected transports only; this is not live-vendor parity evidence. In a browser preview,
-`createSandbox(...).upstream("stripe")` from `@crvouga/mockingbird-preview` supplies the transport
-and the sandbox proxy attaches the real credentials server side.
+`createDevResources(...).upstream("stripe")` from `@crvouga/mockingbird-preview` supplies the transport
+and the dev proxy attaches the real test-mode credentials server side, refusing live keys.
 
 ## API
 

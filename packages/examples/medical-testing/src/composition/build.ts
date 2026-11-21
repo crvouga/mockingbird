@@ -54,8 +54,8 @@ export const buildDemo = async (
   assets: ClientAssets,
   options: {
     /**
-     * A transport to a service's vendor sandbox, by service id. A service given one can be
-     * switched from its emulator to the sandbox at runtime (`PUT /__admin/upstream`).
+     * A transport to a service's real non-production resource, by service id. A service given
+     * one can be switched from its emulator to that resource at runtime (`PUT /__admin/upstream`).
      */
     upstream?: (service: string) => UpstreamOptions | undefined
   } = {},

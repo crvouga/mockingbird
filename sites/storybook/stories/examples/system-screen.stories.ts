@@ -4,16 +4,17 @@ import { mountSystemHarness } from "../../../../packages/ui/src/system-harness.j
 import { SYSTEM_ICONS } from "../../../../packages/ui/src/system-icons.js"
 import { ORDER_KEY, ROTATION_KEY } from "../../../../packages/ui/src/system-rotation.js"
 import type {
-  SystemSandboxStatus,
+  SystemDevStatus,
   SystemService,
   SystemServiceMode,
   SystemServices,
 } from "../../../../packages/ui/src/system-screen.js"
 
 /**
- * The System screen of the preview shell: the apps in this tab, sandbox access, and every
- * third-party service switched between its emulator and the vendor's sandbox. Services come
- * from an in-memory fake with the lab's services.
+ * The System screen of the preview shell: the apps in this tab, the dev proxy's status, and every
+ * third-party service switched between its emulator and a real non-production resource (a
+ * vendor's test mode or sandbox, a dev instance). Services come from an in-memory fake with
+ * the lab's services.
  */
 export default {
   title: "Examples/System harness/System screen",
@@ -28,8 +29,7 @@ export default {
   },
 } satisfies Meta
 
-const ENDPOINT = "https://lab-preview.example.dev/__sandbox"
-const ACCESS_KEY = "lab-sandbox-key"
+const ENDPOINT = "https://lab-preview.example.dev/__dev"
 
 type Lab = { id: string; label: string; category: string; unavailable?: string }
 const LAB: readonly Lab[] = [
@@ -49,14 +49,16 @@ const LAB: readonly Lab[] = [
     id: "postgres",
     label: "PostgreSQL",
     category: "Database",
-    unavailable: "Runs in this browser; there is no vendor sandbox",
+    unavailable: "Runs in this browser; there is no remote dev instance to reach",
   },
 ]
 
 type Fake = {
-  /** What the proxy says, before any key is entered. */
-  state: SystemSandboxStatus["state"]
-  sandbox?: readonly string[]
+  /** What the dev proxy on this app's origin says. */
+  state: SystemDevStatus["state"]
+  dev?: readonly string[]
+  /** The proxy blocks these ids with this reason (its allow-list did not match). */
+  blocked?: Record<string, string>
   /** setMode rejects for these ids with this message. */
   failing?: Record<string, string>
   /** Milliseconds every call takes. */
@@ -64,41 +66,34 @@ type Fake = {
 }
 
 /** An in-memory SystemServices with the proxy behaviour the preview package implements. */
-function fakeServices({ state, sandbox = [], failing = {}, delay = 120 }: Fake): SystemServices {
+function fakeServices({
+  state,
+  dev = [],
+  blocked = {},
+  failing = {},
+  delay = 120,
+}: Fake): SystemServices {
   const modes = new Map<string, SystemServiceMode>(
-    LAB.map((lab) => [lab.id, sandbox.includes(lab.id) ? "sandbox" : "emulated"]),
+    LAB.map((lab) => [lab.id, dev.includes(lab.id) ? "dev" : "emulated"]),
   )
-  let key: string | null = state === "ready" ? ACCESS_KEY : null
   const wait = () => new Promise((resolve) => setTimeout(resolve, delay))
-  const status = (): SystemSandboxStatus => {
-    if (state === "none")
-      return { state, message: "No sandbox proxy is configured for this preview." }
+  const status = (): SystemDevStatus => {
+    if (state === "none") return { state, message: "No dev proxy is configured for this preview." }
     if (state === "unreachable")
-      return { state, message: "The sandbox proxy did not answer.", endpoint: ENDPOINT }
-    if (state === "off")
-      return {
-        state,
-        message: "The proxy has no SANDBOX_PROXY_TOKEN, so sandbox mode is off.",
-        endpoint: ENDPOINT,
-      }
-    if (key !== ACCESS_KEY)
-      return {
-        state: "locked",
-        message: key ? "That access key was refused." : "Enter the sandbox access key.",
-        endpoint: ENDPOINT,
-      }
-    return { state: "ready", message: "Sandbox proxy connected.", endpoint: ENDPOINT }
+      return { state, message: "The dev proxy did not answer.", endpoint: ENDPOINT }
+    return { state: "ready", message: "Dev proxy connected.", endpoint: ENDPOINT }
   }
   const reason = (lab: Lab) => {
     if (lab.unavailable) return lab.unavailable
     const now = status()
-    return now.state === "ready" ? undefined : now.message.replace(/\.$/, "")
+    if (now.state !== "ready") return now.message.replace(/\.$/, "")
+    return blocked[lab.id]
   }
   return {
     async list() {
       await wait()
       return {
-        sandbox: status(),
+        dev: status(),
         services: LAB.map((lab): SystemService => {
           const unavailable = reason(lab)
           return {
@@ -115,18 +110,13 @@ function fakeServices({ state, sandbox = [], failing = {}, delay = 120 }: Fake):
       await wait()
       const lab = LAB.find((candidate) => candidate.id === id)
       if (!lab) throw new Error(`Unknown service ${id}`)
-      if (mode === "sandbox") {
+      if (mode === "dev") {
         const blocked = reason(lab)
         if (blocked) throw new Error(blocked)
         if (failing[id]) throw new Error(failing[id])
       }
       modes.set(id, mode)
     },
-    async setAccessKey(next) {
-      await wait()
-      key = next
-    },
-    hasAccessKey: () => key !== null,
   }
 }
 
@@ -173,7 +163,7 @@ const screen =
       })),
       {
         ...(services ? { services: fakeServices(services) } : {}),
-        ...(extra.docs ? { docsUrl: "https://mockingbird.chrisvouga.dev/docs/sandbox-mode" } : {}),
+        ...(extra.docs ? { docsUrl: "https://mockingbird.chrisvouga.dev/docs/dev-resources" } : {}),
       },
     )
     stop = () => harness.destroy()
@@ -200,36 +190,36 @@ export const AllEmulated: StoryObj = {
     const page = within(canvasElement)
     await expect(page.getByRole("heading", { level: 1, name: "System" })).toBeVisible()
     await expect(page.getByText("Everything this preview runs, in this browser tab.")).toBeVisible()
-    await expect(page.getByRole("link", { name: /How sandbox mode works/ })).toBeVisible()
+    await expect(page.getByRole("link", { name: /How dev resources work/ })).toBeVisible()
     await loaded(canvasElement)
-    await expect(await summary(canvasElement)).toHaveTextContent(
-      "8 services · 8 emulated · 0 sandbox",
-    )
-    const access = page.getByTestId("system-sandbox-access")
+    await expect(await summary(canvasElement)).toHaveTextContent("8 services · 8 emulated · 0 dev")
+    const access = page.getByTestId("system-dev-proxy")
     await expect(access).toHaveAttribute("data-state", "ready")
-    await expect(within(access).getByText("Sandbox proxy connected.")).toBeVisible()
+    await expect(within(access).getByText("Dev proxy connected.")).toBeVisible()
     await expect(within(access).getByText(ENDPOINT)).toBeVisible()
     await expect(
-      page.queryAllByText("Live sandbox").filter((node) => !isHidden(node)),
+      within(access).getByText("It runs on this app's own origin and adds the credentials itself."),
+    ).toBeVisible()
+    await expect(within(access).queryByRole("textbox")).toBeNull()
+    await expect(within(access).queryByRole("button")).toBeNull()
+    await expect(
+      page.queryAllByText("Dev resource").filter((node) => !isHidden(node)),
     ).toHaveLength(0)
     const oauth = row(canvasElement, "oauth")
-    await expect(oauth.getByRole("radio", { name: "Sandbox" })).toBeDisabled()
+    await expect(oauth.getByRole("radio", { name: "Dev" })).toBeDisabled()
     await expect(oauth.getByText("Sign-in redirects can't be forwarded")).toBeVisible()
 
     const stripe = row(canvasElement, "stripe")
     stripe.getByRole("radio", { name: "Emulated" }).focus()
     await userEvent.keyboard("{ArrowRight}")
     await waitFor(() =>
-      expect(stripe.getByRole("radio", { name: "Sandbox" })).toHaveAttribute(
-        "aria-checked",
-        "true",
-      ),
+      expect(stripe.getByRole("radio", { name: "Dev" })).toHaveAttribute("aria-checked", "true"),
     )
-    await expect(stripe.getByRole("radio", { name: "Sandbox" })).toHaveFocus()
-    await waitFor(() => expect(stripe.getByText("Live sandbox")).toBeVisible())
+    await expect(stripe.getByRole("radio", { name: "Dev" })).toHaveFocus()
+    await waitFor(() => expect(stripe.getByText("Dev resource")).toBeVisible())
     await waitFor(() =>
       expect(page.getByTestId("system-services-summary")).toHaveTextContent(
-        "8 services · 7 emulated · 1 sandbox",
+        "8 services · 7 emulated · 1 dev",
       ),
     )
     // The switch is optimistic; the row stays busy until the proxy answers.
@@ -247,76 +237,45 @@ export const AllEmulated: StoryObj = {
 }
 const isHidden = (node: HTMLElement) => node.closest("[hidden]") !== null
 
-/** Stripe and Junction already on their sandboxes; Resend joins them with a pending state. */
-export const MixedSandbox: StoryObj = {
-  render: screen({ state: "ready", sandbox: ["stripe", "junction"], delay: 600 }),
+/**
+ * Stripe (test mode) and Junction (its sandbox) already on dev resources; Twilio joins them with
+ * a pending state. The proxy blocks Resend: its allow-list has no pattern for RESEND_API_KEY.
+ */
+export const MixedDev: StoryObj = {
+  render: screen({
+    state: "ready",
+    dev: ["stripe", "junction"],
+    blocked: { resend: "No allow-list pattern for RESEND_API_KEY" },
+    delay: 600,
+  }),
   play: async ({ canvasElement }) => {
     await loaded(canvasElement)
-    await expect(await summary(canvasElement)).toHaveTextContent(
-      "8 services · 6 emulated · 2 sandbox",
-    )
-    await expect(row(canvasElement, "stripe").getByText("Live sandbox")).toBeVisible()
-    await expect(row(canvasElement, "junction").getByText("Live sandbox")).toBeVisible()
-    const resend = row(canvasElement, "resend")
-    await userEvent.click(resend.getByRole("radio", { name: "Sandbox" }))
-    await expect(resend.getByRole("status")).toHaveTextContent("Switching to the vendor sandbox…")
-    await expect(resend.getByRole("radiogroup")).toHaveAttribute("aria-busy", "true")
-    await waitFor(() => expect(resend.queryByRole("status")).toBeNull(), { timeout: 3000 })
-    await expect(resend.getByText("Live sandbox")).toBeVisible()
-    await expect(canvasElement.querySelector('[data-service="resend"]')).toHaveAttribute(
-      "data-mode",
-      "sandbox",
-    )
-  },
-}
-
-/** No key in this browser: sandbox is locked until the access key is saved. */
-export const Locked: StoryObj = {
-  render: screen({ state: "locked" }),
-  play: async ({ canvasElement }) => {
-    const page = within(canvasElement)
-    await loaded(canvasElement)
-    const access = page.getByTestId("system-sandbox-access")
-    await expect(access).toHaveAttribute("data-state", "locked")
-    await expect(within(access).getByText("Locked")).toBeVisible()
+    await expect(await summary(canvasElement)).toHaveTextContent("8 services · 6 emulated · 2 dev")
+    await expect(row(canvasElement, "stripe").getByText("Dev resource")).toBeVisible()
+    await expect(row(canvasElement, "junction").getByText("Dev resource")).toBeVisible()
+    const access = within(canvasElement).getByTestId("system-dev-proxy")
     await expect(
-      row(canvasElement, "stripe").getByRole("radio", { name: "Sandbox" }),
-    ).toBeDisabled()
-    await expect(within(access).queryByRole("button", { name: "Forget key" })).toBeNull()
-
-    await userEvent.click(within(access).getByRole("button", { name: "Save key" }))
-    await expect(within(access).getByRole("alert")).toHaveTextContent("Enter the access key first.")
-    await userEvent.type(within(access).getByLabelText("Access key"), ACCESS_KEY)
-    await userEvent.click(within(access).getByRole("button", { name: "Save key" }))
-    await waitFor(() => expect(access).toHaveAttribute("data-state", "ready"), { timeout: 3000 })
-    await expect(within(access).getByLabelText("Access key")).toHaveValue("")
-    await expect(within(access).getByRole("button", { name: "Forget key" })).toBeVisible()
-    await waitFor(() =>
-      expect(row(canvasElement, "stripe").getByRole("radio", { name: "Sandbox" })).toBeEnabled(),
-    )
-    await expect(
-      row(canvasElement, "postgres").getByRole("radio", { name: "Sandbox" }),
-    ).toBeDisabled()
-
-    await userEvent.click(within(access).getByRole("button", { name: "Forget key" }))
-    await waitFor(() => expect(access).toHaveAttribute("data-state", "locked"), { timeout: 3000 })
-  },
-}
-
-/** The proxy runs without SANDBOX_PROXY_TOKEN: it fails closed and offers no key form. */
-export const Off: StoryObj = {
-  render: screen({ state: "off" }),
-  play: async ({ canvasElement }) => {
-    await loaded(canvasElement)
-    const access = within(canvasElement).getByTestId("system-sandbox-access")
-    await expect(access).toHaveAttribute("data-state", "off")
-    await expect(
-      within(access).getByText("The proxy has no SANDBOX_PROXY_TOKEN, so sandbox mode is off."),
+      within(access).getByText(
+        "Only credentials that match the proxy's non-production allow-list are used. They never reach this browser.",
+      ),
     ).toBeVisible()
-    await expect(within(access).getByLabelText("Access key")).not.toBeVisible()
-    await expect(
-      row(canvasElement, "twilio").getByRole("radio", { name: "Sandbox" }),
-    ).toBeDisabled()
+    // A service the proxy blocks shows the host's reason and cannot be switched.
+    const resend = row(canvasElement, "resend")
+    await expect(resend.getByText("No allow-list pattern for RESEND_API_KEY")).toBeVisible()
+    await expect(resend.getByRole("radio", { name: "Dev" })).toBeDisabled()
+    await expect(resend.getByRole("radio", { name: "Dev" })).toHaveAccessibleDescription(
+      /No allow-list pattern for RESEND_API_KEY/,
+    )
+    const twilio = row(canvasElement, "twilio")
+    await userEvent.click(twilio.getByRole("radio", { name: "Dev" }))
+    await expect(twilio.getByRole("status")).toHaveTextContent("Switching to the dev resource…")
+    await expect(twilio.getByRole("radiogroup")).toHaveAttribute("aria-busy", "true")
+    await waitFor(() => expect(twilio.queryByRole("status")).toBeNull(), { timeout: 3000 })
+    await expect(twilio.getByText("Dev resource")).toBeVisible()
+    await expect(canvasElement.querySelector('[data-service="twilio"]')).toHaveAttribute(
+      "data-mode",
+      "dev",
+    )
   },
 }
 
@@ -325,23 +284,25 @@ export const Unreachable: StoryObj = {
   render: screen({ state: "unreachable" }),
   play: async ({ canvasElement }) => {
     await loaded(canvasElement)
-    const access = within(canvasElement).getByTestId("system-sandbox-access")
+    const access = within(canvasElement).getByTestId("system-dev-proxy")
     await expect(access).toHaveAttribute("data-state", "unreachable")
     await expect(within(access).getByText("Unreachable")).toBeVisible()
     await expect(within(access).getByText(ENDPOINT)).toBeVisible()
     // The proxy's reason is said once above the list, not under every row.
     await expect(
       within(canvasElement).getByText(
-        "Sandbox is unavailable for every service: The sandbox proxy did not answer.",
+        "Dev is unavailable for every service: The dev proxy did not answer.",
       ),
     ).toBeVisible()
     const slack = row(canvasElement, "slack")
-    await expect(slack.getByText("The sandbox proxy did not answer")).not.toBeVisible()
-    await expect(slack.getByRole("radio", { name: "Sandbox" })).toHaveAccessibleDescription(
-      /The sandbox proxy did not answer/,
+    await expect(slack.getByText("The dev proxy did not answer")).not.toBeVisible()
+    await expect(slack.getByRole("radio", { name: "Dev" })).toHaveAccessibleDescription(
+      /The dev proxy did not answer/,
     )
     await expect(
-      row(canvasElement, "postgres").getByText("Runs in this browser; there is no vendor sandbox"),
+      row(canvasElement, "postgres").getByText(
+        "Runs in this browser; there is no remote dev instance to reach",
+      ),
     ).toBeVisible()
   },
 }
@@ -351,11 +312,10 @@ export const NoProxy: StoryObj = {
   render: screen({ state: "none" }),
   play: async ({ canvasElement }) => {
     await loaded(canvasElement)
-    const access = within(canvasElement).getByTestId("system-sandbox-access")
+    const access = within(canvasElement).getByTestId("system-dev-proxy")
     await expect(access).toHaveAttribute("data-state", "none")
     await expect(within(access).getByText("Not set up")).toBeVisible()
     await expect(within(access).getByText("Proxy")).not.toBeVisible()
-    await expect(within(access).getByLabelText("Access key")).not.toBeVisible()
   },
 }
 
@@ -368,16 +328,16 @@ export const SwitchFails: StoryObj = {
   play: async ({ canvasElement }) => {
     await loaded(canvasElement)
     const twilio = row(canvasElement, "twilio")
-    await userEvent.click(twilio.getByRole("radio", { name: "Sandbox" }))
+    await userEvent.click(twilio.getByRole("radio", { name: "Dev" }))
     await expect(await twilio.findByRole("alert", {}, { timeout: 3000 })).toHaveTextContent(
-      "Couldn't switch Twilio to sandbox: Missing TWILIO_AUTH_TOKEN on the proxy",
+      "Couldn't switch Twilio to dev: Missing TWILIO_AUTH_TOKEN on the proxy",
     )
     await expect(twilio.getByRole("radio", { name: "Emulated" })).toHaveAttribute(
       "aria-checked",
       "true",
     )
     await expect(within(canvasElement).getByTestId("system-services-summary")).toHaveTextContent(
-      "8 services · 8 emulated · 0 sandbox",
+      "8 services · 8 emulated · 0 dev",
     )
   },
 }
@@ -389,8 +349,8 @@ export const NoServices: StoryObj = {
     const page = within(canvasElement)
     await expect(page.getByText("No services listed")).toBeVisible()
     await expect(page.getByText(/The host app supplies them/)).toBeVisible()
-    await expect(page.queryByTestId("system-sandbox-access")).toBeNull()
-    await expect(page.queryByRole("link", { name: /How sandbox mode works/ })).toBeNull()
+    await expect(page.queryByTestId("system-dev-proxy")).toBeNull()
+    await expect(page.queryByRole("link", { name: /How dev resources work/ })).toBeNull()
   },
 }
 
@@ -580,7 +540,7 @@ export const Reorder: StoryObj = {
 
 /** On a phone: cards stack, the segmented control spans the row, and nothing scrolls sideways. */
 export const Phone: StoryObj = {
-  render: screen({ state: "ready", sandbox: ["stripe"] }),
+  render: screen({ state: "ready", dev: ["stripe"] }),
   globals: { viewport: { value: "phone" } },
   play: async ({ canvasElement }) => {
     await loaded(canvasElement)
@@ -590,6 +550,6 @@ export const Phone: StoryObj = {
     await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
       document.documentElement.clientWidth,
     )
-    await expect(row(canvasElement, "stripe").getByText("Live sandbox")).toBeVisible()
+    await expect(row(canvasElement, "stripe").getByText("Dev resource")).toBeVisible()
   },
 }

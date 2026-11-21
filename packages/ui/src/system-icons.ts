@@ -13,7 +13,7 @@
  */
 export type SystemIcon = { svg: string } | { src: string } | { favicon: string }
 
-const stroke = (paths: string): SystemIcon => ({
+const stroke = (paths: string): { svg: string } => ({
   svg: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`,
 })
 

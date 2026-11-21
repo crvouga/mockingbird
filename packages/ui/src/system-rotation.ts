@@ -93,9 +93,9 @@ export function stepRotation(
   return "system"
 }
 
-/** "8 services · 6 emulated · 2 sandbox" */
-export function summarizeServices(services: readonly { mode: "emulated" | "sandbox" }[]): string {
-  const sandbox = services.filter((service) => service.mode === "sandbox").length
+/** "8 services · 6 emulated · 2 dev" */
+export function summarizeServices(services: readonly { mode: "emulated" | "dev" }[]): string {
+  const dev = services.filter((service) => service.mode === "dev").length
   const total = services.length
-  return `${total} ${total === 1 ? "service" : "services"} · ${total - sandbox} emulated · ${sandbox} sandbox`
+  return `${total} ${total === 1 ? "service" : "services"} · ${total - dev} emulated · ${dev} dev`
 }

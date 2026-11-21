@@ -1,14 +1,18 @@
 /**
- * Browser side of sandbox mode: wires an emulator runtime's `upstream` to the sandbox proxy and
- * gives the System screen its per-service Emulated / Sandbox switches.
+ * Browser side of dev resources: wires an emulator runtime's `upstream` to the dev proxy (which
+ * reaches a real non-production resource) and gives the System screen its per-service
+ * Emulated / Dev switches.
+ *
+ * The proxy is mounted on the app's own origin and trusts it: the client sends no key and never
+ * handles a credential.
  *
  * Portable: Fetch API only; `localStorage` is used when present and never required.
  */
-import { SANDBOX_KEY_HEADER, type SandboxManifest } from "./sandbox-proxy.js"
+import type { DevManifest } from "./dev-proxy.js"
 
-export type SandboxMode = "emulated" | "sandbox"
+export type DevMode = "emulated" | "dev"
 
-export type SandboxServiceSpec = {
+export type DevServiceSpec = {
   /** Provider id at the proxy, e.g. "stripe". */
   id: string
   /** "Stripe" */
@@ -22,7 +26,7 @@ export type SandboxServiceSpec = {
 }
 
 /** Structurally identical to `SystemServiceMode` in `@crvouga/mockingbird-ui`. */
-export type SystemServiceModeLike = "emulated" | "sandbox"
+export type SystemServiceModeLike = "emulated" | "dev"
 
 /** Structurally identical to `SystemService` in `@crvouga/mockingbird-ui`. */
 export type SystemServiceLike = {
@@ -30,13 +34,13 @@ export type SystemServiceLike = {
   label: string
   category?: string
   mode: SystemServiceModeLike
-  /** Why sandbox cannot be chosen; undefined when it can. */
+  /** Why dev cannot be chosen; undefined when it can. */
   unavailable?: string
 }
 
-/** Structurally identical to `SystemSandboxStatus` in `@crvouga/mockingbird-ui`. */
-export type SystemSandboxStatusLike = {
-  state: "ready" | "locked" | "off" | "unreachable" | "none"
+/** Structurally identical to `SystemDevStatus` in `@crvouga/mockingbird-ui`. */
+export type SystemDevStatusLike = {
+  state: "ready" | "unreachable" | "none"
   /** One sentence shown in the access panel. */
   message: string
   /** The proxy URL, displayed. */
@@ -45,52 +49,49 @@ export type SystemSandboxStatusLike = {
 
 /** Structurally identical to `SystemServices` in `@crvouga/mockingbird-ui`. */
 export type SystemServicesLike = {
-  list(): Promise<{ sandbox: SystemSandboxStatusLike; services: readonly SystemServiceLike[] }>
+  list(): Promise<{ dev: SystemDevStatusLike; services: readonly SystemServiceLike[] }>
   setMode(id: string, mode: SystemServiceModeLike): Promise<void>
-  setAccessKey(key: string | null): Promise<void>
-  hasAccessKey(): boolean
 }
 
-export type SandboxUpstream = {
+export type DevUpstream = {
   baseUrl: string
   fetch: (request: Request) => Promise<Response>
   rewriteAuth: (request: Request) => Request
 }
 
-export type Sandbox = {
-  /** For createRuntime({ upstream }): baseUrl `${proxy}/${id}`, fetch adds SANDBOX_KEY_HEADER, rewriteAuth drops authorization. */
-  upstream(id: string): SandboxUpstream
+export type DevResources = {
+  /** For createRuntime({ upstream }): baseUrl `${proxy}/${id}`, fetch goes to the proxy as-is, rewriteAuth drops authorization and cookies. */
+  upstream(id: string): DevUpstream
   /** The SystemServices provider the UI harness takes. */
-  controls(services: readonly SandboxServiceSpec[]): SystemServicesLike
+  controls(services: readonly DevServiceSpec[]): SystemServicesLike
 }
 
-export type SandboxStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">
+export type DevStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">
 
-export type SandboxOptions = {
-  /** Absolute, or relative to location.origin (e.g. "/__sandbox"). Undefined = sandbox not offered. */
+export type DevResourcesOptions = {
+  /** Absolute, or relative to location.origin (e.g. "/__dev"). Undefined = dev resources not offered. */
   proxyUrl?: string
-  /** Per-viewer storage for the access key and chosen modes. Default: localStorage, try/catch wrapped. */
-  storage?: SandboxStorage
+  /** Per-viewer storage for the chosen modes. Default: localStorage, try/catch wrapped. */
+  storage?: DevStorage
   fetch?: (request: Request) => Promise<Response>
 }
 
 /** Storage keys (per origin). */
-export const SANDBOX_STORAGE_KEYS = {
-  accessKey: "mockingbird.sandbox.access-key",
-  modes: "mockingbird.sandbox.modes",
+export const DEV_STORAGE_KEYS = {
+  modes: "mockingbird.dev.modes",
 } as const
 
-export const SANDBOX_MESSAGES = {
-  none: "No sandbox proxy is configured for this preview",
-  off: "The proxy has no SANDBOX_PROXY_TOKEN, so sandbox mode is off",
-  locked: "Enter the sandbox access key",
-  ready: "Sandbox access is granted: switch a service to send its requests to the vendor's sandbox",
+export const DEV_MESSAGES = {
+  none: "No dev proxy is configured for this preview",
+  ready: "Dev resources are available: switch a service to send its requests to its dev resource",
 } as const
 
-const unreachableMessage = (endpoint: string) => `The sandbox proxy at ${endpoint} did not answer`
+const unreachableMessage = (endpoint: string) => `The dev proxy at ${endpoint} did not answer`
+const refusedMessage = (endpoint: string, reason: string) =>
+  `The dev proxy at ${endpoint} refused the request: ${reason}`
 
 /** Memory fallback for when browser storage is missing or blocked. */
-const memoryStorage = (): SandboxStorage => {
+const memoryStorage = (): DevStorage => {
   const values = new Map<string, string>()
   return {
     getItem: (key) => values.get(key) ?? null,
@@ -100,12 +101,12 @@ const memoryStorage = (): SandboxStorage => {
 }
 
 /** Wrap a storage so a throwing accessor (private mode, blocked site data) never breaks the page. */
-const safeStorage = (storage: SandboxStorage | undefined): SandboxStorage => {
+const safeStorage = (storage: DevStorage | undefined): DevStorage => {
   const fallback = memoryStorage()
-  const resolve = (): SandboxStorage => {
+  const resolve = (): DevStorage => {
     if (storage) return storage
     try {
-      const local = (globalThis as { localStorage?: SandboxStorage }).localStorage
+      const local = (globalThis as { localStorage?: DevStorage }).localStorage
       if (local) return local
     } catch {}
     return fallback
@@ -142,7 +143,7 @@ const resolveProxyUrl = (proxyUrl: string | undefined): string | undefined => {
     url = origin ? new URL(proxyUrl, origin) : new URL(proxyUrl)
   } catch {
     throw new Error(
-      `sandbox proxyUrl ${JSON.stringify(proxyUrl)} must be absolute outside a browser page`,
+      `dev proxyUrl ${JSON.stringify(proxyUrl)} must be absolute outside a browser page`,
     )
   }
   url.search = ""
@@ -151,7 +152,7 @@ const resolveProxyUrl = (proxyUrl: string | undefined): string | undefined => {
 }
 
 /** Where emulators point when no proxy is configured: refused locally, never on the network. */
-const NO_PROXY_BASE = "https://sandbox-proxy.invalid"
+const NO_PROXY_BASE = "https://dev-proxy.invalid"
 
 const errorMessage = async (response: Response, fallback: string) => {
   try {
@@ -165,67 +166,58 @@ const errorMessage = async (response: Response, fallback: string) => {
 }
 
 /** Read an emulator's upstream mode. */
-const readMode = async (spec: SandboxServiceSpec): Promise<SandboxMode> => {
+const readMode = async (spec: DevServiceSpec): Promise<DevMode> => {
   try {
     const response = await spec.admin(new Request("http://mockingbird.local/__admin/upstream"))
     if (!response.ok) return "emulated"
     const body = (await response.json()) as { mode?: unknown }
-    return body.mode === "forward" ? "sandbox" : "emulated"
+    return body.mode === "forward" ? "dev" : "emulated"
   } catch {
     return "emulated"
   }
 }
 
-const writeMode = (spec: SandboxServiceSpec, mode: SandboxMode) =>
+const writeMode = (spec: DevServiceSpec, mode: DevMode) =>
   spec.admin(
     new Request("http://mockingbird.local/__admin/upstream", {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ mode: mode === "sandbox" ? "forward" : "emulated" }),
+      body: JSON.stringify({ mode: mode === "dev" ? "forward" : "emulated" }),
     }),
   )
 
-export const createSandbox = (options: SandboxOptions = {}): Sandbox => {
+export const createDevResources = (options: DevResourcesOptions = {}): DevResources => {
   const endpoint = resolveProxyUrl(options.proxyUrl)
   const storage = safeStorage(options.storage)
   const send = options.fetch ?? ((request: Request) => globalThis.fetch(request))
 
-  const accessKey = () => storage.getItem(SANDBOX_STORAGE_KEYS.accessKey) || null
-  const storedModes = (): Record<string, SandboxMode> => {
+  const storedModes = (): Record<string, DevMode> => {
     try {
-      const value = JSON.parse(storage.getItem(SANDBOX_STORAGE_KEYS.modes) ?? "{}") as unknown
+      const value = JSON.parse(storage.getItem(DEV_STORAGE_KEYS.modes) ?? "{}") as unknown
       if (!value || typeof value !== "object" || Array.isArray(value)) return {}
       return Object.fromEntries(
-        Object.entries(value).filter(([, mode]) => mode === "sandbox"),
-      ) as Record<string, SandboxMode>
+        Object.entries(value).filter(([, mode]) => mode === "dev"),
+      ) as Record<string, DevMode>
     } catch {
       return {}
     }
   }
-  const storeMode = (id: string, mode: SandboxMode) => {
+  const storeMode = (id: string, mode: DevMode) => {
     const modes = storedModes()
-    if (mode === "sandbox") modes[id] = "sandbox"
+    if (mode === "dev") modes[id] = "dev"
     else delete modes[id]
-    storage.setItem(SANDBOX_STORAGE_KEYS.modes, JSON.stringify(modes))
+    storage.setItem(DEV_STORAGE_KEYS.modes, JSON.stringify(modes))
   }
 
-  const withKey = (request: Request): Request => {
-    const out = new Request(request)
-    const key = accessKey()
-    if (key) out.headers.set(SANDBOX_KEY_HEADER, key)
-    else out.headers.delete(SANDBOX_KEY_HEADER)
-    return out
-  }
-
-  const upstream = (id: string): SandboxUpstream => ({
+  const upstream = (id: string): DevUpstream => ({
     baseUrl: `${endpoint ?? NO_PROXY_BASE}/${encodeURIComponent(id)}`,
     fetch: async (request) => {
       if (!endpoint)
         return Response.json(
-          { error: { code: "sandbox_unavailable", message: SANDBOX_MESSAGES.none } },
+          { error: { code: "dev_unavailable", message: DEV_MESSAGES.none } },
           { status: 503 },
         )
-      return send(withKey(request))
+      return send(request)
     },
     rewriteAuth: (request) => {
       const out = new Request(request)
@@ -235,42 +227,43 @@ export const createSandbox = (options: SandboxOptions = {}): Sandbox => {
     },
   })
 
-  type Manifest = { status: SystemSandboxStatusLike; manifest?: SandboxManifest }
+  type Manifest = { status: SystemDevStatusLike; manifest?: DevManifest }
   const readManifest = async (): Promise<Manifest> => {
-    if (!endpoint) return { status: { state: "none", message: SANDBOX_MESSAGES.none } }
-    let manifest: SandboxManifest
+    if (!endpoint) return { status: { state: "none", message: DEV_MESSAGES.none } }
+    let manifest: DevManifest
     try {
-      const response = await send(withKey(new Request(`${endpoint}/`)))
-      if (!response.ok) throw new Error(`status ${response.status}`)
-      manifest = (await response.json()) as SandboxManifest
+      const response = await send(new Request(`${endpoint}/`))
+      if (!response.ok) {
+        const reason = await errorMessage(response, "")
+        if (reason)
+          return {
+            status: { state: "unreachable", message: refusedMessage(endpoint, reason), endpoint },
+          }
+        throw new Error(`status ${response.status}`)
+      }
+      manifest = (await response.json()) as DevManifest
       if (!manifest || !Array.isArray(manifest.providers)) throw new Error("not a manifest")
     } catch {
       return {
         status: { state: "unreachable", message: unreachableMessage(endpoint), endpoint },
       }
     }
-    const status: SystemSandboxStatusLike =
-      manifest.access === "granted"
-        ? { state: "ready", message: SANDBOX_MESSAGES.ready, endpoint }
-        : manifest.access === "denied"
-          ? { state: "locked", message: SANDBOX_MESSAGES.locked, endpoint }
-          : { state: "off", message: SANDBOX_MESSAGES.off, endpoint }
-    return { status, manifest }
+    return { status: { state: "ready", message: DEV_MESSAGES.ready, endpoint }, manifest }
   }
 
-  /** Why `spec` cannot be switched to sandbox, in the documented precedence; undefined = it can. */
-  const reason = (spec: SandboxServiceSpec, { status, manifest }: Manifest) => {
+  /** Why `spec` cannot be switched to dev, in the documented precedence; undefined = it can. */
+  const reason = (spec: DevServiceSpec, { status, manifest }: Manifest) => {
     if (spec.unsupported) return spec.unsupported
     if (status.state !== "ready") return status.message
     const provider = manifest?.providers.find((candidate) => candidate.id === spec.id)
-    if (!provider) return `The sandbox proxy does not offer ${spec.label}`
+    if (!provider) return `The dev proxy does not offer ${spec.label}`
     if (provider.missing.length > 0) return `Missing ${provider.missing.join(", ")} on the proxy`
-    if (provider.error) return provider.error
-    if (!provider.configured) return `${spec.label} is not configured on the sandbox proxy`
+    if (provider.blocked) return provider.blocked
+    if (!provider.configured) return `${spec.label} is not configured on the dev proxy`
     return undefined
   }
 
-  const controls = (services: readonly SandboxServiceSpec[]): SystemServicesLike => {
+  const controls = (services: readonly DevServiceSpec[]): SystemServicesLike => {
     const specs = new Map(services.map((spec) => [spec.id, spec]))
     let restored = false
 
@@ -280,7 +273,7 @@ export const createSandbox = (options: SandboxOptions = {}): Sandbox => {
       return spec
     }
 
-    const apply = async (spec: SandboxServiceSpec, mode: SandboxMode) => {
+    const apply = async (spec: DevServiceSpec, mode: DevMode) => {
       const response = await writeMode(spec, mode)
       if (response.ok) return
       // An emulator without upstream support is already emulated; that is the goal.
@@ -301,9 +294,9 @@ export const createSandbox = (options: SandboxOptions = {}): Sandbox => {
           const stored = storedModes()
           await Promise.all(
             services.map(async (spec) => {
-              if (stored[spec.id] !== "sandbox" || reason(spec, state) !== undefined) return
-              if ((await readMode(spec)) === "sandbox") return
-              await apply(spec, "sandbox").catch(() => {})
+              if (stored[spec.id] !== "dev" || reason(spec, state) !== undefined) return
+              if ((await readMode(spec)) === "dev") return
+              await apply(spec, "dev").catch(() => {})
             }),
           )
         }
@@ -319,23 +312,17 @@ export const createSandbox = (options: SandboxOptions = {}): Sandbox => {
             }
           }),
         )
-        return { sandbox: state.status, services: rows }
+        return { dev: state.status, services: rows }
       },
       setMode: async (id, mode) => {
         const spec = find(id)
-        if (mode === "sandbox") {
+        if (mode === "dev") {
           const why = reason(spec, await readManifest())
           if (why !== undefined) throw new Error(why)
         } else if (mode !== "emulated") throw new Error(`Unknown mode ${String(mode)}`)
         await apply(spec, mode)
         storeMode(id, mode)
       },
-      setAccessKey: async (key) => {
-        const value = key?.trim()
-        if (value) storage.setItem(SANDBOX_STORAGE_KEYS.accessKey, value)
-        else storage.removeItem(SANDBOX_STORAGE_KEYS.accessKey)
-      },
-      hasAccessKey: () => accessKey() !== null,
     }
   }
 

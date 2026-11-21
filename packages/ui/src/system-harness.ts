@@ -13,7 +13,7 @@ import { mountSystemScreen, SYSTEM_CSS, type SystemServices } from "./system-scr
 
 export { ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
 export type {
-  SystemSandboxStatus,
+  SystemDevStatus,
   SystemService,
   SystemServiceMode,
   SystemServices,
@@ -34,9 +34,9 @@ export type SystemHarnessOptions = {
   initial?: string
   /** Keep `?surface=` in the address bar and follow back/forward. */
   syncUrl?: boolean
-  /** The services the System screen lists and switches between emulated and sandbox. */
+  /** The services the System screen lists and switches between emulated and a real non-production resource. */
   services?: SystemServices
-  /** Where the System screen's "How sandbox mode works" link points. */
+  /** Where the System screen's "How dev resources work" link points. */
   docsUrl?: string
 }
 export type SystemHarness = {

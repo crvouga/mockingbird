@@ -2,7 +2,8 @@
 import { paintIcon, type SystemIcon } from "./system-icons.js"
 import { summarizeServices } from "./system-rotation.js"
 
-export type SystemServiceMode = "emulated" | "sandbox"
+/** Where a service's requests go: its emulator in this tab, or a real non-production resource. */
+export type SystemServiceMode = "emulated" | "dev"
 
 /** One third-party service behind the preview, and where its requests go. */
 export type SystemService = {
@@ -10,13 +11,16 @@ export type SystemService = {
   label: string
   category?: string
   mode: SystemServiceMode
-  /** Why sandbox cannot be chosen; undefined when it can. */
+  /** Why dev cannot be chosen (for example, the proxy blocked it); undefined when it can. */
   unavailable?: string
 }
 
-/** Whether this browser can reach the sandbox proxy, in one sentence. */
-export type SystemSandboxStatus = {
-  state: "ready" | "locked" | "off" | "unreachable" | "none"
+/**
+ * Whether this preview can reach the dev proxy, in one sentence. The proxy runs on the app's own
+ * origin and adds the credentials server-side, so the browser never sees a credential.
+ */
+export type SystemDevStatus = {
+  state: "ready" | "unreachable" | "none"
   /** One sentence shown in the access panel. */
   message: string
   /** The proxy URL, displayed. */
@@ -25,10 +29,8 @@ export type SystemSandboxStatus = {
 
 /** What the System screen lists and switches. `@crvouga/mockingbird-preview`'s `controls()` is one. */
 export type SystemServices = {
-  list(): Promise<{ sandbox: SystemSandboxStatus; services: readonly SystemService[] }>
+  list(): Promise<{ dev: SystemDevStatus; services: readonly SystemService[] }>
   setMode(id: string, mode: SystemServiceMode): Promise<void>
-  setAccessKey(key: string | null): Promise<void>
-  hasAccessKey(): boolean
 }
 
 /** What the harness hands the System screen. */
@@ -58,32 +60,25 @@ const ICONS = {
   alert:
     '<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/>',
   grip: '<circle cx="9" cy="6" r="1.2"/><circle cx="15" cy="6" r="1.2"/><circle cx="9" cy="12" r="1.2"/><circle cx="15" cy="12" r="1.2"/><circle cx="9" cy="18" r="1.2"/><circle cx="15" cy="18" r="1.2"/>',
-  key: '<circle cx="8" cy="15" r="4"/><path d="m10.8 12.2 9.2-9.2M17 6l3 3M15 8l2 2"/>',
+  shield:
+    '<path d="M12 3 5 6v6c0 4.2 2.9 7.6 7 9 4.1-1.4 7-4.8 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/>',
   plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0V8ZM12 18v4"/>',
 } as const
 const icon = (name: keyof typeof ICONS) =>
   `<svg class="msh-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[name]}</svg>`
 
-const STATES: Record<SystemSandboxStatus["state"], { chip: string; hint: string }> = {
+const STATES: Record<SystemDevStatus["state"], { chip: string; hint: string }> = {
   ready: {
     chip: "Ready",
-    hint: "Services that support it can send their requests to the vendor's sandbox.",
-  },
-  locked: {
-    chip: "Locked",
-    hint: "Ask whoever runs this preview for the access key. It is kept only in this browser.",
-  },
-  off: {
-    chip: "Off",
-    hint: "Whoever runs the proxy turns sandbox mode on by giving it an access key.",
+    hint: "It runs on this app's own origin and adds the credentials itself.",
   },
   unreachable: {
     chip: "Unreachable",
-    hint: "Check that the proxy is running and allows this origin, then refresh.",
+    hint: "Check that the proxy is running on this app's origin, then refresh.",
   },
   none: {
     chip: "Not set up",
-    hint: "Every service is emulated in this tab. Deploy the sandbox proxy and give its URL to this preview to offer sandbox mode.",
+    hint: "Every service is emulated in this tab. Deploy the dev proxy and give its URL to this preview to reach non-production resources.",
   },
 }
 
@@ -131,7 +126,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     docs.href = context.docsUrl
     docs.target = "_blank"
     docs.rel = "noreferrer"
-    docs.append(el("span", "", "How sandbox mode works"))
+    docs.append(el("span", "", "How dev resources work"))
     docs.insertAdjacentHTML("beforeend", icon("external"))
     header.append(docs)
   }
@@ -314,7 +309,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   }
   page.append(apps)
 
-  // ---- services + sandbox access
+  // ---- services + dev access
   const services = context.services
   const lower = el("div", services ? "msh-lower" : "msh-lower msh-lower-single")
   page.append(lower)
@@ -325,14 +320,19 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   servicesSection.setAttribute("aria-labelledby", servicesHeading.id)
   const servicesHead = el("div", "msh-section-head")
   const servicesTitles = el("div")
-  const summary = el("p", "msh-meta")
+  const description = el(
+    "p",
+    "msh-meta",
+    "Third-party services the apps call. Each runs emulated in this tab, or against a real non-production resource through the dev proxy.",
+  )
+  const summary = el("p", "msh-meta msh-summary")
   summary.dataset.testid = "system-services-summary"
-  servicesTitles.append(servicesHeading, summary)
+  servicesTitles.append(servicesHeading, description, summary)
   servicesHead.append(servicesTitles)
   servicesSection.append(servicesHead)
 
   if (!services) {
-    summary.textContent = "Third-party APIs the apps call."
+    summary.hidden = true
     const empty = el("div", "msh-card msh-empty")
     empty.innerHTML = icon("plug")
     const emptyText = el("div")
@@ -341,7 +341,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       el(
         "p",
         "msh-empty-body",
-        "The host app supplies them. When it passes its services to the harness, each emulator appears here and can switch between running in this tab and the vendor's sandbox.",
+        "The host app supplies them. When it passes its services to the harness, each emulator appears here and can switch between running in this tab and a real non-production resource.",
       ),
     )
     empty.append(emptyText)
@@ -354,12 +354,12 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     }
   }
 
-  // Sandbox access panel.
+  // Dev proxy status card: read-only, since the proxy holds the credentials.
   const access = el("section", "msh-card msh-access")
-  const accessHeading = el("h2", "msh-access-title", "Sandbox access")
+  const accessHeading = el("h2", "msh-access-title", "Dev proxy")
   accessHeading.id = id("access")
   access.setAttribute("aria-labelledby", accessHeading.id)
-  access.dataset.testid = "system-sandbox-access"
+  access.dataset.testid = "system-dev-proxy"
   const accessHead = el("div", "msh-access-head")
   const dot = el("span", "msh-dot")
   dot.setAttribute("aria-hidden", "true")
@@ -367,31 +367,20 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   accessHead.append(dot, accessHeading, chip)
   const accessMessage = el("p", "msh-access-msg")
   const accessHint = el("p", "msh-access-hint")
+  const safety = el("p", "msh-safety")
+  safety.innerHTML = icon("shield")
+  safety.append(
+    el(
+      "span",
+      "",
+      "Only credentials that match the proxy's non-production allow-list are used. They never reach this browser.",
+    ),
+  )
   const endpoint = el("div", "msh-endpoint")
   const endpointCode = el("code")
   endpoint.append(el("span", "msh-endpoint-label", "Proxy"), endpointCode)
 
-  const form = el("form", "msh-key")
-  const inputId = id("key")
-  const keyLabel = el("label", "msh-key-label", "Access key")
-  keyLabel.htmlFor = inputId
-  const keyRow = el("div", "msh-key-row")
-  const keyInput = el("input", "msh-input")
-  keyInput.id = inputId
-  keyInput.type = "password"
-  keyInput.autocomplete = "off"
-  keyInput.spellcheck = false
-  keyInput.placeholder = "Paste the sandbox access key"
-  const save = el("button", "msh-btn msh-btn-primary", "Save key")
-  save.type = "submit"
-  const forget = button("msh-btn-ghost", "Forget key")
-  keyRow.append(keyInput, save, forget)
-  const keyNote = el("p", "msh-key-note")
-  const keyError = el("p", "msh-error")
-  keyError.setAttribute("role", "alert")
-  keyError.hidden = true
-  form.append(keyLabel, keyRow, keyNote, keyError)
-  access.append(accessHead, accessMessage, accessHint, endpoint, form)
+  access.append(accessHead, accessMessage, accessHint, endpoint, safety)
 
   // Service list.
   const refresh = button("msh-btn-ghost msh-refresh", "Refresh", "refresh")
@@ -402,7 +391,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   const list = el("ul", "msh-card msh-svcs")
   list.setAttribute("role", "list")
   list.setAttribute("aria-label", "Services")
-  // When the proxy itself blocks sandbox, say so once instead of under every row.
+  // When the proxy itself blocks dev resources, say so once instead of under every row.
   const shared = el("p", "msh-shared")
   shared.id = id("shared")
   shared.hidden = true
@@ -431,14 +420,14 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     const main = el("div", "msh-svc-main")
     const name = el("div", "msh-svc-name")
     const label = el("span", "msh-svc-label")
-    const badge = el("span", "msh-badge-live", "Live sandbox")
+    const badge = el("span", "msh-badge-live", "Dev resource")
     name.append(label, badge)
     const category = el("span", "msh-svc-cat")
     main.append(name, category)
     const group = el("div", "msh-seg")
     group.setAttribute("role", "radiogroup")
-    const options = (["emulated", "sandbox"] as const).map((mode) => {
-      const option = el("button", "msh-seg-option", mode === "emulated" ? "Emulated" : "Sandbox")
+    const options = (["emulated", "dev"] as const).map((mode) => {
+      const option = el("button", "msh-seg-option", mode === "emulated" ? "Emulated" : "Dev")
       option.type = "button"
       option.setAttribute("role", "radio")
       option.dataset.mode = mode
@@ -463,7 +452,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
         li.dataset.mode = service.mode
         li.toggleAttribute("data-pending", row.pending)
         label.textContent = service.label
-        badge.hidden = service.mode !== "sandbox"
+        badge.hidden = service.mode !== "dev"
         category.textContent = service.category ?? "Service"
         group.setAttribute("aria-label", `${service.label} mode`)
         group.setAttribute("aria-busy", String(row.pending))
@@ -472,7 +461,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
           const checked = service.mode === mode
           option.setAttribute("aria-checked", String(checked))
           option.tabIndex = checked ? 0 : -1
-          const blocked = mode === "sandbox" && service.unavailable !== undefined && !checked
+          const blocked = mode === "dev" && service.unavailable !== undefined && !checked
           option.disabled = blocked || (row.pending && !checked)
           const sharedNote =
             sharedReason !== undefined &&
@@ -487,7 +476,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
         note.innerHTML = icon("info")
         note.append(el("span", "", service.unavailable ?? ""))
         status.textContent = row.pending
-          ? `Switching to ${service.mode === "sandbox" ? "the vendor sandbox" : "the emulator"}…`
+          ? `Switching to ${service.mode === "dev" ? "the dev resource" : "the emulator"}…`
           : ""
         status.hidden = !row.pending
         error.hidden = row.error === undefined
@@ -554,16 +543,12 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     summary.textContent = "Loading services…"
   }
 
-  const paintAccess = (status: SystemSandboxStatus) => {
+  const paintAccess = (status: SystemDevStatus) => {
     sharedReason = status.state === "ready" ? undefined : status.message
     shared.hidden = sharedReason === undefined
-    shared.innerHTML = icon(status.state === "locked" ? "key" : "info")
+    shared.innerHTML = icon("info")
     shared.append(
-      el(
-        "span",
-        "",
-        `Sandbox is unavailable for every service: ${status.message.replace(/\.$/, "")}.`,
-      ),
+      el("span", "", `Dev is unavailable for every service: ${status.message.replace(/\.$/, "")}.`),
     )
     access.dataset.state = status.state
     chip.textContent = STATES[status.state].chip
@@ -572,13 +557,6 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
     endpoint.hidden = !status.endpoint
     endpointCode.textContent = status.endpoint ?? ""
     endpointCode.title = status.endpoint ?? ""
-    const hasKey = services.hasAccessKey()
-    form.hidden = status.state !== "ready" && status.state !== "locked"
-    forget.hidden = !hasKey
-    keyNote.textContent = hasKey
-      ? "A key is saved in this browser. Saving a new one replaces it."
-      : "Only sent to the proxy, never to a vendor."
-    keyInput.placeholder = hasKey ? "Paste a new key to replace it" : "Paste the sandbox access key"
   }
 
   let sequence = 0
@@ -591,7 +569,7 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
       const result = await services.list()
       if (disposed || mine !== sequence) return
       listError.hidden = true
-      paintAccess(result.sandbox)
+      paintAccess(result.dev)
       current = result.services
       const seen = new Set<string>()
       const ordered: HTMLLIElement[] = []
@@ -639,43 +617,12 @@ export function mountSystemScreen(panel: HTMLElement, context: SystemScreenConte
   }
 
   refresh.onclick = () => void load()
-  const saveKey = async (key: string | null) => {
-    keyError.hidden = true
-    save.disabled = true
-    forget.disabled = true
-    try {
-      await services.setAccessKey(key)
-      if (disposed) return
-      keyInput.value = ""
-      await load()
-    } catch (failure) {
-      if (disposed) return
-      keyError.hidden = false
-      keyError.textContent = message(failure)
-    } finally {
-      save.disabled = false
-      forget.disabled = false
-    }
-  }
-  form.onsubmit = (event) => {
-    event.preventDefault()
-    const key = keyInput.value.trim()
-    if (!key) {
-      keyError.hidden = false
-      keyError.textContent = "Enter the access key first."
-      keyInput.focus()
-      return
-    }
-    void saveKey(key)
-  }
-  forget.onclick = () => void saveKey(null)
 
   access.dataset.state = "loading"
   chip.textContent = "Checking"
-  accessMessage.textContent = "Checking the sandbox proxy…"
+  accessMessage.textContent = "Checking the dev proxy…"
   accessHint.textContent = ""
   endpoint.hidden = true
-  form.hidden = true
   panel.append(home)
   void load()
   return () => {
@@ -755,8 +702,6 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 
 .msh-btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:34px;padding:6px 12px;border-radius:8px;border:1px solid transparent;font:inherit;font-weight:550;font-size:13px;line-height:1.2;cursor:pointer;white-space:nowrap;transition:background-color .15s,border-color .15s,color .15s}
 .msh-btn:disabled{cursor:default;opacity:.55}
-.msh-btn-primary{background:var(--msh-accent);color:var(--msh-accent-text)}
-.msh-btn-primary:hover:not(:disabled){background:var(--msh-accent-hover)}
 .msh-btn-secondary{background:var(--msh-card);border-color:var(--msh-line-strong);color:var(--msh-text)}
 .msh-btn-secondary:hover:not(:disabled){background:var(--msh-hover)}
 .msh-btn-ghost{background:transparent;color:var(--msh-muted)}
@@ -782,9 +727,7 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 .msh-dot{width:10px;height:10px;border-radius:50%;flex:none;background:var(--msh-state,var(--msh-off));box-shadow:0 0 0 4px var(--msh-state-soft,var(--msh-off-soft))}
 .msh-chip{padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--msh-state-soft,var(--msh-off-soft));color:var(--msh-state,var(--msh-off))}
 .msh-access[data-state=ready]{--msh-state:var(--msh-ok);--msh-state-soft:var(--msh-ok-soft)}
-.msh-access[data-state=locked]{--msh-state:var(--msh-warn);--msh-state-soft:var(--msh-warn-soft)}
 .msh-access[data-state=unreachable]{--msh-state:var(--msh-danger);--msh-state-soft:var(--msh-danger-soft)}
-.msh-access[data-state=off]{--msh-state:var(--msh-off);--msh-state-soft:var(--msh-off-soft)}
 .msh-access[data-state=none]{--msh-state:var(--msh-faint);--msh-state-soft:var(--msh-off-soft)}
 .msh-access[data-state=none] .msh-dot{background:transparent;box-shadow:inset 0 0 0 2px var(--msh-faint)}
 .msh-access[data-state=loading] .msh-dot{animation:msh-pulse 1.2s ease-in-out infinite}
@@ -793,21 +736,14 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 .msh-endpoint{display:flex;flex-direction:column;gap:4px;padding:10px 12px;border-radius:8px;background:var(--msh-bg);border:1px solid var(--msh-line);min-width:0}
 .msh-endpoint-label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--msh-faint)}
 .msh-endpoint code{font:12.5px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--msh-text)}
-.msh-key{display:grid;gap:6px;padding-top:12px;border-top:1px solid var(--msh-line)}
-.msh-key-label{font-size:13px;font-weight:600}
-.msh-key-row{display:flex;flex-wrap:wrap;gap:8px}
-.msh-input{flex:1 1 160px;min-width:0;min-height:34px;padding:6px 10px;border:1px solid var(--msh-line-strong);border-radius:8px;background:var(--msh-card);color:var(--msh-text);font:inherit;font-size:13px}
-.msh-input::placeholder{color:var(--msh-faint)}
-.msh-input:focus-visible{outline:2px solid var(--msh-ring);outline-offset:0;border-color:transparent}
-.msh-key-row .msh-input{flex-basis:100%}
 .msh-shared{display:flex;align-items:flex-start;gap:8px;padding:10px 14px;border-radius:10px;font-size:13px;color:var(--msh-muted);background:var(--msh-off-soft);border:1px solid var(--msh-line)}
 .msh-shared .msh-icon{margin-top:2px}
-.msh-key-note{font-size:12px;color:var(--msh-faint)}
+.msh-safety{display:flex;align-items:flex-start;gap:8px;font-size:12px;color:var(--msh-muted)}.msh-safety .msh-icon{flex:none;width:14px;height:14px;margin-top:1px;color:var(--msh-ok)}
 
 .msh-svcs{overflow:hidden}
 .msh-svc{display:flex;flex-wrap:wrap;align-items:center;gap:8px 16px;padding:14px 16px;border-top:1px solid var(--msh-line);transition:background-color .15s}
 .msh-svc:first-child{border-top:0}
-.msh-svc[data-mode=sandbox]{background:linear-gradient(90deg,var(--msh-live-soft),transparent 55%);box-shadow:inset 3px 0 0 var(--msh-live)}
+.msh-svc[data-mode=dev]{background:linear-gradient(90deg,var(--msh-live-soft),transparent 55%);box-shadow:inset 3px 0 0 var(--msh-live)}
 .msh-svc-main{flex:1 1 200px;min-width:0;display:grid;gap:2px}
 .msh-svc-name{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px}
 .msh-svc-label{font-weight:600;font-size:14.5px}
@@ -818,7 +754,7 @@ button.msh-row-main:hover{background:var(--msh-hover)}
 .msh-seg-option{min-width:86px;min-height:30px;padding:4px 12px;border:0;border-radius:6px;background:transparent;color:var(--msh-muted);font:inherit;font-size:13px;font-weight:550;cursor:pointer;transition:background-color .15s,color .15s}
 .msh-seg-option:hover:not(:disabled){color:var(--msh-text)}
 .msh-seg-option[aria-checked=true]{background:var(--msh-seg-on);color:var(--msh-text);box-shadow:0 1px 2px rgb(16 24 40/.12),0 0 0 1px var(--msh-line)}
-.msh-seg-option[data-mode=sandbox][aria-checked=true]{color:var(--msh-live)}
+.msh-seg-option[data-mode=dev][aria-checked=true]{color:var(--msh-live)}
 .msh-seg-option:disabled{cursor:not-allowed;color:var(--msh-faint);opacity:.7}
 .msh-seg[aria-busy=true] .msh-seg-option[aria-checked=true]{opacity:.7}
 .msh-svc-note,.msh-svc-status,.msh-svc-error{flex-basis:100%;display:flex;align-items:flex-start;gap:6px;font-size:12.5px}

@@ -4,8 +4,8 @@ import { setInboxOpener } from "../client/inbox.js"
 import { mountApp } from "../client/main.js"
 import { STYLES } from "../client/theme.js"
 import { buildDemo } from "./build.js"
+import { createLabDevResources, DEV_DOCS_URL } from "./dev.js"
 import { createInProcessFetcher } from "./inProcessFetcher.js"
-import { createLabSandbox, SANDBOX_DOCS_URL } from "./sandbox.js"
 
 export { createInProcessFetcher }
 
@@ -23,15 +23,12 @@ export const mount = async (
   host: HTMLElement,
   options: {
     syncUrl?: boolean
-    /** The sandbox proxy, absolute or relative to this page. Without it every service stays emulated. */
-    sandboxProxyUrl?: string
+    /** The dev proxy, absolute or relative to this page. Without it every service stays emulated. */
+    devProxyUrl?: string
   } = {},
 ): Promise<() => void> => {
-  const sandbox = createLabSandbox(options.sandboxProxyUrl)
-  const demo = await buildDemo(
-    NO_CLIENT_ASSETS,
-    sandbox.upstream ? { upstream: sandbox.upstream } : {},
-  )
+  const dev = createLabDevResources(options.devProxyUrl)
+  const demo = await buildDemo(NO_CLIENT_ASSETS, dev.upstream ? { upstream: dev.upstream } : {})
   setFetcher(createInProcessFetcher(demo.app))
 
   const styleId = "cove-app-styles"
@@ -86,8 +83,8 @@ export const mount = async (
     {
       initial: "app",
       syncUrl: options.syncUrl ?? false,
-      services: sandbox.controls(demo.admins),
-      docsUrl: SANDBOX_DOCS_URL,
+      services: dev.controls(demo.admins),
+      docsUrl: DEV_DOCS_URL,
     },
   )
   setInboxOpener((target) => {
