@@ -92,6 +92,11 @@
   "peerDependencies": {
     "esbuild": ">=0.28.0"
   },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
+  },
   "files": [
     "dist",
     "README.md",
