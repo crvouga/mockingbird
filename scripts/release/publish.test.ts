@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import {
   bumpVersion,
+  burntVersions,
   firstReleaseVersion,
   githubRetryDelayMs,
   initialPackageBlocker,
   isRetryableGitHubError,
+  publishFailureKind,
   releaseInOrder,
   seedSummary,
+  skipBurnt,
   waitForNpmVersion,
 } from "./lib.ts"
 
@@ -160,4 +163,46 @@ test("initial releases ignore code-free npm reservations", () => {
   expect(firstReleaseVersion(["0.0.0-reserved", "0.2.0"])).toBe("0.2.1")
   expect(bumpVersion("1.2.3-beta.1", "patch")).toBe("1.2.4")
   expect(() => bumpVersion("invalid", "patch")).toThrow("Invalid release version")
+})
+
+describe("versions npm removed", () => {
+  test("a version in the publish history but no longer listed is burnt", () => {
+    const time = {
+      created: "2026-10-11T00:11:00.112Z",
+      modified: "2026-11-15T00:18:58.337Z",
+      "0.13.0": "2026-11-14T01:58:18.541Z",
+      "0.14.0": "2026-11-14T22:59:25.135Z",
+    }
+    expect(burntVersions(time, ["0.13.0"])).toEqual(["0.14.0"])
+    expect(burntVersions(time, ["0.13.0", "0.14.0"])).toEqual([])
+  })
+
+  test("the plan moves past burnt versions to the next patch", () => {
+    expect(skipBurnt("0.14.0", new Set(["0.14.0"]))).toBe("0.14.1")
+    expect(skipBurnt("0.14.0", new Set(["0.14.0", "0.14.1"]))).toBe("0.14.2")
+    expect(skipBurnt("0.14.0", new Set(["0.13.0"]))).toBe("0.14.0")
+  })
+})
+
+describe("publishFailureKind", () => {
+  test("a taken version is not blamed on the Trusted Publisher", () => {
+    expect(
+      publishFailureKind(
+        'npm error code E400\nnpm error 400 Bad Request - PUT https://registry.npmjs.org/@x%2fy - Cannot publish over previously published version "0.14.0".',
+      ),
+    ).toBe("version-taken")
+  })
+
+  test("auth failures point at the Trusted Publisher", () => {
+    expect(
+      publishFailureKind(
+        "npm error code ENEEDAUTH\nnpm error need auth This command requires you to be logged in",
+      ),
+    ).toBe("auth")
+    expect(publishFailureKind("npm error code E403\nnpm error 403 Forbidden - PUT")).toBe("auth")
+  })
+
+  test("anything else is reported as a plain publish failure", () => {
+    expect(publishFailureKind("npm error code ECONNRESET")).toBe("other")
+  })
 })
