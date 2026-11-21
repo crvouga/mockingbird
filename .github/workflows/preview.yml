@@ -10,7 +10,9 @@
 #     preview:
 #       uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
 #       with: { name: my-app, build: bun run preview:build, outdir: preview-dist }
-#       secrets: inherit
+#       secrets:
+#         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 #
 # It needs only CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID, the credentials any hosting needs.
 # The preview's live CI status is pushed here into the Worker's own configuration (PREVIEW_BUILD,
@@ -52,10 +54,6 @@ on:
         description: A wrangler config to deploy with (relative to working-directory). Empty generates one that serves `outdir` with the package's Worker.
         type: string
         default: ""
-      worker-secrets:
-        description: Space-separated names of the caller's secrets to copy to the preview Worker (e.g. dev resource credentials).
-        type: string
-        default: ""
       cli:
         description: Runs the `mockingbird-preview` CLI.
         type: string
@@ -66,6 +64,15 @@ on:
       wrangler:
         type: string
         default: bunx wrangler@4.50.0
+    # Only what the caller passes explicitly reaches this workflow (never `secrets: inherit`).
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      WORKER_SECRETS:
+        description: Optional `KEY=value` lines to set on the preview Worker (e.g. dev resource credentials).
+        required: false
 
 jobs:
   preview:
@@ -203,8 +210,7 @@ jobs:
           VERSION: ${{ steps.ctx.outputs.sha }}
           PR: ${{ steps.ctx.outputs.pr }}
           PR_URL: ${{ steps.ctx.outputs.pr-url }}
-          SECRETS_JSON: ${{ toJSON(secrets) }}
-          WORKER_SECRETS: ${{ inputs.worker-secrets }}
+          WORKER_SECRETS: ${{ secrets.WORKER_SECRETS }}
         run: |
           # version.json names the commit this deploy ships; open tabs update to it in place.
           $CLI stamp --outdir "$OUTDIR" --version "$VERSION" --pr "$PR" --pr-url "$PR_URL"
@@ -229,10 +235,12 @@ jobs:
             fi
           fi
           cat "$RUNNER_TEMP/deploy.log"
-          # Copy the named secrets; values go through a 0600 file that is removed at once.
+          # Set the caller's KEY=value lines (empty values skipped); they go through a 0600 file that
+          # is removed at once.
           file="$RUNNER_TEMP/worker-secrets.json"
-          ( umask 077; echo "$SECRETS_JSON" | jq --arg names "$WORKER_SECRETS" \
-            '($names | split(" ") | map(select(. != ""))) as $n | with_entries(select(.key as $k | $n | index($k)) | select(.value != ""))' > "$file" )
+          ( umask 077; printf '%s\n' "$WORKER_SECRETS" | jq -Rn 'reduce inputs as $line ({};
+              ($line | capture("^(?<key>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$")? // null) as $pair
+              | if $pair != null and $pair.value != "" then .[$pair.key] = $pair.value else . end)' > "$file" )
           echo "Secrets for this preview: $(jq -r 'keys | join(", ")' "$file")"
           if [ "$(jq length "$file")" -gt 0 ]; then $WRANGLER secret bulk "$file" --name "$WORKER" > /dev/null; fi
           rm -f "$file"

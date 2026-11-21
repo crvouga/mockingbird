@@ -83,7 +83,9 @@ flowchart LR
          name: my-app
          build: bun scripts/build-preview.ts
          outdir: preview-dist
-       secrets: inherit
+       secrets:
+         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
    ```
 
 That is all. The workflow generates the Worker's wrangler config (the package's Worker serving
@@ -103,9 +105,20 @@ PRs are skipped. The lab in this repo uses exactly this
 | `working-directory` | `.` | Where install, build, the CLI and wrangler run. |
 | `install` | `bun install --frozen-lockfile` | Installs dependencies, including `@crvouga/mockingbird-preview`. |
 | `wrangler-config` | generated | Your own wrangler config, for a custom Worker built on `createPreviewWorker`. |
-| `worker-secrets` | none | Space-separated names of your secrets to copy to the preview Worker. |
 | `cli` | `bunx mockingbird-preview` | How to run the package's CLI (`stamp`, `wrangler-config`). |
 | `bun-version` / `wrangler` | `1.4.0` / `bunx wrangler@4.50.0` | Tool versions. |
+
+Secrets are passed explicitly, never with `secrets: inherit`, so the workflow sees only what you
+hand it: the two Cloudflare values, and optionally `WORKER_SECRETS`, `KEY=value` lines to set on
+the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
+
+```yaml
+       secrets:
+         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+         WORKER_SECRETS: |
+           STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+```
 
 ## What a preview does not do
 

@@ -33,7 +33,16 @@ jobs:
       cli: bun ../../adapters/preview/dist/cli.js
       # The lab's own Worker: the package's preview Worker plus the dev resources proxy.
       wrangler-config: wrangler.jsonc
-      worker-secrets: >-
-        STRIPE_SECRET_KEY JUNCTION_API_KEY RESEND_API_KEY TWILIO_ACCOUNT_SID TWILIO_AUTH_TOKEN
-        FCM_PROJECT_ID FCM_ACCESS_TOKEN SLACK_BOT_TOKEN
-    secrets: inherit
+    # Only these reach the preview workflow; the dev resource credentials are optional.
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      WORKER_SECRETS: |
+        STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+        JUNCTION_API_KEY=${{ secrets.JUNCTION_API_KEY }}
+        RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+        TWILIO_ACCOUNT_SID=${{ secrets.TWILIO_ACCOUNT_SID }}
+        TWILIO_AUTH_TOKEN=${{ secrets.TWILIO_AUTH_TOKEN }}
+        FCM_PROJECT_ID=${{ secrets.FCM_PROJECT_ID }}
+        FCM_ACCESS_TOKEN=${{ secrets.FCM_ACCESS_TOKEN }}
+        SLACK_BOT_TOKEN=${{ secrets.SLACK_BOT_TOKEN }}

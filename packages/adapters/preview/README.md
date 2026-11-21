@@ -407,7 +407,9 @@ jobs:
   preview:
     uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
     with: { name: lab, install: bun install --frozen-lockfile, build: bun run preview:build, outdir: preview-dist }
-    secrets: inherit
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 ```
 
 Inputs:
@@ -420,12 +422,12 @@ Inputs:
 | `build`             | Build command; it writes the static preview to `outdir` (see `buildPreview`).           |
 | `outdir`            | The built preview, relative to `working-directory`.                                     |
 | `wrangler-config`   | Optional path to your own wrangler config (e.g. a Worker with a dev proxy).             |
-| `worker-secrets`    | Space-separated secret names copied from the caller's secrets to the Worker.            |
 | `bun-version`       | Bun version for the job.                                                                |
 
 The `workflow_run` trigger is what reports your CI checks (`running` on `requested`, `passed` or
-`failed` on `completed`) to the preview of that commit's PR. Cloudflare credentials come from the
-caller's secrets (`secrets: inherit`).
+`failed` on `completed`) to the preview of that commit's PR. Secrets are passed explicitly, never
+with `secrets: inherit`: the two Cloudflare values, and optionally `WORKER_SECRETS`, `KEY=value`
+lines set on the preview Worker.
 
 ### Status in the Worker env
 
