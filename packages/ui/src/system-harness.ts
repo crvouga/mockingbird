@@ -1,25 +1,29 @@
 /// <reference lib="dom" />
 
-import { mountBuildChrome, type SystemBuild } from "./system-build.js"
-import { paintIcon, SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
+import type { SystemBuild } from "./system-build-status.js"
+import { SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
 import {
   readExcluded,
   readOrder,
   reconcileOrder,
-  stepRotation,
   writeExcluded,
   writeOrder,
 } from "./system-rotation.js"
-import { mountSystemScreen, SYSTEM_CSS, type SystemServices } from "./system-screen.js"
+import type {
+  HarnessController,
+  HarnessSnapshot,
+  PanelStatus,
+  SystemServices,
+} from "./system-types.js"
 
-export type { SystemBuild, SystemBuildState } from "./system-build.js"
+export type { SystemBuild, SystemBuildState } from "./system-build-status.js"
 export { ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
 export type {
   SystemDevStatus,
   SystemService,
   SystemServiceMode,
   SystemServices,
-} from "./system-screen.js"
+} from "./system-types.js"
 
 /** Product code supplies lazy surfaces; the shell knows nothing about their services. */
 export type SystemSurface = {
@@ -52,10 +56,24 @@ export type SystemHarness = {
   destroy(): void
 }
 
+const SYSTEM_APP: Required<Omit<SystemSurface, "mount">> = {
+  id: "system",
+  label: "System",
+  description: "This screen: the apps, the switcher and the services behind them.",
+  icon: SYSTEM_ICONS.system,
+}
+
 /**
  * One visible surface, with mounted surfaces retained while hidden. Resolving mount means ready;
  * rejecting means failed. Abort and late disposal make teardown safe during asynchronous loading.
  * The reserved System surface is always reachable. URL state is opt-in for embedded hosts.
+ *
+ * The surfaces draw into panels (`section[data-surface]`) inside `host`, styled by the host
+ * page. The harness's own UI (the switcher pill, its tooltip and update toast, each panel's
+ * loading and error state, and the System screen) is React and HeroUI with Mockingbird's
+ * stylesheet scoped to it, so it restyles nothing else on the page. The view loads lazily
+ * (`system-view.tsx`), so importing this module costs no React.
+ *
  * The switcher pill docks to the middle of the left edge until dragged; the edge and the
  * position along it are kept in localStorage, so it returns there after a reload or resize.
  * The System screen's "In switcher" toggles choose which surfaces the arrows cycle through, and
@@ -75,107 +93,129 @@ export function mountSystemHarness(
   }
   const doc = host.ownerDocument
   const win = doc.defaultView ?? window
+  // Light DOM, styled inline: nothing here adds a stylesheet to the host page.
   const shell = doc.createElement("div")
   shell.className = "msh"
-  const style = doc.createElement("style")
-  style.textContent = SYSTEM_CSS
+  shell.dataset.testid = "system-harness"
+  shell.style.cssText =
+    "position:relative;height:100%;min-height:240px;isolation:isolate;background:Canvas;color:CanvasText"
   const chrome = doc.createElement("div")
   chrome.className = "msh-chrome"
-  const switcher = doc.createElement("div")
-  switcher.className = "msh-switcher"
-  switcher.setAttribute("role", "group")
-  switcher.setAttribute("aria-label", "Switch apps")
-  switcher.dataset.testid = "system-switcher"
-  switcher.hidden = surfaces.length === 0
-  const arrow = (direction: "previous" | "next") => {
-    const button = doc.createElement("button")
-    button.type = "button"
-    button.setAttribute("aria-label", direction === "next" ? "Next app" : "Previous app")
-    button.dataset.testid = `system-switcher-${direction}`
-    const path = direction === "next" ? "M5 12h14M13 6l6 6-6 6" : "M19 12H5M11 6l-6 6 6 6"
-    button.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${path}"/></svg>`
-    return button
-  }
-  const previousButton = arrow("previous")
-  const nextButton = arrow("next")
-  switcher.append(previousButton, doc.createElement("hr"), nextButton)
-  const tip = doc.createElement("div")
-  tip.className = "msh-tip"
-  tip.setAttribute("role", "tooltip")
-  tip.hidden = true
-  chrome.append(switcher, tip)
-  shell.append(style, chrome)
+  chrome.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:1000"
+  shell.append(chrome)
   host.append(shell)
+
   let destroyed = false
-  let current = ""
   const storage = () => win.localStorage
-  const excluded = readExcluded(storage)
-  let order = readOrder(storage, ["system", ...surfaces.map((surface) => surface.id)])
   const controller = new AbortController()
+  const listeners = new Set<() => void>()
+  let snapshot: HarnessSnapshot = {
+    current: "",
+    order: readOrder(storage, ["system", ...surfaces.map((surface) => surface.id)]),
+    excluded: readExcluded(storage),
+    statuses: [],
+  }
+  const update = (patch: Partial<HarnessSnapshot>) => {
+    snapshot = { ...snapshot, ...patch }
+    for (const listener of listeners) listener()
+  }
+  const setStatus = (id: string, status?: PanelStatus) =>
+    update({
+      statuses: [
+        ...snapshot.statuses.filter((candidate) => candidate.id !== id),
+        ...(status ? [status] : []),
+      ],
+    })
+
   type Entry = {
     spec: SystemSurface
     panel: HTMLElement
     pending?: Promise<void> | undefined
     dispose?: (() => void) | undefined
   }
-  const entries: Entry[] = []
   const all: SystemSurface[] = [
     {
-      id: "system",
-      label: "System",
-      mount: (panel) =>
-        mountSystemScreen(panel, {
-          apps: order.map((id) =>
-            id === "system"
-              ? {
-                  id,
-                  label: "System",
-                  description: "This screen: the apps, the switcher and the services behind them.",
-                  icon: SYSTEM_ICONS.system,
-                }
-              : (surfaces.find((surface) => surface.id === id) as SystemSurface),
-          ),
-          open: (id) => void show(id),
-          inRotation: (id) => id === "system" || !excluded.has(id),
-          setInRotation(id, included) {
-            if (id === "system") return
-            if (included) excluded.delete(id)
-            else excluded.add(id)
-            writeExcluded(storage, excluded)
-            paintArrows()
-          },
-          setOrder(ids) {
-            order = reconcileOrder(ids, order)
-            writeOrder(storage, order)
-            paintArrows()
-          },
-          services: options.services,
-          docsUrl: options.docsUrl,
-          build: options.build,
-        }),
+      ...SYSTEM_APP,
+      mount(content) {
+        content.dataset.systemScreen = ""
+        update({ systemHost: content })
+        return () => {
+          if (snapshot.systemHost === content) update({ systemHost: undefined })
+        }
+      },
     },
     ...surfaces,
   ]
-  for (const spec of all) {
+  const entries: Entry[] = all.map((spec) => {
     const panel = doc.createElement("section")
     panel.className = "msh-panel"
     panel.dataset.surface = spec.id
     panel.setAttribute("aria-label", spec.label)
     panel.tabIndex = -1
-    panel.hidden = true
+    // Positioned, so absolutely placed descendants scroll and clip with the panel.
+    panel.style.cssText = "position:relative;height:100%;overflow:auto;outline:none"
+    setHidden(panel, true)
     shell.insertBefore(panel, chrome)
-    entries.push({ spec, panel })
+    return { spec, panel }
+  })
+
+  const view: HarnessController = {
+    shell,
+    apps: all.map(({ id, label, description, icon }) => ({ id, label, description, icon })),
+    switcher: surfaces.length > 0,
+    get: () => snapshot,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    show: (id) => void show(id),
+    retry(id) {
+      const entry = entries.find((candidate) => candidate.spec.id === id)
+      if (!entry || destroyed) return
+      entry.pending = undefined
+      void load(entry)
+    },
+    setInRotation(id, included) {
+      if (id === "system") return
+      const excluded = new Set(snapshot.excluded)
+      if (included) excluded.delete(id)
+      else excluded.add(id)
+      writeExcluded(storage, excluded)
+      update({ excluded })
+    },
+    setOrder(order) {
+      const next = reconcileOrder(order, snapshot.order)
+      writeOrder(storage, next)
+      update({ order: next })
+    },
+    services: options.services,
+    docsUrl: options.docsUrl,
+    build: options.build,
   }
+
+  // The React view loads on its own, beside the first mount; `show()` settles once it has drawn.
+  // A view that cannot load leaves the surfaces working.
+  let rendered: { dispose(): void } | undefined
+  const viewReady = import("./system-view.js").then(
+    ({ renderHarness }) => {
+      if (!destroyed) rendered = renderHarness(chrome, view)
+    },
+    (error: unknown) => {
+      console.error("mockingbird: the System harness UI did not load", error)
+    },
+  )
+
   function load(entry: Entry): Promise<void> {
     if (entry.pending) return entry.pending
+    const { id, label } = entry.spec
     entry.panel.setAttribute("aria-busy", "true")
     const status = doc.createElement("div")
     status.className = "msh-status"
     status.setAttribute("role", "status")
-    status.textContent = "Loading…"
     const content = doc.createElement("div")
     content.style.height = "100%"
     entry.panel.replaceChildren(status, content)
+    setStatus(id, { id, host: status, state: "loading" })
     entry.pending = Promise.resolve()
       .then(() => {
         if (destroyed) return
@@ -183,32 +223,31 @@ export function mountSystemHarness(
       })
       .then((dispose) => {
         status.remove()
-        if (destroyed) dispose?.()
-        else entry.dispose = dispose
+        if (destroyed) {
+          dispose?.()
+          return
+        }
+        entry.dispose = dispose
+        setStatus(id)
       })
       .catch((error: unknown) => {
         if (destroyed) return
         content.remove()
-        status.textContent = `Unable to open ${entry.spec.label}: ${error instanceof Error ? error.message : String(error)}`
-        const retry = doc.createElement("button")
-        retry.textContent = "Retry"
-        retry.onclick = () => {
-          entry.pending = undefined
-          void load(entry)
-        }
-        status.append(retry)
+        const message = `Unable to open ${label}: ${error instanceof Error ? error.message : String(error)}`
+        setStatus(id, { id, host: status, state: "error", message })
       })
+      // Settled once the view has drawn what the mount left: the surface, or its error and Retry.
+      .then(() => viewReady)
       .finally(() => entry.panel.removeAttribute("aria-busy"))
     return entry.pending
   }
+
   async function show(id: string): Promise<void> {
     if (destroyed) return
     const entry = entries.find((e) => e.spec.id === id) ?? entries[0]
     if (!entry) return
-    current = entry.spec.id
-    paintArrows()
     for (const candidate of entries) {
-      candidate.panel.hidden = candidate !== entry
+      setHidden(candidate.panel, candidate !== entry)
       candidate.panel.inert = candidate !== entry
     }
     if (
@@ -218,221 +257,15 @@ export function mountSystemHarness(
     ) {
       entry.panel.focus()
     }
+    update({ current: entry.spec.id })
     if (options.syncUrl) {
       const url = new URL(win.location.href)
-      url.searchParams.set("surface", current)
+      url.searchParams.set("surface", entry.spec.id)
       if (url.href !== win.location.href) win.history.pushState(null, "", url)
     }
     await load(entry)
   }
-  function neighbour(step: -1 | 1): Entry {
-    const id = stepRotation(order, excluded, current, step)
-    return entries.find((entry) => entry.spec.id === id) ?? (entries[0] as Entry)
-  }
-  /** Each arrow names where it goes; the rotation or the current surface changed. */
-  function paintArrows() {
-    for (const [button, step] of [
-      [previousButton, -1],
-      [nextButton, 1],
-    ] as const) {
-      const label = `${step < 0 ? "Previous" : "Next"}: ${neighbour(step).spec.label}`
-      button.dataset.tip = label
-      button.setAttribute("aria-description", label)
-    }
-    if (tipFor) showTip(tipFor)
-  }
-  let tipFor: HTMLButtonElement | undefined
-  function showTip(button: HTMLButtonElement) {
-    tipFor = button
-    if (buildChrome && button === buildChrome.dot) {
-      const status = buildChrome.tip()
-      const tone = doc.createElement("span")
-      tone.className = "msh-tip-tone"
-      tone.dataset.tone = status.tone
-      tone.setAttribute("aria-hidden", "true")
-      tip.replaceChildren(tone, status.text)
-    } else {
-      const destination = neighbour(button === previousButton ? -1 : 1).spec
-      const mark = doc.createElement("span")
-      mark.className = "msh-tip-icon"
-      mark.setAttribute("aria-hidden", "true")
-      paintIcon(
-        mark,
-        destination.icon ?? (destination.id === "system" ? SYSTEM_ICONS.system : undefined),
-        destination.label,
-      )
-      tip.replaceChildren(mark, button.dataset.tip ?? "")
-    }
-    tip.hidden = false
-    const box = shell.getBoundingClientRect()
-    const target = button.getBoundingClientRect()
-    const pill = switcher.getBoundingClientRect()
-    const left = target.left - box.left + (target.width - tip.offsetWidth) / 2
-    const above = pill.top - box.top - tip.offsetHeight - 8
-    tip.style.left = `${Math.max(4, Math.min(left, shell.clientWidth - tip.offsetWidth - 4))}px`
-    tip.style.top = `${above >= 4 ? above : pill.bottom - box.top + 8}px`
-  }
-  const hideTip = () => {
-    tipFor = undefined
-    tip.hidden = true
-  }
-  const buildChrome = options.build
-    ? mountBuildChrome({
-        build: options.build,
-        shell,
-        chrome,
-        switcher,
-        open: () => void show("system"),
-        dragging: () => dragged,
-        changed() {
-          if (tipFor && tipFor === buildChrome?.dot) showTip(tipFor)
-        },
-      })
-    : undefined
-  const tipped: HTMLButtonElement[] = [previousButton, nextButton]
-  if (buildChrome) tipped.push(buildChrome.dot)
-  for (const [button, step] of [
-    [previousButton, -1],
-    [nextButton, 1],
-  ] as const) {
-    button.onclick = () => {
-      if (dragged) return
-      void show(neighbour(step).spec.id)
-    }
-  }
-  for (const button of tipped) {
-    button.onpointerenter = (event) => {
-      if (event.pointerType === "mouse" && !drag) showTip(button)
-    }
-    button.onpointerleave = () => {
-      if (tipFor === button) hideTip()
-    }
-    button.onfocus = () => {
-      if (button.matches(":focus-visible")) showTip(button)
-    }
-    button.onblur = () => {
-      if (tipFor === button) hideTip()
-    }
-  }
-  switcher.onkeydown = (event) => {
-    if (event.key === "Escape") hideTip()
-  }
 
-  // Where the pill rests: an edge, and how far along it (0 = start, 1 = end).
-  type Dock = { edge: "left" | "right" | "top" | "bottom"; at: number }
-  const DOCK_KEY = "mockingbird.system-switcher.dock"
-  const MARGIN = 8
-  const readDock = (): Dock => {
-    try {
-      const saved = JSON.parse(win.localStorage.getItem(DOCK_KEY) ?? "null") as Partial<Dock>
-      if (
-        saved &&
-        ["left", "right", "top", "bottom"].includes(saved.edge ?? "") &&
-        typeof saved.at === "number" &&
-        saved.at >= 0 &&
-        saved.at <= 1
-      )
-        return saved as Dock
-    } catch {
-      /* Storage can be unavailable or hold something else; fall back to the default. */
-    }
-    return { edge: "left", at: 0.5 }
-  }
-  const writeDock = (value: Dock) => {
-    try {
-      win.localStorage.setItem(DOCK_KEY, JSON.stringify(value))
-    } catch {
-      /* The position is a convenience; switching still works without storage. */
-    }
-  }
-  let dock = readDock()
-  let x = 0
-  let y = 0
-  const limits = () => {
-    const maxX = Math.max(0, shell.clientWidth - switcher.offsetWidth - MARGIN)
-    const maxY = Math.max(0, shell.clientHeight - switcher.offsetHeight - MARGIN)
-    return { minX: Math.min(MARGIN, maxX), minY: Math.min(MARGIN, maxY), maxX, maxY }
-  }
-  const position = () => {
-    const { maxX, maxY } = limits()
-    x = Math.max(0, Math.min(x, maxX + MARGIN))
-    y = Math.max(0, Math.min(y, maxY + MARGIN))
-    switcher.style.left = `${x}px`
-    switcher.style.top = `${y}px`
-    buildChrome?.place()
-  }
-  const settle = () => {
-    const { minX, minY, maxX, maxY } = limits()
-    const along = (min: number, max: number) => min + (max - min) * dock.at
-    x = dock.edge === "left" ? minX : dock.edge === "right" ? maxX : along(minX, maxX)
-    y = dock.edge === "top" ? minY : dock.edge === "bottom" ? maxY : along(minY, maxY)
-    position()
-  }
-  const snap = () => {
-    const { minX, minY, maxX, maxY } = limits()
-    x = Math.max(minX, Math.min(x, maxX))
-    y = Math.max(minY, Math.min(y, maxY))
-    const fraction = (value: number, min: number, max: number) =>
-      max > min ? (value - min) / (max - min) : 0.5
-    const distances = { left: x - minX, right: maxX - x, top: y - minY, bottom: maxY - y }
-    const edge = (Object.keys(distances) as Dock["edge"][]).reduce((a, b) =>
-      distances[b] < distances[a] ? b : a,
-    )
-    dock = {
-      edge,
-      at: edge === "left" || edge === "right" ? fraction(y, minY, maxY) : fraction(x, minX, maxX),
-    }
-    writeDock(dock)
-    switcher.style.transition = win.matchMedia("(prefers-reduced-motion: reduce)").matches
-      ? "none"
-      : "left 160ms ease-out, top 160ms ease-out"
-    settle()
-  }
-  let drag: { x: number; y: number; left: number; top: number } | undefined
-  let dragged = false
-  switcher.onpointerdown = (event) => {
-    if (event.button !== 0) return
-    dragged = false
-    switcher.style.transition = "none"
-    drag = { x: event.clientX, y: event.clientY, left: x, top: y }
-  }
-  switcher.onpointermove = (event) => {
-    if (!drag) return
-    const dx = event.clientX - drag.x
-    const dy = event.clientY - drag.y
-    if (!dragged && Math.hypot(dx, dy) > 5) {
-      dragged = true
-      hideTip()
-      switcher.classList.add("msh-dragging")
-      // Capture only once it is a drag, so a plain press still clicks the arrow under it.
-      switcher.setPointerCapture(event.pointerId)
-    }
-    if (!dragged) return
-    x = drag.left + dx
-    y = drag.top + dy
-    position()
-  }
-  const release = () => {
-    if (!drag) return
-    drag = undefined
-    switcher.classList.remove("msh-dragging")
-    if (dragged) {
-      snap()
-      // The click that ends a drag arrives after pointerup; let it through on the next task.
-      win.setTimeout(() => {
-        dragged = false
-      })
-    }
-  }
-  switcher.onpointerup = release
-  switcher.onpointercancel = release
-  switcher.onlostpointercapture = release
-  const resize = new ResizeObserver(() => {
-    switcher.style.transition = "none"
-    settle()
-  })
-  resize.observe(shell)
-  resize.observe(switcher)
   const fromUrl = () =>
     new URL(win.location.href).searchParams.get("surface") ?? options.initial ?? "system"
   const pop = () => {
@@ -442,14 +275,14 @@ export function mountSystemHarness(
   void show(options.syncUrl ? fromUrl() : (options.initial ?? "system"))
   return {
     show,
-    active: () => current,
+    active: () => snapshot.current,
     destroy() {
       if (destroyed) return
       destroyed = true
       controller.abort()
-      resize.disconnect()
-      buildChrome?.dispose()
       win.removeEventListener("popstate", pop)
+      rendered?.dispose()
+      listeners.clear()
       for (const entry of entries) {
         try {
           entry.dispose?.()
@@ -460,4 +293,10 @@ export function mountSystemHarness(
       shell.remove()
     },
   }
+}
+
+/** `hidden`, and `display: none` too, which a host page's own `section { display }` cannot undo. */
+function setHidden(panel: HTMLElement, hidden: boolean) {
+  panel.hidden = hidden
+  panel.style.display = hidden ? "none" : ""
 }

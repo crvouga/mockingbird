@@ -9,13 +9,10 @@ import {
   bodyStr,
   constantTimeSecretEqual,
   debug,
-  escapeAttr,
-  escapeHtml,
   matchesRedirectUri,
-  renderCardPage,
   renderErrorPage,
+  renderSignInPage,
   renderFormPostPage,
-  renderUserButton,
 } from "../../core/index.js";
 import type { OktaOAuthClient, OktaUser } from "../entities.js";
 import {
@@ -363,7 +360,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     });
   });
 
-  const renderAuthorizePage = (c: Context<AppEnv>, authServerId: string): Response => {
+  const renderAuthorizePage = async (c: Context<AppEnv>, authServerId: string): Promise<Response> => {
     const server = resolveServer(authServerId, baseUrl, oktaStore);
     if (!server) return oktaError(c, 404, "E0000007", `Not found: authorization server '${authServerId}'`, undefined, store.now);
 
@@ -378,15 +375,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const codeChallengeMethod = c.req.query("code_challenge_method") ?? "";
 
     if (responseType !== "code") {
-      return c.html(
-        renderErrorPage("Unsupported response_type", "Only response_type=code is supported.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Unsupported response_type", "Only response_type=code is supported.", SERVICE_LABEL),
         400,
       );
     }
 
     if (!redirectUri) {
-      return c.html(
-        renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
         400,
       );
     }
@@ -396,14 +391,12 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     if (configuredClients.length > 0) {
       const client = configuredClients.find((entry) => entry.client_id === clientId);
       if (!client) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (!matchesRedirectUri(redirectUri, client.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -418,7 +411,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const callbackPath = `${buildOAuthBasePath(authServerId)}/authorize/callback`;
     const buttons = users
       .map((user) =>
-        renderUserButton({
+        ({
           letter: (user.login[0] ?? "?").toUpperCase(),
           login: user.login,
           name: userDisplayName(user),
@@ -437,21 +430,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
             auth_server_id: authServerId,
           },
         }),
-      )
-      .join("\n");
+      );
 
     const subtitle = clientName
-      ? `Sign in to <strong>${escapeHtml(clientName)}</strong> with your Okta account.`
+      ? ["Sign in to ", { strong: clientName }, " with your Okta account."]
       : "Choose a seeded user to continue.";
 
-    return c.html(
-      renderCardPage(
-        "Sign in with Okta",
-        subtitle,
-        users.length > 0 ? buttons : '<p class="empty">No users in the emulator store.</p>',
-        SERVICE_LABEL,
-      ),
-    );
+    return c.html(await renderSignInPage("Sign in with Okta", subtitle, buttons, SERVICE_LABEL));
   };
 
   app.get("/oauth2/v1/authorize", (c) => renderAuthorizePage(c, ORG_AUTH_SERVER_ID));
@@ -473,29 +458,26 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const codeChallengeMethod = bodyStr(body.code_challenge_method);
 
     if (!redirectUri) {
-      return c.html(
-        renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
         400,
       );
     }
 
     const user = findUserByRef(oktaStore, userRef);
     if (!user) {
-      return c.html(renderErrorPage("Unknown user", "The selected user is not available.", SERVICE_LABEL), 400);
+      return c.html(await renderErrorPage("Unknown user", "The selected user is not available.", SERVICE_LABEL), 400);
     }
 
     const configuredClients = getClientsForServer(oktaStore.oauthClients.all(), authServerId);
     if (configuredClients.length > 0) {
       const client = configuredClients.find((entry) => entry.client_id === clientId);
       if (!client) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (!matchesRedirectUri(redirectUri, client.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -521,7 +503,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     debug("okta.oauth", `[callback] code=${code.slice(0, 8)}... user=${user.login} server=${authServerId}`);
 
     if (responseMode === "form_post") {
-      return c.html(renderFormPostPage(redirectUri, { code, state }, SERVICE_LABEL));
+      return c.html(await renderFormPostPage(redirectUri, { code, state }, SERVICE_LABEL));
     }
 
     const url = new URL(redirectUri);

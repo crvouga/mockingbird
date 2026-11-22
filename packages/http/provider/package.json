@@ -8,6 +8,7 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "dist-ui",
     "README.md",
     "LICENSE_EMULATE",
     "THIRD_PARTY_NOTICES.md",
@@ -17,6 +18,14 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
+    }
+  },
+  "imports": {
+    "#ui/server": {
+      "types": "./src/ui/server.tsx",
+      "bun": "./src/ui/server.tsx",
+      "browser": "./src/ui/server.tsx",
+      "default": "./dist-ui/server.js"
     }
   },
   "repository": {
@@ -35,22 +44,31 @@
     "layer": "http-provider"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun ../../../packages/ui/scripts/bundle.ts --ssr src/ui/server.tsx && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test --pass-with-no-tests",
     "portability": "bun ../../../scripts/portability.ts",
     "pack:check": "bun ../../../scripts/pack-check.ts"
   },
-  "devDependencies": {},
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0"
+  },
   "dependencies": {
+    "@crvouga/mockingbird-openapi": "workspace:*",
+    "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
-    "buffer": "6.0.3",
+    "@crvouga/mockingbird-ui": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
     "@noble/hashes": "2.4.0",
-    "jose": "6.2.2",
+    "buffer": "6.0.3",
     "graphql": "17.0.0",
-    "@crvouga/mockingbird-openapi": "workspace:*",
-    "@crvouga/mockingbird-openapi-metadata": "workspace:*"
+    "jose": "6.2.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }

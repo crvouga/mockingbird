@@ -131,6 +131,16 @@ or `customPreviewOrigin({ previewName, host })` on a custom domain. Run
 without it a deploy succeeds and its URL answers 404. `get(name)` confirms a removed Preview is
 gone, and `list()` is `[]` before the parent Worker's first deploy.
 
+## Your own lifecycle
+
+Driving Cloudflare Previews yourself instead of the workflow? The package exports pure helpers for the
+same decisions. `explainPreviewAction(pullRequest, builtCommit)` deploys, removes, or skips with a
+reason (`fork`, `stale-head`, `no-build`) and a message for your log or PR comment;
+`selectBranchAction({ head }, builtCommit)` deploys the branch the Worker serves only from its
+current head. `planPreviewSweep` lists previews to remove; pass `capacityCounts: "all"` to count
+previews it does not manage against `capacity` too. See the
+[package README](../packages/adapters/preview/README.md).
+
 ## What a preview does not do
 
 - **Checks status starts once the caller file is on your default branch.** GitHub runs

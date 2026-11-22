@@ -4,6 +4,7 @@
  *
  *   bun run catalog:screenshots              # → catalog/*.png
  *   bun run catalog:screenshots -- --no-build
+ *   bun run catalog:screenshots -- --no-build --static .tmp/sb --out .tmp/shots --only harness- --scheme dark
  *
  * Each story picks its viewport with a `vp-*` tag; the clock and time zone are fixed, so the
  * pictures only change when the UI does.
@@ -13,8 +14,15 @@ import { extname, join } from "node:path"
 import { chromium } from "@playwright/test"
 
 const root = join(import.meta.dir, "..")
-const staticDir = join(root, "storybook-static")
-const outDir = join(root, "catalog")
+const option = (name: string) => {
+  const at = process.argv.indexOf(name)
+  return at >= 0 ? process.argv[at + 1] : undefined
+}
+const staticDir = join(root, option("--static") ?? "storybook-static")
+const outDir = join(root, option("--out") ?? "catalog")
+const only = option("--only")
+/** `light` or `dark`: the color scheme the browser reports. Default light. */
+const scheme = option("--scheme") === "dark" ? "dark" : "light"
 
 if (!process.argv.includes("--no-build")) {
   const build = Bun.spawnSync(["bun", "run", "storybook:build"], {
@@ -37,7 +45,9 @@ type Entry = { id: string; title: string; name: string; type: string; tags?: str
 const index = JSON.parse(readFileSync(join(staticDir, "index.json"), "utf8")) as {
   entries: Record<string, Entry>
 }
-const stories = Object.values(index.entries).filter((e) => e.type === "story")
+const stories = Object.values(index.entries).filter(
+  (e) => e.type === "story" && (!only || e.id.startsWith(only)),
+)
 
 const TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -71,6 +81,7 @@ try {
       locale: "en-US",
       timezoneId: "America/Los_Angeles",
       reducedMotion: "reduce",
+      colorScheme: scheme,
     })
     const page = await context.newPage()
     const errors: string[] = []
@@ -79,7 +90,7 @@ try {
     for (let attempt = 1; ; attempt++) {
       await page.goto(`${server.url}iframe.html?id=${encodeURIComponent(story.id)}&viewMode=story`)
       try {
-        await page.waitForSelector("#storybook-root .devices, #storybook-root .timeline", {
+        await page.waitForSelector("#storybook-root [data-testid], #storybook-root iframe", {
           state: "attached",
           timeout: 15_000,
         })

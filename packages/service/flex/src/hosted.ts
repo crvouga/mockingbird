@@ -1,4 +1,3 @@
-import { CSS_RESET } from "@crvouga/mockingbird-ui"
 import type { NextActionType, SessionRecord } from "./state.js"
 
 /** Test cards the hosted page recognises (spaces are ignored). */
@@ -52,40 +51,8 @@ export const substituteSessionId = (url: string, sessionId: string): string =>
     .replaceAll("{CHECKOUT_SESSION_ID}", sessionId)
     .replace(/%7BCHECKOUT_SESSION_ID%7D/gi, sessionId)
 
-const escapeHtml = (value: string) =>
-  value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;")
-
-const dollars = (cents: number) => `$${(cents / 100).toFixed(2)}`
-
-const layout = (title: string, body: string) => `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${escapeHtml(title)}</title>
-<style>
-${CSS_RESET}
-body{font-family:system-ui,sans-serif;max-width:28rem;margin:2rem auto;padding:0 1rem;color:#1a1a1a;background:#fff}
-h1{font-size:1.5rem;font-weight:650;margin:0 0 .75rem}
-p{margin:0 0 .75rem}
-ul{list-style:disc;padding-left:1.25rem}
-label{display:block;margin:.75rem 0 .25rem;font-size:.9rem}
-input{width:100%;min-width:0;max-width:100%;padding:.5rem;font-size:1rem;border:1px solid #c8c8c8;border-radius:6px;background:#fff}
-button{margin-top:1rem;width:100%;padding:.75rem;font-size:1rem;background:#1a1a1a;color:#fff;border-radius:6px}
-[role=alert]{color:#b00020;margin:1rem 0}
-.row{display:flex;flex-wrap:wrap;gap:.5rem;min-width:0}.row>div{flex:1;min-width:min(100%,8rem)}
-</style>
-</head>
-<body>
-${body}
-</body>
-</html>
-`
+/** The browser pages (React, prebuilt in `#ui/server`), loaded only when a page is served. */
+const pages = () => import("#ui/server")
 
 export type PageInput = {
   session: SessionRecord
@@ -93,71 +60,33 @@ export type PageInput = {
   error?: string
 }
 
-const alert = (error: string | undefined) =>
-  error ? `<div role="alert" data-testid="flex-mock-error">${escapeHtml(error)}</div>` : ""
-
-const cancelLink = (session: SessionRecord) =>
-  session.cancel_url
-    ? `<p><a data-testid="flex-mock-cancel" href="./${encodeURIComponent(session.checkout_session_id)}/cancel">Cancel and return</a></p>`
-    : ""
-
 /** "month", "3 months": how often the session's first recurring line item bills. */
 const cadence = (session: SessionRecord) => {
   const recurring = session.line_items.find((item) => item.price_data.recurring)?.price_data
     .recurring
-  if (!recurring) return ""
+  if (!recurring) return undefined
   const count = recurring.interval_count ?? 1
-  const every = count === 1 ? recurring.interval : `${count} ${recurring.interval}s`
-  return ` <span data-testid="flex-mock-interval">per ${escapeHtml(every)}</span>`
+  return count === 1 ? recurring.interval : `${count} ${recurring.interval}s`
 }
 
-const summary = (input: PageInput) => {
-  const { session } = input
-  const items = input.productNames
-    .map((name) => `<li data-testid="flex-mock-line-item">${escapeHtml(name)}</li>`)
-    .join("")
-  return `<h1>${session.mode === "subscription" ? "Subscribe with HSA/FSA" : "Pay with HSA/FSA"}</h1>
-<p data-testid="flex-mock-session" data-session-id="${escapeHtml(session.checkout_session_id)}" data-mode="${escapeHtml(session.mode)}">
-${session.mode === "setup" ? "Save a card for future payments" : `Total <strong data-testid="flex-mock-amount">${dollars(session.amount_total)}</strong>${session.mode === "subscription" ? cadence(session) : ""}`}
-</p>
-${items ? `<ul>${items}</ul>` : ""}`
-}
+const view = (input: PageInput) => ({
+  sessionId: input.session.checkout_session_id,
+  mode: input.session.mode,
+  amountTotal: input.session.amount_total,
+  interval: cadence(input.session),
+  productNames: input.productNames,
+  // Relative to `/pay/:id`, so an `/__admin/ns/<name>` prefix survives.
+  cancelHref: input.session.cancel_url
+    ? `./${encodeURIComponent(input.session.checkout_session_id)}/cancel`
+    : undefined,
+  error: input.error,
+})
 
 /** The card form: contact fields, then the card, then Pay. */
-export const cardPage = (input: PageInput) =>
-  layout(
-    "Flex checkout (Mockingbird)",
-    `${summary(input)}
-${alert(input.error)}
-<form method="post" action="" data-testid="flex-mock-form">
-<input type="hidden" name="step" value="card">
-<label for="email">Email</label>
-<input id="email" name="email" type="email" autocomplete="email" placeholder="Email" data-testid="flex-mock-email">
-<div class="row">
-<div><label for="firstName">First name</label>
-<input id="firstName" name="firstName" autocomplete="given-name" placeholder="First Name" data-testid="flex-mock-first-name"></div>
-<div><label for="lastName">Last name</label>
-<input id="lastName" name="lastName" autocomplete="family-name" placeholder="Last Name" data-testid="flex-mock-last-name"></div>
-</div>
-<label for="phone">Phone</label>
-<input id="phone" name="phone" type="tel" autocomplete="tel" placeholder="Phone" data-testid="flex-mock-phone">
-<label for="cardNumber">Card number</label>
-<input id="cardNumber" name="cardNumber" inputmode="numeric" autocomplete="cc-number" placeholder="Card number" data-testid="flex-mock-card">
-<div class="row">
-<div><label for="expiry">Expiration (MM/YY)</label>
-<input id="expiry" name="expiry" autocomplete="cc-exp" placeholder="MM / YY" data-testid="flex-mock-exp"></div>
-<div><label for="cvc">CVC</label>
-<input id="cvc" name="cvc" autocomplete="cc-csc" placeholder="CVC" data-testid="flex-mock-cvc"></div>
-</div>
-<label for="postalCode">ZIP</label>
-<input id="postalCode" name="postalCode" autocomplete="postal-code" placeholder="ZIP" data-testid="flex-mock-zip">
-<button type="submit" data-testid="flex-mock-pay">${input.session.mode === "setup" ? "Save card" : "Pay"}</button>
-</form>
-${cancelLink(input.session)}`,
-  )
+export const cardPage = async (input: PageInput) => (await pages()).cardPage(view(input))
 
 /** The next-action step: a letter of medical necessity, or another card. */
-export const nextActionPage = (input: PageInput, type: NextActionType) => {
+export const nextActionPage = async (input: PageInput, type: NextActionType) => {
   if (type !== "collect_letter_of_medical_necessity") {
     return cardPage({
       ...input,
@@ -170,32 +99,14 @@ export const nextActionPage = (input: PageInput, type: NextActionType) => {
             : "Use another payment method to complete this purchase."),
     })
   }
-  return layout(
-    "Letter of medical necessity (Mockingbird)",
-    `${summary(input)}
-${alert(input.error)}
-<p data-testid="flex-mock-lmn">One of these items needs a letter of medical necessity. Answer the short questionnaire to finish paying.</p>
-<form method="post" action="" data-testid="flex-mock-lmn-form">
-<input type="hidden" name="step" value="lmn">
-<button type="submit" data-testid="flex-mock-lmn-submit">Submit questionnaire and pay</button>
-</form>
-${cancelLink(input.session)}`,
-  )
+  return (await pages()).letterPage(view(input))
 }
 
 /** A session that can no longer be paid (complete, expired, canceled). */
-export const closedPage = (session: SessionRecord) =>
-  layout(
-    "Flex checkout (Mockingbird)",
-    `<h1>This checkout is ${escapeHtml(session.status)}</h1>
-<p data-testid="flex-mock-closed" data-status="${escapeHtml(session.status)}">Nothing more to pay here.</p>`,
-  )
+export const closedPage = async (session: SessionRecord) =>
+  (await pages()).closedPage(session.status)
 
-export const notFoundPage = () =>
-  layout(
-    "Flex checkout (Mockingbird)",
-    `<h1>Checkout not found</h1><p data-testid="flex-mock-not-found">This link is invalid.</p>`,
-  )
+export const notFoundPage = async () => (await pages()).notFoundPage()
 
 export const html = (status: number, body: string) =>
   new Response(body, { status, headers: { "content-type": "text/html; charset=utf-8" } })

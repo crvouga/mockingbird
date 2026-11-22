@@ -5,12 +5,9 @@ import { createHash, randomBytes } from "../../core/crypto.js";
 import { SignJWT, exportJWK } from "jose";
 import type { RouteContext } from "../../core/index.js";
 import {
-  escapeHtml,
-  escapeAttr,
-  renderCardPage,
   renderErrorPage,
+  renderSignInPage,
   renderFormPostPage,
-  renderUserButton,
   matchesRedirectUri,
   constantTimeSecretEqual,
   bodyStr,
@@ -170,7 +167,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
 
   // ---------- Authorization page ----------
 
-  app.get("/oauth2/v2.0/authorize", (c) => {
+  app.get("/oauth2/v2.0/authorize", async (c) => {
     const client_id = c.req.query("client_id") ?? "";
     const redirect_uri = c.req.query("redirect_uri") ?? "";
     const scope = c.req.query("scope") ?? "";
@@ -185,14 +182,12 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     if (clientsConfigured) {
       const client = ms.oauthClients.findOneBy("client_id", client_id);
       if (!client) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (redirect_uri && !matchesRedirectUri(redirect_uri, client.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -204,13 +199,13 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     }
 
     const subtitleText = clientName
-      ? `Sign in to <strong>${escapeHtml(clientName)}</strong> with your Microsoft account.`
+      ? ["Sign in to ", { strong: clientName }, " with your Microsoft account."]
       : "Choose a seeded user to continue.";
 
     const users = ms.users.all();
     const userButtons = users
       .map((user) => {
-        return renderUserButton({
+        return ({
           letter: (user.email[0] ?? "?").toUpperCase(),
           login: user.email,
           name: user.name,
@@ -228,12 +223,10 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
             code_challenge_method,
           },
         });
-      })
-      .join("\n");
+      });
 
-    const body = users.length === 0 ? '<p class="empty">No users in the emulator store.</p>' : userButtons;
 
-    return c.html(renderCardPage("Sign in with Microsoft", subtitleText, body, SERVICE_LABEL));
+    return c.html(await renderSignInPage("Sign in with Microsoft", subtitleText, userButtons, SERVICE_LABEL));
   });
 
   // ---------- Authorization callback ----------
@@ -255,14 +248,12 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     if (clientsConfigured) {
       const client = ms.oauthClients.findOneBy("client_id", client_id);
       if (!client) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (redirect_uri && !matchesRedirectUri(redirect_uri, client.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -288,7 +279,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     debug("microsoft.oauth", `[Microsoft callback] code=${code.slice(0, 8)}... email=${email}`);
 
     if (response_mode === "form_post") {
-      return c.html(renderFormPostPage(redirect_uri, { code, state }, SERVICE_LABEL));
+      return c.html(await renderFormPostPage(redirect_uri, { code, state }, SERVICE_LABEL));
     }
 
     // Default: query mode redirect

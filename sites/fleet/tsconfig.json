@@ -5,7 +5,10 @@
     "noEmit": true,
     "declaration": false,
     "declarationMap": false,
-    "sourceMap": false
+    "sourceMap": false,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
   "include": [
     "src/**/*.ts",
@@ -13,7 +16,12 @@
     "test/**/*.ts",
     "specs/**/*.ts",
     ".storybook/**/*.ts",
-    "playwright.config.ts"
+    "playwright.config.ts",
+    "src/**/*.tsx",
+    "scripts/**/*.tsx",
+    "test/**/*.tsx",
+    "specs/**/*.tsx",
+    ".storybook/**/*.tsx"
   ],
   "exclude": ["dist"]
 }

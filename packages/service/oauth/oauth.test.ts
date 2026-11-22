@@ -234,7 +234,7 @@ describe("OAuth protocol", () => {
     })
     const html = await response.text()
     expect(response.status).toBe(200)
-    expect(html).toContain(`method="post" action="${nativeCallback}"`)
+    expect(html).toContain(`action="${nativeCallback}" method="post"`)
     expect(html).toContain('name="code"')
     expect(html).toContain('name="state" value="round-trip"')
     // The app the form posts to may redirect anywhere next, so the hand-off names no form-action.
@@ -275,7 +275,7 @@ describe("OAuth protocol", () => {
     // form-action also governs the redirects that follow a submit, and a callback may answer the
     // POST with a redirect to an application origin the provider never sees.
     const handoffPolicy =
-      "default-src 'none'; style-src 'nonce-fixed-csp-nonce'; script-src 'nonce-fixed-csp-nonce'; base-uri 'none'; frame-ancestors 'none'"
+      "default-src 'none'; style-src 'nonce-fixed-csp-nonce'; style-src-attr 'unsafe-inline'; script-src 'nonce-fixed-csp-nonce'; img-src data:; base-uri 'none'; frame-ancestors 'none'"
     for (const provider of ["google", "apple", "oidc", "microsoft", "github"] as const) {
       for (const action of ["allow", "deny"] as const) {
         const service = new OAuthAPI({
@@ -302,7 +302,7 @@ describe("OAuth protocol", () => {
         const html = await handoff.text()
         expect(handoff.status).toBe(200)
         expect(html).toContain('data-testid="oauth-mock-form-post"')
-        expect(html).toContain(`<form id="callback" method="post" action="${callback}">`)
+        expect(html).toContain(`<form id="callback" action="${callback}" method="post">`)
         expect(html).toContain(action === "allow" ? 'name="code"' : 'name="error"')
         expect(handoff.headers.get("content-security-policy")).toBe(handoffPolicy)
       }

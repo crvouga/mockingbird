@@ -1,9 +1,11 @@
 # Shared admin UI
 
-React and Ant Design power the complete service admin shell: layout, menus, tables,
-forms, dialogs, theme switching, and loading/error/success feedback. All structured
-data uses Ant Design Table with bounded columns, horizontal scrolling, search,
-sorting, pagination, and expandable JSON details.
+React and [HeroUI](https://heroui.com/docs/react/getting-started), on Mockingbird's design system
+(`@crvouga/mockingbird-ui`), power the complete service admin shell: the shared top bar, a sidebar
+of screens (a picker on a phone), tables, forms, dialogs, the theme switch, and loading, error and
+success feedback, so it reads as the same product as every other Mockingbird surface. All
+structured data uses HeroUI's Table with bounded columns, horizontal scrolling, search, sorting,
+pagination, and each row's full JSON in a details dialog.
 
 `bun run build` compiles a production browser bundle and exports it as a string.
 Service runtimes import that string without importing React or accessing the DOM, and
@@ -23,9 +25,11 @@ then exposes a global emulator selector and sends every read or mutation only to
 it does not duplicate service state or implement service controls in the browser.
 In a composed shell the top-left title is the emulator switcher. `Command/Ctrl + K` opens the
 keyboard-first command palette for jumping directly to any emulator and built-in screen.
-Ant Design's StyleProvider and ConfigProvider keep styles and portals within the
-embedded document. Hosts dispatch `mockingbird:unmount` before detaching the document
-to dispose the React root. Service-owned manifest panels keep their existing API
+The bundle carries the design system's precompiled stylesheet and adds it once to the shadow root
+the UI is mounted in, or to `document.head`; dialogs, menus and notices render inside the mount, and
+the UI pins its own subtree light or dark (following the shared theme switch, `mb:theme`), so it is
+styled and themed inside a Shadow DOM too. Hosts dispatch `mockingbird:unmount` before detaching
+the document to dispose the React root. Service-owned manifest panels keep their existing API
 and can return a cleanup function from their script. Declarative `route` extensions
 render service actions with the shared prebuilt request form and response viewer;
 the built-in Plane action uses this instead of shipping a custom HTML form.
@@ -78,7 +82,7 @@ Every `AdminEnvironment` field is optional; the default is the document the UI i
 | `history` | Where the UI's URL updates go (`replaceState`) |
 | `shortcutTarget` | Where Command/Ctrl + K is listened for (default `document`) |
 | `viewport` | The box the UI fills (default the window, or the shadow host) |
-| `styleContainer` | Where Ant Design's `<style>` elements go (default `document.head` or the shadow root) |
+| `styleContainer` | Where the design system's `<style>` element goes (default the shadow root, or `document.head`); `false` for a page that loads `@crvouga/mockingbird-ui/styles.css` itself |
 | `panelScript` | How a custom panel's script runs: `(panel, api) => PanelScript \| undefined`, or `false` for none |
 
 The module never compiles a string, so it runs under a Content Security Policy without

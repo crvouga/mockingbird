@@ -2,7 +2,7 @@
  * The JavaScript half of scripts/bundle-service.ts: one esbuild pass with code splitting, in
  * which the admin page's browser client stays a file of its own.
  *
- * The client (`@crvouga/mockingbird-admin-ui/document`) is ~1.3 MB of React + Ant Design held as
+ * The client (`@crvouga/mockingbird-admin-ui/document`) is ~1.5 MB of React + HeroUI + the design system stylesheet held as
  * one string. The service runtime reaches it only through a dynamic `import()` on the first
  * `/__admin/ui` request (packages/service/core/src/admin-client.ts), so with splitting it never
  * lands in an entry's static import graph: an app that only calls `createRuntime().fetch` never

@@ -15,6 +15,18 @@ const GROUPS = [
   "packages/examples",
 ]
 
+/**
+ * Subpath exports read from source too. The design system's React components and page document
+ * are what most stories draw with; its stylesheet (`/styles`, `/styles.css`) is compiled, so it
+ * still comes from `dist` (`bun run --cwd packages/ui build`).
+ */
+const SUBPATHS: Record<string, string> = {
+  "@crvouga/mockingbird-ui/react": "packages/ui/src/react/index.ts",
+  "@crvouga/mockingbird-ui/react/server": "packages/ui/src/react/server.tsx",
+  "@crvouga/mockingbird-ui/react/client": "packages/ui/src/react/client.tsx",
+  "@crvouga/mockingbird-ui/document": "packages/ui/src/document.ts",
+}
+
 /** `@crvouga/mockingbird-…` → its `src/index.ts`, for every package that has one. */
 export function sourceEntries(): Record<string, string> {
   const entries: Record<string, string> = {}
@@ -29,5 +41,6 @@ export function sourceEntries(): Record<string, string> {
       if (pkg.name?.startsWith("@crvouga/mockingbird")) entries[pkg.name] = entry
     }
   }
+  for (const [name, path] of Object.entries(SUBPATHS)) entries[name] = join(REPO_ROOT, path)
   return entries
 }

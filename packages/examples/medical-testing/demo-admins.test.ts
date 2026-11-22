@@ -116,7 +116,7 @@ describe("live demo admins", () => {
     expect(restored.status).toBe(200)
     expect((await catalog()).tests.find((test) => test.id === first.id)?.name).toBe(first.name)
     const ui = await (await request("/ui")).text()
-    expect(ui).toContain('data-admin-ui-library="antd"')
+    expect(ui).toContain('data-admin-ui-library="heroui"')
     expect(ui).toContain("data-mockingbird-admin")
   })
 })
