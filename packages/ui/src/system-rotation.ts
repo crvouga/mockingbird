@@ -55,51 +55,60 @@ export function writeIncluded(storage: () => Store, included: ReadonlySet<string
  * The ids out of the switcher when it mounts: the ones a person switched off, plus every
  * off-by-default id they never switched on.
  */
-export function initialExcluded(
-  storage: () => Store,
+type RotationPreferences = { switchedOff: Set<string>; included: Set<string> }
+
+export function excludedWithDefaults(
+  prefs: RotationPreferences,
   defaultOff: readonly string[],
-): { excluded: Set<string>; included: Set<string> } {
-  const excluded = readExcluded(storage)
-  const included = readIncluded(storage)
-  for (const id of defaultOff) if (id !== "system" && !included.has(id)) excluded.add(id)
-  return { excluded, included }
+): Set<string> {
+  return new Set([
+    ...prefs.switchedOff,
+    ...defaultOff.filter((id) => id !== "system" && !prefs.included.has(id)),
+  ])
+}
+
+export function initialExcluded(storage: () => Store, defaultOff: readonly string[]) {
+  const prefs = { switchedOff: readExcluded(storage), included: readIncluded(storage) }
+  return { ...prefs, excluded: excludedWithDefaults(prefs, defaultOff) }
 }
 
 /** Records one switch flip, keeping both keys consistent. */
 export function setRotation(
   storage: () => Store,
-  state: { excluded: Set<string>; included: Set<string> },
+  state: RotationPreferences & { excluded: Set<string> },
   defaultOff: readonly string[],
   id: string,
   on: boolean,
 ): void {
   if (id === "system") return
-  if (on) state.excluded.delete(id)
-  else state.excluded.add(id)
-  if (defaultOff.includes(id)) {
+  if (on) state.switchedOff.delete(id)
+  else state.switchedOff.add(id)
+  if (!on || defaultOff.includes(id)) {
     if (on) state.included.add(id)
     else state.included.delete(id)
     writeIncluded(storage, state.included)
   }
-  // Off-by-default ids are left out of ROTATION_KEY: their absence from INCLUDED_KEY says it.
-  writeExcluded(
-    storage,
-    new Set([...state.excluded].filter((value) => !defaultOff.includes(value))),
-  )
+  writeExcluded(storage, state.switchedOff)
+  state.excluded = excludedWithDefaults(state, defaultOff)
 }
 
 /** localStorage key holding the switcher's order (System included), as a JSON string array. */
 export const ORDER_KEY = "mockingbird.system-switcher.order"
 
-/** The saved order. Unreadable or malformed storage means the default order. */
-export function readOrder(storage: () => Store, ids: readonly string[]): string[] {
+/** The saved order as stored, unreconciled. Unreadable or malformed storage means none. */
+export function readSavedOrder(storage: () => Store): unknown[] {
   try {
     const parsed: unknown = JSON.parse(storage().getItem(ORDER_KEY) ?? "[]")
-    if (Array.isArray(parsed)) return reconcileOrder(parsed, ids)
+    if (Array.isArray(parsed)) return parsed
   } catch {
     /* Storage can be unavailable or hold something else; the default order stands. */
   }
-  return [...ids]
+  return []
+}
+
+/** The saved order. Unreadable or malformed storage means the default order. */
+export function readOrder(storage: () => Store, ids: readonly string[]): string[] {
+  return reconcileOrder(readSavedOrder(storage), ids)
 }
 
 /**

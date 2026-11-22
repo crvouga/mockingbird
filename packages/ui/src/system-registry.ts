@@ -333,6 +333,23 @@ export function systemSurfaces(
   system: PreviewSystem,
   runtime: PreviewSystemRuntime = {},
 ): { surfaces: PreviewSystemSurface[]; loader: PreviewPartLoader } {
+  const parts = createPartRuntime(() => system, runtime)
+  return { surfaces: parts.surfaces(system), loader: parts.loader }
+}
+
+/**
+ * The part loader of a registry that can change while the preview runs (`current` answers the
+ * registry now), and the surfaces of any one registry over that loader.
+ */
+export function createPartRuntime(
+  current: () => PreviewSystem,
+  runtime: PreviewSystemRuntime = {},
+): {
+  surfaces(system: PreviewSystem): PreviewSystemSurface[]
+  loader: PreviewPartLoader
+  /** Drops what was loaded for apps that left, so one added back loads from its own declaration. */
+  forget(ids: readonly string[]): void
+} {
   const manifest = () =>
     typeof runtime.manifest === "function" ? runtime.manifest() : runtime.manifest
   const base = () => runtime.baseUrl ?? globalThis.location?.href ?? "http://localhost/"
@@ -348,7 +365,7 @@ export function systemSurfaces(
     }
   }
   const load = (id: string): Promise<PreviewAppModule> => {
-    const app = system.app(id)
+    const app = current().app(id)
     if (!app) return Promise.reject(new Error(`No app "${id}" in the registry`))
     const { entry, pin } = resolvePart(app)
     const key = `${id}@${pin ?? entry ?? "bundled"}`
@@ -372,7 +389,7 @@ export function systemSurfaces(
     })
     return pending
   }
-  const surfaces = system.apps.map((app): PreviewSystemSurface => {
+  const surfaceOf = (app: PreviewApp): PreviewSystemSurface => {
     const surface: PreviewSystemSurface = {
       id: app.id,
       label: app.label,
@@ -400,13 +417,17 @@ export function systemSurfaces(
       get: () => resolvePart(app).pin,
     })
     return surface
-  })
+  }
   return {
-    surfaces,
+    surfaces: (system) => system.apps.map(surfaceOf),
+    forget(ids) {
+      for (const key of [...cache.keys()])
+        if (ids.some((id) => key.startsWith(`${id}@`))) cache.delete(key)
+    },
     loader: {
       load,
       async prefetch() {
-        for (const app of system.apps) {
+        for (const app of current().apps) {
           if (app.mount === "iframe" || !resolvePart(app).prefetch) continue
           await load(app.id).catch(() => {})
         }

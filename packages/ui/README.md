@@ -317,6 +317,31 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 
 `mountSystemHarness` keeps working with plain `SystemSurface`s; the registry's fields (`defaultEnabled`, `route`, `backends`, `version`, `health`) are optional there too, and `harness.update(id, next?)` and `harness.notify(notice)` are available on any harness.
 
+### Change the apps in a running session
+
+Pass the full list to `setApps` whenever a client joins, a server stops, or an emulator becomes available. Give each instance a stable ID and its own route.
+
+```ts
+import { defineSystem, mountSystem, type PreviewApp } from "@crvouga/mockingbird-ui"
+
+declare const host: HTMLElement
+const preview = mountSystem(host, defineSystem({ apps: [] }), { syncUrl: true })
+const client = (id: string): PreviewApp => ({
+  id,
+  label: id,
+  route: `/clients/${id}`,
+  part: { entry: "/parts/client.js" },
+})
+
+preview.setApps([client("client-1")])
+await preview.show("client-1")
+preview.setApps([client("client-1"), client("client-2")])
+preview.setApps([client("client-1")]) // The first client keeps its draft and navigation.
+preview.setApps([]) // Return to System.
+```
+
+The low-level harness accepts the same pattern through `harness.setSurfaces(surfaces)`. Surviving IDs keep their panels and mounted state as labels, routes and order change. Removal aborts a pending mount and runs its disposer when it resolves. Removing the active app selects the configured initial app if present, then the first enabled app, then System. URL sync replaces the current history entry on fallback. Use `update(id, next)` for explicit code replacement.
+
 ## Launcher page
 
 `@crvouga/mockingbird-ui/launcher` is the page a pull request links to before anything is built. It polls an on-demand build relay (`GET <relay>?pr=<n>` answers a `PreviewLaunch`; `@crvouga/mockingbird-preview`'s `createBuildRelay()` is one), starts the build of the head commit with `POST <relay>?pr=<n>`, shows it live and opens the preview when it is ready, with no refresh. It is dependency-free and needs no worker, backends or emulators.
