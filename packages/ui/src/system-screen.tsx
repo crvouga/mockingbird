@@ -35,23 +35,31 @@ import { type Status, StatusChip } from "./react/status-chip.js"
 import { ThemeSwitch } from "./react/theme-switch.js"
 import { PreviewCard, RelativeTime } from "./system-build.js"
 import type { SystemBuild } from "./system-build-status.js"
+import { ServiceCredentials } from "./system-credentials.js"
+import { isFactsSection } from "./system-facts.js"
+import { FactsSection } from "./system-facts-section.js"
 import type { SystemIcon } from "./system-icons.js"
 import { IconMark } from "./system-mark.js"
 import { move, summarizeServices } from "./system-rotation.js"
+import { takesCredentials } from "./system-services-store.js"
 import { SYSTEM_SECTION_PARAM } from "./system-shortcut.js"
 import { DataCard, SectionMount } from "./system-snapshot.js"
+import { formatMs, timelineRows } from "./system-timeline.js"
 import type {
   SystemApp,
   SystemBackend,
   SystemBackends,
   SystemDevStatus,
+  SystemFactsSection,
   SystemHealth,
   SystemSection,
   SystemService,
+  SystemServiceField,
   SystemServiceMode,
   SystemServices,
   SystemServiceTest,
   SystemSnapshot,
+  SystemTimelineStep,
 } from "./system-types.js"
 
 /** What the harness hands the System screen. */
@@ -69,8 +77,8 @@ export type SystemScreenProps = {
   build?: SystemBuild | undefined
   /** The backends and emulators behind the apps; with any app's `backends`, adds a Backends list. */
   backends?: SystemBackends | undefined
-  /** The consumer's own sections, after the built-in ones. */
-  sections?: readonly SystemSection[] | undefined
+  /** The consumer's own sections, after the built-in ones: drawn by `mount`, or from `load`'s facts. */
+  sections?: readonly (SystemSection | SystemFactsSection)[] | undefined
   /** Save, load and reset: adds the Data card. */
   snapshot?: SystemSnapshot | undefined
   /** Read and write `?system=<section>`. */
@@ -234,7 +242,11 @@ export function SystemScreen(props: SystemScreenProps) {
                 title={section.label}
                 icon={section.icon}
               />
-              <SectionMount section={section} />
+              {isFactsSection(section) ? (
+                <FactsSection section={section} />
+              ) : (
+                <SectionMount section={section} />
+              )}
             </section>,
           ),
         )}
@@ -726,6 +738,8 @@ function ServicesArea({ services }: { services: SystemServices }) {
   }, [load, services])
 
   const sharedReason = dev && dev.state !== "ready" ? dev.message : undefined
+  // A service that takes the developer's own key can still use Dev without the proxy (#903).
+  const someTakeKeys = !!rows?.some((row) => takesCredentials(row.service, services))
   const choose = async (id: string, mode: SystemServiceMode) => {
     const row = rows?.find((candidate) => candidate.service.id === id)
     if (!row || row.pending || row.service.mode === mode) return
@@ -801,7 +815,9 @@ function ServicesArea({ services }: { services: SystemServices }) {
           >
             <CircleInfo className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
             <span>
-              Dev is unavailable for every service: {(sharedReason ?? "").replace(/\.$/, "")}.
+              {someTakeKeys
+                ? `Dev through the proxy is unavailable: ${(sharedReason ?? "").replace(/\.$/, "")}. A service that takes your own key can still use Dev.`
+                : `Dev is unavailable for every service: ${(sharedReason ?? "").replace(/\.$/, "")}.`}
             </span>
           </p>
           {rows === undefined && failure ? null : (
@@ -838,6 +854,23 @@ function ServicesArea({ services }: { services: SystemServices }) {
                       sharedReason={sharedReason}
                       choose={(mode) => choose(row.service.id, mode)}
                       test={services.test ? () => testService(services, row.service.id) : undefined}
+                      credentials={
+                        takesCredentials(row.service, services) && row.service.fields
+                          ? {
+                              fields: row.service.fields,
+                              save: (values) =>
+                                services.setCredentials?.(row.service.id, values) ??
+                                Promise.resolve(),
+                              ...(services.clearCredentials
+                                ? {
+                                    clear: () =>
+                                      services.clearCredentials?.(row.service.id) ??
+                                      Promise.resolve(),
+                                  }
+                                : {}),
+                            }
+                          : undefined
+                      }
                     />
                   ))
                 )}
@@ -866,12 +899,21 @@ function ServiceRow({
   sharedReason,
   choose,
   test,
+  credentials,
 }: {
   row: Row
   sharedId: string
   sharedReason: string | undefined
   choose(mode: SystemServiceMode): Promise<void>
   test?: (() => Promise<SystemServiceTest>) | undefined
+  /** The service takes the developer's own key (#903): its inputs, drawn while Dev is chosen. */
+  credentials?:
+    | {
+        fields: readonly SystemServiceField[]
+        save(values: Record<string, string>): Promise<void>
+        clear?: () => Promise<void>
+      }
+    | undefined
 }) {
   const { service, pending, error } = row
   const [testing, setTesting] = useState(false)
@@ -899,11 +941,17 @@ function ServiceRow({
   const sharedNote =
     sharedReason !== undefined && unavailable !== undefined && same(unavailable, sharedReason)
 
-  // Disabling the half that was pressed drops focus; keep it on the checked one.
+  // Disabling the half that was pressed drops focus; keep it on the checked one. Focus the person
+  // has since moved elsewhere (into the credentials inputs) stays where they put it.
   useLayoutEffect(() => {
     if (!refocus.current) return
     const button = buttons.current.get(service.mode)
-    if (button && !button.disabled) button.focus()
+    const active = button?.ownerDocument.activeElement
+    const dropped =
+      !active ||
+      active === button?.ownerDocument.body ||
+      [...buttons.current.values()].some((candidate) => candidate === active)
+    if (button && !button.disabled && dropped) button.focus()
     if (!pending) refocus.current = false
   }, [service.mode, pending])
 
@@ -913,8 +961,28 @@ function ServiceRow({
     void choose(mode)
   }
   const other = service.mode === "dev" ? "emulated" : "dev"
+  // A service that takes the developer's own key does not need the proxy, so it is never blocked.
   const blocked = (mode: SystemServiceMode) =>
-    mode === "dev" && unavailable !== undefined && service.mode !== "dev"
+    mode === "dev" && unavailable !== undefined && service.mode !== "dev" && !credentials
+  const keyed = credentials !== undefined && service.mode === "dev"
+  const testButton = test ? (
+    <Button
+      size="sm"
+      variant="ghost"
+      isDisabled={testing}
+      aria-label={`Test ${service.label}`}
+      data-testid="system-service-test"
+      onPress={() => {
+        void runTest()
+      }}
+    >
+      <PlugConnection
+        aria-hidden="true"
+        className={`size-4 ${testing ? "motion-safe:animate-pulse" : ""}`}
+      />
+      Test
+    </Button>
+  ) : null
   const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
     const forward = event.key === "ArrowRight" || event.key === "ArrowDown"
     const backward = event.key === "ArrowLeft" || event.key === "ArrowUp"
@@ -942,28 +1010,16 @@ function ServiceRow({
             >
               <StatusChip status="warning">Dev resource</StatusChip>
             </span>
+            {credentials && service.configured && service.mode !== "dev" ? (
+              <span data-testid="system-service-configured" className="inline-flex">
+                <StatusChip status="ok">Key saved</StatusChip>
+              </span>
+            ) : null}
           </span>
           <span className="text-sm text-muted">{service.category ?? "Service"}</span>
           {service.lastCall ? <LastCall call={service.lastCall} /> : null}
         </div>
-        {test ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            isDisabled={testing}
-            aria-label={`Test ${service.label}`}
-            data-testid="system-service-test"
-            onPress={() => {
-              void runTest()
-            }}
-          >
-            <PlugConnection
-              aria-hidden="true"
-              className={`size-4 ${testing ? "motion-safe:animate-pulse" : ""}`}
-            />
-            Test
-          </Button>
-        ) : null}
+        {keyed ? null : testButton}
         <div onKeyDownCapture={onKeyDownCapture} className="max-sm:w-full">
           <ToggleButtonGroup
             aria-label={`${service.label} mode`}
@@ -998,12 +1054,21 @@ function ServiceRow({
       </div>
       <p
         id={noteId}
-        hidden={unavailable === undefined || sharedNote}
+        hidden={unavailable === undefined || sharedNote || credentials !== undefined}
         className="flex items-start gap-2 text-sm text-muted"
       >
         <CircleInfo className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>{unavailable ?? ""}</span>
       </p>
+      {keyed && credentials ? (
+        <ServiceCredentials
+          service={service}
+          fields={credentials.fields}
+          save={credentials.save}
+          clear={credentials.clear}
+          test={testButton}
+        />
+      ) : null}
       {test ? (
         <p
           role="status"
@@ -1013,7 +1078,9 @@ function ServiceRow({
           className={`m-0 flex items-start gap-2 text-sm ${tested && !tested.ok ? "text-danger" : "text-muted"}`}
         >
           {testing
-            ? `Testing ${service.label} through the dev proxy…`
+            ? credentials
+              ? `Testing ${service.label} with your key…`
+              : `Testing ${service.label} through the dev proxy…`
             : tested
               ? `${tested.ok ? "Test passed" : "Test failed"}${tested.message ? `: ${tested.message}` : "."}`
               : ""}
@@ -1129,6 +1196,7 @@ function Backends({
 }) {
   const headingId = useId()
   const [known, setKnown] = useState<readonly SystemBackend[]>([])
+  const [timeline, setTimeline] = useState<readonly SystemTimelineStep[]>()
   useEffect(() => {
     if (!backends) return
     let alive = true
@@ -1138,6 +1206,13 @@ function Backends({
         if (alive) setKnown(list)
       } catch {
         if (alive) setKnown([])
+      }
+      if (!backends.timeline) return
+      try {
+        const steps = await backends.timeline()
+        if (alive) setTimeline(steps)
+      } catch {
+        if (alive) setTimeline(undefined)
       }
     }
     void refresh()
@@ -1178,6 +1253,14 @@ function Backends({
                     {backend?.kind === "emulator" ? "Emulator" : "Backend"} ·{" "}
                     {users.length ? `used by ${users.join(", ")}` : "no app declares it"}
                   </span>
+                  {backend?.startedInMs !== undefined ? (
+                    <span
+                      className="text-xs text-muted tabular-nums"
+                      data-testid={`system-backend-started-${id}`}
+                    >
+                      Started in {formatMs(backend.startedInMs)}
+                    </span>
+                  ) : null}
                 </span>
                 {backend?.state ? (
                   <span
@@ -1193,6 +1276,52 @@ function Backends({
           )
         })}
       </ul>
+      {timeline?.length ? <StartupTimeline steps={timeline} /> : null}
     </section>
+  )
+}
+
+/** The start-up steps (#903): each one's time since the page began and since the step before. */
+export function StartupTimeline({ steps }: { steps: readonly SystemTimelineStep[] }) {
+  const headingId = useId()
+  const rows = timelineRows(steps)
+  if (rows.length === 0) return null
+  return (
+    <Card className="mt-3 gap-3 p-4" data-testid="system-backends-timeline">
+      <h3 id={headingId} className="flex flex-wrap items-baseline justify-between gap-2 text-sm">
+        <span className="font-semibold text-foreground">Start-up</span>
+        <span className="text-muted tabular-nums">Ready in {formatMs(rows.at(-1)?.atMs ?? 0)}</span>
+      </h3>
+      <ol aria-labelledby={headingId} className="m-0 flex list-none flex-col gap-2 p-0">
+        {rows.map((row) => (
+          <li
+            key={`${row.label}@${row.atMs}`}
+            data-step={row.label}
+            className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)_auto] items-center gap-3 text-sm max-sm:grid-cols-[minmax(0,1fr)_auto]"
+          >
+            <span className="truncate text-foreground" title={row.label}>
+              {row.label}
+            </span>
+            <span
+              aria-hidden="true"
+              className="relative h-1.5 rounded-full bg-default max-sm:hidden"
+            >
+              <span
+                className="absolute inset-y-0 rounded-full bg-accent"
+                style={{
+                  left: `${row.bar.from * 100}%`,
+                  width: `max(2px, ${row.bar.width * 100}%)`,
+                }}
+              />
+            </span>
+            <span className="text-right text-muted tabular-nums">
+              {formatMs(row.atMs)}
+              <span className="sr-only">, </span>
+              <span className="ml-1.5 text-xs">+{formatMs(row.sinceMs)}</span>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </Card>
   )
 }

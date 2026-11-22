@@ -29,6 +29,7 @@
 import { createServer, type Server, type Socket } from "node:net";
 import type { Database } from "../api/database.ts";
 import type { Snapshot } from "../api/snapshot.ts";
+import type { StatementObserver } from "../runtime/statement-observer.ts";
 import type { ServerLog } from "./connection.ts";
 import type { DurableOptions, DurableStorage } from "./durable.ts";
 import { fileStorage } from "./file-storage.ts";
@@ -64,6 +65,16 @@ export type ServeOptions = {
   onLog?: (entry: ServerLog) => void;
   /** Include extended-protocol parameter values in `onLog` entries (`params`). Off by default: they may be large. */
   logParams?: boolean;
+  /**
+   * Called after each statement a client ran that took at least `slowStatementMs` (default `0`:
+   * every statement), with its text, duration, row count and error: the way to find the statement
+   * that blocked the engine. Parameter values only with `includeParams`.
+   */
+  onStatement?: StatementObserver;
+  /** Threshold for `onStatement`, in milliseconds. */
+  slowStatementMs?: number;
+  /** Include bound parameter values in `onStatement` events. Off by default: they may hold personal data. */
+  includeParams?: boolean;
   /**
    * `postgres://` or `postgresql://` URL. User, password, host, port, and database name
    * fill the fields above when those fields are omitted. An omitted port means `5432`;
@@ -167,6 +178,9 @@ const start = async (options: ServeOptions): Promise<PostgresServer> => {
     ...(options.parameters !== undefined ? { parameters: options.parameters } : {}),
     ...(options.onLog !== undefined ? { onLog: options.onLog } : {}),
     ...(options.logParams !== undefined ? { logParams: options.logParams } : {}),
+    ...(options.onStatement !== undefined ? { onStatement: options.onStatement } : {}),
+    ...(options.slowStatementMs !== undefined ? { slowStatementMs: options.slowStatementMs } : {}),
+    ...(options.includeParams !== undefined ? { includeParams: options.includeParams } : {}),
     ...(options.databaseName !== undefined ? { databaseName: options.databaseName } : {}),
     ...(options.allowDatabaseSelection !== undefined ? { allowDatabaseSelection: options.allowDatabaseSelection } : {}),
     ...(durable !== undefined ? { durable } : {}),
@@ -224,6 +238,7 @@ const start = async (options: ServeOptions): Promise<PostgresServer> => {
 
 export { Cluster } from "./cluster.ts";
 export type { ServerFaults, ServerLog, ServerLogPhase } from "./connection.ts";
+export type { StatementEvent, StatementObserver } from "../runtime/statement-observer.ts";
 export type { ClusterImage, DurableCommit, DurableOptions, DurableStorage } from "./durable.ts";
 export { fileStorage } from "./file-storage.ts";
 export type { ByteStreamPair, ClientStream, DuplexLike } from "./stream.ts";

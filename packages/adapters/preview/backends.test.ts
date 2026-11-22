@@ -1,8 +1,13 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { join } from "node:path"
+import { pathToFileURL } from "node:url"
 import {
   backendControlHandler,
   backendControls,
   createBackendHost,
+  importPreviewBackend,
   type PreviewBackendBoot,
   PreviewBackendDrainError,
   PreviewBackendUpdateError,
@@ -292,5 +297,170 @@ describe("#838 per-backend swap", () => {
     expect(refused?.status).toBe(501)
     expect(await refused?.json()).toMatchObject({ error: "preview_backend_replace_unsupported" })
     await preview.dispose()
+  })
+})
+
+describe("#899 replace one app server inside a running system", () => {
+  const dir = mkdtempSync(join(tmpdir(), "mockingbird-backend-modules-"))
+  let modules = 0
+  /** Writes an app-server module (loaded by URL, as the worker would) and returns its URL. */
+  const serverModule = (label: string, options: { bootMs?: number; fail?: boolean } = {}) => {
+    const file = join(dir, `server-${++modules}.mjs`)
+    writeFileSync(
+      file,
+      `export async function boot({ id, generation }) {
+  const log = globalThis.__systemLog
+  log.push("boot ${label}")
+  ${options.bootMs ? `await new Promise((r) => setTimeout(r, ${options.bootMs}))` : ""}
+  ${options.fail ? `throw new Error("${label} does not compile")` : ""}
+  return {
+    async fetch(request) {
+      const url = new URL(request.url)
+      if (url.searchParams.has("hold")) await new Promise((r) => (globalThis.__release = r))
+      // The database is a long-lived service of the same system, reached through it.
+      const db = await globalThis.__system.fetch(new Request("http://db.internal/" + url.pathname.slice(1)))
+      return Response.json({ server: "${label}", generation, db: await db.text() })
+    },
+    dispose() { log.push("dispose ${label}") },
+  }
+}
+`,
+    )
+    return pathToFileURL(file).href
+  }
+
+  /** A system: a database emulator, a backend and an admin server with in-memory state. */
+  const system = (api: string, options: Parameters<typeof createBackendHost>[0]["strategy"]) => {
+    const log: string[] = []
+    const rows = new Map<string, string>([["users", "ada,grace"]])
+    let adminHits = 0
+    let adminBoots = 0
+    let dbBoots = 0
+    ;(globalThis as Record<string, unknown>).__systemLog = log
+    const host = createBackendHost({
+      ...(options ? { strategy: options } : {}),
+      backends: {
+        db: {
+          kind: "emulator",
+          match: "db.internal",
+          boot: () => {
+            dbBoots++
+            return {
+              fetch: (request) =>
+                new Response(rows.get(new URL(request.url).pathname.slice(1)) ?? ""),
+            }
+          },
+        },
+        // The app server's first code, loaded by URL like every later one.
+        backend: {
+          match: "api.internal",
+          boot: async (context) => (await importPreviewBackend(api))(context),
+        },
+        admin: {
+          match: "admin.internal",
+          boot: () => {
+            adminBoots++
+            return { fetch: () => Response.json({ hits: ++adminHits }) }
+          },
+        },
+      },
+    })
+    ;(globalThis as Record<string, unknown>).__system = host
+    return { host, log, rows, adminBoots: () => adminBoots, dbBoots: () => dbBoots }
+  }
+  const updating = async (host: ReturnType<typeof createBackendHost>) => {
+    while (host.status().find((b) => b.id === "backend")?.state !== "updating")
+      await new Promise((r) => setTimeout(r, 1))
+  }
+  const call = async (host: ReturnType<typeof createBackendHost>, url: string) =>
+    (await (await host.fetch(new Request(url))).json()) as Record<string, unknown>
+
+  test("acceptance: replacing `backend` by URL leaves the database, the admin server and their state untouched", async () => {
+    const s = system(serverModule("v1"), undefined)
+    const backend = s.host
+    expect(await call(backend, "http://api.internal/users")).toEqual({
+      server: "v1",
+      generation: 0,
+      db: "ada,grace",
+    })
+    expect(await call(backend, "http://admin.internal/")).toEqual({ hits: 1 })
+    s.rows.set("users", "ada,grace,linus")
+
+    const inFlight = backend.fetch(new Request("http://api.internal/users?hold"))
+    await new Promise((r) => setTimeout(r, 5))
+    const swap = backend.replace("backend", serverModule("v2", { bootMs: 20 }))
+    // While v2 boots, v1 keeps answering.
+    expect((await call(backend, "http://api.internal/users")).server).toBe("v1")
+    while (backend.status().find((b) => b.id === "backend")?.generation !== 1)
+      await new Promise((r) => setTimeout(r, 2))
+    expect(await call(backend, "http://api.internal/users")).toEqual({
+      server: "v2",
+      generation: 1,
+      db: "ada,grace,linus",
+    })
+    ;(globalThis as { __release?: () => void }).__release?.()
+    expect(((await (await inFlight).json()) as { server: string }).server).toBe("v1")
+    await swap
+    // The admin server kept its in-memory state and was never booted again; nor was the database.
+    expect(await call(backend, "http://admin.internal/")).toEqual({ hits: 2 })
+    expect(s.adminBoots()).toBe(1)
+    expect(s.dbBoots()).toBe(1)
+    expect(
+      backend.status().map(({ id, state, generation }) => ({ id, state, generation })),
+    ).toEqual([
+      { id: "db", state: "ready", generation: 0 },
+      { id: "backend", state: "ready", generation: 1 },
+      { id: "admin", state: "ready", generation: 0 },
+    ])
+    expect(s.log).toContain("dispose v1")
+    await backend.dispose()
+  })
+
+  test("stop-first: requests to the server being replaced wait for the new code instead of failing", async () => {
+    const s = system(serverModule("v1"), "stop-first")
+    await s.host.ensure(["backend", "admin"])
+    const inFlight = s.host.fetch(new Request("http://api.internal/users?hold"))
+    await new Promise((r) => setTimeout(r, 5))
+    const swap = s.host.replace("backend", serverModule("v2", { bootMs: 30 }))
+    await updating(s.host)
+    // Arrives mid-swap: waits, and the admin server answers meanwhile.
+    const waiting = s.host.fetch(new Request("http://api.internal/users"))
+    expect(await call(s.host, "http://admin.internal/")).toEqual({ hits: 1 })
+    ;(globalThis as { __release?: () => void }).__release?.()
+    expect(((await (await inFlight).json()) as { server: string }).server).toBe("v1")
+    await swap
+    const waited = await waiting
+    expect(waited.status).toBe(200)
+    expect(((await waited.json()) as { server: string }).server).toBe("v2")
+    // The old server was gone before the new one booted.
+    expect(s.log.indexOf("dispose v1")).toBeLessThan(s.log.lastIndexOf("boot v2"))
+    expect(s.adminBoots()).toBe(1)
+    await s.host.dispose()
+  })
+
+  test("stop-first: new code that fails to boot brings the old code back for the waiting requests", async () => {
+    const s = system(serverModule("v1"), "stop-first")
+    await s.host.ensure(["backend"])
+    const swap = s.host.replace("backend", serverModule("v2", { bootMs: 30, fail: true }))
+    await updating(s.host)
+    const waiting = s.host.fetch(new Request("http://api.internal/users"))
+    await expect(swap).rejects.toBeInstanceOf(PreviewBackendUpdateError)
+    expect(((await (await waiting).json()) as { server: string }).server).toBe("v1")
+    expect(s.host.status().find((b) => b.id === "backend")).toMatchObject({
+      state: "ready",
+      message: "v2 does not compile",
+    })
+    await s.host.dispose()
+  })
+
+  test("a module URL that exports no boot is refused and the running code keeps serving", async () => {
+    const s = system(serverModule("v1"), undefined)
+    const file = join(dir, "not-a-server.mjs")
+    writeFileSync(file, "export const value = 1\n")
+    await expect(s.host.replace("backend", pathToFileURL(file).href)).rejects.toThrow(
+      "exports no backend boot",
+    )
+    expect((await call(s.host, "http://api.internal/users")).server).toBe("v1")
+    await s.host.dispose()
   })
 })

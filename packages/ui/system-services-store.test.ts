@@ -91,4 +91,28 @@ describe("trackServices (#871)", () => {
     const store = trackServices({ ...host.services, test: async (id) => ({ ok: id === "stripe" }) })
     expect(await store.services.test?.("stripe")).toEqual({ ok: true })
   })
+
+  test("saved and forgotten credentials reach the host and the screen lists again (#903)", async () => {
+    const host = fake()
+    const kept = new Map<string, Record<string, string>>()
+    const store = trackServices({
+      ...host.services,
+      async setCredentials(id, values) {
+        kept.set(id, values)
+      },
+      async clearCredentials(id) {
+        if (id) kept.delete(id)
+        else kept.clear()
+      },
+    })
+    let heard = 0
+    const stop = store.services.subscribe(() => heard++)
+    await store.services.setCredentials?.("stripe", { apiKey: "sk_test_1" })
+    expect(kept.get("stripe")).toEqual({ apiKey: "sk_test_1" })
+    expect(heard).toBe(1)
+    await store.services.clearCredentials?.()
+    expect(kept.size).toBe(0)
+    expect(heard).toBe(2)
+    stop()
+  })
 })

@@ -91,10 +91,18 @@ export {
   type PreviewAssetReport,
 } from "./assets-check.js"
 export {
+  createPreviewDevServer,
+  type PreviewDevBuild,
+  type PreviewDevBuildResult,
+  type PreviewDevServer,
+  type PreviewDevServerOptions,
+} from "./dev-server.js"
+export {
   type BuildPreviewPartsOptions,
   type BuiltPreviewParts,
   buildPreviewPartSet,
   buildPreviewParts,
+  PREVIEW_SHARED_DEPS_PART,
   type PreviewPartSource,
   type PreviewPartsWatcher,
   watchPreviewParts,

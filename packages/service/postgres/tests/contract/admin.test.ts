@@ -190,4 +190,49 @@ describe("admin catalog reads scale with the schema (#695)", () => {
     for (const path of ["public/missing", "public/item_ids", "pg_catalog/pg_class", "information_schema/tables"])
       expect((await admin.fetch(request(`/__admin/sql/tables/${path}`))).status).toBe(400);
   });
+
+  test("#898 lists the most recent slow statements, newest first, without parameters", async () => {
+    const db = new Database();
+    db.registerFunction({
+      name: "spin",
+      args: ["int4"],
+      returns: "int4",
+      fn: (ms) => {
+        const end = performance.now() + Number(ms);
+        while (performance.now() < end) {}
+        return Number(ms);
+      },
+    });
+    const admin = createAdmin({ database: db, slowStatementMs: 20, slowStatementLimit: 2, adminKey: "k" });
+    const slow = async (init: RequestInit = { headers: { "x-mockingbird-admin-key": "k" } }) =>
+      admin.fetch(request("/__admin/sql/slow-statements", init));
+
+    db.query("SELECT 1");
+    expect(await (await slow()).json()).toEqual({ thresholdMs: 20, statements: [] });
+
+    db.query("SELECT spin(40) WHERE $1::text IS NOT NULL", ["secret@example.com"]);
+    db.query("SELECT spin(45)");
+    db.query("SELECT spin(50)");
+    db.query("SELECT 2");
+    const listed = (await (await slow()).json()) as {
+      statements: { sql: string; durationMs: number; rows: number; at: number }[];
+    };
+    // bounded to the limit, newest first
+    expect(listed.statements.map((s) => s.sql)).toEqual(["SELECT spin(50)", "SELECT spin(45)"]);
+    expect(listed.statements[0]!.durationMs).toBeGreaterThanOrEqual(20);
+    expect(listed.statements[0]!.rows).toBe(1);
+    expect(JSON.stringify(admin.slowStatements())).not.toContain("secret@example.com");
+    expect(admin.slowStatements()).toEqual(listed.statements);
+
+    expect((await slow({})).status).toBe(401);
+    // other namespaces keep their own list
+    const other = await admin.fetch(
+      request("/__admin/sql/slow-statements?namespace=other", { headers: { "x-mockingbird-admin-key": "k" } }),
+    );
+    expect(await other.json()).toEqual({ thresholdMs: 20, statements: [] });
+    // the rest of the admin surface is untouched
+    expect(
+      (await admin.fetch(request("/__admin/sql/tables", { headers: { "x-mockingbird-admin-key": "k" } }))).status,
+    ).toBe(200);
+  });
 });

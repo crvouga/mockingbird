@@ -101,16 +101,54 @@ type Slot = {
   message?: string | undefined
   /** Serializes replacements. */
   replacing: Promise<unknown>
+  /** Set while a stop-first replacement runs: requests wait for it. */
+  gate?: Promise<void> | undefined
   /** Requests waiting for or running on any generation (for `inFlight`). */
   retired: Set<Generation>
 }
 
 const describe = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
+/**
+ * How `replace` moves a backend to new code:
+ * - `"side-by-side"` (default): the new code boots beside the old one, which keeps serving until
+ *   the new one is ready, then drains;
+ * - `"stop-first"`: for a server that cannot run twice (one port, an exclusive lock, a single
+ *   connection): new requests wait, the old one drains and is disposed, then the new one boots
+ *   and serves the waiting requests. If the new code fails to boot, the old code boots again.
+ */
+export type PreviewBackendReplaceStrategy = "side-by-side" | "stop-first"
+
+/** What `replace` takes: a boot function, or the URL of a module exporting one. */
+export type PreviewBackendCode = PreviewBackendBoot | string | URL
+
+export type PreviewBackendReplaceOptions = {
+  drainMs?: number
+  strategy?: PreviewBackendReplaceStrategy
+}
+
+/**
+ * Loads a backend module by URL with the native dynamic `import()` (never `eval` of fetched
+ * source, so the browser's module and compiled-code caches apply) and returns its boot: the
+ * module's `boot` export, else its default export.
+ */
+export async function importPreviewBackend(url: string | URL): Promise<PreviewBackendBoot> {
+  const href = String(url)
+  const module = (await import(/* @vite-ignore */ href)) as { boot?: unknown; default?: unknown }
+  const boot = typeof module.boot === "function" ? module.boot : module.default
+  if (typeof boot !== "function")
+    throw new Error(`${href} exports no backend boot (a \`boot\` or default function)`)
+  return boot as PreviewBackendBoot
+}
+
 export type BackendHostOptions = {
   backends: Record<string, PreviewBackendSpec>
   /** How long a replaced generation may keep serving its in-flight requests. Default 10 s. */
   drainMs?: number
+  /** The default `replace` strategy. Default "side-by-side". */
+  strategy?: PreviewBackendReplaceStrategy
+  /** Loads the code `replace(id, url)` names. Default `importPreviewBackend`. */
+  importBackend?: (url: string) => Promise<PreviewBackendBoot>
 }
 
 export type BackendHost = {
@@ -119,12 +157,19 @@ export type BackendHost = {
   /** Boots these backends now (an app about to open calls them). Rejects if one fails. */
   ensure(ids: readonly string[], signal?: AbortSignal): Promise<void>
   /**
-   * Swaps one backend's code. The new generation boots beside the old one; when it is ready, new
-   * requests go to it and the old one drains (`drainMs`, then `PreviewBackendDrainError`) and is
-   * disposed. If the new code fails to boot, the old one keeps serving and this rejects with
-   * `PreviewBackendUpdateError`. A backend that has not started just takes the new code.
+   * Swaps one backend's code: a boot function, or the URL of a module exporting one (loaded with
+   * `importBackend`). With the default `"side-by-side"` strategy the new generation boots beside
+   * the old one; when it is ready, new requests go to it and the old one drains (`drainMs`, then
+   * `PreviewBackendDrainError`) and is disposed. With `"stop-first"` new requests wait while the
+   * old one drains and the new one boots. If the new code fails to load or boot, the old code
+   * keeps (or goes back to) serving and this rejects with `PreviewBackendUpdateError`. A backend
+   * that has not started just takes the new code. Every other backend is untouched.
    */
-  replace(id: string, boot: PreviewBackendBoot, options?: { drainMs?: number }): Promise<void>
+  replace(
+    id: string,
+    code: PreviewBackendCode,
+    options?: PreviewBackendReplaceOptions,
+  ): Promise<void>
   status(): PreviewBackendStatus[]
   /** Same as `status()`, shaped for the System screen's `backends` option. */
   list(): PreviewBackendStatus[]
@@ -145,6 +190,8 @@ const matcher = (match: PreviewBackendSpec["match"]): ((url: URL) => boolean) =>
 /** Lazy, swappable backends behind one Fetch handler (pass it as a `createPreviewHost` system). */
 export function createBackendHost(options: BackendHostOptions): BackendHost {
   const drainDefault = options.drainMs ?? 10_000
+  const strategyDefault = options.strategy ?? "side-by-side"
+  const importBackend = options.importBackend ?? importPreviewBackend
   const listeners = new Set<() => void>()
   const emit = () => {
     for (const listener of listeners) {
@@ -288,8 +335,26 @@ export function createBackendHost(options: BackendHostOptions): BackendHost {
       )
     let generation: Generation
     try {
-      generation = await start(target)
+      for (;;) {
+        // A stop-first replacement is running: wait for the new code rather than fail.
+        while (target.gate) {
+          const gate = target.gate
+          await new Promise<void>((resolve, reject) => {
+            const aborted = () => reject(request.signal.reason)
+            if (request.signal.aborted) return aborted()
+            request.signal.addEventListener("abort", aborted, { once: true })
+            void gate.then(() => {
+              request.signal.removeEventListener("abort", aborted)
+              resolve()
+            })
+          })
+        }
+        generation = await start(target)
+        // A replacement moved on while this request waited: take the generation serving now.
+        if (generation === target.active) break
+      }
     } catch (error) {
+      if (request.signal.aborted) throw error
       return Response.json(
         { error: "preview_backend_failed", backend: target.id, message: describe(error) },
         { status: 503 },
@@ -298,15 +363,39 @@ export function createBackendHost(options: BackendHostOptions): BackendHost {
     request.signal.throwIfAborted()
     return serve(target, generation, request)
   }
+  /** Lets `previous`'s requests finish within `drainMs`, cuts off the rest, then disposes it. */
+  const drain = async (id: string, previous: Generation, drainMs: number) => {
+    const all = Promise.all([...previous.inFlight].map((entry) => entry.settled))
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<"late">((resolve) => {
+      timer = setTimeout(() => resolve("late"), drainMs)
+    })
+    const outcome = await Promise.race([all.then(() => "drained" as const), deadline])
+    clearTimeout(timer)
+    if (outcome === "late") {
+      previous.drained = new PreviewBackendDrainError(id, previous.number, drainMs)
+      for (const entry of previous.inFlight) entry.abort.abort(previous.drained)
+      await Promise.all([...previous.inFlight].map((entry) => entry.settled))
+    }
+  }
   const replace = (
     id: string,
-    boot: PreviewBackendBoot,
-    replaceOptions: { drainMs?: number } = {},
+    code: PreviewBackendCode,
+    replaceOptions: PreviewBackendReplaceOptions = {},
   ) => {
     const target = slot(id)
     const drainMs = replaceOptions.drainMs ?? drainDefault
+    const strategy = replaceOptions.strategy ?? strategyDefault
     const run = async () => {
       if (disposed) throw new Error("Backend host is disposed")
+      let boot: PreviewBackendBoot
+      try {
+        boot = typeof code === "function" ? code : await importBackend(String(code))
+      } catch (error) {
+        target.message = describe(error)
+        emit()
+        throw new PreviewBackendUpdateError(id, error)
+      }
       if (target.starting) await target.starting.catch(() => {})
       const previous = target.active
       if (!previous) {
@@ -319,6 +408,7 @@ export function createBackendHost(options: BackendHostOptions): BackendHost {
       target.state = "updating"
       target.message = undefined
       emit()
+      if (strategy === "stop-first") return stopFirst(target, previous, boot, drainMs)
       let fresh: Generation
       try {
         fresh = await bootGeneration(target, boot)
@@ -340,18 +430,7 @@ export function createBackendHost(options: BackendHostOptions): BackendHost {
       target.retired.add(previous)
       emit()
       // Drain the old generation: let its requests finish, then cut off the rest.
-      const all = Promise.all([...previous.inFlight].map((entry) => entry.settled))
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const deadline = new Promise<"late">((resolve) => {
-        timer = setTimeout(() => resolve("late"), drainMs)
-      })
-      const outcome = await Promise.race([all.then(() => "drained" as const), deadline])
-      clearTimeout(timer)
-      if (outcome === "late") {
-        previous.drained = new PreviewBackendDrainError(id, previous.number, drainMs)
-        for (const entry of previous.inFlight) entry.abort.abort(previous.drained)
-        await Promise.all([...previous.inFlight].map((entry) => entry.settled))
-      }
+      await drain(id, previous, drainMs)
       target.retired.delete(previous)
       try {
         await previous.system.dispose?.()
@@ -362,6 +441,51 @@ export function createBackendHost(options: BackendHostOptions): BackendHost {
     const result = target.replacing.then(run, run)
     target.replacing = result.catch(() => {})
     return result
+  }
+  /** New requests wait; the old generation drains and is disposed; then the new code boots. */
+  const stopFirst = async (
+    target: Slot,
+    previous: Generation,
+    boot: PreviewBackendBoot,
+    drainMs: number,
+  ) => {
+    let open: () => void = () => {}
+    target.gate = new Promise<void>((resolve) => {
+      open = resolve
+    })
+    try {
+      target.active = undefined
+      target.retired.add(previous)
+      emit()
+      await drain(target.id, previous, drainMs)
+      target.retired.delete(previous)
+      await Promise.resolve(previous.system.dispose?.()).catch(() => {})
+      if (disposed) throw new Error("Backend host is disposed")
+      try {
+        target.active = await bootGeneration(target, boot)
+        target.boot = boot
+        target.state = "ready"
+        target.progress = undefined
+        emit()
+      } catch (error) {
+        // The new code does not boot: bring the old code back so the waiting requests are served.
+        const failure = describe(error)
+        try {
+          target.active = await bootGeneration(target, target.boot)
+          target.state = "ready"
+        } catch (restoreError) {
+          target.state = "failed"
+          target.message = `${failure}; restarting the previous code also failed: ${describe(restoreError)}`
+        }
+        target.progress = undefined
+        if (target.state === "ready") target.message = failure
+        emit()
+        throw new PreviewBackendUpdateError(target.id, error)
+      }
+    } finally {
+      target.gate = undefined
+      open()
+    }
   }
   const status = (): PreviewBackendStatus[] =>
     slots.map((target) => ({
