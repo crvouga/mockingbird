@@ -13,9 +13,12 @@
 #                     live vendors, so it is reported and never holds the publish.
 #
 # Release checks passes when all but Live parity passed, and the publish needs it: a commit that
-# fails a check is not published. Report then opens a GitHub issue (label `ci-failure`) for each
-# failing check, or comments on the one already open, and closes it when the check passes again
-# (scripts/release/check-issues.ts). So a red check is fixed forward on main, from its issue.
+# fails a check is not published. Report then upserts a GitHub issue per failing check, and per
+# failing turbo task for Static and the shards (`@crvouga/x#test`, read from the job's log):
+# it opens one, comments on the one already open, or reopens the one it closed, and closes it when
+# the check passes again; Report release does the same for the publish jobs
+# (scripts/release/check-issues.ts). The issues are labelled `ci-failure` and `agent-reported`,
+# the head of the /resolve-issues queue, so a red check is queued work, fixed forward on main.
 #
 # These jobs also keep main's turbo cache warm per scope (see .github/actions/setup); previews and
 # parity runs replay it.
@@ -385,3 +388,30 @@ jobs:
       - uses: ./.github/actions/release
         with:
           group: maintenance
+
+  # The same issues for the publish itself: a prerequisite, a publish shard or the repairs that
+  # failed. Runs after them, so a red check is filed by Report without waiting for the publish.
+  report-release:
+    name: Report release
+    if: ${{ !cancelled() && github.ref == 'refs/heads/main' }}
+    needs: [release, publish, reconcile]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      issues: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - name: Open, update or close an issue per release job
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: bun scripts/release/check-issues.ts

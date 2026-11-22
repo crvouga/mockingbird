@@ -9,9 +9,11 @@ description: Resolve agent-reported GitHub issues in one worktree, branch and PR
      (bun run agents:sync) — edit this file, never a link. -->
 
 Agents in other projects file issues through [docs/REPORTING_ISSUES.md](../../docs/REPORTING_ISSUES.md)
-with the `agent-reported` label plus one of `parity`, `feature`, `bug` or `new-service`. Work that
-queue. Arguments name one or more issues (`/resolve-issues 42 43`); with no argument, take the oldest open
-unclaimed issue in the order `parity`, `bug`, `feature`. When the user asks for all issues, inventory
+with the `agent-reported` label plus one of `parity`, `feature`, `bug` or `new-service`. The
+Release workflow files `agent-reported` + `ci-failure` issues itself, one per failing release check
+or turbo task on `main`. Work that queue. Arguments name one or more issues (`/resolve-issues 42 43`);
+with no argument, take the oldest open unclaimed issue in the order `ci-failure`, `parity`, `bug`,
+`feature`: a failing release check holds every publish, so it goes first. When the user asks for all issues, inventory
 the entire open queue and track every issue to a tested resolution or a documented non-oracle blocker. Take a `new-service` issue only when it is
 named, or when the user asks for one: it is a whole package, not a fix.
 
@@ -104,6 +106,13 @@ access, repeatedly retry unavailable evidence, or request credentials merely to 
 Report missing credential names without values and continue through the selected batch.
 
 ## 4. Reproduce, then fix
+
+For `ci-failure` issues, the issue names the check (or the turbo task, such as
+`@crvouga/mockingbird-ui#test`), the failing run and the command that reproduces it. Run that command
+on a branch from `main`, read the failure, and fix its root cause in the code it checks: never skip,
+loosen or delete the check. Do not close the issue yourself; the Release workflow closes it when the
+check passes on `main` after your PR merges. A failure that names no task (a timeout, a runner or
+setup error) gets one re-run of the job first; if it passes, comment that it was transient.
 
 For `feature` issues, the reported behaviors are the failing tests: add one acceptance test per
 behavior, then extend the contract (`openapi.yaml`) and the handlers until they pass. A test control

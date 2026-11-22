@@ -13,7 +13,7 @@
  *
  * The required status checks are the only merge requirement: Commitlint and Check from
  * .github/workflows/pr.yml (rename either and REQUIRED_CHECKS must follow), each pinned to the
- * app that reports it. pr.yml's other job (Lint) is rolled up by Check, so it gates the merge
+ * app that reports it. Check is Biome's format and lint; pr.yml runs nothing else, so it gates the merge
  * without being required itself. Any other check that runs on a PR must be required. Release
  * (.github/workflows/ci.yml) is not a PR check: its release checks (build, tests, smoke, …) run on
  * main after the merge and hold the publish, not the merge.
