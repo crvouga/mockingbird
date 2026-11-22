@@ -32,7 +32,8 @@ import {
 } from "./protocol.ts";
 import { type ScramCredentialStore, ScramServer } from "./scram.ts";
 import { runInImplicitTransaction } from "../executor/call.ts";
-import { splitStatements } from "./split.ts";
+import { splitStatements } from "../sql/split.ts";
+import { notifyStatement, type StatementObservation } from "../runtime/statement-observer.ts";
 import { applyStartupSettings, StartupError, startupSettings } from "./startup.ts";
 import type { StreamSocket } from "./stream.ts";
 import { wireTypeModifier } from "./type-modifier.ts";
@@ -131,6 +132,8 @@ export type ConnectionOptions = {
   onLog?: (entry: ServerLog) => void;
   /** Include bound parameter values in `onLog` entries (they may be large). */
   logParams?: boolean;
+  /** `onStatement` observers (#898), each with its threshold; told about the same statements as `onLog`. */
+  statementObservations?: readonly StatementObservation[];
   /**
    * When set, a startup packet that names a different database is fatal `3D000`.
    * Unset accepts any database name.
@@ -735,16 +738,28 @@ export class Connection implements Session {
     rowCount?: number,
   ): void {
     const onLog = this.options.onLog;
-    if (!onLog) return;
+    const observers = this.options.statementObservations;
+    if (!onLog && !observers?.length) return;
     if (error !== null && typeof error === "object") {
       if (loggedErrors.has(error)) return;
       loggedErrors.add(error);
     }
+    const durationMs = performance.now() - started;
+    if (observers?.length) {
+      notifyStatement(
+        observers,
+        error === null
+          ? { sql, durationMs, rows: rowCount ?? 0, pid: this.pid }
+          : { sql, durationMs, rows: 0, error, pid: this.pid },
+        params,
+      );
+    }
+    if (!onLog) return;
     const fields = error === null ? null : errorFields(error);
     onLog({
       pid: this.pid,
       sql,
-      durationMs: performance.now() - started,
+      durationMs,
       status: fields ? fields.code : "ok",
       phase,
       ...(fields ? { message: fields.message } : rowCount !== undefined ? { rowCount } : {}),

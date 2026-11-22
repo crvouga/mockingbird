@@ -14,6 +14,7 @@ export default {
     sources: [
       "packages/examples/medical-testing/src/browser.ts",
       "packages/examples/medical-testing/src/composition/browser.ts",
+      "packages/examples/medical-testing/src/composition/systemScreen.ts",
       "packages/examples/medical-testing/src/composition/emulatorsPanel.ts",
       "packages/examples/medical-testing/src/composition/build.ts",
       "packages/examples/medical-testing/src/client/inbox.ts",
@@ -119,4 +120,34 @@ export const OnAPhone: StoryObj = workspace(undefined, { globals: phone })
 export const System: StoryObj = workspace(async (page) => {
   await page.click('[data-testid="system-switcher-previous"]')
   await page.find(".msh-home")
+})
+
+/**
+ * System as the example fills it (#903): the Lab API's start-up time and timeline, a read-only
+ * Configuration section, and Stripe taking a test key typed here, since this preview has no dev
+ * proxy.
+ */
+export const SystemKeysTimingsAndFacts: StoryObj = workspace(async (page) => {
+  await page.click('[data-testid="system-switcher-previous"]')
+  await page.find('[data-testid="system-backend-started-lab-api"]', "Started in")
+  await page.find('[data-testid="system-backends-timeline"]', "API ready")
+  await page.find('[data-fact="dev-proxy"]', "not set")
+  await page.find('[data-fact="postgres"]', "emulated only")
+  // No proxy: Resend stays emulated, but Stripe switches to Dev and asks for a key.
+  await page.find('li[data-service="resend"] button[disabled]', "Dev")
+  await page.click('li[data-service="stripe"] button', "Dev")
+  await page.find(
+    'li[data-service="stripe"][data-mode="dev"] [data-testid="system-service-credentials"]',
+  )
+  await page.type('li[data-service="stripe"] input[type="password"]', "sk_test_51storybookkey")
+  await page.click('li[data-service="stripe"] [data-testid="system-service-credentials-save"]')
+  await page.find(
+    'li[data-service="stripe"] [data-testid="system-service-configured"]',
+    "Key saved",
+  )
+  await page.click('li[data-service="stripe"] [data-testid="system-service-test"]')
+  await page.find(
+    'li[data-service="stripe"] [data-testid="system-service-test-result"]',
+    "Test passed",
+  )
 })

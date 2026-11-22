@@ -30,6 +30,8 @@ const NOT_UI: Record<string, string> = {
     "writes the one-script document that hosts an iframe app's part; the app is drawn by the System harness registry stories",
   "packages/adapters/preview/src/build.ts":
     "writes the one-element host page for the boot loader; the app it boots is drawn by the System harness and lab stories",
+  "packages/adapters/preview/src/dev-server.ts":
+    "a table of content types for serving a built preview's files locally; draws nothing",
   "packages/adapters/preview/src/site.ts":
     "a table of content types for uploading a built site's files; draws nothing",
   "packages/http/provider/src/vendor/core/http.ts": "response helpers the vendor pages call",

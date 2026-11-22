@@ -360,8 +360,8 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
       countdownFor = undefined
       return
     }
-    if (disposer === undefined || doc?.hidden === true) {
-      // Nothing running to interrupt, or nobody watching: apply now.
+    if (disposer === undefined || doc?.hidden === true || snapshot?.dev === true) {
+      // Nothing running to interrupt, nobody watching, or a local dev server: apply now.
       clear("countdown")
       autoApplyAt = undefined
       countdownFor = undefined

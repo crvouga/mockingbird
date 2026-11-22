@@ -6,6 +6,7 @@
  *   mockingbird-postgres serve postgres://postgres:secret@0.0.0.0:55432/app --log
  *   mockingbird-postgres serve --port 55432 --host 0.0.0.0 --password secret --log
  *   mockingbird-postgres serve --port 55432 --durable ./.postgres   # commits survive a restart
+ *   mockingbird-postgres serve --slow-ms 250                    # print statements that took 250 ms or more
  *
  * The connection string it prints works with `pg`, `postgres.js`, JDBC and `psql`.
  */
@@ -13,7 +14,7 @@ import { runCli, serveCommand } from "@crvouga/mockingbird-adapter-node";
 import { serveTarget } from "../server.ts";
 import { type ServeOptions, serve } from "./index.ts";
 
-const usage = `mockingbird-postgres serve [postgres://URI] [--port <n>] [--host <h>] [--password <p>] [--server-version <v>] [--durable <dir>] [--log]`;
+const usage = `mockingbird-postgres serve [postgres://URI] [--port <n>] [--host <h>] [--password <p>] [--server-version <v>] [--durable <dir>] [--log] [--slow-ms <ms>]`;
 
 const args = process.argv.slice(2);
 if (args[0] === "serve" && args.includes("--config")) {
@@ -69,6 +70,19 @@ for (let i = 1; i < args.length; i++) {
     case "--log":
       log = true;
       break;
+    case "--slow-ms": {
+      const ms = Number(need());
+      if (!Number.isFinite(ms) || ms < 0) {
+        console.error("--slow-ms requires a non-negative number of milliseconds");
+        process.exit(2);
+      }
+      options.slowStatementMs = ms;
+      options.onStatement = (event) =>
+        console.error(
+          `[pid ${event.pid}] slow ${event.durationMs.toFixed(1)}ms rows=${event.rows}  ${event.sql.replace(/\s+/g, " ").slice(0, 500)}`,
+        );
+      break;
+    }
     default:
       console.error(`unknown option ${flag}\n${usage}`);
       process.exit(2);

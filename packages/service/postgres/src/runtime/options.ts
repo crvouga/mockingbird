@@ -1,4 +1,5 @@
 import type { Clock } from "./clock.ts";
+import type { StatementObserverOptions } from "./statement-observer.ts";
 
 /** Entropy source for `random()` / `gen_random_uuid()`. Default is seeded xorshift64*. */
 export type RandomMode = "deterministic" | "os";
@@ -6,8 +7,14 @@ export type RandomMode = "deterministic" | "os";
 /** How `int8` columns surface in query row objects. Default `"bigint"`. */
 export type Int8Mode = "bigint" | "number" | "string";
 
-/** Options for {@link Database} construction. All fields are optional. */
-export interface DatabaseOptions {
+/**
+ * Options for {@link Database} construction. All fields are optional.
+ *
+ * `onStatement` / `slowStatementMs` / `includeParams` ({@link StatementObserverOptions}) report each
+ * statement after it finishes, e.g. to log the ones that blocked the thread:
+ * `new Database({ onStatement: ({ sql, durationMs }) => console.warn(durationMs, sql), slowStatementMs: 250 })`.
+ */
+export interface DatabaseOptions extends StatementObserverOptions {
   /**
    * Seed for deterministic `random()` (and any other PRNG-backed builtins).
    * Defaults to {@link DEFAULT_DATABASE_SEED} (`1`). Ignored when {@link random} is `"os"`.

@@ -127,6 +127,11 @@ export interface ExecEnv {
    * same statement; an env a function, trigger or DO block builds for its own statements has none.
    */
   stmtCache?: StatementCache;
+  /**
+   * Type-check only: every base relation reads as empty. Set while a zero-row type probe checks an
+   * EXISTS subquery, whose result type is always bool, so the subquery is analysed but never run.
+   */
+  shapeOnly?: boolean;
 }
 
 export function childEnv(env: ExecEnv, outer: RowScope | null): ExecEnv {
@@ -137,6 +142,7 @@ export function childEnv(env: ExecEnv, outer: RowScope | null): ExecEnv {
     outer,
     allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
     stmtCache: env.stmtCache,
+    ...(env.shapeOnly ? { shapeOnly: true } : {}),
   };
 }
 
@@ -148,6 +154,7 @@ export function withCtes(env: ExecEnv, ctes: Map<string, Relation>): ExecEnv {
     outer: env.outer,
     allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
     stmtCache: env.stmtCache,
+    ...(env.shapeOnly ? { shapeOnly: true } : {}),
   };
 }
 

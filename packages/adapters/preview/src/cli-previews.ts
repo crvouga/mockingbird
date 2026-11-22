@@ -49,6 +49,8 @@ export type PreviewCliDeps = {
   fetch: PreviewHttpFetch
   sleep?: (ms: number) => Promise<void>
   now?: () => number
+  /** Ends a long-running command (`dev`); default SIGINT / SIGTERM. */
+  signal?: AbortSignal
 }
 
 type Io = { stdout(line: string): void; stderr(line: string): void }

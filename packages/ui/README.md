@@ -250,6 +250,46 @@ declare const livePreview: SystemBuild // e.g. createLivePreview(...) from @crvo
 mountSystemHarness(host, surfaces, { build: livePreview })
 ```
 
+#### Pages in iframes (`frame` surfaces)
+
+A surface can be a same-origin page in an iframe: give it `frame` in place of `mount`. The harness creates the `<iframe>` (with the surface's label as its `title`, and your `name` and `allow`), removes it when the surface is disposed, and returns it from `harness.frame(id)` while it is mounted, for hosts that call into the page.
+
+```ts
+import { mountSystemHarness, type SystemSurface } from "@crvouga/mockingbird-ui"
+
+declare const host: HTMLElement
+const page = (id: string, start: string): SystemSurface => ({
+  id,
+  label: id,
+  frame: {
+    // A deep link into this app wins, then where its page was last, then its start page.
+    src: (lastPath) =>
+      location.pathname.startsWith(`/${id}/`) ? `/pages${location.pathname}` : (lastPath ?? start),
+    // The tab shows the page's own path: /pages/shop/orders/7 → /shop/orders/7.
+    address: (frameLocation) => frameLocation.pathname.replace(/^\/pages/, "") + frameLocation.search,
+    // Resolve once the page has painted; the harness's loading panel stays up until then.
+    ready: (frame, signal) =>
+      new Promise((resolve) => {
+        const onMessage = (event: MessageEvent) => {
+          if (event.source === frame.contentWindow && event.data === "ready") resolve()
+        }
+        addEventListener("message", onMessage, { signal })
+      }),
+  },
+})
+
+const harness = mountSystemHarness(host, [page("shop", "/pages/shop/"), page("admin", "/pages/admin/")], {
+  url: { read: (location) => location.pathname.split("/")[1] || undefined, write: (id) => `/${id}/` },
+  readyTimeoutMs: 15_000, // a page that never calls back shows the error panel and Retry
+})
+harness.frame("shop")?.contentWindow // the shop page's window, once it is mounted
+```
+
+- **`src`** is a string, or a function of the frame's last inner path (`pathname + search + hash`), which the harness keeps per surface under `FRAME_PATHS_KEY` in its `storage`, so a reload, an eviction or a Retry reopens the page where it was. It is `undefined` the first time.
+- **`address(frameLocation)`** maps the page's location to the tab's address. The harness calls it whenever the page navigates while its surface is shown (and replaces the address), and when the surface is shown (the address that switch pushes); a hidden page's navigations only update its kept path. Return `undefined` to leave the address. Navigations are followed by events, never by polling: the frame's `load`, then the Navigation API's `currententrychange` where the browser has it (which also sees `pushState`), else `popstate` and `hashchange`. Same-origin pages only: a cross-origin page still mounts, but its path is neither kept nor followed.
+- **`ready(frame, signal)`** resolves when the page is usable, so the panel's own loading state covers its start-up; a rejection shows the panel's error and Retry. It defaults to the frame's first `load`. `readyTimeoutMs` on the harness (default `DEFAULT_FRAME_READY_TIMEOUT_MS`, 30 s; `Infinity` for none) bounds it: a page that never becomes ready shows the error panel, and `signal` aborts.
+- A surface takes exactly one of `mount` and `frame`; `mountSystemHarness` and `setSurfaces` throw otherwise. `update(id, { mount })` can still replace a frame surface's code with a `mount`, and `update(id)` reloads its page.
+
 ### Your own System sections and the Data card
 
 Operator screens of your own (the feature flags the build runs with, each backend's start-up steps) belong on System. Don't add them as another surface. Pass them as `sections`. They draw after the built-in sections (Preview, Apps, Backends, Services, Data), in the order given. Each `mount(host, signal)` runs once, when System first draws, and returns its disposer (a promise of one also works). A mount that throws shows its error with Retry in that section only. The content sits inside the harness's scoped stylesheet, so it inherits Mockingbird's base styles. Section ids must be unique, made of letters, digits, `-` and `_`, and not one of `SYSTEM_SECTION_IDS`; `mountSystemHarness` throws otherwise.
@@ -274,6 +314,29 @@ mountSystemHarness(host, surfaces, {
 })
 ```
 
+#### Facts sections: data the screen draws
+
+A section that only lists facts (the feature flags a build runs with, grouped by app, with why some are off) needs no drawing code: pass a `SystemFactsSection` in `sections`, beside mount-based ones, with `load()` in place of `mount`. `load()` runs once, when System first draws, and answers groups of rows: `{ group, rows: { label, value, tone?, note? }[] }[]`. The screen draws one card per group, with a filter box (`Filter <label>`) that keeps the rows matching every word typed, in a row's label, value or note or in its group's name, and a count of the rows matched. `tone: "on"` and `"off"` draw the value as a chip, `"muted"` as faint text; `note` sits under the row. A rejected `load()` shows its error with Retry in that section only. Its id follows the same rules as any section's, and it deep-links the same way.
+
+```ts
+mountSystemHarness(host, surfaces, {
+  sections: [{
+    id: "flags",
+    label: "Flags",
+    load: async () => [
+      { group: "Lab workspace", rows: [
+        { label: "new-results-view", value: "on", tone: "on" },
+        { label: "sms-reminders", value: "off", tone: "off", note: "Waiting on carrier approval" },
+      ] },
+    ],
+  }],
+})
+```
+
+#### Backend start-up times
+
+A `SystemBackend` may carry `startedInMs`, the time it took to become ready; its card says "Started in 412 ms". `SystemBackends` may add `timeline()`, which returns (or resolves to) the steps of start-up, `{ label, atMs }[]` in milliseconds since the page began (fetched, unpacked, evaluated, database, emulators, first server). The Backends section draws them under its list as a timeline (`data-testid="system-backends-timeline"`), in time order, with each step's time, the time since the step before, and the total. It is read with `list()`, again whenever `subscribe` fires. Steps whose time is not a finite, non-negative number are left out.
+
 ### Services that are not emulated, live
 
 While any service's `mode` is not `emulated`, the switcher bar gets a triangle badge. The badge is a shape, not only a color, and the bar also gets a `border-warning` edge and `data-dev`. The bar's accessible name becomes "Switch apps · not all services emulated", and its description names the services. The badge (`data-testid="system-dev-badge"`) is a button that opens System at its Services section. The bar learns the modes from the same `services` the screen uses. It lists them once on mount, after every switch made on System, and whenever the host's `subscribe` fires.
@@ -283,6 +346,10 @@ While any service's `mode` is not `emulated`, the switcher bar gets a triangle b
 - `subscribe(listener)`: call it when a mode or an availability changes outside the screen, such as in another tab, from a test harness, or when the proxy starts refusing a service. System lists again, and the bar follows. `controls()` from `@crvouga/mockingbird-preview` fires it on its own switches and, through the `storage` event, on another tab's. Every open tab of one preview is marked within a second.
 - `lastCall` on a `SystemService` (`{ at, ok, status? }`): each row shows "Last call 42 s ago · HTTP 200" with an OK or Failed chip (`data-testid="system-service-last-call"`, `data-ok`).
 - `test(id)`: each row gets a Test button that shows the result (`{ ok, message? }`) under the row (`system-service-test-result`, `data-ok`). A rejection counts as a failed test.
+
+#### Credentials typed in the browser
+
+A preview with no dev proxy can still reach a dev resource with the developer's own key. Give a `SystemService` `fields` (`{ name, label, secret?, placeholder?, options? }[]`) and `SystemServices` `setCredentials(id, values)` (and optionally `clearCredentials(id?)`, which forgets one service's values, or every service's without an id). Such a row can switch to Dev even when it is `unavailable`, since it does not need the proxy. While it is on Dev, its inputs are drawn under it (`data-testid="system-service-credentials"`): a password input for a `secret` field, a select for one with `options`, a text input otherwise, with Save, Forget (when `configured`) and the row's Test beside them. Save is enabled once every field has a value and hands the trimmed values to `setCredentials`; a rejection shows its message under the inputs. The screen keeps the typed values only until they are saved and never stores them: the host decides where they live (memory, IndexedDB) and says it holds them with `configured: true`, shown as "Key saved". A saved secret is never shown back. A service with no `fields`, or a host with no `setCredentials`, behaves as before.
 
 ### Opening System from anywhere
 
@@ -404,11 +471,15 @@ Inject `fetch`, `now` and `timers` to drive it in tests; `launcherView(input, no
 - `SystemIcon`, `SYSTEM_ICONS`: a surface's icon, and Mockingbird's icons for the surfaces it provides.
 - `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`: the storage keys of the surfaces left out of the switcher, of its order, and of the off-by-default surfaces switched on. `DOCK_KEY` is deprecated: the switcher is a fixed bar and keeps no position.
 - `SWITCHER_BAR_HEIGHT`: the height of the switcher bar, in CSS pixels.
+- `FRAME_PATHS_KEY`, `DEFAULT_FRAME_READY_TIMEOUT_MS`: the storage key of each `frame` surface's last inner path, and how long a `frame` surface may take to become ready unless `readyTimeoutMs` says otherwise (30 s).
 - `defineSystem`, `mountSystem`, `PreviewApp`, `PreviewSystem`, `PreviewRegistryError`: the app registry and the shell it mounts.
 - `systemSurfaces`, `planPartUpdate`, `PreviewLoadManifestLike`: the registry as surfaces with their part loader, and what a newer load manifest takes to apply.
 - `PREVIEW_FRAME_CONNECT`: the type of the message an iframe app receives with its bridge port.
 - `SystemHarness.update`, `SystemHarness.notify`, `SystemNotice`: swap one surface's code in place; show a notice over the apps.
 - `SystemBackends`, `SystemBackend`: the in-tab backends and emulators for the System screen's Backends list.
+- `SystemTimelineStep`: one step of `SystemBackends.timeline()`, drawn as the start-up timeline under the Backends list.
+- `SystemFactsSection`, `SystemFactGroup`, `SystemFact`: a read-only section the screen draws from `load()`'s grouped rows, with a filter.
+- `SystemServiceField`: one input of a service's `fields`, for credentials typed on the System screen (`setCredentials`, `clearCredentials`).
 - `SystemSection`, `SystemSnapshot`, `SYSTEM_SECTION_IDS`, `SYSTEM_SECTION_PARAM`: the consumer's own System sections, the Data card's save, load and reset, the built-in section ids, and the `?system=` deep-link parameter.
 - `SystemServiceCall`, `SystemServiceTest`: a service's `lastCall` and what its `test` reports.
 - `DEFAULT_SYSTEM_SHORTCUT`: the keyboard shortcut that opens System unless `systemShortcut` says otherwise.
