@@ -29,6 +29,8 @@ export function holdFormPosts(emulator: Emulator): Emulator {
           /<script nonce="[^"]*">document\.getElementById\('callback'\)\.submit\(\)<\/script>/,
           "",
         )
+        // The shared form-post page (`renderFormPostPage`) submits through this script.
+        .replace(/<script[^>]*>[^<]*MockingbirdFormPost[^<]*<\/script>/, "")
       return new Response(html, { status: response.status, headers: response.headers })
     },
   }
