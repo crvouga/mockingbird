@@ -84,7 +84,7 @@ Live parity spends a vendor's rate limit, so each service declares how often it 
 
 | Tier | Runs | Where |
 | --- | --- | --- |
-| `hot` | on each PR that changes something in the service's dependency graph | [`advisory.yml`](../.github/workflows/advisory.yml) → [`parity.yml`](../.github/workflows/parity.yml) |
+| `hot` | after each merge to `main` that changes something in the service's dependency graph | [`ci.yml`](../.github/workflows/ci.yml) → [`parity.yml`](../.github/workflows/parity.yml) |
 | `warm` | on a schedule (weekly, Mondays 06:17 UTC) | `schedule:` in `parity.yml` |
 | `cold` | only when dispatched by hand | `bun run parity:remote -- <service>` |
 

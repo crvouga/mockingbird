@@ -7,6 +7,9 @@ import {
   githubRetryDelayMs,
   initialPackageBlocker,
   isRetryableGitHubError,
+  latestVersionIn,
+  mapPool,
+  mutex,
   publishFailureKind,
   releaseInOrder,
   seedSummary,
@@ -29,7 +32,7 @@ describe("npm publish visibility", () => {
       }),
     ).toBeNull()
     expect(responses).toEqual([])
-    expect(delays).toEqual([10_000, 10_000])
+    expect(delays).toEqual([2_000, 3_000])
   })
 
   test("an already visible version needs no delay", async () => {
@@ -70,7 +73,7 @@ describe("npm publish visibility", () => {
       expect(error).toContain("pkg@1.1.0 is not visible on npm after 15 minutes")
       expect(error).toContain("retry the release")
       if (!Array.isArray(response)) expect(error).toContain(response.error)
-      expect(queries).toBe(91)
+      expect(queries).toBe(93)
       expect(delays.reduce((sum, ms) => sum + ms, 0)).toBe(900_000)
     }
   })
@@ -233,5 +236,46 @@ describe("consumerPeerDependencies", () => {
       new Set(),
     )
     expect(peers).toEqual({ react: ">=18.0.0 ^19.1.0" })
+  })
+})
+
+describe("latestVersionIn", () => {
+  test("picks the highest release tag of exactly that package", () => {
+    const tags = ["@x/a@1.2.0", "@x/a@1.10.0", "@x/a-b@9.0.0", "@x/a@2.0.0-rc.1", "other"]
+    expect(latestVersionIn("@x/a", tags)).toBe("1.10.0")
+    expect(latestVersionIn("@x/c", tags)).toBeNull()
+  })
+})
+
+describe("mapPool", () => {
+  test("keeps input order and never exceeds the limit", async () => {
+    let running = 0
+    let peak = 0
+    const out = await mapPool([30, 10, 20, 0, 5], 2, async (ms, index) => {
+      running++
+      peak = Math.max(peak, running)
+      await Bun.sleep(ms)
+      running--
+      return index
+    })
+    expect(out).toEqual([0, 1, 2, 3, 4])
+    expect(peak).toBe(2)
+  })
+})
+
+describe("mutex", () => {
+  test("runs work one at a time in call order, even after a failure", async () => {
+    const lock = mutex("test")
+    const events: string[] = []
+    const step = (name: string, ms: number, fail = false) =>
+      lock(async () => {
+        events.push(`start ${name}`)
+        await Bun.sleep(ms)
+        events.push(`end ${name}`)
+        if (fail) throw new Error(name)
+      })
+    const results = await Promise.allSettled([step("a", 20, true), step("b", 0), step("c", 5)])
+    expect(results.map((r) => r.status)).toEqual(["rejected", "fulfilled", "fulfilled"])
+    expect(events).toEqual(["start a", "end a", "start b", "end b", "start c", "end c"])
   })
 })

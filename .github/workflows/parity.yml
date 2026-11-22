@@ -2,7 +2,7 @@
 #
 # Every parity service has a tier in its package.json (`mockingbird.parityTier`, read by
 # scripts/parity-tiers.ts) that says how often it may spend a vendor's rate limit:
-#   hot   advisory.yml calls this workflow on each PR that changes the service
+#   hot   ci.yml (Release) calls this workflow for each merge to main that changes the service
 #   warm  the `schedule:` below runs every warm service
 #   cold  only a manual dispatch runs it (the default for a service with no tier)
 # Promoting a service is changing that one value; nothing in this file names a service.
@@ -73,15 +73,14 @@ jobs:
     if: needs.plan.outputs.services != ''
     runs-on: ubuntu-latest
     timeout-minutes: 80
-    # Job-level so it also applies when advisory.yml calls this workflow (whose own concurrency
-    # group cancels superseded PR runs).
+    # Job-level so it also applies when ci.yml calls this workflow.
     concurrency:
       group: parity-${{ github.ref }}-${{ needs.plan.outputs.services }}
       cancel-in-progress: false
     steps:
       - uses: actions/checkout@v5
 
-      # Replays every package's build from pr.yml's turbo caches; parity itself is never cached.
+      # Replays every package's build from the release checks' turbo caches; parity itself is never cached.
       - uses: ./.github/actions/setup
 
       - name: Build

@@ -29,6 +29,65 @@ export const REPO = "crvouga/mockingbird"
 /** npm scope/name of the published packages; independent of the GitHub owner. */
 export const NPM_PROJECT = "crvouga/mockingbird"
 export const WORKFLOW_FILE = "ci.yml"
+/** Where packuments are read. MOCKINGBIRD_NPM_REGISTRY points it at a fake or a mirror. */
+export const NPM_REGISTRY = (
+  process.env.MOCKINGBIRD_NPM_REGISTRY ?? "https://registry.npmjs.org"
+).replace(/\/+$/, "")
+
+// ── Timing and debug output ─────────────────────────────────────────
+// Every progress line carries the time since the process started, so a slow step is visible
+// in the log. RELEASE_DEBUG=1 also traces each registry request, poll and lock wait.
+
+const startedAt = performance.now()
+export const debugEnabled = /^(1|true|yes)$/i.test(process.env.RELEASE_DEBUG ?? "")
+
+/** `[+12.3s]`: seconds since this process started. */
+export function since(): string {
+  return `[+${((performance.now() - startedAt) / 1000).toFixed(1)}s]`
+}
+
+/** A progress line with its elapsed time. */
+export function log(message: string): void {
+  console.log(`${since()} ${message}`)
+}
+
+/** A trace line, printed only with RELEASE_DEBUG=1. */
+export function debug(message: string): void {
+  if (debugEnabled) console.error(`${since()} debug: ${message}`)
+}
+
+/** Run `fn` over `items` with at most `limit` in flight; results keep the input order. */
+export async function mapPool<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = new Array(items.length)
+  let next = 0
+  const worker = async () => {
+    while (next < items.length) {
+      const index = next++
+      out[index] = await fn(items[index] as T, index)
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
+  return out
+}
+
+/** A promise-chain lock: `run` calls execute one at a time, in call order. */
+export function mutex(label: string) {
+  let tail: Promise<unknown> = Promise.resolve()
+  return function run<T>(work: () => Promise<T>): Promise<T> {
+    const queuedAt = performance.now()
+    const result = tail.then(() => {
+      const waited = performance.now() - queuedAt
+      if (waited > 1_000) debug(`${label}: waited ${(waited / 1000).toFixed(1)}s for the lock`)
+      return work()
+    })
+    tail = result.catch(() => {})
+    return result
+  }
+}
 export const PLACEHOLDER_VERSION = "0.0.0-development"
 export const INITIAL_VERSION = "0.1.0"
 
@@ -278,10 +337,16 @@ export const tagName = (name: string, version: string): string => `${name}@${ver
 
 export async function latestTaggedVersion(name: string): Promise<string | null> {
   const result = await $`git tag --list ${`${name}@*`}`.cwd(root).quiet().nothrow()
-  const versions = result
-    .text()
-    .split("\n")
-    .map((t) => t.trim().slice(name.length + 1))
+  return latestVersionIn(name, result.text().split("\n"))
+}
+
+/** The highest `<name>@x.y.z` among `tags`, or null. */
+export function latestVersionIn(name: string, tags: readonly string[]): string | null {
+  const prefix = `${name}@`
+  const versions = tags
+    .map((t) => t.trim())
+    .filter((t) => t.startsWith(prefix))
+    .map((t) => t.slice(prefix.length))
     .filter((v) => /^\d+\.\d+\.\d+$/.test(v))
   if (versions.length === 0) return null
   return versions.sort((a, b) => Bun.semver.order(b, a))[0] ?? null
@@ -351,19 +416,49 @@ export function firstReleaseVersion(published: readonly string[]): string {
 // ── npm ────────────────────────────────────────────────────────────
 
 /** Published versions, `[]` if the package does not exist, or an error string. */
-export async function npmVersions(name: string): Promise<string[] | { error: string }> {
-  const result = await $`npm view ${name} versions --json --prefer-online`
-    .cwd(root)
-    .quiet()
-    .nothrow()
-  const out = result.stdout.toString().trim()
-  if (result.exitCode !== 0) {
-    if (/E404|404 Not Found/.test(out + result.stderr.toString())) return []
-    return { error: result.stderr.toString().trim() || `npm view exited ${result.exitCode}` }
+type Packument = { versions?: Record<string, unknown>; time?: Record<string, string> }
+
+/**
+ * GET a packument straight from the registry, bypassing caches like `npm view --prefer-online`.
+ * A direct fetch costs ~100ms where spawning npm cost about a second, and the release reads
+ * hundreds of packuments. `null` when the package does not exist. Retries transient failures.
+ */
+async function fetchPackument(
+  name: string,
+  abbreviated: boolean,
+): Promise<Packument | null | { error: string }> {
+  const url = `${NPM_REGISTRY}/${name.replaceAll("/", "%2f")}`
+  let detail = ""
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await Bun.sleep(500 * attempt)
+    const at = performance.now()
+    try {
+      const res = await fetch(url, {
+        headers: {
+          accept: abbreviated ? "application/vnd.npm.install-v1+json" : "application/json",
+          "cache-control": "no-cache",
+        },
+        signal: AbortSignal.timeout(30_000),
+      })
+      debug(`GET ${url} → ${res.status} in ${Math.round(performance.now() - at)}ms`)
+      if (res.status === 404) return null
+      if (res.ok) return (await res.json()) as Packument
+      detail = `registry returned HTTP ${res.status} for ${name}`
+      if (res.status < 500 && res.status !== 429) break
+    } catch (error) {
+      detail = `registry request for ${name} failed: ${error instanceof Error ? error.message : String(error)}`
+      debug(detail)
+    }
   }
-  if (!out) return []
-  const parsed = JSON.parse(out) as string | string[]
-  return Array.isArray(parsed) ? parsed : [parsed]
+  return { error: detail }
+}
+
+/** Every version npm lists for `name` (`[]` if the package does not exist). */
+export async function npmVersions(name: string): Promise<string[] | { error: string }> {
+  const doc = await fetchPackument(name, true)
+  if (doc === null) return []
+  if ("error" in doc) return { error: doc.error as string }
+  return Object.keys(doc.versions ?? {})
 }
 
 /**
@@ -372,18 +467,10 @@ export async function npmVersions(name: string): Promise<string[] | { error: str
  * with E400 "Cannot publish over previously published version". `[]` if the package is new.
  */
 export async function npmBurntVersions(name: string): Promise<string[] | { error: string }> {
-  const result = await $`npm view ${name} time versions --json --prefer-online`
-    .cwd(root)
-    .quiet()
-    .nothrow()
-  const out = result.stdout.toString().trim()
-  if (result.exitCode !== 0) {
-    if (/E404|404 Not Found/.test(out + result.stderr.toString())) return []
-    return { error: result.stderr.toString().trim() || `npm view exited ${result.exitCode}` }
-  }
-  if (!out) return []
-  const parsed = JSON.parse(out) as { time?: Record<string, string>; versions?: string | string[] }
-  return burntVersions(parsed.time ?? {}, [parsed.versions ?? []].flat())
+  const doc = await fetchPackument(name, false)
+  if (doc === null) return []
+  if ("error" in doc) return { error: doc.error as string }
+  return burntVersions(doc.time ?? {}, Object.keys(doc.versions ?? {}))
 }
 
 export function burntVersions(time: Record<string, string>, live: string[]): string[] {
@@ -410,6 +497,13 @@ export function publishFailureKind(output: string): "version-taken" | "auth" | "
 }
 
 /** npm can accept a publish before registry readers can resolve the version. */
+/** Poll delays: quick at first (npm often lists a small package within seconds), then every 10s. */
+export function visibilityDelayMs(attempt: number): number {
+  return [2_000, 3_000, 5_000][attempt] ?? 10_000
+}
+
+export const VISIBILITY_TIMEOUT_MS = 15 * 60_000
+
 export async function waitForNpmVersion(
   name: string,
   version: string,
@@ -424,13 +518,20 @@ export async function waitForNpmVersion(
   // Poll for fifteen minutes: a multi-megabyte tarball can take npm more than five to list.
   // Do not tag a pending publish: subsequent plans use tags to decide which dependency
   // versions are ready for consumers.
-  for (let attempt = 0; attempt <= 90; attempt++) {
+  let waited = 0
+  for (let attempt = 0; ; attempt++) {
     const published = await versions(name)
-    if (Array.isArray(published) && published.includes(version)) return null
+    if (Array.isArray(published) && published.includes(version)) {
+      if (attempt > 0) log(`${name}@${version} is visible on npm (after ${waited / 1000}s)`)
+      return null
+    }
     detail = Array.isArray(published) ? "version is not listed" : published.error
-    if (attempt === 90) break
-    if (attempt === 0) console.log(`waiting for ${name}@${version} to become visible on npm`)
-    await sleep(10_000)
+    if (waited >= VISIBILITY_TIMEOUT_MS) break
+    if (attempt === 0) log(`waiting for ${name}@${version} to become visible on npm`)
+    else debug(`${name}@${version} not visible yet after ${waited / 1000}s (${detail})`)
+    const delay = Math.min(visibilityDelayMs(attempt), VISIBILITY_TIMEOUT_MS - waited)
+    await sleep(delay)
+    waited += delay
   }
   return `${name}@${version} is not visible on npm after 15 minutes (${detail}). npm may still be processing it; retry the release.`
 }
@@ -551,38 +652,46 @@ export async function computePlan(): Promise<Plan> {
   const versions = new Map<string, string>()
   const releases = new Map<string, Release>()
 
-  for (const pkg of publicPkgs) {
-    const previous = await latestTaggedVersion(pkg.name)
+  // One tag listing for every package, then each package's npm and git lookups in parallel.
+  const tags = (await $`git tag --list`.cwd(root).quiet()).text().split("\n")
+  const planned = await mapPool(publicPkgs, 8, async (pkg): Promise<Release | string | null> => {
+    const previous = latestVersionIn(pkg.name, tags)
     if (!previous) {
       // Never tagged: first release. If npm already has versions (e.g. a manual
       // seed), release the next patch above them so provenance builds win.
       const published = await npmVersions(pkg.name)
       if (!Array.isArray(published)) throw new Error(`npm view ${pkg.name}: ${published.error}`)
-      const version = firstReleaseVersion(published)
-      releases.set(pkg.name, {
+      return {
         pkg,
         previous: null,
-        version,
+        version: firstReleaseVersion(published),
         bump: "initial",
         commits: [],
         dependencyUpdates: [],
-      })
-      continue
+      }
     }
-    versions.set(pkg.name, previous)
     const commits = await commitsTouching(tagName(pkg.name, previous), pkg.sourceDirs)
     const bump = maxBump(commits.map((c) => parseCommit(c).bump))
-    if (bump) {
-      releases.set(pkg.name, {
-        pkg,
-        previous,
-        version: bumpVersion(previous, bump),
-        bump,
-        commits: commits.filter((c) => parseCommit(c).bump),
-        dependencyUpdates: [],
-      })
+    if (!bump) return previous
+    return {
+      pkg,
+      previous,
+      version: bumpVersion(previous, bump),
+      bump,
+      commits: commits.filter((c) => parseCommit(c).bump),
+      dependencyUpdates: [],
     }
-  }
+  })
+  publicPkgs.forEach((pkg, index) => {
+    const result = planned[index]
+    if (result === null || result === undefined) return
+    if (typeof result === "string") {
+      versions.set(pkg.name, result)
+      return
+    }
+    if (result.previous) versions.set(pkg.name, result.previous)
+    releases.set(pkg.name, result)
+  })
 
   // Workspace deps are pinned exactly at pack time, so dependents must re-release.
   let changed = true
@@ -627,7 +736,7 @@ export async function computePlan(): Promise<Plan> {
       }
     }
   }
-  await Promise.all(Array.from({ length: 8 }, worker))
+  await Promise.all(Array.from({ length: 16 }, worker))
 
   for (const r of releases.values()) versions.set(r.pkg.name, r.version)
   const ordered = topoSort(publicPkgs).filter((p) => releases.has(p.name))
@@ -762,6 +871,6 @@ export async function unreservedPackages(
       else if (result.length === 0) missing.push(name)
     }
   }
-  await Promise.all(Array.from({ length: 8 }, worker))
+  await Promise.all(Array.from({ length: 16 }, worker))
   return { missing: missing.sort(), errors: errors.sort((a, b) => a.name.localeCompare(b.name)) }
 }

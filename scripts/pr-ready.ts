@@ -13,10 +13,10 @@
  *
  * The required status checks are the only merge requirement: Commitlint and Check from
  * .github/workflows/pr.yml (rename either and REQUIRED_CHECKS must follow), each pinned to the
- * app that reports it. pr.yml's other jobs (Static, Shard i, Consumer smoke, …) are rolled up by
- * Check, so they gate the merge without being required themselves. .github/workflows/advisory.yml's checks never gate: they are reported, not waited on.
- * Any other check that runs on a PR must be required. Release (.github/workflows/ci.yml) is not a
- * PR check: a green PR merged to main is the release.
+ * app that reports it. Check is Biome's format and lint; pr.yml runs nothing else, so it gates the merge
+ * without being required itself. Any other check that runs on a PR must be required. Release
+ * (.github/workflows/ci.yml) is not a PR check: its release checks (build, tests, smoke, …) run on
+ * main after the merge and hold the publish, not the merge.
  */
 import { unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -39,7 +39,7 @@ const REQUIRED_CHECKS: RequiredStatusCheck[] = [
 const REQUIRED_CHECK_CONTEXTS = REQUIRED_CHECKS.map((check) => check.context)
 /** pr.yml's workflow name: its jobs gate through the required Check job, which needs them all. */
 const GATE_WORKFLOW = "CI"
-/** advisory.yml's workflow name: non-blocking checks, never a merge requirement. */
+/** A workflow of non-blocking pull-request checks, never a merge requirement. None exists now. */
 const ADVISORY_WORKFLOW = "Advisory"
 const ALLOWED_MERGE_METHODS = ["merge"]
 
@@ -505,7 +505,7 @@ type PrView = {
 
 type Check = { name: string; state: string; bucket: string; link: string; workflow?: string }
 
-/** `checks` gate the merge; `advisory` (advisory.yml) is reported alongside and never waited on. */
+/** `checks` gate the merge; `advisory` is reported alongside and never waited on. */
 type CheckFetch =
   | { ok: true; reported: boolean; checks: Check[]; advisory: Check[] }
   | { ok: false; reason: string }
