@@ -36,7 +36,7 @@ import {
 } from "./system-build-status.js"
 import { SYSTEM_ICONS } from "./system-icons.js"
 import { IconMark } from "./system-mark.js"
-import { stepRotation } from "./system-rotation.js"
+import { DOCK_KEY, stepRotation } from "./system-rotation.js"
 import { SystemScreen } from "./system-screen.js"
 import { notEmulated, type ServicesStore, trackServices } from "./system-services-store.js"
 import { matchesShortcut, parseShortcut } from "./system-shortcut.js"
@@ -253,15 +253,15 @@ function Harness({ controller }: { controller: HarnessController }) {
 // ---- The switcher pill: arrows through the rotation, dragged to dock on any edge.
 
 type Dock = { edge: "left" | "right" | "top" | "bottom"; at: number }
-const DOCK_KEY = "mockingbird.system-switcher.dock"
 const MARGIN = 8
 type Tip = "previous" | "next" | "dot" | "dev"
 /** How long a press on the pill opens System, unless it moves first (then it is a drag). */
 export const LONG_PRESS_MS = 500
 
-const readDock = (win: Window): Dock => {
+type Store = Pick<Storage, "getItem" | "setItem">
+const readDock = (storage: () => Store): Dock => {
   try {
-    const saved = JSON.parse(win.localStorage.getItem(DOCK_KEY) ?? "null") as Partial<Dock>
+    const saved = JSON.parse(storage().getItem(DOCK_KEY) ?? "null") as Partial<Dock>
     if (
       saved &&
       ["left", "right", "top", "bottom"].includes(saved.edge ?? "") &&
@@ -275,9 +275,9 @@ const readDock = (win: Window): Dock => {
   }
   return { edge: "left", at: 0.5 }
 }
-const writeDock = (win: Window, value: Dock) => {
+const writeDock = (storage: () => Store, value: Dock) => {
   try {
-    win.localStorage.setItem(DOCK_KEY, JSON.stringify(value))
+    storage().setItem(DOCK_KEY, JSON.stringify(value))
   } catch {
     /* The position is a convenience; switching still works without storage. */
   }
@@ -340,7 +340,7 @@ function Chrome({
   useLayoutEffect(() => {
     const switcher = pill.current
     if (!switcher) return
-    let dock = readDock(win)
+    let dock = readDock(controller.storage)
     let x = 0
     let y = 0
     const limits = () => {
@@ -377,7 +377,7 @@ function Chrome({
         edge,
         at: edge === "left" || edge === "right" ? fraction(y, minY, maxY) : fraction(x, minX, maxX),
       }
-      writeDock(win, dock)
+      writeDock(controller.storage, dock)
       switcher.style.transition = win.matchMedia("(prefers-reduced-motion: reduce)").matches
         ? "none"
         : "left 160ms ease-out, top 160ms ease-out"

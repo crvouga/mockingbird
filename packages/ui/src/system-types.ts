@@ -158,6 +158,8 @@ export type HarnessController = {
   setOrder(ids: readonly string[]): void
   /** Clears the notice over the apps. */
   dismissNotice(): void
+  /** Where the switcher's preferences live (the pill's position among them). */
+  storage(): Pick<Storage, "getItem" | "setItem">
   services?: SystemServices | undefined
   docsUrl?: string | undefined
   build?: SystemBuild | undefined

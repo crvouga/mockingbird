@@ -129,6 +129,9 @@ export function writeOrder(storage: () => Store, order: readonly string[]): void
   }
 }
 
+/** Storage key holding where the switcher pill is docked (`{ edge, at }`), as JSON. */
+export const DOCK_KEY = "mockingbird.system-switcher.dock"
+
 /** `list` with the item at `from` moved to `to`. */
 export function move<T>(list: readonly T[], from: number, to: number): T[] {
   const next = [...list]
