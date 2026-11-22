@@ -54,7 +54,7 @@ describe("buildPreview", () => {
     expect(Number.isNaN(Date.parse(version.builtAt))).toBe(false)
 
     const html = read(outdir, "index.html")
-    expect(html).toContain('<script type="module" src="./preview.js"></script>')
+    expect(html).toContain('<script type="module" src="/preview.js"></script>')
     expect(html).toContain('<main id="system"')
     expect(html).toContain("<title>Lab &lt;preview&gt;</title>")
 
@@ -62,6 +62,41 @@ describe("buildPreview", () => {
     expect(boot).toContain("#system")
     expect(boot).toContain("version.json")
     expect(boot).not.toContain("import ") // self-contained
+  })
+
+  // #867: `./preview.js` resolved against a deep link (`/settings/profile` -> `/settings/preview.js`),
+  // which the single-page-application fallback answers with index.html.
+  test("index.html loads the boot loader from the deployment root, so deep links boot", async () => {
+    const outdir = join(root, "deep")
+    await buildPreview({
+      entry: join(root, "app.ts"),
+      outdir,
+      esbuild: { define: { __FIXTURE__: '"x"' } },
+    })
+    const src = /<script type="module" src="([^"]+)"><\/script>/.exec(read(outdir, "index.html"))?.[1]
+    expect(src).toBe("/preview.js")
+    for (const page of ["https://x.test/", "https://x.test/settings/profile", "https://x.test/a/b/c?d=1#e"])
+      expect(new URL(src ?? "", page).href).toBe("https://x.test/preview.js")
+    // The loader resolves version.json and the entry against its own URL (the deployment root),
+    // never against the page's address.
+    expect(read(outdir, "preview.js")).toContain("import.meta.url")
+  })
+
+  test("a sub-path deployment sets base", async () => {
+    const outdir = join(root, "sub")
+    await buildPreview({
+      entry: join(root, "app.ts"),
+      outdir,
+      base: "/apps/lab/",
+      esbuild: { define: { __FIXTURE__: '"x"' } },
+    })
+    expect(read(outdir, "index.html")).toContain(
+      '<script type="module" src="/apps/lab/preview.js"></script>',
+    )
+    for (const base of ["apps/", "/apps", "/a b/", '/"x"/'])
+      await expect(
+        buildPreview({ entry: join(root, "app.ts"), outdir: join(root, "bad-base"), base }),
+      ).rejects.toThrow("Invalid base")
   })
 
   test("rejects an unsafe host id", async () => {
