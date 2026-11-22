@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import { createRuntime } from "@crvouga/mockingbird-service-slack"
 import type { OutboundChat } from "../../app/ports/notifier.js"
 import type { MockAdmin } from "../admin.js"
@@ -18,8 +19,9 @@ const CHANNELS = [
  * token. Slack answers 200 even when it refuses a message, so `ok` in the
  * body is what counts.
  */
-export const createSlackMockChat = () => {
+export const createSlackMockChat = (upstream?: UpstreamOptions) => {
   const runtime = createRuntime({
+    ...(upstream ? { upstream } : {}),
     fixtures: { team: { name: "Cove", domain: "cove" }, channels: CHANNELS },
     settings: { teamName: "Cove", teamDomain: "cove" },
   })

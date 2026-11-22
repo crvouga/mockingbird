@@ -36,6 +36,7 @@ const text = (value: string | boolean | undefined) =>
 
 /** How `serve` (and `serve --config`) builds the Twilio mock from flags. */
 export const serveTarget: ServeTarget = {
+  supportsUpstream: true,
   name: "twilio",
   defaultPort: DEFAULT_PORT,
   options: {
@@ -96,6 +97,7 @@ export const serveTarget: ServeTarget = {
         : {}),
       ...(accountSid && authToken ? { accounts: { [accountSid]: authToken } } : {}),
       ...(fixedCode ? { verify: { fixedCode } } : {}),
+      ...(common.upstream ? { upstream: common.upstream } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),

@@ -28,9 +28,11 @@
         "$TURBO_ROOT$/scripts/bundle-service-runtime.ts",
         "$TURBO_ROOT$/scripts/admin-brand.ts",
         "$TURBO_ROOT$/sites/docs/src/data/brands.json",
-        "$TURBO_ROOT$/sites/docs/public/brands/**"
+        "$TURBO_ROOT$/sites/docs/public/brands/**",
+        "$TURBO_ROOT$/packages/ui/scripts/bundle.ts",
+        "$TURBO_ROOT$/packages/ui/scripts/notices.ts"
       ],
-      "outputs": ["dist/**"]
+      "outputs": ["dist/**", "dist-ui/**"]
     },
     "storybook:build": {
       "dependsOn": ["^build"],

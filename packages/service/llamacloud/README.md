@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-llamacloud
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **LlamaCloud** platform API (LlamaIndex's managed indexes) for test suites:
 project and pipeline lookup, pipeline documents (list, get, insert, upsert, delete), and
@@ -9,7 +9,7 @@ term-overlap ranking over the documents in the pipeline. The chat knowledge tool
 (`search_health_knowledge`, `search_faq`) and the EMR chatbot-admin knowledge CRUD run against
 it with no vendor account, no embeddings and no nondeterminism.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/llamacloud/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/llamacloud/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from the official Python client's wire models
   (llama-cloud 0.1.45) and our backend adapter.
 
@@ -196,4 +196,4 @@ never records queries, document text or titles.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--index`, `--project`, `--api-key`); port 8805. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

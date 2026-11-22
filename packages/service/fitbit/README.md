@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-fitbit
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP Fitbit legacy Web API emulator: OAuth 2.0 authorization code with PKCE, refresh rotation and revoke, the profile, the activity log list, the sleep log by date and the daily activity summary, over synthetic data. Fitbit announced the end of support for the legacy Web API on 2026-09-30 and its shutdown on 2026-10-30 (migration target: the Google Health API); this emulator keeps the documented legacy contract testable after that.
 

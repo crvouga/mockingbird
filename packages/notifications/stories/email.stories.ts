@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import type { Notification } from "../src/model.js"
-import type { AppOptions } from "../src/ui/app.js"
+import type { AppOptions } from "../src/ui/types.js"
 import { base, email, MAILBOX, mailbox, ORDER_HTML, RESET_HTML } from "./fixtures.js"
 import { mount } from "./mount.js"
 
@@ -189,3 +189,11 @@ export const InboxStarred: Story = {
 export const ArchivedToast: Story = {
   args: inbox(box.slice(1), null, { initial: { toast: "Conversation archived." } }),
 }
+
+// Dark Mode: the webmail client's dark theme. An HTML message keeps its own white page.
+const dark = { theme: "dark" }
+export const DarkInbox: Story = { ...InboxMixedReadUnread, globals: dark }
+export const DarkOpenHtmlEmail: Story = { ...OpenHtmlEmail, globals: dark }
+export const DarkOpenWithAttachments: Story = { ...OpenWithAttachments, globals: dark }
+export const DarkOpenPlainTextWithLinks: Story = { ...OpenPlainTextWithLinks, globals: dark }
+export const DarkPhoneWidthInbox: Story = { ...PhoneWidthInbox, globals: dark }

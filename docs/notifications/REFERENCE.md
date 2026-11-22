@@ -16,12 +16,12 @@ Every export of `@crvouga/mockingbird-notifications`, and what the harness does 
 | `CHANNELS` | value | Every channel, in device order: `sms`, `push`, `email`, `chat`. |
 | `TEST_IDS`, `selectors` | values | Every `data-testid` the UI renders, and CSS selector builders for browser tests. Also exported from `./ui`. |
 | `mountNotifications` (`./ui`) | function | `(element, {harness, …})` → `{ready, show, setNamespace, setSound, setScale, render, destroy}`. Mounts the UI on an element. |
-| `mountDashboard` (`./ui`) | function | `(element, {emulators, notifications, tabs, …})` → `{show, active, tabs, aside, notifications, destroy}`. A tab bar over an emulators panel and the notifications UI. Also `DASHBOARD_STYLES` and `DASHBOARD_ROOT_CLASS`. |
-| `createApp`, `STYLES`, `ROOT_CLASS` (`./ui`) | browser | The UI without the style injection and embedded defaults, its scoped stylesheet, and its root class. |
+| `mountDashboard` (`./ui`) | function | `(element, {emulators, notifications, tabs, …})` → `{show, active, tabs, aside, notifications, destroy}`. The Mockingbird shell and tabs over an emulators panel and the notifications UI. Also `DASHBOARD_STYLES` and `DASHBOARD_ROOT_CLASS`. |
+| `createApp`, `STYLES`, `ROOT_CLASS` (`./ui`) | browser | The UI without the style injection and embedded defaults, the device skins' scoped stylesheet (pair it with `MOCKINGBIRD_CSS`), and its root class. |
 | `createServer`, `manifestFile`, `DEFAULT_PORT` (`./server`) | Node | Serve the harness over `node:http`; `manifestFile(path)` re-reads a fleet ready file. Port 8790. |
 | `adminGateway` (`./server`) | Node | The harness's `admin` option: fronts every emulator's admin API and admin UI under `/admin/`. `createServer` passes it by default. |
 
-The package's [README](https://github.com/crvouga-organization/mockingbird/tree/main/packages/notifications#readme) is the same material in one file.
+The package's [README](https://github.com/crvouga/mockingbird/tree/main/packages/notifications#readme) is the same material in one file.
 
 ## Not covered
 

@@ -19,27 +19,30 @@ async function run(args: string[], cwd: string) {
 test("packed runtime exposes harness UI and shared worker previews outside the workspace", async () => {
   const work = await mkdtemp(join(tmpdir(), "mockingbird-harness-consumer-"))
   try {
-    let sqliteTarball = ""
-    let runtimeTarball = ""
-    for (const name of ["sqlite", "runtime"]) {
-      const source =
-        name === "sqlite" ? resolve(import.meta.dir, "../service/sqlite") : import.meta.dir
-      const stage = join(work, name)
-      await mkdir(stage)
-      await cp(join(source, "dist"), join(stage, "dist"), { recursive: true })
-      await cp(join(source, "README.md"), join(stage, "README.md"))
+    const tarballs = new Map<string, string>()
+    for (const relative of ["../service/sqlite", "../adapters/preview", "../ui", "."]) {
+      const source = resolve(import.meta.dir, relative)
       const manifest = JSON.parse(await readFile(join(source, "package.json"), "utf8"))
+      const stage = join(work, manifest.name.split("/").at(-1))
+      await mkdir(stage)
+      for (const file of manifest.files) {
+        if (existsSync(join(source, file))) {
+          await mkdir(resolve(stage, file, ".."), { recursive: true })
+          await cp(join(source, file), join(stage, file), { recursive: true })
+        }
+      }
       manifest.version = "0.0.0-smoke"
-      if (name === "runtime")
-        manifest.dependencies["@crvouga/mockingbird-service-sqlite"] = `file:${sqliteTarball}`
+      for (const [name, tarball] of tarballs) {
+        if (manifest.dependencies?.[name]) manifest.dependencies[name] = `file:${tarball}`
+      }
       await writeFile(join(stage, "package.json"), JSON.stringify(manifest))
       const packed = JSON.parse(
         await run(["npm", "pack", "--json", "--ignore-scripts", "--pack-destination", work], stage),
       )
-      const tarball = join(work, packed[0].filename)
-      if (name === "sqlite") sqliteTarball = tarball
-      else runtimeTarball = tarball
+      tarballs.set(manifest.name, join(work, packed[0].filename))
     }
+    const runtimeTarball = tarballs.get("@crvouga/mockingbird-runtime")
+    if (!runtimeTarball) throw new Error("runtime tarball missing")
     const app = join(work, "app")
     await mkdir(app)
     await writeFile(join(app, "package.json"), JSON.stringify({ private: true, type: "module" }))

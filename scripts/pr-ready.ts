@@ -13,10 +13,10 @@
  *
  * The required status checks are the only merge requirement: Commitlint and Check from
  * .github/workflows/pr.yml (rename either and REQUIRED_CHECKS must follow), each pinned to the
- * app that reports it. pr.yml's other jobs (Static, Shard i, Consumer smoke, …) are rolled up by
- * Check, so they gate the merge without being required themselves. .github/workflows/advisory.yml's checks never gate: they are reported, not waited on.
- * Any other check that runs on a PR must be required. Release (.github/workflows/ci.yml) is not a
- * PR check: a green PR merged to main is the release.
+ * app that reports it. Check is Biome's format and lint; pr.yml runs nothing else, so it gates the merge
+ * without being required itself. Any other check that runs on a PR must be required. Release
+ * (.github/workflows/ci.yml) is not a PR check: its release checks (build, tests, smoke, …) run on
+ * main after the merge and hold the publish, not the merge.
  */
 import { unlink } from "node:fs/promises"
 import { tmpdir } from "node:os"
@@ -39,7 +39,7 @@ const REQUIRED_CHECKS: RequiredStatusCheck[] = [
 const REQUIRED_CHECK_CONTEXTS = REQUIRED_CHECKS.map((check) => check.context)
 /** pr.yml's workflow name: its jobs gate through the required Check job, which needs them all. */
 const GATE_WORKFLOW = "CI"
-/** advisory.yml's workflow name: non-blocking checks, never a merge requirement. */
+/** A workflow of non-blocking pull-request checks, never a merge requirement. None exists now. */
 const ADVISORY_WORKFLOW = "Advisory"
 const ALLOWED_MERGE_METHODS = ["merge"]
 
@@ -320,7 +320,9 @@ function canonicalRuleset(base: string): CanonicalRuleset {
       {
         type: "required_status_checks",
         parameters: {
-          strict_required_status_checks_policy: true,
+          // Off on purpose: a pull request merges without first catching up with main. The
+          // release checks in ci.yml test the merged result; GitHub still blocks a conflict.
+          strict_required_status_checks_policy: false,
           do_not_enforce_on_create: false,
           required_status_checks: REQUIRED_CHECKS,
         },
@@ -345,8 +347,9 @@ function ruleDrift(found: RulesetRule, want: CanonicalRule): string[] {
     if (JSON.stringify(contexts) !== JSON.stringify(wanted)) {
       drift.push(`contexts=[${contexts.join(",")}]`)
     }
-    if (live.strict_required_status_checks_policy !== true) {
-      drift.push("strict_required_status_checks_policy=false")
+    const strict = live.strict_required_status_checks_policy === true
+    if (strict !== expected.strict_required_status_checks_policy) {
+      drift.push(`strict_required_status_checks_policy=${strict}`)
     }
     if (live.do_not_enforce_on_create !== false) {
       drift.push("do_not_enforce_on_create=true")
@@ -505,7 +508,7 @@ type PrView = {
 
 type Check = { name: string; state: string; bucket: string; link: string; workflow?: string }
 
-/** `checks` gate the merge; `advisory` (advisory.yml) is reported alongside and never waited on. */
+/** `checks` gate the merge; `advisory` is reported alongside and never waited on. */
 type CheckFetch =
   | { ok: true; reported: boolean; checks: Check[]; advisory: Check[] }
   | { ok: false; reason: string }
@@ -1451,7 +1454,7 @@ const MERGEABLE_STATES = ["CLEAN", "HAS_HOOKS"]
  * GitHub still computing mergeability); `blockers` need work first. The only requirement is
  * that every check on the PR passed, and that each of those checks is required on main.
  */
-async function mergeReadiness(branch: string, base: string, pr: PrView) {
+async function mergeReadiness(branch: string, pr: PrView) {
   const blockers: string[] = []
   const pending: { name: string; bucket: string; link: string }[] = []
 
@@ -1465,11 +1468,6 @@ async function mergeReadiness(branch: string, base: string, pr: PrView) {
   else if (ahead || behindUpstream) {
     blockers.push(`local and remote branch differ (ahead ${ahead}, behind ${behindUpstream})`)
   }
-  if ((await git(["fetch", "--quiet", "origin", base])).code === 0) {
-    const behind = await git(["rev-list", "--count", `HEAD..origin/${base}`])
-    if (Number(behind.stdout) > 0) blockers.push(`behind origin/${base} (run \`sync\`)`)
-  }
-
   const fetched = await fetchChecks(branch)
   if (!fetched.ok) blockers.push(`checks unavailable: ${fetched.reason}`)
   else if (!fetched.reported)
@@ -1513,7 +1511,7 @@ async function cmdReady(): Promise<void> {
     die(EXIT.usage, { error: `no PR for ${branch}; run \`pr\` first` })
   }
 
-  const { blockers, pending, mergeStateStatus } = await mergeReadiness(branch, base, existing)
+  const { blockers, pending, mergeStateStatus } = await mergeReadiness(branch, existing)
   if (blockers.length > 0)
     die(EXIT.fail, { step: "ready-gate", blockers, pending, mergeStateStatus })
   if (pending.length > 0) die(EXIT.pending, { step: "ready-gate", pending, mergeStateStatus })

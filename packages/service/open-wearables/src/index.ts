@@ -11,6 +11,7 @@ import {
 } from "@crvouga/mockingbird-service"
 import { document, type SupportedOperationId } from "./generated/openapi.js"
 import { type Connection, type Settings, WearablesState } from "./state.js"
+import { completionPage, consentPage, html, pairingPage } from "./ui.js"
 
 export { document, supportedOperationIds } from "./generated/openapi.js"
 export type { WearablesRuntime, WearablesRuntimeOptions } from "./runtime.js"
@@ -19,23 +20,31 @@ export type { Connection, Provider, Settings, Task, User } from "./state.js"
 export const WEARABLES_NAMESPACE = "open-wearables"
 export const apiKeyCredential = (request: Request) =>
   request.headers.get("X-Open-Wearables-API-Key")?.trim() || undefined
-export type WearablesAPIOptions = APIOptions & { settings?: Partial<Settings> }
+export type WearablesAPIOptions = APIOptions & {
+  settings?: Partial<Settings>
+  browserPrefix?: string
+}
+const queryString = (value: unknown) => {
+  if (value === undefined || typeof value === "string") return value
+  throw new HttpError(422, { detail: "Expected a single query value" })
+}
 const unsupported = () =>
   jsonRes(501, {
     detail: {
       code: "mockingbird_unsupported",
-      message:
-        "This deployment extension or OAuth/browser flow is not modelled. See the Open Wearables emulator README.",
+      message: "This deployment extension is not modelled. See the Open Wearables emulator README.",
     },
   })
 export class WearablesAPI implements FetchAPI {
   readonly state: WearablesState
   private readonly service: Service
   private readonly now: () => number
+  private readonly browserPrefix: string
   constructor(options: WearablesAPIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? WEARABLES_NAMESPACE
     this.now = options.now ?? Date.now
+    this.browserPrefix = options.browserPrefix ?? ""
     this.state = new WearablesState(sqlite, namespace, options.settings ?? {})
     this.service = createService({
       document,
@@ -43,6 +52,56 @@ export class WearablesAPI implements FetchAPI {
       namespace,
       now: this.now,
       handlers: defineOperations<SupportedOperationId>({
+        AuthorizeProvider: (c) =>
+          jsonRes(
+            200,
+            this.authorize(
+              c,
+              c.params.provider,
+              queryString(c.query.user_id),
+              queryString(c.query.redirect_uri),
+            ),
+          ),
+        PairUser: async (c) => {
+          const user = this.user(c.params.user_id)
+          const redirect = this.redirectUrl(queryString(c.query.redirect_url))
+          const providers = this.state.providers
+            .list({ where: (p) => p.is_enabled && p.has_cloud_api })
+            .map((row) => row.value)
+          return html(await pairingPage(providers, user.id, redirect ?? "", this.browserPrefix))
+        },
+        PairProvider: (c) =>
+          new Response(null, {
+            status: 303,
+            headers: {
+              location: this.authorize(
+                c,
+                c.params.provider,
+                c.params.user_id,
+                queryString(c.query.redirect_url),
+              ).authorization_url,
+            },
+          }),
+        ConsentPage: async (c) => {
+          const authorization = this.authorization(c.params.state)
+          const action = new URL(c.request.url)
+          action.pathname = `${this.browserPrefix}${action.pathname}`
+          return html(await consentPage(this.provider(authorization.provider).name, action.href))
+        },
+        DecideConsent: async (c) => {
+          const authorization = this.authorization(c.params.state)
+          const form = c.body.kind === "form" ? (c.body.value as Record<string, unknown>) : {}
+          if (form.decision !== "allow" && form.decision !== "deny")
+            return jsonRes(422, { detail: "Expected allow or deny" })
+          this.state.authorizations.update(authorization.id, { ...authorization, used: true })
+          if (form.decision === "deny") return html(await completionPage(false))
+          const provider = this.provider(authorization.provider)
+          if (!provider.is_enabled) return jsonRes(409, { detail: "Provider is disabled" })
+          this.seedConnection(authorization.userId, authorization.provider)
+          return authorization.redirectUrl
+            ? new Response(null, { status: 303, headers: { location: authorization.redirectUrl } })
+            : html(await completionPage(true))
+        },
         ListProviders: (c) =>
           jsonRes(
             200,
@@ -80,7 +139,7 @@ export class WearablesAPI implements FetchAPI {
       }),
       before: (c) => {
         this.tick()
-        if (c.request.url.includes("/api/v1/")) {
+        if (new URL(c.request.url).pathname.startsWith("/api/v1/")) {
           const key = apiKeyCredential(c.request)
           if (!key || !this.state.current().apiKeys.includes(key))
             return jsonRes(401, { detail: "Invalid or missing API key" })
@@ -128,6 +187,54 @@ export class WearablesAPI implements FetchAPI {
         detail: [{ loc: ["path", "provider"], msg: "Unknown provider", type: "enum" }],
       })
     return provider
+  }
+  private redirectUrl(value: string | undefined) {
+    if (!value) return null
+    try {
+      const url = new URL(value)
+      if (!["http:", "https:"].includes(url.protocol) || url.username || url.password)
+        throw new Error("invalid redirect")
+      return url.href
+    } catch {
+      throw new HttpError(422, {
+        detail: "redirect URI must be an HTTP(S) URL without credentials",
+      })
+    }
+  }
+  private authorize(
+    c: OperationContext,
+    providerId: string | undefined,
+    userId: string | undefined,
+    redirect: string | undefined,
+  ) {
+    const user = this.user(userId)
+    const provider = this.provider(providerId)
+    if (!provider.has_cloud_api || !provider.is_enabled)
+      throw new HttpError(409, { detail: "Cloud provider is unavailable" })
+    const redirectUrl = this.redirectUrl(redirect)
+    const state = this.id("authorization")
+    this.state.authorizations.insert(state, {
+      id: state,
+      userId: user.id,
+      provider: provider.provider,
+      redirectUrl,
+      expiresAt: this.now() + 600000,
+      used: false,
+    })
+    return {
+      authorization_url: new URL(
+        `${this.browserPrefix}/mockingbird/oauth/${encodeURIComponent(state)}`,
+        c.request.url,
+      ).href,
+      state,
+    }
+  }
+  private authorization(state: string | undefined) {
+    const found = this.state.authorizations.get(state ?? "")
+    if (!found) throw new HttpError(404, { detail: "Authorization not found" })
+    if (found.used || found.expiresAt <= this.now())
+      throw new HttpError(409, { detail: "Authorization already used or expired" })
+    return found
   }
   private body(c: OperationContext): Record<string, unknown> {
     return c.body.kind === "json" &&

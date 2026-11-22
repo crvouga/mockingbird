@@ -28,6 +28,12 @@ import { ingressSupport, supportsPublicIngress } from "./fleet-proxy.js"
 import type { ArchiveRepository } from "./fleet-repository.js"
 import { type ClockSynchronization, FleetTimeController } from "./fleet-time.js"
 
+const bootArchive = (value: unknown) =>
+  !!value &&
+  typeof value === "object" &&
+  "format" in value &&
+  value.format === "mockingbird.boot/v1"
+
 export type Operation = {
   scope?: string[]
   participant?: string
@@ -615,6 +621,8 @@ export class FleetManagement {
         ["GET", "/namespaces/{namespace}/snapshots/{id}"],
         ["DELETE", "/namespaces/{namespace}/snapshots/{id}"],
         ["POST", "/namespaces/{namespace}/snapshots/{id}/restore"],
+        ["GET", "/services/{service}/upstream"],
+        ["PUT", "/services/{service}/upstream"],
         ["GET", "/metrics"],
         ["GET", "/clock"],
         ["POST", "/clock"],
@@ -1115,7 +1123,7 @@ export class FleetManagement {
       method = request.method
     if (path === "/ui")
       return new Response(
-        fleetConsole(this.ctx.config.adminPrefix ?? "/__admin", this.ctx.dashboard?.()),
+        await fleetConsole(this.ctx.config.adminPrefix ?? "/__admin", this.ctx.dashboard?.()),
         { headers: { "content-type": "text/html; charset=utf-8" } },
       )
     if (route === "" && method === "GET")
@@ -1173,6 +1181,15 @@ export class FleetManagement {
         operationId: record.operationId,
         resolution: "restored-before-state",
       })
+    }
+    const upstreamService = /^\/services\/([a-z0-9-]+)\/upstream$/.exec(route)?.[1]
+    if (upstreamService && ["GET", "PUT"].includes(method)) {
+      if (!admin) return fleetError(403, "upstream controls require administrator scope")
+      const child = this.ctx.children.get(upstreamService)
+      if (!child) return fleetError(404, "unknown service")
+      if (!child.upstream) return fleetError(409, "upstream forwarding is not supported by service")
+      checked(body, ["mode", "baseUrl"])
+      return child.upstream(namespace, method === "PUT" ? body : undefined)
     }
     if (route === "/telemetry" && method === "GET")
       return admin
@@ -2097,10 +2114,13 @@ export class FleetManagement {
           !child ||
           child.protocol !== state.protocol ||
           !child.importCheckpoint ||
-          (state.target ?? name) !== (child.targetName ?? name)
+          (state.target ?? name) !== (child.targetName ?? name) ||
+          (state.packageVersion !== undefined &&
+            child.packageVersion !== undefined &&
+            state.packageVersion !== child.packageVersion)
         )
           throw new Error(`unsupported archive service ${name}`)
-        await child.importCheckpoint(namespace, state.state)
+        if (!bootArchive(state.state)) await child.importCheckpoint(namespace, state.state)
       }
     const rollback: {
       namespace: string
@@ -2127,10 +2147,12 @@ export class FleetManagement {
           selected,
           async (name, child) => {
             values.set(name, await child.checkpoint(namespace))
-            await child.restore(
-              namespace,
-              await child.importCheckpoint?.(namespace, ns.services[name]?.state),
-            )
+            if (bootArchive(ns.services[name]?.state)) await child.reset(namespace)
+            else
+              await child.restore(
+                namespace,
+                await child.importCheckpoint?.(namespace, ns.services[name]?.state),
+              )
           },
           true,
         )
@@ -2357,8 +2379,18 @@ export class FleetManagement {
   }
 }
 
-const escapeAttribute = (value: string) =>
-  value.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;")
-
-const fleetConsole = (prefix: string, dashboard?: string) =>
-  `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Mockingbird Fleet</title><style>body{font:16px system-ui;max-width:1000px;margin:3rem auto;padding:1rem;background:#10151b;color:#e0e9f2}input,select,button{padding:.7rem;margin:.3rem;background:#233142;color:inherit;border:1px solid #60768b;border-radius:5px}pre{white-space:pre-wrap;overflow-wrap:anywhere}a{color:#9fdbff}</style><h1>Mockingbird Fleet</h1>${dashboard ? `<p id="dashboard">Every emulator's admin UI and the notifications UI are on the <a href="${escapeAttribute(dashboard)}">dashboard</a>.</p>` : ""}<label>Admin key <input id="key" type="password" autocomplete="off"></label><label>Namespace <input id="ns" value="default"></label><button id="refresh">Refresh</button><section id="children"></section><label>Action <select id="action"><option value="snapshots">Capture checkpoint</option><option value="reset">Reset namespace</option></select></label><button id="run">Run</button><h2>Lifecycle and operations</h2><pre id="result"></pre><script type="module">const base=${JSON.stringify(`${prefix}/fleet`)};const key=document.querySelector('#key'),ns=document.querySelector('#ns'),result=document.querySelector('#result');async function api(path,method='GET',body){const r=await fetch(base+path,{method,headers:{'content-type':'application/json','x-mockingbird-admin-key':key.value},...(body?{body:JSON.stringify(body)}:{})});const data=await r.json();result.textContent=JSON.stringify(data,null,2);return data}document.querySelector('#refresh').onclick=async()=>{const data=await api('');const host=document.querySelector('#children');host.replaceChildren();for(const [name,child]of Object.entries(data.manifest?.services??{})){const link=document.createElement('a');link.href=child.adminUrl;link.textContent=name+' ('+child.protocol+') ';host.append(link)}await api('/operations?namespace='+encodeURIComponent(ns.value))};document.querySelector('#run').onclick=()=>api('/namespaces/'+encodeURIComponent(ns.value)+'/'+document.querySelector('#action').value,'POST',{});</script></html>`
+/**
+ * The console page: React and HeroUI, server-rendered and hydrated, prebuilt in
+ * `@crvouga/mockingbird-service` (src/ui/fleet-console.tsx). Imported on the first request for it,
+ * so the fleet never loads React otherwise.
+ */
+const fleetConsole = async (prefix: string, dashboard?: string): Promise<string> => {
+  const [{ fleetConsolePage }, { BUNDLE }] = await Promise.all([
+    import("@crvouga/mockingbird-service/ui"),
+    import("@crvouga/mockingbird-service/ui/client-bundle"),
+  ])
+  return fleetConsolePage(
+    { base: `${prefix}/fleet`, ...(dashboard ? { dashboard } : {}) },
+    { source: BUNDLE },
+  )
+}

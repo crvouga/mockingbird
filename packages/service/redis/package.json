@@ -36,10 +36,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/service/redis"
   },
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/redis#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/redis#readme",
   "keywords": [
     "mockingbird",
     "redis",
@@ -78,7 +78,7 @@
         "README.md public test controls",
         "SUPPORT.md compatibility and divergence evidence"
       ],
-      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "scripts": {
@@ -101,6 +101,7 @@
     "bullmq": "5.76.2",
     "esbuild": "^0.28.2",
     "ioredis": "5.11.1",
-    "ioredis-5-9": "npm:ioredis@5.9.2"
+    "ioredis-5-9": "npm:ioredis@5.9.2",
+    "@crvouga/mockingbird-core": "workspace:*"
   }
 }

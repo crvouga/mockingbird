@@ -1,27 +1,140 @@
 {
   "name": "@crvouga/mockingbird-ui",
   "version": "0.0.0-development",
-  "private": true,
-  "description": "The cross-browser CSS reset every Mockingbird HTML surface starts from.",
+  "description": "Mockingbird's design system: the HeroUI theme, shared React components, the precompiled stylesheet, the page document helper, and the browser system preview shell.",
   "license": "MIT",
   "type": "module",
-  "sideEffects": false,
+  "sideEffects": [
+    "**/*.css"
+  ],
   "exports": {
     ".": {
-      "bun": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./reset.css": "./src/reset.css"
+    "./reset.css": {
+      "types": "./dist/reset-css.d.ts",
+      "default": "./src/reset.css"
+    },
+    "./system": {
+      "types": "./dist/system-harness.d.ts",
+      "default": "./dist/system-harness.js"
+    },
+    "./launcher": {
+      "types": "./dist/preview-launcher.d.ts",
+      "default": "./dist/preview-launcher.js"
+    },
+    "./freshness": {
+      "types": "./dist/freshness-indicator.d.ts",
+      "default": "./dist/freshness-indicator.js"
+    },
+    "./react": {
+      "types": "./dist/react/index.d.ts",
+      "default": "./dist/react/index.js"
+    },
+    "./react/server": {
+      "types": "./dist/react/server.d.ts",
+      "default": "./dist/react/server.js"
+    },
+    "./react/client": {
+      "types": "./dist/react/client.d.ts",
+      "default": "./dist/react/client.js"
+    },
+    "./document": {
+      "types": "./dist/document.d.ts",
+      "default": "./dist/document.js"
+    },
+    "./styles": {
+      "types": "./dist/styles.d.ts",
+      "default": "./dist/styles.js"
+    },
+    "./styles.css": {
+      "types": "./dist/reset-css.d.ts",
+      "default": "./dist/styles.css"
+    },
+    "./theme.css": {
+      "types": "./dist/reset-css.d.ts",
+      "default": "./src/theme.css"
+    },
+    "./tokens.css": {
+      "types": "./dist/reset-css.d.ts",
+      "default": "./src/tokens.css"
+    }
   },
   "mockingbird": {
     "runtime": "portable",
     "layer": "ui"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun scripts/build-css.ts && tsc -p tsconfig.build.json && bun scripts/build-system.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
-    "test": "bun test"
-  }
+    "test": "bun test",
+    "pack:check": "bun ../../scripts/pack-check.ts"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "src/reset.css",
+    "src/theme.css",
+    "src/tokens.css"
+  ],
+  "peerDependencies": {
+    "@gravity-ui/icons": "^2.23.1",
+    "@heroui/react": "^3.2.7",
+    "@heroui/styles": "^3.2.7",
+    "@types/react": ">=19.0.0",
+    "@types/react-dom": ">=19.0.0",
+    "react": ">=19.0.0",
+    "react-dom": ">=19.0.0",
+    "tailwindcss": "^4.3.5"
+  },
+  "peerDependenciesMeta": {
+    "@gravity-ui/icons": {
+      "optional": true
+    },
+    "@heroui/react": {
+      "optional": true
+    },
+    "@heroui/styles": {
+      "optional": true
+    },
+    "@types/react": {
+      "optional": true
+    },
+    "@types/react-dom": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-dom": {
+      "optional": true
+    },
+    "tailwindcss": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@tailwindcss/cli": "4.3.5",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "esbuild": "0.28.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "tailwindcss": "4.3.5"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/ui"
+  },
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/ui#readme"
 }

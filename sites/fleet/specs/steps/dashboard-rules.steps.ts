@@ -89,7 +89,7 @@ When(
       const typed = dash.form.locator("input:is([type=text], [type=email], [type=password])")
       for (const field of await typed.all()) await field.fill("")
       for (const field of await dash.form.getByRole("spinbutton").all()) await field.fill("")
-      await dash.form.getByRole("button").click()
+      await dash.form.locator("button[type=submit]").click()
       await expect(dash.problems.first()).toBeVisible()
       await dash.idle()
       found.push({
@@ -102,12 +102,11 @@ When(
           const form = document.querySelector("main form")
           const active = document.activeElement
           const summary = form?.querySelector(".form-error")
-          // The control a field's problem is announced on: a text field, or the chosen radio.
-          const first = [...(form?.querySelectorAll("[aria-invalid=true]") ?? [])].find(
-            (control) => !control.matches("[type=radio]:not(:checked)"),
-          )
+          // The control a field's problem is announced on: a text field, or a set of choices,
+          // whose chosen radio takes the focus.
+          const first = form?.querySelector("[aria-invalid=true]")
           if (summary) return active === summary ? "summary" : "elsewhere"
-          return active && active === first ? "first problem" : "elsewhere"
+          return active && first?.contains(active) ? "first problem" : "elsewhere"
         }),
       })
     }
@@ -192,7 +191,7 @@ When(
   async ({ dash }, label: string, value: string) => {
     await dash.idle()
     await dash.field(label).fill(value)
-    await dash.form.getByRole("button").click()
+    await dash.form.locator("button[type=submit]").click()
     await dash.idle()
   },
 )

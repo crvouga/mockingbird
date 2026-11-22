@@ -11,12 +11,12 @@ import { markup } from "../../src/story.js"
  */
 const harness = Object.values(
   import.meta.glob<{ renderHtmlReport(report: BenchReport): string }>(
-    "../../../../packages/service/postgres/benchmarks/harness/html-report.ts",
+    "../../../../packages/service/postgres/benchmarks/harness/html-report.tsx",
     { eager: true },
   ),
 )[0]
 const renderHtmlReport = (report: BenchReport): string => {
-  if (!harness) throw new Error("the benchmark harness's html-report.ts is missing")
+  if (!harness) throw new Error("the benchmark harness's html-report.tsx is missing")
   return harness.renderHtmlReport(report)
 }
 
@@ -29,7 +29,7 @@ export default {
   title: "Reports/postgres-mem benchmarks",
   parameters: {
     layout: "fullscreen",
-    sources: ["packages/service/postgres/benchmarks/harness/html-report.ts"],
+    sources: ["packages/service/postgres/benchmarks/harness/html-report.tsx"],
   },
 } satisfies Meta
 
@@ -69,3 +69,11 @@ export const OnAPhone: StoryObj = {
   ...CiBaseline,
   globals: { viewport: { value: "phone", isRotated: false } },
 }
+
+/** Pinned dark, as a visitor whose system (or saved `mb:theme`) is dark sees it. */
+export const Dark: StoryObj = markup(() =>
+  renderHtmlReport(CI).replace(
+    /<html lang="en">/,
+    '<html lang="en" data-theme="dark" class="dark">',
+  ),
+)

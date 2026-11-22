@@ -34,6 +34,8 @@ export type CallEvent = {
   participants?: Record<string, CallParticipant>
   error?: { type: string }
   errorMsg?: string
+  track?: MediaStreamTrack
+  type?: string
 }
 type Listener = (event: CallEvent) => void
 
@@ -68,7 +70,14 @@ export function createCallObject(options: BrowserOptions) {
     return response.json()
   }
   const stopMedia = () => {
-    for (const track of stream?.getTracks() ?? []) track.stop()
+    for (const track of stream?.getTracks() ?? []) {
+      emit("track-stopped", {
+        track,
+        type: track.kind,
+        ...(participants.local ? { participant: participants.local } : {}),
+      })
+      track.stop()
+    }
     stream = undefined
   }
   const convert = (p: Presence): CallParticipant => {
@@ -187,6 +196,7 @@ export function createCallObject(options: BrowserOptions) {
             })
           }
         }
+        if (generation !== epoch || destroyed) throw new Error("join cancelled")
         const row = (await request("", "POST", {
           browser: true,
           token: input.token,
@@ -202,6 +212,12 @@ export function createCallObject(options: BrowserOptions) {
         participants = { local: convert(row) }
         state = "joined-meeting"
         emit("joined-meeting", { participants })
+        for (const track of stream?.getTracks() ?? [])
+          emit("track-started", {
+            track,
+            type: track.kind,
+            ...(participants.local ? { participant: participants.local } : {}),
+          })
         await poll()
         return { participants }
       } catch (error) {
@@ -229,10 +245,37 @@ export function createCallObject(options: BrowserOptions) {
       listeners.clear()
       stopMedia()
     },
+    localAudio: () => participants.local?.tracks.audio.state !== "off",
+    localVideo: () => participants.local?.tracks.video.state !== "off",
     setLocalVideo: (enabled: boolean) => setTrack("video", enabled),
     setLocalAudio: (enabled: boolean) => setTrack("audio", enabled),
     /** Deterministic alternative to waiting for the polling interval in tests. */
     refresh,
   }
   return call
+}
+
+/** One configured Daily factory per page; separate calls require separate factory instances. */
+export function createDailyIframe(options: BrowserOptions) {
+  let instance: ReturnType<typeof createCallObject> | undefined
+  return {
+    createCallObject(overrides: Partial<BrowserOptions> = {}) {
+      if (instance) throw new Error("A Daily call object already exists; destroy it first")
+      const call = createCallObject({ ...options, ...overrides })
+      const destroy = call.destroy
+      call.destroy = async () => {
+        try {
+          await destroy()
+        } finally {
+          if (instance === call) instance = undefined
+        }
+      }
+      instance = call
+      return call
+    },
+    getCallInstance: () => instance,
+    async destroy() {
+      await instance?.destroy()
+    },
+  }
 }

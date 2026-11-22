@@ -37,6 +37,7 @@ export const upstreamRequest = (request: Request, baseUrl: string): Request => {
     method: request.method,
     headers,
     signal: request.signal,
+    redirect: "manual",
     ...(request.method !== "GET" && request.method !== "HEAD"
       ? { body: request.body, duplex: "half" }
       : {}),

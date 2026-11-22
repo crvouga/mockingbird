@@ -4,6 +4,7 @@ import { Marked, type Tokens } from "marked"
 import { createHighlighter, type Highlighter, type ThemedToken } from "shiki"
 import { guideSlug } from "../../src/lib/guides.ts"
 import type { TocEntry } from "../../src/lib/types.ts"
+import { codeFrameHtml } from "../../src/ui/code-frame.ts"
 
 const LANGS = [
   "typescript",
@@ -94,7 +95,7 @@ function renderSource(h: Highlighter, code: string, rawLang: string | undefined)
 
 function renderCode(h: Highlighter, code: string, rawLang: string | undefined): string {
   const { html, label } = renderSource(h, code, rawLang)
-  return `<figure class="code"><figcaption><span>${escapeHtml(label)}</span><button type="button" class="copy" data-copy aria-label="Copy code"><svg class="i i-copy" aria-hidden="true"><use href="#i-copy"/></svg><svg class="i i-check" aria-hidden="true"><use href="#i-check"/></svg></button></figcaption>${html}</figure>`
+  return codeFrameHtml(label, html)
 }
 
 /** TypeScript and JavaScript blocks recolor SQL inside template strings with the SQL grammar. */
@@ -183,7 +184,7 @@ export async function renderMarkdown(
           return ""
         }
         const inner = this.parser.parseInline(token.tokens)
-        const text = decodeEntities(inner.replace(/<[^>]+>/g, ""))
+        const text = plainText(token.tokens)
         const slug = slugger.slug(text)
         if (token.depth === 2 || token.depth === 3) toc.push({ depth: token.depth, slug, text })
         const level = Math.max(2, token.depth)
@@ -248,6 +249,21 @@ const ENTITIES: Record<string, string> = {
 
 const decodeEntities = (s: string) =>
   s.replace(/&(?:amp|lt|gt|quot|#39);/g, (m) => ENTITIES[m] ?? m)
+
+/**
+ * Heading text for slugs and the table of contents, read from the inline tokens
+ * rather than by stripping tags from rendered HTML. Raw inline HTML contributes
+ * nothing, so no markup can survive into the text.
+ */
+function plainText(tokens: readonly Tokens.Generic[]): string {
+  return tokens
+    .map((t) => {
+      if (t.type === "html") return ""
+      if (t.tokens) return plainText(t.tokens)
+      return typeof t.text === "string" ? decodeEntities(t.text) : ""
+    })
+    .join("")
+}
 
 export const escapeHtml = (s: string) =>
   s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;")

@@ -37,6 +37,16 @@ test("takes parity, then bug, then feature, oldest first", () => {
   expect(pickFromQueue(queue, 2)).toEqual([3, 5])
 })
 
+test("a failing release check (ci-failure) comes before everything else", () => {
+  const queue = [
+    issue(1, ["parity"]),
+    issue(2, ["bug"]),
+    issue(3, ["ci-failure"]),
+    issue(4, ["ci-failure"], { assignees: [{ login: "someone" }] }),
+  ]
+  expect(pickFromQueue(queue, 10)).toEqual([3, 1, 2])
+})
+
 test("skips claimed, waiting, already-fixed, new-service and unreported issues", () => {
   const queue = [
     issue(1, ["bug"], { assignees: [{ login: "someone" }] }),

@@ -1,3 +1,4 @@
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import type { Notifier } from "../../app/ports/notifier.js"
 import { createFcmMockPush } from "./fcmMockPush.js"
 import { createResendMockEmail } from "./resendMockEmail.js"
@@ -9,12 +10,16 @@ import { createTwilioMockSms } from "./twilioMockSms.js"
  * Twilio for SMS and WhatsApp, FCM for push, Slack for staff chat. Twilio
  * also backs `phoneVerifier` (Twilio Verify). `runtimes` are the emulators
  * themselves, so the notification harness reads exactly what the app sent.
+ * `upstream` gives a channel's emulator a transport to a real dev resource,
+ * which the System screen can switch it to.
  */
-export const createMockNotifier = () => {
-  const email = createResendMockEmail()
-  const sms = createTwilioMockSms()
-  const push = createFcmMockPush()
-  const chat = createSlackMockChat()
+export const createMockNotifier = (
+  upstream: (service: string) => UpstreamOptions | undefined = () => undefined,
+) => {
+  const email = createResendMockEmail(upstream("resend"))
+  const sms = createTwilioMockSms(upstream("twilio"))
+  const push = createFcmMockPush(upstream("fcm"))
+  const chat = createSlackMockChat(upstream("slack"))
   const client: Notifier = {
     sendEmail: email.sendEmail,
     sendSms: sms.sendSms,

@@ -344,29 +344,31 @@
       "get": {
         "operationId": "AuthorizeProvider",
         "x-mockingbird": {
-          "supported": false,
-          "notes": "Explicit emulator unsupported error; see README.",
+          "supported": true,
+          "notes": "Emulated consent based on public upstream flow; not live provider parity.",
           "parity": {
             "enabled": false,
-            "reason": "Emulator limitation, not a vendor response."
-          },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+            "reason": "Preview consent UI never calls real OAuth providers."
+          }
         },
         "responses": {
-          "501": {
-            "description": "Emulator operation not modelled"
+          "200": {
+            "description": "Authorization or browser page"
+          },
+          "303": {
+            "description": "Redirect to preview consent"
+          },
+          "404": {
+            "description": "Unknown user"
+          },
+          "409": {
+            "description": "Unavailable provider"
+          },
+          "422": {
+            "description": "Invalid request"
           },
           "401": {
             "description": "Invalid API key"
-          },
-          "404": {
-            "description": "Not found"
-          },
-          "409": {
-            "description": "Conflict"
-          },
-          "422": {
-            "description": "Validation error"
           }
         },
         "parameters": [
@@ -386,6 +388,21 @@
                 "fitbit"
               ]
             }
+          },
+          {
+            "name": "user_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "redirect_uri",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ]
       }
@@ -400,7 +417,7 @@
             "enabled": false,
             "reason": "Emulator limitation, not a vendor response."
           },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+          "reason": "No verified public upstream equivalent; explicitly rejected with 501."
         },
         "responses": {
           "501": {
@@ -431,7 +448,7 @@
             "enabled": false,
             "reason": "Emulator limitation, not a vendor response."
           },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+          "reason": "No verified public upstream equivalent; explicitly rejected with 501."
         },
         "responses": {
           "501": {
@@ -489,7 +506,7 @@
             "enabled": false,
             "reason": "Emulator limitation, not a vendor response."
           },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+          "reason": "No verified public upstream equivalent; explicitly rejected with 501."
         },
         "responses": {
           "501": {
@@ -547,7 +564,7 @@
             "enabled": false,
             "reason": "Emulator limitation, not a vendor response."
           },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+          "reason": "No verified public upstream equivalent; explicitly rejected with 501."
         },
         "responses": {
           "501": {
@@ -613,7 +630,7 @@
             "enabled": false,
             "reason": "Emulator limitation, not a vendor response."
           },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+          "reason": "No verified public upstream equivalent; explicitly rejected with 501."
         },
         "responses": {
           "501": {
@@ -648,29 +665,28 @@
       "get": {
         "operationId": "PairUser",
         "x-mockingbird": {
-          "supported": false,
-          "notes": "Explicit emulator unsupported error; see README.",
+          "supported": true,
+          "notes": "Emulated consent based on public upstream flow; not live provider parity.",
           "parity": {
             "enabled": false,
-            "reason": "Emulator limitation, not a vendor response."
-          },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+            "reason": "Preview consent UI never calls real OAuth providers."
+          }
         },
         "responses": {
-          "501": {
-            "description": "Emulator operation not modelled"
+          "200": {
+            "description": "Authorization or browser page"
           },
-          "401": {
-            "description": "Invalid API key"
+          "303": {
+            "description": "Redirect to preview consent"
           },
           "404": {
-            "description": "Not found"
+            "description": "Unknown user"
           },
           "409": {
-            "description": "Conflict"
+            "description": "Unavailable provider"
           },
           "422": {
-            "description": "Validation error"
+            "description": "Invalid request"
           }
         },
         "parameters": [
@@ -681,37 +697,44 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "redirect_url",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
-        ]
+        ],
+        "security": []
       }
     },
     "/users/{user_id}/pair/{provider}": {
       "get": {
         "operationId": "PairProvider",
         "x-mockingbird": {
-          "supported": false,
-          "notes": "Explicit emulator unsupported error; see README.",
+          "supported": true,
+          "notes": "Emulated consent based on public upstream flow; not live provider parity.",
           "parity": {
             "enabled": false,
-            "reason": "Emulator limitation, not a vendor response."
-          },
-          "reason": "No verified public upstream equivalent or browser OAuth implementation; explicitly rejected with 501."
+            "reason": "Preview consent UI never calls real OAuth providers."
+          }
         },
         "responses": {
-          "501": {
-            "description": "Emulator operation not modelled"
+          "200": {
+            "description": "Authorization or browser page"
           },
-          "401": {
-            "description": "Invalid API key"
+          "303": {
+            "description": "Redirect to preview consent"
           },
           "404": {
-            "description": "Not found"
+            "description": "Unknown user"
           },
           "409": {
-            "description": "Conflict"
+            "description": "Unavailable provider"
           },
           "422": {
-            "description": "Validation error"
+            "description": "Invalid request"
           }
         },
         "parameters": [
@@ -739,8 +762,116 @@
                 "fitbit"
               ]
             }
+          },
+          {
+            "name": "redirect_url",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
-        ]
+        ],
+        "security": []
+      }
+    },
+    "/mockingbird/oauth/{state}": {
+      "get": {
+        "operationId": "ConsentPage",
+        "security": [],
+        "x-mockingbird": {
+          "supported": true,
+          "parity": {
+            "enabled": false,
+            "reason": "Emulator-only consent route."
+          }
+        },
+        "parameters": [
+          {
+            "name": "state",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consent result"
+          },
+          "303": {
+            "description": "Return to app"
+          },
+          "404": {
+            "description": "Unknown authorization"
+          },
+          "409": {
+            "description": "Used or expired authorization"
+          },
+          "422": {
+            "description": "Invalid decision"
+          }
+        }
+      },
+      "post": {
+        "operationId": "DecideConsent",
+        "security": [],
+        "x-mockingbird": {
+          "supported": true,
+          "parity": {
+            "enabled": false,
+            "reason": "Emulator-only consent route."
+          }
+        },
+        "parameters": [
+          {
+            "name": "state",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Consent result"
+          },
+          "303": {
+            "description": "Return to app"
+          },
+          "404": {
+            "description": "Unknown authorization"
+          },
+          "409": {
+            "description": "Used or expired authorization"
+          },
+          "422": {
+            "description": "Invalid decision"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "allow",
+                      "deny"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },

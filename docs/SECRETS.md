@@ -12,14 +12,14 @@ bun run check   # every CI gate, no secrets
 ```
 
 Secrets are used by the workflows below, running on GitHub with the repo's own
-Actions secrets. Anyone with **write access** to `crvouga-organization/mockingbird` can use them without
+Actions secrets. Anyone with **write access** to `crvouga/mockingbird` can use them without
 seeing a value (GitHub never returns a secret's value, to anyone):
 
 | Workflow | Secrets it reads | How to run it |
 | --- | --- | --- |
 | [Parity](../.github/workflows/parity.yml) | the `<SERVICE>_*` keys its live-parity step maps | `bun run parity:remote -- <service…>`, `-- --all` or `-- --tier=warm`; by [tier](TESTING.md#parity-tiers) also on each PR that changes a hot service ([Advisory](../.github/workflows/advisory.yml), non-blocking, not for forks) and weekly for warm services |
 | [Verify](../.github/workflows/verify.yml) | `JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
-| [System preview](../.github/workflows/system-preview.yml) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` | optional static lab PR hosting on Cloudflare Workers; same-repository PRs only; without credentials the workflow only produces a downloadable artifact |
+| [System preview](../.github/workflows/system-preview.yml) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; for [dev resources](DEV_RESOURCES.md) also any of `STRIPE_SECRET_KEY`, `JUNCTION_API_KEY`, `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `FCM_PROJECT_ID`, `FCM_ACCESS_TOKEN`, `SLACK_BOT_TOKEN` | optional lab PR hosting on Cloudflare Workers; same-repository PRs only; without credentials the workflow only produces a downloadable artifact. The dev resource values are copied to that PR's Worker, where only its `/__dev` proxy reads them, uses only those matching the non-production allow-list in `packages/examples/medical-testing/src/worker.ts`, and only for requests from the preview's own origin |
 
 ## Live parity
 
@@ -191,7 +191,7 @@ bun run release:publish -- --dry-run
 Set by the local seed after the first publish. Manual equivalent, per package at
 `https://www.npmjs.com/package/<name>/access`:
 
-- Organization/user: `crvouga-organization`
+- Organization/user: `crvouga`
 - Repository: `mockingbird`
 - Workflow filename: `ci.yml`
 - Environment: (empty)

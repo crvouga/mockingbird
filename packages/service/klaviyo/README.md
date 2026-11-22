@@ -1,13 +1,13 @@
 # @crvouga/mockingbird-service-klaviyo
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Klaviyo** events API for test suites: the JSON:API create-event endpoint
 our backend posts `Ordered Product` and `Placed Order` to after checkout, the event reads, and an
 outbox a suite asserts on. Errors come back in Klaviyo's JSON:API `errors[]` shape, so the text
 our client throws (and logs) is the text the real API would produce.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/klaviyo/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/klaviyo/SUPPORT.md)
 - The contract (`openapi.yaml`) is trimmed from Klaviyo's published API (revision `2024-02-15`,
   the one our backend pins) to what our consumer sends.
 
@@ -111,4 +111,4 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /_
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8811. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

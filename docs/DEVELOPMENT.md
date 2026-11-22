@@ -8,7 +8,7 @@ Working on this repo: requirements, how the packages are layered, and the qualit
 - npm is required for the package-integrity gates (`bunx publint`, `bunx attw`); Bun runs the rest.
 
 ```bash
-git clone https://github.com/crvouga-organization/mockingbird.git && cd mockingbird
+git clone https://github.com/crvouga/mockingbird.git && cd mockingbird
 bun run setup   # install, build every package, create .env.local from .env.example
 bun test
 ```
@@ -42,7 +42,7 @@ own Storybooks, which the catalog composes. Change UI there: open the story, edi
 the story re-renders (packages are read from `src/`).
 
 ```sh
-bun run storybook                            # http://localhost:6008, everything composed
+bun run storybook                            # http://localhost:6008 (or a free port, printed), everything composed
 bun run --cwd sites/storybook verify         # every story renders and plays without an error
 bun run check:storybook                      # every UI source file is in some story
 ```
@@ -70,7 +70,7 @@ bun run health -- --no-interactive               # disable browser approval in a
 | Check | What it verifies |
 | --- | --- |
 | `npm` | Every public service exists on npm; `latest` resolves, metadata and tarball integrity exist, current services are not deprecated, exact internal dependency pins exist, stable release tags agree with npm, current tags have GitHub Releases, and retired packages are absent or deprecated |
-| `trusted-publisher` | Each public package trusts `crvouga-organization/mockingbird`, `ci.yml`, an empty environment, and direct `npm publish`; missing packages and unreadable settings are distinct |
+| `trusted-publisher` | Each public package trusts `crvouga/mockingbird`, `ci.yml`, an empty environment, and direct `npm publish`; missing packages and unreadable settings are distinct |
 | `github` | Repository and Actions are enabled, main is protected, workflow files are registered and active, latest main runs succeed, schedules are not overdue, and the Actions cache stays below its 10 GiB budget |
 | `secrets` | Required workflow secrets, effective repository/organization secret names, parity workflow env mappings, scheduled parity readiness, and optional local/on-demand credentials; values are never printed or fetched from GitHub |
 | `docs` | Fresh shared hosting contract and authoritative fleet inventory, HTTPS pages and machine-readable routes, all service catalog entries, deployed `llms.txt` versus main, webhook runtime and read protection, and immutable deployed revision evidence |
@@ -118,18 +118,20 @@ secrets checks and accepts the same reporting flags.
 
 ## Quality gates
 
-Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates the pull-request gate end-to-end (install + commitlint + check). Passing that gate is the release decision.
+Every check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + check).
 
-CI runs the same turbo graph as `bun run check`, spread over parallel runners ([`scripts/ci-plan.ts`](../scripts/ci-plan.ts) splits it and fails if the split drifts from the `check` script): a **Static** job (format, lint, boundaries, generated-file drift) and four **Shard** jobs, each running build, typecheck, test, pack and portability for a quarter of the packages. **Consumer smoke** runs beside them. A **Changes** job reads Turborepo's dependency graph ([`scripts/affected.ts`](../scripts/affected.ts)) and hands each Shard only the packages a change reaches: each changed package plus everything that depends on it, transitively, and any package whose turbo task declares the changed file as a `$TURBO_ROOT$/…` input (a test comparing against another package's file declares it, and runs when it changes). A change to one emulator runs that emulator and its dependents, never an unrelated emulator; a change to a shared package runs every dependent. A file that belongs to no package runs everything unless it is on a list of paths the shards do not read (agent docs, worktree config, other workflows), and a `bun.lock` change reaches only the workspaces whose own entry changed (everything, if an external package or the root moved). Inside the affected packages, turbo's content hashes replay whatever did not change. The required **Check** job passes when every job the change needed passed.
+A pull request is held only by **Commitlint** and **Check** (Biome format and lint), so it merges in about a minute. Everything else is a **release check**: it runs on `main` after the merge, in the Release workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), and holds the publish rather than the merge. A failing release check, or a failing publish job, upserts a GitHub issue labelled `ci-failure` and `agent-reported`: one per check, and one per failing turbo task for Static and the shards (`@crvouga/mockingbird-ui#test`), with the command that reproduces it. Later failures comment on it, a check that breaks again reopens its issue, and it closes itself when the check passes on `main`. Those issues head the [`/resolve-issues`](#agent-commands) queue, so a red `main` is queued work, fixed forward from its issue.
 
-The GitHub Actions cache is the remote cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)); there is no turbo token or server. The CI workflow also runs on every push to `main`, so `main` holds a warm turbo cache per job and a PR's first run replays everything it did not change. Each job saves only the task hashes it used, `node_modules` is cached from `main` only, and [`cache-cleanup.yml`](../.github/workflows/cache-cleanup.yml) deletes a PR's caches when it closes and trims `main`'s daily. Locally turbo uses the same cache directory on disk.
+The release checks run the same turbo graph as `bun run check`, spread over parallel runners ([`scripts/ci-plan.ts`](../scripts/ci-plan.ts) splits it and fails if the split drifts from the `check` script): a **Static** job (format, lint, boundaries, generated-file drift) and four **Shard** jobs, each running build, typecheck, test, pack and portability for a quarter of the packages. **Consumer smoke**, **npm names** and the **Fleet container** build run beside them. Every package is in scope on each run; turbo's content hashes replay whatever did not change. The **Release checks** job passes when all of them passed, and the publish needs it.
 
-Non-blocking checks live in [`advisory.yml`](../.github/workflows/advisory.yml): Biome findings as inline annotations, and live parity (the [Parity](../.github/workflows/parity.yml) workflow) for each **hot** service whose dependency graph the PR changes (see [Parity tiers](TESTING.md#parity-tiers)). They depend on live vendors or only restate the blocking lint, so a red advisory check informs the PR without holding its merge.
+The GitHub Actions cache is the remote cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)); there is no turbo token or server. The release checks run on every push to `main`, so `main` holds a warm turbo cache per job for previews, parity runs and the next release. Each job saves only the task hashes it used, `node_modules` is cached from `main` only, and [`cache-cleanup.yml`](../.github/workflows/cache-cleanup.yml) deletes a PR's caches when it closes and trims `main`'s weekly. Locally turbo uses the same cache directory on disk.
+
+Live parity (the [Parity](../.github/workflows/parity.yml) workflow) also runs after the merge, for each **hot** service whose dependency graph the merged change reaches (see [Parity tiers](TESTING.md#parity-tiers); [`scripts/affected.ts`](../scripts/affected.ts) reads Turborepo's graph). It depends on live vendors, so a failure opens an issue like any other release check but never holds the publish.
 
 ```bash
 bun run setup          # first time: install + build
 bun run check          # every gate below, in parallel, cached by turbo
-bun run check:full     # mirrors .github/workflows/pr.yml (the pull-request gate)
+bun run check:full     # mirrors the pull-request gate and the release checks
 ```
 
 | Gate | Command | What it enforces |
@@ -169,13 +171,16 @@ pull-request check has passed:
 | Check | What it is |
 | --- | --- |
 | Commitlint | Conventional Commits on the PR's commits, and a Conventional Commits title |
-| Check | `bun run check` plus the consumer smoke install (rolls up the Static, Shard and Consumer smoke jobs) |
+| Check | Biome format and lint over the whole repository |
 
-Advisory checks ([`advisory.yml`](../.github/workflows/advisory.yml)) are not required. There is no
-required review, no required approval, and an unresolved review thread does not block the merge. A green pull request is releasable: merging it to `main` publishes. The Release
-workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds (replaying main's turbo
-cache) and publishes. It does not re-run the pull-request checks. The branch must be up
-to date with `main` before merge, so those checks ran against the code that lands. Only merge
+There is no
+required review, no required approval, and an unresolved review thread does not block the merge.
+Merging to `main` starts the Release workflow
+([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)): it runs the release checks (build,
+typecheck, tests, pack, portability, the consumer smoke and the rest of `bun run check`) on the
+commit that landed and publishes only if they pass. A failure there does not undo the merge; it
+opens a `ci-failure` issue to fix forward. The branch must be up
+to date with `main` before merge. Only merge
 commits are allowed, because each commit on the pull request is a release input. Head branches
 are deleted on merge. PRs use the template in `.github/pull_request_template.md`.
 
@@ -189,14 +194,10 @@ bun run pr:ready ruleset                         # verify the `Protect main` rul
 bun run pr:ready ruleset --apply
 ```
 
-### Failure issues
+### Failure notifications
 
-When an important workflow fails on `main` (CI, Release, Publish image, Verify, Parity, Cache
-cleanup), [`ci-alerts.yml`](../.github/workflows/ci-alerts.yml) opens a
-`[ci-failure] <workflow> is failing on main` issue labelled `ci-failure`, with the failed jobs and
-their error annotations ([`scripts/ci-alert.ts`](../scripts/ci-alert.ts)). Each later failure of that
-workflow comments on the same issue, and its next successful run closes it. Pull-request runs never
-open one. A new workflow that guards or ships `main` belongs in that workflow's `workflows:` list.
+There is no failure-issue workflow: GitHub already emails a workflow's failures on `main` to whoever
+triggered the run, and an extra `workflow_run` workflow after every run doubled the Actions volume.
 
 ### Agent commands
 
@@ -248,12 +249,12 @@ ordering example's browser dependencies are optimized before its first launch. T
 boundary, keep the dev server running, run `bun run docs:build`, then reload
 `/examples/medical-testing` and open the Example, Notifications and Emulators tabs.
 
-The docs site (`sites/docs`) is hosted by `crvouga-organization/personal` as the service
+The docs site (`sites/docs`) is hosted by `crvouga/personal` as the service
 `mockingbird-docs` ([cloud infrastructure guide §4](https://www.chrisvouga.dev/llms-cloud.txt)).
 [`sites/docs/Dockerfile`](../sites/docs/Dockerfile) builds the static Astro site and serves it
 with nginx on port 80. Its build context is the repo root, because the site renders every service
 package. On every push to `main`, [`.github/workflows/publish.yml`](../.github/workflows/publish.yml)
-calls `crvouga-organization/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga-organization/chrisvouga-mockingbird-docs:<sha>`,
-and then `crvouga-organization/personal` deploys that exact image and health-checks it. Railway never builds this repo.
+calls `crvouga/personal`'s reusable publish workflow. That workflow pushes `ghcr.io/crvouga/chrisvouga-mockingbird-docs:<sha>`,
+and then `crvouga/personal` deploys that exact image and health-checks it. Railway never builds this repo.
 
 To check the image locally, run `docker build -f sites/docs/Dockerfile -t mockingbird-docs . && docker run --rm -p 8080:80 mockingbird-docs`.

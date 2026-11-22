@@ -74,6 +74,8 @@ export type RecordingRecord = {
 
 /** What the mock "sent": outbound SMS and every Verify code delivery. */
 export type TwilioOutboxItem = OutboxItem & {
+  upstream?: true
+  sentForReal?: true
   kind: "sms" | "verify"
   sid: string
   to: string

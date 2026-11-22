@@ -3,7 +3,7 @@
     "mockingbird-sqlite": "./dist/socket/cli.js"
   },
   "bugs": {
-    "url": "https://github.com/crvouga-organization/mockingbird/issues"
+    "url": "https://github.com/crvouga/mockingbird/issues"
   },
   "description": "Pure TypeScript in-memory SQLite implementation with zero WASM/native dependencies",
   "devDependencies": {
@@ -13,11 +13,18 @@
     "@crvouga/mockingbird-core": "workspace:*",
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-ui": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
     "@types/bun": "1.4.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "alasql": "^4.19.1",
     "esbuild": "^0.28.2",
     "fast-check": "^4.10.2",
     "publint": "^0.3.24",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
     "sql.js": "^1.14.2",
     "typescript": "^5.9.3",
     "wa-sqlite": "^1.0.0"
@@ -59,7 +66,7 @@
     "CHANGELOG.md",
     "DISCOVERY.md"
   ],
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite#readme",
   "keywords": [
     "mockingbird",
     "sqlite",
@@ -99,7 +106,7 @@
         "README.md public test controls",
         "COMPATIBILITY.md compatibility and divergence evidence"
       ],
-      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "module": "./dist/index.js",
@@ -110,7 +117,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/service/sqlite"
   },
   "scripts": {

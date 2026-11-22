@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-slack
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of **Slack** for test suites: incoming webhooks, the Web API methods our apps
 call, and the Socket Mode control plane Bolt needs in order to boot, with an **outbox** of
@@ -9,7 +9,7 @@ everything the app "sent". A suite asserts that an alert fired
 retry paths (429 with `retry-after`, 5xx) and the terminal ones (`no_text`, `no_service`,
 `channel_not_found`) with named presets.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/slack/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/slack/SUPPORT.md)
 - Slack publishes no maintained OpenAPI for these methods: the contract (`openapi.yaml`) is
   hand-authored from Slack's documented wire shapes and our consumers.
 
@@ -160,4 +160,27 @@ maps a bot token or a webhook's `T/B/X` path to a namespace.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8808. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
+
+## Forwarding through an injected transport
+
+`createRuntime({ upstream: { baseUrl, fetch, rewriteAuth?, mode? } })` opts into the shared
+forwarding controls. There is no default upstream transport or production URL: supply both
+explicitly. Mode starts as `emulated`; `PUT /__admin/upstream {"mode":"forward"}` changes only
+the selected namespace. The per-request `x-mockingbird-upstream` override, faults, journal,
+reset and snapshot controls work in both modes. Admin requests always stay local.
+
+Authentication rewriting happens on a separate outgoing Request. Rewritten credentials are
+not retained in the journal or snapshots. Redirects are returned without following them; the
+host owns any redirect policy, allowed destinations and credential validation. The injected
+transport must honor the Request's abort signal. Real transport failures use the runtime's
+network-drop error.
+
+Successful send receipts are copied into the normal notifications outbox with `upstream: true`
+and `sentForReal: true`. They do not invoke emulator delivery hooks, fabricate delivery
+confirmation or update emulator business records. Failed HTTP responses do not create receipts.
+Switching back to emulated mode resumes the original business state. This is transport and
+receipt bookkeeping tested with injected transports, **not live-vendor parity evidence**.
+
+Receipt capture covers `chat.postMessage`, `chat.postEphemeral` and incoming webhooks.
+An HTTP 200 with `{ok:false}` is not a successful send; a webhook must return `ok`.

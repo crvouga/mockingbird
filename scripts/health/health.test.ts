@@ -20,7 +20,7 @@ const document: Packument = {
   "dist-tags": { latest: "1.2.0" },
   versions: {
     "1.2.0": {
-      repository: "https://github.com/crvouga-organization/mockingbird",
+      repository: "https://github.com/crvouga/mockingbird",
       dist: { tarball: "https://registry.npmjs.org/example.tgz", integrity: "sha512-test-fixture" },
     },
   },

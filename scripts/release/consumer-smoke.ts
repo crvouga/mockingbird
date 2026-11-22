@@ -4,7 +4,8 @@
  * Packs each public package exactly like `release:publish` (`bun pm pack`, workspace deps
  * pinned to one shared version), `npm install`s all tarballs into a fresh project outside
  * the monorepo, then:
- *   1. imports every `exports` subpath under Node (ESM),
+ *   1. imports every `exports` subpath under Node (ESM), with every declared peer dependency
+ *      (optional ones included) installed, as a consumer of that subpath would,
  *   2. typechecks an import of every subpath with `moduleResolution: nodenext`,
  *   3. typechecks every ```ts example in every shipped README.md (the docs agents copy from),
  *   4. runs every `bin` with `--help`,
@@ -22,7 +23,14 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { $ } from "bun"
 import type { EndpointManifest } from "../../packages/adapters/node/src/fleet-manifest.js"
-import { discoverPackages, packedManifest, pinManifest, unresolvablePins } from "./lib.ts"
+import {
+  consumerPeerDependencies,
+  discoverPackages,
+  type Manifest as PackedManifest,
+  packedManifest,
+  pinManifest,
+  unresolvablePins,
+} from "./lib.ts"
 
 /**
  * The vendor SDKs (and their typings) that README examples import. Examples show an application
@@ -184,6 +192,7 @@ try {
   }
 
   const files: string[] = []
+  const packedManifests: PackedManifest[] = []
   for (const pkg of pkgs) {
     const packed = await $`bun pm pack --destination ${tarballs} --quiet`.cwd(pkg.dir).quiet()
     const tarball = packed.stdout.toString().trim().split("\n").pop()?.trim()
@@ -191,7 +200,9 @@ try {
     // The install below resolves every package name to a local tarball, which would
     // also satisfy a pin npm could never resolve (`workspace:*`, `0.0.0-development`).
     // So assert the packed manifest directly — this is what a consumer gets.
-    const bad = unresolvablePins(await packedManifest(tarball))
+    const manifest = await packedManifest(tarball)
+    packedManifests.push(manifest)
+    const bad = unresolvablePins(manifest)
     if (bad.length > 0) {
       throw new Error(
         `consumer-smoke: ${pkg.name} ships dependency pins no consumer could resolve:\n  ${bad.join("\n  ")}`,
@@ -207,6 +218,20 @@ try {
   const overrides = Object.fromEntries(
     pkgs.map((p, i) => [p.name, `file:${files[i] as string}`]),
   ) as Record<string, string>
+  const devDependencies: Record<string, string> = {
+    typescript: "5.9.3",
+    "@types/node": "22.20.1",
+    "@types/bun": "1.4.0",
+    ...README_SDKS,
+  }
+  // An entry point that imports a peer (e.g. `@crvouga/mockingbird-ui/react` → `@heroui/react`)
+  // only works in a project that installs it, so install every declared peer, as its user would.
+  const peers = consumerPeerDependencies(
+    packedManifests,
+    new Set([...Object.keys(overrides), ...Object.keys(devDependencies)]),
+  )
+  if (Object.keys(peers).length > 0)
+    console.log(`consumer-smoke: peer dependencies ${JSON.stringify(peers)}`)
   await $`mkdir -p ${app}`
   writeFileSync(
     join(app, "package.json"),
@@ -215,13 +240,8 @@ try {
         name: "mockingbird-consumer-smoke",
         private: true,
         type: "module",
-        dependencies: overrides,
-        devDependencies: {
-          typescript: "5.9.3",
-          "@types/node": "22.20.1",
-          "@types/bun": "1.4.0",
-          ...README_SDKS,
-        },
+        dependencies: { ...peers, ...overrides },
+        devDependencies,
         overrides,
       },
       null,
@@ -239,6 +259,17 @@ try {
     ) as Manifest
     for (const subpath of Object.keys(manifest.exports ?? { ".": null })) {
       if (subpath.includes("*") || subpath === "./package.json") continue
+      if (subpath.endsWith(".css")) {
+        const entry = manifest.exports?.[subpath]
+        const target =
+          typeof entry === "object" && entry !== null && "default" in entry ? entry.default : entry
+        if (typeof target !== "string" || !target.startsWith("./"))
+          throw new Error(`${pkg.name}: invalid stylesheet export ${subpath}`)
+        const stylesheet = join(app, "node_modules", pkg.name, target)
+        if (!existsSync(stylesheet) || !readFileSync(stylesheet, "utf8").trim())
+          throw new Error(`${pkg.name}: missing or empty stylesheet ${subpath}`)
+        continue
+      }
       specifiers.push(subpath === "." ? pkg.name : `${pkg.name}/${subpath.slice(2)}`)
     }
     const binNames =

@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fakeRegistry } from "./fake-registry.ts"
 import { discoverPackages, root } from "./lib.ts"
 
 async function dryRun(script: string, args: string[]) {
@@ -20,7 +21,7 @@ case '${name}'" $1" in
   'gh run')
     case "$2" in
       list) echo '[{"databaseId":42,"status":"completed","conclusion":"failure"}]';;
-      view) echo 'Check its Trusted Publisher (repo crvouga-organization/mockingbird, workflow ci.yml): https://www.npmjs.com/package/@crvouga/mockingbird-service-ecs/access';;
+      view) echo 'Check its Trusted Publisher (repo crvouga/mockingbird, workflow ci.yml): https://www.npmjs.com/package/@crvouga/mockingbird-service-ecs/access';;
       *) exit 99;;
     esac;;
   'bun scripts/release/publish.ts') exit 0;;
@@ -30,14 +31,16 @@ esac
         { mode: 0o755 },
       )
     }
+    const env = {
+      ...process.env,
+      PATH: `${dir}:${process.env.PATH}`,
+      TEST_RELEASE_CALLS: calls,
+      GITHUB_ACTIONS: "false",
+    }
+    const registry = fakeRegistry(join(dir, "npm"), env)
     const proc = Bun.spawn([process.execPath, script, ...args], {
       cwd: root,
-      env: {
-        ...process.env,
-        PATH: `${dir}:${process.env.PATH}`,
-        TEST_RELEASE_CALLS: calls,
-        GITHUB_ACTIONS: "false",
-      },
+      env: { ...env, MOCKINGBIRD_NPM_REGISTRY: registry.url },
       stdout: "pipe",
       stderr: "pipe",
     })
@@ -45,7 +48,7 @@ esac
       proc.exited,
       new Response(proc.stdout).text(),
       new Response(proc.stderr).text(),
-    ])
+    ]).finally(() => registry.stop())
     return { code, stdout, stderr, calls: readFileSync(calls, "utf8").trim().split("\n") }
   } finally {
     rmSync(dir, { recursive: true, force: true })

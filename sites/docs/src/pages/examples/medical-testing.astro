@@ -1,135 +1,34 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
-import { highlight } from "../../../integrations/catalog/markdown.ts"
+import { highlightSource } from "../../../integrations/catalog/markdown.ts"
 import ExampleLauncher from "../../components/ExampleLauncher.astro"
-import Icon from "../../components/Icon.astro"
 import Base from "../../layouts/Base.astro"
 import { APP_EXAMPLES } from "../../lib/appExamples.ts"
+import {
+  MedicalTestingCapabilities,
+  MedicalTestingHowTo,
+  MedicalTestingIntro,
+  RunLocally,
+  type ServiceRef,
+} from "../../ui/examples/examples.tsx"
 
 const example = APP_EXAMPLES.find((e) => e.slug === "medical-testing")
 if (!example) throw new Error("medical-testing is missing from APP_EXAMPLES")
 
-const servicesByName = new Map(catalog.services.map((s) => [s.name, s]))
-const runHtml = await highlight(example.runCommand, "bash")
+const services: Record<string, ServiceRef> = Object.fromEntries(
+  catalog.services.map((s) => [s.name, { name: s.name, displayName: s.displayName }]),
+)
+const runHtml = await highlightSource(example.runCommand, "bash")
 ---
 
 <Base title={example.title} description={example.description}>
-  <div class="container">
-    <header class="page-head">
-      <p class="eyebrow"><a href="/examples">Examples</a></p>
-      <h1>{example.title}</h1>
-      <p class="lede">{example.description}</p>
-      <div class="example-services">
-        {
-          example.servicesUsed.map((name) => {
-            const service = servicesByName.get(name)
-            return service ? (
-              <a class="chip" href={`/services/${service.name}`}>{service.displayName}</a>
-            ) : (
-              <span class="chip">{name}</span>
-            )
-          })
-        }
-      </div>
-    </header>
-
-    <section class="live-app">
-      <p class="live-note">
-        Everything in the app runs in this browser tab: sign-in by emailed code or Google/Apple OAuth, the shop,
-        the Stripe checkout, the Junction fulfillment, the Postgres-backed order history, and every message it
-        sends through Resend (email), Twilio (SMS, WhatsApp and Verify codes), FCM (push to an iPhone and an
-        Android phone) and Slack (staff alerts). The fullscreen view is one dashboard with three tabs:
-        <strong>Example</strong> is the app, <strong>Emulators</strong> is one live admin UI for every emulator
-        it talks to, and <strong>Notifications</strong> shows every message on a phone, a mailbox and a chat
-        window. No server to start, and no real network call to any provider.
-      </p>
-      <div class="example-capabilities">
-        <div><h2>Patient workspace</h2><p>Search the catalog, build an order, pay, track progress, explore biomarker reports, and download records.</p></div>
-        <div><h2>Clinical review</h2><p>Inspect all patient reports, compare values and reference ranges, and add a signed, timestamped review.</p></div>
-        <div><h2>Administration</h2><p>Manage patient, clinician, and administrator roles with server-enforced permissions and an audit log.</p></div>
-      </div>
-      <p class="live-note">Pick Ada (patient), Morgan (clinician), or Alex (administrator) on the sign-in screen and ask for a code: the app says where it sent it, and "Open Notifications" takes you to that email. Then pay for a test and watch the receipt, shipping and result updates arrive. Account has the phone verification, the per-channel switches and a "send a test" button for each channel. Ada starts with two fictional reports. Changes last until the example closes; reopening starts a fresh workspace.</p>
-      <ExampleLauncher element="app-example" example={example.slug} title={example.title} launchLabel="Launch the app" fit="app" />
-    </section>
-
-    <section class="run-locally">
-      <h2>Run it locally instead</h2>
-      <p>
-        This is the exact same code as a standalone app you can clone and run with a real dev server, if you'd
-        rather poke at it outside the browser:
-      </p>
-      <Fragment set:html={runHtml} />
-      <a class="btn btn-secondary btn-sm" href={`${catalog.repo}/tree/main/${example.packagePath}`} target="_blank" rel="noopener">
-        <Icon name="github" /> Source
-      </a>
-    </section>
-  </div>
+  <MedicalTestingIntro example={example} services={services} />
+  <MedicalTestingCapabilities />
+  <MedicalTestingHowTo />
+  <ExampleLauncher element="app-example" example={example.slug} title={example.title} launchLabel="Launch the app" fit="app" />
+  <RunLocally runHtml={runHtml} source={`${catalog.repo}/tree/main/${example.packagePath}`} />
 </Base>
 
 <script>
   import "../../client/appExamples.ts"
 </script>
-
-<style>
-  .page-head {
-    max-width: 720px;
-  }
-  .eyebrow {
-    font-size: 13px;
-    color: var(--fg-muted);
-  }
-  .example-services {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 16px;
-  }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    height: 26px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    background: var(--bg-subtle);
-    color: var(--fg-muted);
-    font-size: 12.5px;
-    font-weight: 500;
-  }
-  a.chip:hover {
-    border-color: var(--border-strong);
-    color: var(--fg);
-  }
-  .live-app {
-    margin-top: 40px;
-  }
-  .live-note {
-    font-size: 13.5px;
-    color: var(--fg-muted);
-    max-width: 720px;
-    margin-bottom: 16px;
-  }
-  app-example {
-    display: block;
-    min-width: 0;
-  }
-  .example-capabilities { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px; margin: 24px 0; }
-  .example-capabilities > div { border: 1px solid var(--border); border-radius: 8px; padding: 20px; }
-  .example-capabilities h2 { font-size: 15px; margin-bottom: 8px; }
-  .example-capabilities p { color: var(--fg-muted); font-size: 13px; line-height: 1.6; }
-  .run-locally {
-    margin-top: 48px;
-    padding-top: 24px;
-    border-top: 1px solid var(--border);
-    max-width: 720px;
-  }
-  .run-locally h2 {
-    font-size: 17px;
-    letter-spacing: -0.01em;
-  }
-  .run-locally p {
-    margin-top: 8px;
-    color: var(--fg-muted);
-    font-size: 13.5px;
-  }
-</style>

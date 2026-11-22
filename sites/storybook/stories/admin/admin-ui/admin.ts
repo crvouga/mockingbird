@@ -110,10 +110,11 @@ function host(options: AdminOptions): { outer: HTMLElement; inner: HTMLElement }
   disposeLast = undefined
   try {
     sessionStorage.removeItem("mockingbird-admin-key")
-    sessionStorage.setItem("mockingbird-admin-theme", options.dark ? "dark" : "light")
+    // The theme switch's key (the docs site's), which the shell follows.
+    localStorage.setItem("mb:theme", options.dark ? "dark" : "light")
   } catch {}
   const outer = document.createElement("div")
-  outer.style.cssText = `min-height:100vh;background:${options.dark ? "#0b0f14" : "#f5f7fa"}`
+  outer.style.cssText = `min-height:100vh;background:${options.dark ? "#0d1117" : "#f6f8fa"}`
   const inner = document.createElement("div")
   inner.style.cssText = options.width ? `width:${options.width}px;max-width:100%;margin:0 auto` : ""
   outer.append(inner)
@@ -132,24 +133,35 @@ export async function shows(canvas: HTMLElement, text: string | RegExp): Promise
   )
 }
 
-/** Open the Ant Design select labelled `name`, type `search`, and pick the option matching `option`. */
+/**
+ * Pick `option` in the field labelled `name`: a HeroUI ComboBox (type `search` to narrow it) or
+ * Select (open it). Options render inside the admin's own mount, so they are found in `canvas`.
+ */
 export async function choose(
   canvas: HTMLElement,
   name: string,
   search: string,
   option: string | RegExp,
 ): Promise<void> {
-  await userEvent.click(within(canvas).getByRole("combobox", { name }))
-  await userEvent.keyboard(search)
+  const label = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
+  const field =
+    within(canvas).queryByRole("combobox", { name: label }) ??
+    within(canvas).getByRole("button", { name: label })
+  if (field instanceof HTMLInputElement) {
+    await userEvent.click(field)
+    await userEvent.clear(field)
+    await userEvent.type(field, search)
+  } else {
+    await userEvent.click(field)
+  }
   const item = await waitFor(
     () => {
-      const found = [
-        ...canvas.querySelectorAll<HTMLElement>(".ant-select-item-option-content"),
-      ].find((element) =>
-        typeof option === "string"
-          ? element.textContent === option
-          : option.test(element.textContent ?? ""),
-      )
+      const found = within(canvas)
+        .queryAllByRole("option")
+        .find((element) => {
+          const label = element.textContent?.trim() ?? ""
+          return typeof option === "string" ? label === option : option.test(label)
+        })
       if (!found) throw new Error(`No option ${String(option)} in ${name}`)
       return found
     },

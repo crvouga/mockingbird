@@ -30,7 +30,9 @@ export const verifyJwt = async (
   secrets: Readonly<Record<string, string>>,
   now: number,
 ) => {
-  const [head, body, signature] = token.split(".")
+  const parts = token.split(".")
+  if (parts.length !== 3) return undefined
+  const [head, body, signature] = parts
   if (!head || !body || !signature) return undefined
   try {
     const header = JSON.parse(new TextDecoder().decode(decode64url(head))) as Record<
@@ -48,7 +50,7 @@ export const verifyJwt = async (
     const seconds = Math.floor(now / 1000)
     if (
       typeof claims.exp !== "number" ||
-      claims.exp < seconds ||
+      claims.exp <= seconds ||
       (typeof claims.nbf === "number" && claims.nbf > seconds + 10)
     )
       return undefined

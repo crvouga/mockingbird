@@ -10,10 +10,16 @@ permissions:
   contents: read
   packages: write
 
+# Queue publishes per branch instead of running them in parallel; never cancel
+# an in-flight publish so a deploy dispatch is not cut off halfway.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
 
   mockingbird_docs:
-    uses: crvouga-organization/personal/.github/workflows/publish.yml@main
+    uses: crvouga/personal/.github/workflows/publish.yml@main
     secrets:
       DEPLOY_DISPATCH_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
       CALLER_GITHUB_TOKEN: ${{ github.token }}
@@ -21,12 +27,12 @@ jobs:
       service_id: mockingbird-docs
       dockerfile: sites/docs/Dockerfile
       context: .
-      image_owner: crvouga-organization
+      image_owner: crvouga
       image_prefix: chrisvouga
-      infra_github_repo: crvouga-organization/personal
+      infra_github_repo: crvouga/personal
 
   mockingbird_fleet:
-    uses: crvouga-organization/personal/.github/workflows/publish.yml@main
+    uses: crvouga/personal/.github/workflows/publish.yml@main
     secrets:
       DEPLOY_DISPATCH_TOKEN: ${{ secrets.DEPLOY_DISPATCH_TOKEN }}
       CALLER_GITHUB_TOKEN: ${{ github.token }}
@@ -34,6 +40,6 @@ jobs:
       service_id: mockingbird-fleet
       dockerfile: sites/fleet/Dockerfile
       context: .
-      image_owner: crvouga-organization
+      image_owner: crvouga
       image_prefix: chrisvouga
-      infra_github_repo: crvouga-organization/personal
+      infra_github_repo: crvouga/personal

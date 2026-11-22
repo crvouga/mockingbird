@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-medplum
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful, in-process emulator of a self-hosted [Medplum](https://www.medplum.com/) server (v5.1.37)
 for test suites. It covers:
@@ -30,7 +30,7 @@ exchanges: status, headers and body) and seeded random walks run against a self-
 v5.1.37 and the emulator, and they must agree exchange by exchange. The oracle's recording replays
 in CI.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/medplum/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/medplum/SUPPORT.md)
 - Medplum docs: https://www.medplum.com/docs · FHIR R4: https://hl7.org/fhir/R4/
 
 ## Install
@@ -445,7 +445,7 @@ first boot clones and builds it, which takes several minutes. After changing a s
 in its README. `bun run generate` regenerates the operation table and the embedded definitions,
 and `generate:check` fails when they are stale.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird) — agent integration guide: [README](https://github.com/crvouga-organization/mockingbird#readme) · [llms.txt](https://github.com/crvouga-organization/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
 
 ### Fleet public ingress
 

@@ -87,10 +87,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/runtime"
   },
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/runtime#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/runtime#readme",
   "keywords": [
     "mockingbird",
     "emulator",
@@ -119,7 +119,9 @@
     "buffer": "6.0.3",
     "graphql": "17.0.0",
     "hono": "4.13.11",
-    "jose": "6.2.2"
+    "jose": "6.2.2",
+    "@crvouga/mockingbird-ui": "workspace:*",
+    "@crvouga/mockingbird-preview": "workspace:*"
   },
   "devDependencies": {
     "@crvouga/mockingbird-adapter-node": "workspace:*",
@@ -131,7 +133,6 @@
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
-    "@crvouga/mockingbird-ui": "workspace:*",
     "@playwright/test": "1.65.0"
   }
 }

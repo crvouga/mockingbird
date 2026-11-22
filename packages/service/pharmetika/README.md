@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-pharmetika
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Pharmetika** compounding-pharmacy provider portal for test suites:
 clinic and patient lookup, patient create, medication-order validate / EPCS prepare / submit /
@@ -8,7 +8,7 @@ lookup, the v7 cancel, the medication-template catalog, and the status webhooks 
 posts back. Orders move only when a test says so (an admin transition or an auto-advance path on
 the emulator clock).
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/pharmetika/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/pharmetika/SUPPORT.md)
 - The vendor publishes no spec: the contract (`openapi.yaml`) is hand-authored from the wire
   shapes our consumer reads and writes (`pharmetika-fulfillment.adapter.ts`,
   `pharmetika-live.client.ts`, and the bodies recorded in the adapter's spec).
@@ -189,4 +189,4 @@ username works the same way for the catalog client).
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http` (auto-advance ticks every 100 ms); the `serve` CLI target; port 8801. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

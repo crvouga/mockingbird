@@ -7,7 +7,7 @@ the screen you are changing, change the source, and watch it re-render (packages
 `src/`, not `dist/`, so there is no build step in the loop).
 
 ```sh
-bun run --cwd sites/storybook dev        # http://localhost:6008, with Fleet Cloud (6006) and notifications (6007) composed in
+bun run --cwd sites/storybook dev        # http://localhost:6008, with Fleet Cloud (6006) and notifications (6007) composed in; taken ports are replaced by free ones
 bun run --cwd sites/storybook storybook  # only this catalog
 bun run --cwd sites/storybook build      # storybook-static/, refs copied into fleet/ and notifications/
 bun run --cwd sites/storybook verify     # every story must render and play without an error

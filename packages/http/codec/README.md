@@ -78,4 +78,4 @@ and `__proto__` keys become plain own properties (no prototype pollution).
 
 - `@crvouga/mockingbird-service`: uses this codec to hand operation handlers decoded bodies and queries.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

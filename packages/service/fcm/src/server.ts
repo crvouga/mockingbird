@@ -27,6 +27,7 @@ export const createServer = async (options: FcmServerOptions = {}): Promise<FcmS
 
 /** How `serve` builds the FCM mock from flags. */
 export const serveTarget: ServeTarget = {
+  supportsUpstream: true,
   name: "fcm",
   defaultPort: DEFAULT_PORT,
   options: {
@@ -39,6 +40,7 @@ export const serveTarget: ServeTarget = {
   create: (values, common) =>
     createRuntime({
       ...(values.strict === true ? { settings: { strict: true } } : {}),
+      ...(common.upstream ? { upstream: common.upstream } : {}),
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),

@@ -13,7 +13,7 @@ info:
   x-mockingbird-upstream:
     note: >-
       Hand-authored from Shopify's Admin GraphQL reference (https://shopify.dev/docs/api/admin-graphql)
-      and the surface named in crvouga-organization/mockingbird#763.
+      and the surface named in crvouga/mockingbird#763.
 servers:
   - url: https://mockingbird-test.myshopify.com
 paths:

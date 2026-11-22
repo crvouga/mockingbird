@@ -2,6 +2,7 @@ import {
   createNotificationHarness,
   type NotificationHarness,
 } from "@crvouga/mockingbird-notifications"
+import type { UpstreamOptions } from "@crvouga/mockingbird-service"
 import type { Hono } from "hono"
 import { composeMockAdmins, type MockAdmin } from "../adapters/admin.js"
 import { createPostgresMockDb } from "../adapters/db/postgresMockDb.js"
@@ -49,7 +50,19 @@ export type Demo = {
  * dependency: the adapters close over a `dispatch` function that forwards
  * into whatever `appRef.current` is once construction finishes below.
  */
-export const buildDemo = async (assets: ClientAssets): Promise<Demo> => {
+export const buildDemo = async (
+  assets: ClientAssets,
+  options: {
+    /**
+     * A transport to a service's real non-production resource, by service id. A service given
+     * one can be switched from its emulator to that resource at runtime (`PUT /__admin/upstream`).
+     */
+    upstream?: (service: string) => UpstreamOptions | undefined
+    /** The page the emailed sign-in link opens, when the app runs in a browser tab. */
+    signInPage?: string
+  } = {},
+): Promise<Demo> => {
+  const upstream = options.upstream ?? (() => undefined)
   const appRef: { current?: Hono<AppEnv> } = {}
   const dispatch = async (request: Request): Promise<Response> => {
     if (!appRef.current) throw new Error("App not ready yet")
@@ -62,11 +75,13 @@ export const buildDemo = async (assets: ClientAssets): Promise<Demo> => {
   const labTesting = createJunctionMockLabTesting({
     dispatch,
     webhookUrl: `${APP_ORIGIN}/api/webhooks/lab-testing`,
+    upstream: upstream("junction"),
   })
-  const notifier = createMockNotifier()
+  const notifier = createMockNotifier(upstream)
   const payments = createStripeMockPayments({
     dispatch,
     webhookUrl: `${APP_ORIGIN}/api/webhooks/payments`,
+    upstream: upstream("stripe"),
   })
 
   await migrate(db)
@@ -81,6 +96,7 @@ export const buildDemo = async (assets: ClientAssets): Promise<Demo> => {
       identity: identity.client,
       notifier: notifier.client,
       phoneVerifier: notifier.phoneVerifier,
+      signInPage: options.signInPage,
     },
     assets,
   )

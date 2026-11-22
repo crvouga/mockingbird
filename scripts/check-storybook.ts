@@ -26,6 +26,12 @@ const NOT_UI: Record<string, string> = {
   "packages/notifications/src/harness.ts": "serves the bundle that stories already mount",
   "packages/examples/medical-testing/src/composition/buildClientAssets.ts":
     "bundles the client the example's stories run",
+  "packages/adapters/preview/src/parts-build.ts":
+    "writes the one-script document that hosts an iframe app's part; the app is drawn by the System harness registry stories",
+  "packages/adapters/preview/src/build.ts":
+    "writes the one-element host page for the boot loader; the app it boots is drawn by the System harness and lab stories",
+  "packages/adapters/preview/src/site.ts":
+    "a table of content types for uploading a built site's files; draws nothing",
   "packages/http/provider/src/vendor/core/http.ts": "response helpers the vendor pages call",
   "packages/service/s3/src/mimedb.generated.ts": "a table of MIME types",
   "packages/http/provider/src/vendor/google/helpers.ts": "Gmail message and MIME data, no page",
@@ -78,11 +84,11 @@ const candidates = [
   ),
   // Reports render HTML from benchmark runs; they live under benchmarks/ but are UI.
   ...["packages/service/postgres", "packages/service/sqlite"].map((dir) =>
-    join(root, dir, "benchmarks/harness/html-report.ts"),
+    join(root, dir, "benchmarks/harness/html-report.tsx"),
   ),
   ...walk(join(root, "sites/docs/src/pages")).filter((path) => path.endsWith(".astro")),
   join(root, "sites/docs/src/layouts/Base.astro"),
-  ...walk(join(root, "sites/fleet/src/ui")).filter((path) => /\.ts$/.test(path) && !isTest(path)),
+  ...walk(join(root, "sites/fleet/src/ui")).filter((path) => /\.tsx?$/.test(path) && !isTest(path)),
   ...walk(join(root, "packages/notifications/src/ui")).filter(
     (path) => /\.ts$/.test(path) && !isTest(path),
   ),

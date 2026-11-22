@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-checkr
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP Checkr v1 emulator for synthetic candidates, package/hierarchy enumeration, invitations
 and seeded report/ETA reads. No checks run, emails are sent or real personal data is needed.

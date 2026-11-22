@@ -144,7 +144,7 @@ like behind any load balancer.
 
 ```sh
 # Try it: no dependencies, data in memory, sign in by typing an email (loopback only).
-docker run --rm -p 8080:8080 -e AUTH_DEV_LOGIN=1 ghcr.io/crvouga-organization/chrisvouga-mockingbird-fleet
+docker run --rm -p 8080:8080 -e AUTH_DEV_LOGIN=1 ghcr.io/crvouga/chrisvouga-mockingbird-fleet
 
 # Run it for real: copy .env.example to .env and fill in the REQUIRED block.
 docker run --rm --env-file .env <image> bun dist/main.js check   # validate, then exit
@@ -250,8 +250,12 @@ create or change. `GET /admin/orgs` lists every organization with its usage.
 
 ## Storybook: every screen of the dashboard
 
-The dashboard (`src/ui`) is plain TypeScript: `router.ts` draws the screen for the address,
-`screens/` holds one module per screen and `routes.ts` lists them. Storybook mounts that same code
+The dashboard (`src/ui`) is React and [HeroUI](https://heroui.com), styled by Mockingbird's design
+system (`@crvouga/mockingbird-ui`: its `AppShell`, page headers, states and stylesheet) like every
+other Mockingbird UI. `router.tsx` draws the screen for the address, `screens/` holds one module per
+screen, `kit.tsx` the markup they share, `form.tsx` the one form layout, and `routes.ts` lists them.
+It ships as three files (`index.html`, `app.js`, `app.css`, the shared stylesheet) under a policy
+that allows no inline scripts or styles. Storybook mounts that same code
 over a mocked `fetch`, one story per screen and state, so the whole product can be browsed without
 a server.
 
@@ -328,7 +332,7 @@ On loopback with no `DATABASE_URL` / `S3_*`, storage is in memory, for developme
 
 | Platform piece | How this service uses it |
 | --- | --- |
-| Hosting | Service `mockingbird-fleet`, image `ghcr.io/crvouga-organization/chrisvouga-mockingbird-fleet`, port 8080, health `GET /health` (no database, no auth). `GET /ready` checks the database. Set `TRUSTED_PROXY_HOPS=1`. |
+| Hosting | Service `mockingbird-fleet`, image `ghcr.io/crvouga/chrisvouga-mockingbird-fleet`, port 8080, health `GET /health` (no database, no auth). `GET /ready` checks the database. Set `TRUSTED_PROXY_HOPS=1`.              |
 | Vault | Secrets are declared in the service inventory and arrive as env vars. `OPERATOR_TOKEN` is the one new key, and only if operator controls are wanted (sessions are database rows, so there is no signing key). |
 | PostgreSQL | `DATABASE_URL`, schema `mockingbird_fleet`. Migrations run at boot under an advisory lock and touch only that schema. |
 | Object store | The shared R2 bucket, under `mockingbird-fleet/` only. |

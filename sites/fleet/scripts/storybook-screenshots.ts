@@ -73,7 +73,7 @@ const STATE_CHECKS = {
   pending: "form[aria-busy=true] button[type=submit][disabled]",
   // Succeeded and moved on: a route's own query screen, not the form again or a shell statement.
   landed: `main[data-surface=query]${["unavailable", "error", "forbidden", "not-found", "gone", "managed"].map((state) => `:not([data-route=${state}])`).join("")}`,
-  secret: "main[data-surface=query] .secret code",
+  secret: "main[data-surface=query] [data-secret] code",
   "catalog:results": "main input[type=search]",
   "catalog:no-match": "main input[type=search]",
 } as const

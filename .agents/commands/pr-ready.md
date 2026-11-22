@@ -167,10 +167,10 @@ bun run pr:ready pr --ready
 bun run pr:ready checks
 ```
 
-`checks` covers **every** check on the PR. The required ones are Commitlint and Check. Check rolls
-up the other CI jobs (Static, Shard i, Consumer smoke), so a failing shard fails Check too; fix the
-shard. A check that ran outside the CI and Advisory
-workflows and is not in that list fails this command — add its name to `REQUIRED_CHECKS` in
+`checks` covers **every** check on the PR. The required ones are Commitlint and Check (Biome
+format and lint); a failing Check is a lint or format finding to fix. Build, tests and the rest of `bun run check` are release checks: they run on `main` after the
+merge and never appear on the PR. A check that ran outside the CI
+workflow and is not in that list fails this command — add its name to `REQUIRED_CHECKS` in
 `scripts/pr-ready.ts` and run `bun run pr:ready ruleset --apply`. A skipped check is not a
 pull-request check (Release runs only after merge). A failing check blocks this command: fix it
 like any other.
@@ -222,7 +222,6 @@ before `ready`.
 When `checks` exits 0, run the ready gate. It verifies, without merging:
 - the PR is open and not a draft;
 - the worktree is clean and pushed;
-- the branch is not behind `origin/main`;
 - every check on the PR passed;
 - every check that ran is a required status check;
 - GitHub reports the PR mergeable.
@@ -246,8 +245,8 @@ bun run pr:ready status
 
 Report exactly: branch, PR number and URL, base branch, the PR `state` (must be `OPEN`, not a draft),
 every check name with its bucket, and the required contexts. Say auto-merge is enabled (or that it
-merged). If `main` moves first, the PR becomes `BEHIND`: `sync`/`publish` (or `gh pr update-branch`)
-and wait for the checks again. Success requires `ready: true` — never report success on a partial, queued, or filtered run.
+merged). A PR does not have to be up to date with `main` to merge; if `main` moves first it still
+lands, unless the two conflict (then `sync`/`publish` and wait for the checks again). Success requires `ready: true` — never report success on a partial, queued, or filtered run.
 
 ## Rules
 

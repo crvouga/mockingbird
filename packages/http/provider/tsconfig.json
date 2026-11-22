@@ -6,7 +6,10 @@
     "noUncheckedIndexedAccess": false,
     "exactOptionalPropertyTypes": false,
     "noImplicitOverride": false,
-    "noImplicitReturns": false
+    "noImplicitReturns": false,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
   },
   "include": ["src", "*.test.ts"]
 }

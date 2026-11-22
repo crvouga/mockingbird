@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { fakeRegistry } from "./fake-registry.ts"
 import { discoverPackages, type Plan, root, topoSort } from "./lib.ts"
 import { serializePlan } from "./pipeline.ts"
 
@@ -10,11 +11,11 @@ test("CI build and publish consume the frozen group without replanning or reconc
   const checkout = join(dir, "checkout")
   const calls = join(dir, "calls")
   const version = "7.8.9"
-  // The scenario is SQLite as the one prerequisite; the shared runtime is left out of it.
-  const RUNTIME = "@crvouga/mockingbird-runtime"
+  // This fixture isolates SQLite as the prerequisite; pipeline.test.ts covers the full package graph.
+  const shared = new Set(["@crvouga/mockingbird-runtime", "@crvouga/mockingbird-ui"])
   const packages = discoverPackages().map((p) => ({
     ...p,
-    runtimeDeps: p.runtimeDeps.filter((d) => d !== RUNTIME),
+    runtimeDeps: p.runtimeDeps.filter((d) => !shared.has(d)),
   }))
   const selected = packages.filter((p) => /-service-(sqlite|stripe|postgres)$/.test(p.name))
   const plan: Plan = {
@@ -52,7 +53,7 @@ Bun.sleep = async (ms) => { appendFileSync(process.env.TEST_RELEASE_CALLS, "slee
       const destination = join(checkout, pkg.relDir)
       mkdirSync(destination, { recursive: true })
       const manifest = JSON.parse(readFileSync(pkg.manifestPath, "utf8"))
-      delete manifest.dependencies?.[RUNTIME]
+      for (const name of shared) delete manifest.dependencies?.[name]
       const copy = `${JSON.stringify(manifest, null, 2)}\n`
       copies.push(copy)
       writeFileSync(join(destination, "package.json"), copy)
@@ -97,7 +98,16 @@ esac
         { mode: 0o755 },
       )
     }
+    const env = {
+      ...process.env,
+      PATH: `${dir}:${process.env.PATH}`,
+      TEST_RELEASE_CALLS: calls,
+      TEST_RELEASE_MISSING: missing,
+      TEST_RELEASE_TARBALL: tarball,
+      GITHUB_ACTIONS: "true",
+    }
     async function run(script: string, group: string, extra: string[] = [], expectedCode = 0) {
+      const registry = fakeRegistry(join(dir, "npm"), env)
       const proc = Bun.spawn(
         [
           process.execPath,
@@ -112,14 +122,7 @@ esac
         ],
         {
           cwd: checkout,
-          env: {
-            ...process.env,
-            PATH: `${dir}:${process.env.PATH}`,
-            TEST_RELEASE_CALLS: calls,
-            TEST_RELEASE_MISSING: missing,
-            TEST_RELEASE_TARBALL: tarball,
-            GITHUB_ACTIONS: "true",
-          },
+          env: { ...env, MOCKINGBIRD_NPM_REGISTRY: registry.url },
           stdout: "pipe",
           stderr: "pipe",
         },
@@ -128,7 +131,7 @@ esac
         proc.exited,
         new Response(proc.stdout).text(),
         new Response(proc.stderr).text(),
-      ])
+      ]).finally(() => registry.stop())
       if (expectedCode === 0) expect(stderr).toBe("")
       expect(code).toBe(expectedCode)
       return stdout + stderr
@@ -168,7 +171,7 @@ esac
     )
     expect(dependentCalls.slice(dependencyAt, dependencyAt + 3)).toEqual([
       "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
-      "sleep 10000",
+      "sleep 2000",
       "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
     ])
     expect(dependentCalls.findIndex((c) => c.startsWith("npm publish "))).toBeGreaterThan(
@@ -196,7 +199,7 @@ esac
     expect(publishAt).toBeGreaterThan(0)
     expect(publishedCalls.slice(publishAt + 1, publishAt + 5)).toEqual([
       "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
-      "sleep 10000",
+      "sleep 2000",
       "npm view @crvouga/mockingbird-service-sqlite versions --json --prefer-online",
       `git rev-parse -q --verify refs/tags/@crvouga/mockingbird-service-sqlite@${version}`,
     ])
@@ -208,7 +211,12 @@ esac
     expect(timedOut).toContain("not visible on npm after 15 minutes")
     expect(timedOut).toContain("released=0 failed=1")
     const timedOutCalls = readFileSync(calls, "utf8").trim().split("\n")
-    expect(timedOutCalls.filter((c) => c === "sleep 10000")).toHaveLength(90)
+    expect(timedOutCalls.filter((c) => c.startsWith("sleep "))).toEqual([
+      "sleep 2000",
+      "sleep 3000",
+      "sleep 5000",
+      ...Array.from({ length: 89 }, () => "sleep 10000"),
+    ])
     expect(timedOutCalls.some((c) => c.startsWith("git tag -a "))).toBe(false)
     expect(timedOutCalls.some((c) => c.startsWith("git push "))).toBe(false)
     rmSync(`${missing}.stuck`)

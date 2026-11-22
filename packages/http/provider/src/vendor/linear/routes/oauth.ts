@@ -5,11 +5,9 @@ import type { RouteContext, Store } from "../../core/index.js";
 import {
   bodyStr,
   constantTimeSecretEqual,
-  escapeHtml,
   matchesRedirectUri,
-  renderCardPage,
   renderErrorPage,
-  renderUserButton,
+  renderSignInPage,
 } from "../../core/index.js";
 import { getLinearStore } from "../store.js";
 import { token } from "../ids.js";
@@ -44,7 +42,7 @@ function pendingCodes(store: Store): Map<string, PendingCode> {
 export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
   const ls = () => getLinearStore(store);
 
-  app.get("/oauth/authorize", (c) => {
+  app.get("/oauth/authorize", async (c) => {
     const clientId = c.req.query("client_id") ?? "";
     const redirectUri = c.req.query("redirect_uri") ?? "";
     const responseType = c.req.query("response_type") ?? "code";
@@ -55,14 +53,12 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     const codeChallengeMethod = c.req.query("code_challenge_method") ?? "";
 
     if (responseType !== "code") {
-      return c.html(
-        renderErrorPage("Unsupported response_type", "Only response_type=code is supported.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Unsupported response_type", "Only response_type=code is supported.", SERVICE_LABEL),
         400,
       );
     }
     if (!redirectUri) {
-      return c.html(
-        renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Missing redirect URI", "The redirect_uri parameter is required.", SERVICE_LABEL),
         400,
       );
     }
@@ -70,22 +66,19 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     const oauthApp = resolveOAuthApp(clientId);
     if (ls().oauthApps.all().length > 0) {
       if (!oauthApp) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${clientId}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (!matchesRedirectUri(redirectUri, oauthApp.redirect_uris)) {
-        return c.html(
-          renderErrorPage("Redirect URI mismatch", "The redirect_uri is not registered for this app.", SERVICE_LABEL),
+        return c.html(await renderErrorPage("Redirect URI mismatch", "The redirect_uri is not registered for this app.", SERVICE_LABEL),
           400,
         );
       }
     }
     const actor = requestedActor ?? oauthApp?.actor ?? "user";
     if (requestedActor && oauthApp && requestedActor !== oauthApp.actor) {
-      return c.html(
-        renderErrorPage("Invalid actor", `This app is configured for actor=${oauthApp.actor}.`, SERVICE_LABEL),
+      return c.html(await renderErrorPage("Invalid actor", `This app is configured for actor=${oauthApp.actor}.`, SERVICE_LABEL),
         400,
       );
     }
@@ -93,8 +86,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     const requestedScopes = normalizeScopes(scope, oauthApp?.scopes ?? ["read"]);
     const invalidScopes = scopesOutsideApp(requestedScopes, oauthApp);
     if (invalidScopes.length > 0) {
-      return c.html(
-        renderErrorPage(
+      return c.html(await renderErrorPage(
           "Invalid scope",
           `The app is not registered for scopes: ${invalidScopes.join(", ")}.`,
           SERVICE_LABEL,
@@ -107,7 +99,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
 
     const buttons =
       actor === "app"
-        ? renderUserButton({
+        ? [{
             letter: "L",
             login: appName,
             name: `Install ${appName}`,
@@ -123,12 +115,12 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
               code_challenge: codeChallenge,
               code_challenge_method: codeChallengeMethod,
             },
-          })
+          }]
         : ls()
             .users.all()
             .filter((user) => !user.app && user.active)
             .map((user) =>
-              renderUserButton({
+              ({
                 letter: (user.display_name[0] ?? "U").toUpperCase(),
                 login: user.email,
                 name: user.display_name,
@@ -145,15 +137,15 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
                   code_challenge_method: codeChallengeMethod,
                 },
               }),
-            )
-            .join("\n");
+            );
 
     return c.html(
-      renderCardPage(
+      await renderSignInPage(
         title,
-        `Continue to <strong>${escapeHtml(appName)}</strong> with scopes <strong>${escapeHtml(requestedScopes.join(", "))}</strong>.`,
-        buttons || '<p class="empty">No users in the Linear emulator store.</p>',
+        ["Continue to ", { strong: appName }, " with scopes ", { strong: requestedScopes.join(", ") }, "."],
+        buttons,
         SERVICE_LABEL,
+        "No users in the Linear emulator store.",
       ),
     );
   });
@@ -172,26 +164,23 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     const oauthApp = resolveOAuthApp(clientId);
     if (ls().oauthApps.all().length > 0) {
       if (!oauthApp) {
-        return c.html(renderErrorPage("Application not found", "The OAuth app is not registered.", SERVICE_LABEL), 400);
+        return c.html(await renderErrorPage("Application not found", "The OAuth app is not registered.", SERVICE_LABEL), 400);
       }
       if (!matchesRedirectUri(redirectUri, oauthApp.redirect_uris)) {
-        return c.html(
-          renderErrorPage("Redirect URI mismatch", "The redirect_uri is not registered for this app.", SERVICE_LABEL),
+        return c.html(await renderErrorPage("Redirect URI mismatch", "The redirect_uri is not registered for this app.", SERVICE_LABEL),
           400,
         );
       }
     }
     const actor = requestedActor ?? oauthApp?.actor ?? "user";
     if (requestedActor && oauthApp && requestedActor !== oauthApp.actor) {
-      return c.html(
-        renderErrorPage("Invalid actor", `This app is configured for actor=${oauthApp.actor}.`, SERVICE_LABEL),
+      return c.html(await renderErrorPage("Invalid actor", `This app is configured for actor=${oauthApp.actor}.`, SERVICE_LABEL),
         400,
       );
     }
     const invalidScopes = scopesOutsideApp(scopes, oauthApp);
     if (invalidScopes.length > 0) {
-      return c.html(
-        renderErrorPage(
+      return c.html(await renderErrorPage(
           "Invalid scope",
           `The app is not registered for scopes: ${invalidScopes.join(", ")}.`,
           SERVICE_LABEL,
@@ -210,8 +199,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     const appUser =
       actor === "app" ? (oauthApp?.app_user_id ? ls().users.findOneBy("linear_id", oauthApp.app_user_id) : user) : user;
     if (!appUser) {
-      return c.html(
-        renderErrorPage("No Linear actor", "No matching user or app actor is available.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("No Linear actor", "No matching user or app actor is available.", SERVICE_LABEL),
         400,
       );
     }

@@ -8,6 +8,7 @@
   "sideEffects": false,
   "files": [
     "dist",
+    "dist-ui",
     "README.md"
   ],
   "exports": {
@@ -18,14 +19,22 @@
     "./admin": {
       "types": "./dist/engine-admin.d.ts",
       "default": "./dist/engine-admin.js"
+    },
+    "./ui": {
+      "types": "./dist/ui/server.d.ts",
+      "default": "./dist-ui/server.js"
+    },
+    "./ui/client-bundle": {
+      "types": "./dist-ui/client.bundle.d.ts",
+      "default": "./dist-ui/client.bundle.js"
     }
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/service/core"
   },
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/core#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/core#readme",
   "keywords": [
     "mockingbird",
     "service"
@@ -35,7 +44,7 @@
     "layer": "service"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "bun ../../../packages/ui/scripts/bundle.ts --ssr src/ui/server.tsx --client src/ui/client.tsx --global MockingbirdService && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
@@ -50,12 +59,19 @@
     "@crvouga/mockingbird-openapi-metadata": "workspace:*",
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-ui": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
     "fast-xml-parser": "5.11.2",
-    "hono": "4.13.11"
+    "hono": "4.13.11",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
-    "fast-check": "4.9.0",
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
     "@crvouga/mockingbird-testing": "workspace:*",
-    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "fast-check": "4.9.0"
   }
 }

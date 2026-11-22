@@ -33,14 +33,20 @@ import { restoreOriginals } from "./files.ts"
 import {
   changelog,
   computePlan,
+  debug,
   discoverPackages,
   githubRetryDelayMs,
   initialPackageBlocker,
   isRetryableGitHubError,
+  log,
+  mapPool,
+  mutex,
+  npmBurntVersions,
   npmVersions,
   type Plan,
   packedManifest,
   pinManifest,
+  publishFailureKind,
   REPO,
   RESERVED_DIST_TAG,
   RESERVED_VERSION,
@@ -96,6 +102,7 @@ if (local && !dryRun && !trustOnly) {
   }
 }
 
+log("release:publish: planning")
 const plan: Plan = trustOnly
   ? { packages: discoverPackages(), releases: [], versions: new Map() }
   : pipeline
@@ -106,12 +113,12 @@ if (pipeline) {
   if (maintenance) plan.versions.clear()
 }
 if (trustOnly) {
-  console.log("release:publish: reconciling Trusted Publishers only")
+  log("release:publish: reconciling Trusted Publishers only")
 } else if (plan.releases.length === 0) {
-  console.log("release:publish: nothing to release")
+  log("release:publish: nothing to release")
 } else {
-  console.log(
-    `release:publish: ${plan.releases.length} package(s) still to release${dryRun ? " (dry-run)" : ""}`,
+  log(
+    `release:publish: ${plan.releases.length} package(s) still to release${dryRun ? " (dry-run)" : ""}: ${plan.releases.map((r) => `${r.pkg.name}@${r.version}`).join(", ")}`,
   )
 }
 
@@ -156,6 +163,12 @@ const needsSeed: string[] = []
 const needsTrust: string[] = []
 /** Pins already published or verified on npm; avoid checking shared prerequisites per package. */
 const releasedNow = new Set<string>()
+/**
+ * Versions this process published, resolving to whether npm lists them yet. A dependent publishes
+ * right after its dependency (npm does not resolve pins on publish) and is only tagged once
+ * every pin it shares with this run is visible, so tags still mean "installable".
+ */
+const visibleNow = new Map<string, Promise<boolean>>()
 /** Do not spend another propagation timeout on each package sharing a missing pin. */
 const unavailablePins = new Map<string, string>()
 // OIDC is npm's fallback only when legacy token auth is absent. Locally, use the npm login.
@@ -176,6 +189,15 @@ const trustPackages = plan.packages.filter(
   (pkg) => pkg.isPublic && (!refreshRejected || refreshPublishers.has(pkg.name)),
 )
 
+/**
+ * A local seed answers npm's 2FA prompts in one terminal, so interactive npm commands never
+ * overlap even though publishing, waiting and trust run concurrently.
+ */
+const interactiveLock = mutex("interactive npm")
+function interactive<T>(work: () => Promise<T>): Promise<T> {
+  return local ? interactiveLock(work) : work()
+}
+
 /** A seed is left running unattended, so a step that stalls on the maintainer's approval alerts. */
 function attended<T>(what: string, work: () => Promise<T>): Promise<T> {
   if (!local) return work()
@@ -187,12 +209,46 @@ function attended<T>(what: string, work: () => Promise<T>): Promise<T> {
 
 /** Runs npm with inherited stdio so a local run can answer 2FA prompts. */
 async function npm(args: string[], cwd = root): Promise<number> {
+  return interactive(async () => {
+    const started = performance.now()
+    debug(`npm ${args.join(" ")}`)
+    const proc = Bun.spawn(["npm", ...args], {
+      cwd,
+      env: npmEnv,
+      stdio: ["inherit", "inherit", "inherit"],
+    })
+    const code = await attended(`npm ${args[0]}`, () => proc.exited)
+    debug(
+      `npm ${args[0]} ${args[1] ?? ""} exited ${code} in ${((performance.now() - started) / 1000).toFixed(1)}s`,
+    )
+    return code
+  })
+}
+
+/**
+ * `npm publish`, keeping its output to tell a taken version or a missing Trusted Publisher from
+ * other failures. A local seed inherits stdio instead, so it can answer 2FA prompts.
+ */
+async function npmPublish(
+  args: string[],
+  cwd: string,
+): Promise<{ exitCode: number; output: string }> {
+  if (local) return { exitCode: await npm(args, cwd), output: "" }
   const proc = Bun.spawn(["npm", ...args], {
     cwd,
     env: npmEnv,
-    stdio: ["inherit", "inherit", "inherit"],
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
   })
-  return await attended(`npm ${args[0]}`, () => proc.exited)
+  const [out, err, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ])
+  process.stdout.write(out)
+  process.stderr.write(err)
+  return { exitCode, output: `${out}\n${err}` }
 }
 
 function fail(name: string, lines: string[]): void {
@@ -220,6 +276,8 @@ async function assertInstallable(release: Release, tarball: string): Promise<boo
       manifest.optionalDependencies?.[dep]
     if (!pinned || releasedNow.has(`${dep}@${pinned}`)) continue
     const pin = `${dep}@${pinned}`
+    // Published by this run moments ago: finish() checks it is visible before tagging.
+    if (visibleNow.has(pin)) continue
     let pending = unavailablePins.get(pin)
     if (!pending) {
       if (dryRun) {
@@ -245,7 +303,12 @@ async function assertInstallable(release: Release, tarball: string): Promise<boo
   return true
 }
 
-async function publish(release: Release): Promise<boolean> {
+/**
+ * Publish one release. "visible" when registry readers can already resolve the version (it was
+ * on npm before, or this is a dry run), "pending" when npm accepted it but may still be
+ * processing it, false when it failed.
+ */
+async function publish(release: Release): Promise<"visible" | "pending" | false> {
   const { pkg, version } = release
   const published = await npmVersions(pkg.name)
   if (!Array.isArray(published)) {
@@ -253,9 +316,9 @@ async function publish(release: Release): Promise<boolean> {
     return false
   }
   if (published.includes(version)) {
-    console.log(`skip ${pkg.name}@${version} (already on npm)`)
+    log(`skip ${pkg.name}@${version} (already on npm)`)
     releasedNow.add(`${pkg.name}@${version}`)
-    return true
+    return "visible"
   }
   const isNew = published.length === 0
   const blocker = initialPackageBlocker(published, { inCi, local, dryRun })
@@ -278,32 +341,40 @@ async function publish(release: Release): Promise<boolean> {
   if (dryRun) {
     console.log(`would publish ${pkg.name}@${version}${isNew ? " (new package)" : ""}`)
     releasedNow.add(`${pkg.name}@${version}`)
-    return true
+    return "visible"
   }
 
-  console.log(`publish ${pkg.name}@${version}${isNew ? " (new package)" : ""}`)
+  log(`publish ${pkg.name}@${version}${isNew ? " (new package)" : ""}`)
   const provenance = local ? "--provenance=false" : "--provenance"
   const args = ["publish", tarball, "--access", "public", provenance]
-  const exitCode = await npm(args, pkg.dir)
-  if (exitCode !== 0) {
-    if (!isNew && !local) needsTrust.push(pkg.name)
-    fail(pkg.name, [
-      `npm publish exited ${exitCode}`,
-      isNew
-        ? "Run bun run release:seed with an interactive maintainer login."
-        : `Check its Trusted Publisher (repo ${REPO}, workflow ${WORKFLOW_FILE}): https://www.npmjs.com/package/${pkg.name}/access`,
-    ])
-    return false
+  const { exitCode, output } = await npmPublish(args, pkg.dir)
+  if (exitCode === 0) return "pending"
+  const kind = local ? "other" : publishFailureKind(output)
+  if (kind === "version-taken") {
+    // An earlier run that timed out after publishing leaves the version on npm without a tag;
+    // that one only needs its tag. A version npm removed can never be reused: the next plan
+    // skips it (computePlan), so it is reported without blaming the Trusted Publisher.
+    const burnt = await npmBurntVersions(pkg.name)
+    if (Array.isArray(burnt) && burnt.includes(version)) {
+      fail(pkg.name, [
+        `${pkg.name}@${version} was published and then removed on npm; npm never accepts it again.`,
+        "The next release plan skips it and publishes the following patch version.",
+      ])
+      return false
+    }
+    console.log(`${pkg.name}@${version} was already published by an earlier run`)
+    return "pending"
   }
-  // A successful publish can still be processing. Keep dependents and the next
-  // release plan blocked until registry readers can resolve this exact version.
-  const pending = await waitForNpmVersion(pkg.name, version)
-  if (pending) {
-    fail(pkg.name, [pending])
-    return false
-  }
-  releasedNow.add(`${pkg.name}@${version}`)
-  return true
+  if (!isNew && !local && kind === "auth") needsTrust.push(pkg.name)
+  fail(pkg.name, [
+    `npm publish exited ${exitCode}`,
+    isNew
+      ? "Run bun run release:seed with an interactive maintainer login."
+      : kind === "auth" || local
+        ? `Check its Trusted Publisher (repo ${REPO}, workflow ${WORKFLOW_FILE}): https://www.npmjs.com/package/${pkg.name}/access`
+        : "See the npm error above; retry the release once it is fixed.",
+  ])
+  return false
 }
 
 // Read the initial settings in a batch while npm's two-factor skip is active.
@@ -316,20 +387,22 @@ const trust = trustedPublisherReconciler({
       throw new Error(localTrustToken?.error ?? "npm trusted publisher lookup is unavailable")
     }
     const token = localTrustToken
-    initialTrust ??= attended("the trusted publisher lookup", async () => {
-      const loaded = await loadPackageTrust(
-        trustPackages.map((pkg) => pkg.name),
-        token,
-      )
-      if (!Array.isArray(loaded)) throw new Error(loaded.error)
-      return new Map(loaded.map((pkg) => [pkg.name, pkg]))
-    })
+    initialTrust ??= interactive(() =>
+      attended("the trusted publisher lookup", async () => {
+        const loaded = await loadPackageTrust(
+          trustPackages.map((pkg) => pkg.name),
+          token,
+        )
+        if (!Array.isArray(loaded)) throw new Error(loaded.error)
+        return new Map(loaded.map((pkg) => [pkg.name, pkg]))
+      }),
+    )
     const snapshot = await initialTrust
     let pkg = snapshot.get(name)
     snapshot.delete(name)
     if (!pkg) {
-      const loaded = await attended("the trusted publisher verification", () =>
-        loadPackageTrust([name], token),
+      const loaded = await interactive(() =>
+        attended("the trusted publisher verification", () => loadPackageTrust([name], token)),
       )
       if (!Array.isArray(loaded)) throw new Error(loaded.error)
       pkg = loaded[0]
@@ -343,7 +416,7 @@ const trust = trustedPublisherReconciler({
   async create(name) {
     const args = ["trust", "github", name, "--file", WORKFLOW_FILE, "--repository", REPO]
     if ((await npm([...args, "--allow-publish", "--yes"])) === 0) {
-      console.log(`trust ${name}: GitHub Actions ${REPO}/${WORKFLOW_FILE}`)
+      log(`trust ${name}: GitHub Actions ${REPO}/${WORKFLOW_FILE}`)
       return true
     }
     console.warn(
@@ -375,9 +448,15 @@ function detailOf(result: {
  * Returns false only after the retries are exhausted. Never throws: one 500 must
  * not abort the rest of the seed.
  */
+/** Tags with a GitHub Release, from repairMissingReleases' listing; saves a `gh` call per tag. */
+let knownReleases: Set<string> | undefined
+
 async function createGitHubRelease(tag: string, notes: string): Promise<boolean> {
-  const hasRelease = await $`gh release view ${tag} --repo ${REPO}`.quiet().nothrow()
-  if (hasRelease.exitCode === 0) return true
+  if (knownReleases?.has(tag)) return true
+  if (!knownReleases) {
+    const hasRelease = await $`gh release view ${tag} --repo ${REPO}`.quiet().nothrow()
+    if (hasRelease.exitCode === 0) return true
+  }
   const attempts = 6
   for (let attempt = 0; attempt < attempts; attempt++) {
     const created =
@@ -420,7 +499,7 @@ async function repairMissingReleases(): Promise<number> {
     .split("\n")
     .map((tag) => tag.trim())
     .filter(Boolean)
-  console.log("release:publish: checking for tags that never got a GitHub release")
+  log("release:publish: checking for tags that never got a GitHub release")
   const remote = await $`gh api --paginate repos/${REPO}/releases --jq ${".[].tag_name"}`
     .quiet()
     .nothrow()
@@ -435,6 +514,8 @@ async function repairMissingReleases(): Promise<number> {
       .map((tag) => tag.trim())
       .filter(Boolean),
   )
+  knownReleases = have
+  debug(`${have.size} GitHub Releases listed`)
   const missing = tags.filter((tag) => !have.has(tag))
   if (missing.length === 0) return 0
   console.log(`release:publish: ${missing.length} existing tag(s) have no GitHub release`)
@@ -444,7 +525,7 @@ async function repairMissingReleases(): Promise<number> {
       console.log(`would create release ${tag}`)
       continue
     }
-    if (await createGitHubRelease(tag, releaseNoteForTag(tag))) console.log(`tagged ${tag}`)
+    if (await createGitHubRelease(tag, releaseNoteForTag(tag))) log(`tagged ${tag}`)
     else still += 1
   }
   return still
@@ -474,20 +555,26 @@ async function tagAndRelease(release: Release): Promise<boolean> {
     return false
   }
   if (!(await createGitHubRelease(tag, notes))) return false
-  console.log(`tagged ${tag}`)
+  knownReleases?.add(tag)
+  log(`tagged ${tag}`)
   return true
 }
 
 async function deprecateRetiredPackages(): Promise<void> {
-  for (const retired of retiredPackages(plan.packages)) {
-    const published = await npmVersions(retired.name)
-    if (!Array.isArray(published) || published.length === 0) continue
-    if (retired.requires) {
-      const replacement = await npmVersions(retired.requires)
-      if (!Array.isArray(replacement) || replacement.length === 0) continue
+  log("release:publish: checking retired packages")
+  const candidates = retiredPackages(plan.packages)
+  const pending = await mapPool(candidates, 8, async (candidate) => {
+    const published = await npmVersions(candidate.name)
+    if (!Array.isArray(published) || published.length === 0) return false
+    if (candidate.requires) {
+      const replacement = await npmVersions(candidate.requires)
+      if (!Array.isArray(replacement) || replacement.length === 0) return false
     }
-    const current = await $`npm view ${retired.name} deprecated`.quiet().nothrow()
-    if (current.exitCode !== 0 || current.stdout.toString().trim() !== "") continue
+    const current = await $`npm view ${candidate.name} deprecated`.quiet().nothrow()
+    return current.exitCode === 0 && current.stdout.toString().trim() === ""
+  })
+  for (const [index, retired] of candidates.entries()) {
+    if (!pending[index]) continue
     if (dryRun || !local) {
       console.log(`${dryRun ? "would deprecate" : "run release:seed to deprecate"} ${retired.name}`)
       continue
@@ -539,6 +626,62 @@ async function reserveNewPackages(): Promise<void> {
 }
 
 let githubReleaseGaps = 0
+/** Tags and GitHub Releases are created one at a time, in the order packages were published. */
+let tagging: Promise<unknown> = Promise.resolve()
+function serially(work: () => Promise<void>): Promise<void> {
+  const run = tagging.then(work)
+  tagging = run.catch(() => {})
+  return run
+}
+
+/**
+ * Wait until npm serves the version. This runs in the background while the next package
+ * publishes, locally and in CI: npm takes seconds to minutes per version to list a publish, and
+ * waiting for each in turn made a seed crawl and ran a 16-package CI shard past its job timeout,
+ * killing it between publish and tag. finish() tags a release only once it and every dependency
+ * released by this run are visible.
+ */
+async function waitVisible(release: Release): Promise<boolean> {
+  const { pkg, version } = release
+  const pending = await waitForNpmVersion(pkg.name, version)
+  if (pending) {
+    fail(pkg.name, [pending])
+    return false
+  }
+  releasedNow.add(`${pkg.name}@${version}`)
+  return true
+}
+
+/** Each release's finish(), by name: resolves true once it is visible on npm (and tagged, if it could be). */
+const finished = new Map<string, Promise<boolean>>()
+
+async function finish(release: Release, visibility: "visible" | "pending"): Promise<boolean> {
+  const { pkg, version } = release
+  try {
+    if (visibility === "pending" && !(await visibleNow.get(`${pkg.name}@${version}`))) return false
+    // Dependencies released by this run are visible (and tagged) first, so a tag always means
+    // "installable" and tags keep their dependency order.
+    const deps = pkg.runtimeDeps.filter((dep) => finished.has(dep))
+    const ready = await Promise.all(deps.map((dep) => finished.get(dep)))
+    const missing = deps.filter((_, index) => !ready[index])
+    if (missing.length > 0) {
+      fail(pkg.name, [
+        `not tagged: a dependency never became visible on npm (${missing.join(", ")})`,
+      ])
+      return false
+    }
+    await serially(async () => {
+      await ensureTrustedPublisher(pkg.name)
+      if (!(await tagAndRelease(release))) githubReleaseGaps += 1
+    })
+    return true
+  } catch (error) {
+    fail(pkg.name, [error instanceof Error ? error.message : String(error)])
+    return false
+  }
+}
+
+const finishing: Promise<boolean>[] = []
 try {
   if (reserve) await reserveNewPackages()
   if (!trustOnly && maintenance) githubReleaseGaps += await repairMissingReleases()
@@ -548,9 +691,16 @@ try {
     plan.releases,
     async (release) => {
       try {
-        if (!(await publish(release))) return false
-        await ensureTrustedPublisher(release.pkg.name)
-        if (!(await tagAndRelease(release))) githubReleaseGaps += 1
+        const visibility = await publish(release)
+        if (!visibility) return false
+        if (visibility === "pending") {
+          visibleNow.set(`${release.pkg.name}@${release.version}`, waitVisible(release))
+        }
+        // Waiting for npm to list the version, trust and tagging run in the background while
+        // the next package publishes; interactive npm prompts still take turns (interactive()).
+        const done = finish(release, visibility)
+        finished.set(release.pkg.name, done)
+        finishing.push(done)
         return true
       } catch (error) {
         fail(release.pkg.name, [error instanceof Error ? error.message : String(error)])
@@ -560,10 +710,18 @@ try {
     (release, blockedBy) =>
       fail(release.pkg.name, [`skipped: dependency failed to release (${blockedBy.join(", ")})`]),
   )
+  if (finishing.length > 0)
+    log(`release:publish: waiting on ${finishing.length} release(s) to finish`)
+  await Promise.all(finishing)
   // Reconcile: every published service is trusted for OIDC, everything else is deprecated.
-  for (const pkg of local ? trustPackages : []) {
-    if (!pkg.isPublic || failed.has(pkg.name)) continue
-    const published = await npmVersions(pkg.name)
+  const reconcile = (local ? trustPackages : []).filter(
+    (pkg) => pkg.isPublic && !failed.has(pkg.name),
+  )
+  if (reconcile.length > 0)
+    log(`release:publish: checking Trusted Publishers for ${reconcile.length} package(s)`)
+  const reconcileVersions = await mapPool(reconcile, 16, (pkg) => npmVersions(pkg.name))
+  for (const [index, pkg] of reconcile.entries()) {
+    const published = reconcileVersions[index] as Awaited<ReturnType<typeof npmVersions>>
     if (trustOnly && !Array.isArray(published)) {
       fail(pkg.name, [`npm view: ${published.error}`])
       continue
@@ -586,7 +744,7 @@ try {
 }
 
 const ok = trustOnly ? 0 : plan.releases.length - failed.size
-console.log(
+log(
   `release:publish: released=${ok} failed=${failed.size} trusted-publisher-failed=${trustFailed.size} github-releases-missing=${githubReleaseGaps}${dryRun ? " (dry-run)" : ""}`,
 )
 for (const line of seedSummary({ needsSeed, needsTrust, failed: failed.size })) console.error(line)

@@ -29,6 +29,7 @@ export const createApp = (deps: AppDeps, assets: ClientAssets): Hono<AppEnv> => 
     c.set("identity", deps.identity)
     c.set("notifier", deps.notifier)
     c.set("phoneVerifier", deps.phoneVerifier)
+    c.set("signInPage", deps.signInPage)
     // Real browsers block JS from *reading* the Set-Cookie/Cookie headers on
     // any Response/Headers object — not just ones from a real network fetch,
     // any object in a browser JS realm — so a real `Cookie` request header

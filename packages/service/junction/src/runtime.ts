@@ -4,6 +4,7 @@ import {
   type MockControls,
   type RequestLog,
   type ServiceRuntime,
+  type UpstreamOptions,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { junctionAdminRoutes, junctionFaultPresets } from "./admin.js"
@@ -81,6 +82,12 @@ export type JunctionRuntimeOptions = {
   /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
   adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
+  /**
+   * Where `PUT /__admin/upstream {"mode":"forward"}` sends API calls (the Junction sandbox,
+   * usually through the sandbox proxy). Only the `/v2/` and `/v3/` API paths forward; admin routes
+   * stay local. Forwarded responses are relayed as-is and not mirrored into the emulator's state.
+   */
+  upstream?: UpstreamOptions
 }
 
 export type JunctionRuntime = ServiceRuntime<JunctionAPI> & {
@@ -104,6 +111,8 @@ export const createRuntime = (options: JunctionRuntimeOptions = {}): JunctionRun
   const runtime: ServiceRuntime<JunctionAPI> = createServiceRuntime<JunctionAPI>({
     name: JUNCTION_NAMESPACE,
     document,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    canForward: (request) => /^\/v[23]\//.test(new URL(request.url).pathname),
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     ...(options.clock ? { clock: options.clock } : {}),
     ...(options.seed !== undefined ? { seed: options.seed } : {}),

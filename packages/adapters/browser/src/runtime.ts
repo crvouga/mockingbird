@@ -1,4 +1,6 @@
 import { createFsFromVolume, Volume } from "memfs"
+import { publicAssets } from "./assets.js"
+import { createVirtualNetwork } from "./net.js"
 
 export type WebFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 export type FetchHandler = (request: Request) => Response | Promise<Response>
@@ -33,6 +35,9 @@ export function createBrowserRuntime(
   const fs = createFsFromVolume(volume)
   const env = { ...options.env }
   const listeners = new Map<string, FetchHandler>()
+  const net = createVirtualNetwork({
+    isPortReserved: (port) => listeners.has(`http://localhost:${port}`),
+  })
   let nextPort = 3000
   let disposed = false
   const assertOpen = () => {
@@ -48,13 +53,13 @@ export function createBrowserRuntime(
       unsupported("serve hostname")
     let port = options.port ?? 3000
     if (port === 0) {
-      while (listeners.has(`http://localhost:${nextPort}`)) nextPort++
+      while (listeners.has(`http://localhost:${nextPort}`) || net.hasListener(nextPort)) nextPort++
       port = nextPort++
     }
     if (!Number.isInteger(port) || port < 1 || port > 65535)
       throw new RangeError("Invalid server port")
     const url = new URL(`http://localhost:${port}`)
-    if (listeners.has(url.origin))
+    if (listeners.has(url.origin) || net.hasListener(port))
       throw Object.assign(new Error(`Address in use: ${url.origin}`), { code: "EADDRINUSE" })
     listeners.set(url.origin, options.fetch)
     let stopped = false
@@ -227,6 +232,16 @@ export function createBrowserRuntime(
   })
   return {
     fs,
+    net,
+    mountAssets(files: Readonly<Record<string, string | readonly number[] | Uint8Array>>) {
+      assertOpen()
+      for (const [name, bytes] of Object.entries(files)) {
+        if (!name.startsWith("/") || name.includes("\\") || name.split("/").includes(".."))
+          throw new TypeError(`Invalid virtual asset path: ${name}`)
+        fs.mkdirSync(name.slice(0, name.lastIndexOf("/")) || "/", { recursive: true })
+        fs.writeFileSync(name, typeof bytes === "string" ? bytes : new Uint8Array(bytes))
+      }
+    },
     volume,
     env,
     bun,
@@ -237,6 +252,7 @@ export function createBrowserRuntime(
       disposed = true
       for (const stop of stops) stop()
       stops.clear()
+      net.dispose()
       volume.reset()
       for (const key of Object.keys(env)) delete env[key]
     },
@@ -247,3 +263,5 @@ export function createBrowserRuntime(
 export const browserRuntime = createBrowserRuntime({
   networkFetch: globalThis.fetch?.bind(globalThis),
 })
+
+browserRuntime.mountAssets(publicAssets)

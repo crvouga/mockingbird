@@ -14,10 +14,9 @@ export default {
     layout: "fullscreen",
     sources: [
       ...SHELL,
-      "packages/examples/medical-testing/src/client/pages/Landing.ts",
-      "packages/examples/medical-testing/src/client/components/OAuthButtons.ts",
-      "packages/examples/medical-testing/src/client/components/OAuthModal.ts",
-      "packages/examples/medical-testing/src/client/components/useEscapeKey.ts",
+      "packages/examples/medical-testing/src/client/pages/Landing.tsx",
+      "packages/examples/medical-testing/src/client/components/OAuthModal.tsx",
+      "packages/examples/medical-testing/src/client/components/HostedPageModal.tsx",
       "packages/examples/medical-testing/src/client/hostedPages.ts",
       "packages/examples/medical-testing/src/client/pasteHtml.ts",
       "packages/examples/medical-testing/src/adapters/identity/oauthMockIdentity.ts",
@@ -28,8 +27,8 @@ export default {
 
 const open = async (canvas: HTMLElement, provider: "Google" | "Apple"): Promise<Person> => {
   const page = person(canvas)
-  await page.click("button.cove-oauth-btn", `Continue with ${provider}`)
-  await page.find(".hosted-page [data-testid]")
+  await page.click("button", `Continue with ${provider}`)
+  await page.find('[data-testid="hosted-page"] [data-testid]')
   return page
 }
 
@@ -59,7 +58,7 @@ export const SignedInWithGoogle: StoryObj = {
     const page = await open(canvasElement, "Google")
     await page.click('[data-testid="oauth-mock-account-ada"]')
     await page.click('[data-testid="oauth-mock-allow"]')
-    expect((await page.find(".cove-page h1")).textContent).toBe("Welcome back, Ada.")
+    expect((await page.find("main h1")).textContent).toBe("Welcome back, Ada.")
   },
 }
 
@@ -71,7 +70,7 @@ export const GoogleDenied: StoryObj = {
     await page.click('[data-testid="oauth-mock-account-ada"]')
     await page.find('[data-testid="oauth-mock-allow"]')
     await page.click('[data-testid="oauth-mock-deny"]')
-    await page.find(".cove-modal-error", "Try again")
+    await page.find('[data-testid="hosted-page-error"]', "Try again")
   },
 }
 
@@ -108,8 +107,8 @@ export const ProviderUnavailable: StoryObj = {
   }),
   play: async ({ canvasElement }) => {
     const page = person(canvasElement)
-    await page.click("button.cove-oauth-btn", "Continue with Google")
-    await page.find(".cove-modal-error", "The provider is unavailable.")
+    await page.click("button", "Continue with Google")
+    await page.find('[data-testid="hosted-page-error"]', "The provider is unavailable.")
   },
 }
 

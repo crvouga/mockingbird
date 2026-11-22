@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-hermes
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Work-in-progress emulator for the Hermes Agent public peer-run API pinned to
 `v2026.8.31`. Submission, polling and stop work with explicit synthetic lifecycle observations.

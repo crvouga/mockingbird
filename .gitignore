@@ -1,5 +1,7 @@
 node_modules/
 dist/
+# Prebuilt React pages (packages/ui/scripts/bundle.ts)
+dist-ui/
 .turbo/
 .husky/_
 *.tgz
@@ -25,3 +27,4 @@ packages/service/*/CHANGELOG.md
 .performance/
 packages/examples/medical-testing/preview-dist/
 .wrangler/
+.dev.vars*

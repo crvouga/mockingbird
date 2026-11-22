@@ -142,9 +142,23 @@ export class Dashboard {
     return this.page.getByLabel(label, { exact: true })
   }
 
-  /** A set of choices (radio buttons) by its legend. */
+  /** A set of choices (radio buttons) by its label. */
   choices(legend: string): Locator {
-    return this.page.getByRole("group", { name: legend, exact: true })
+    return this.page.getByRole("radiogroup", { name: legend, exact: true })
+  }
+
+  /** The button that opens a select's options, by the select's label. */
+  picker(label: string): Locator {
+    return this.form
+      .locator("[data-field]")
+      .filter({ has: this.page.getByText(label, { exact: true }) })
+      .locator("button[aria-haspopup=listbox]")
+  }
+
+  /** Choose an option of a select, the way a person does: open it and pick one. */
+  async pick(label: string, option: string): Promise<void> {
+    await this.picker(label).click()
+    await this.page.getByRole("option", { name: option, exact: true }).click()
   }
 
   /** One of a set of choices, by the start of its label ("Admin" of "Admin: Everything an …"). */
@@ -152,14 +166,19 @@ export class Dashboard {
     return this.choices(legend).getByRole("radio", { name: new RegExp(`^${literal(option)}`) })
   }
 
+  /** Choose one of a set of choices, by clicking its label as a person does. */
+  async choose(legend: string, option: string): Promise<void> {
+    await this.choice(legend, option).locator("xpath=ancestor::label[1]").click()
+  }
+
   /**
-   * The control a field's problem is announced on: the text field or select labelled so, or the
-   * first of the choices under that legend.
+   * The control a field's problem is announced on: the text field labelled so, or the set of
+   * choices itself (React Aria marks the group invalid and describes it by its error).
    */
   async control(label: string): Promise<Locator> {
     const field = this.field(label)
     if ((await field.count()) > 0) return field
-    return this.choices(label).getByRole("radio").first()
+    return this.choices(label)
   }
 
   /** The one form of a mutation screen. */
@@ -181,12 +200,32 @@ export class Dashboard {
     return within.getByRole("button", { name, exact: true })
   }
 
-  /** A row of a named list, found by text it shows. */
-  row(list: string, text: string): Locator {
+  /** A named table (or list) of things. */
+  list(name: string): Locator {
     return this.page
-      .getByRole("list", { name: list, exact: true })
-      .getByRole("listitem")
-      .filter({ hasText: text })
+      .getByRole("grid", { name, exact: true })
+      .or(this.page.getByRole("list", { name, exact: true }))
+  }
+
+  /** The rows of a named table, without its header, or the items of a named list. */
+  rows(list: string): Locator {
+    return this.list(list)
+      .getByRole("row")
+      .filter({ has: this.page.getByRole("rowheader") })
+      .or(this.list(list).getByRole("listitem"))
+  }
+
+  /** A row of a named table, found by text it shows. */
+  row(list: string, text: string): Locator {
+    return this.rows(list).filter({ hasText: text })
+  }
+
+  /** A row of a named table whose own name is exactly `name`, so other text in other rows (a
+   *  key's random prefix, say) can never match it too. */
+  namedRow(list: string, name: string): Locator {
+    return this.rows(list).filter({
+      has: this.page.locator("[data-title]").getByText(name, { exact: true }),
+    })
   }
 
   /** An emulator's card on the fleet screen. */
@@ -197,18 +236,20 @@ export class Dashboard {
   /** A setting of the screen's properties ("Name", "Who can call it"), found by its name. */
   setting(name: string, within: Locator | Page = this.page): Locator {
     return within
-      .locator(".prop")
+      .locator("[data-prop]")
       .filter({ has: this.page.getByRole("term").getByText(name, { exact: true }) })
   }
 
   /** A value shown with a button that copies it, found by the value. */
   copyable(value: string, within: Locator | Page = this.page): Locator {
-    return within.locator(".copy").filter({ has: this.page.getByText(value, { exact: true }) })
+    return within
+      .locator("[data-copy]")
+      .filter({ has: this.page.getByText(value, { exact: true }) })
   }
 
   /** The secret a result screen shows, once. */
   get secret(): Locator {
-    return this.page.getByRole("main").locator(".secret").getByRole("code")
+    return this.page.getByRole("main").locator("[data-secret]").getByRole("code")
   }
 
   /** The secret value currently on screen. */
@@ -247,6 +288,11 @@ export class Dashboard {
       const name = (element: Element) =>
         `<${element.tagName.toLowerCase()} class="${element.getAttribute("class") ?? ""}"> "${(element.textContent ?? "").trim().slice(0, 40)}"`
       for (const element of document.querySelectorAll("body *")) {
+        // The page's top bar stays at the top as the page scrolls; it is chrome, not feedback.
+        if (element.closest("[data-mockingbird-shell] > header")) continue
+        // Nor is what is there only for the form and assistive technology, hidden from sight.
+        const box = element.getBoundingClientRect()
+        if (box.width <= 1 && box.height <= 1) continue
         if (/toast|snackbar|flash|banner/i.test(element.getAttribute("class") ?? ""))
           found.push(`named like a toast: ${name(element)}`)
         const position = getComputedStyle(element).position

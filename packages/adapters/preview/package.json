@@ -1,0 +1,106 @@
+{
+  "name": "@crvouga/mockingbird-preview",
+  "version": "0.0.0-development",
+  "description": "Portable worker preview hosts, streaming Fetch bridges, artifact verification and static preview lifecycle helpers.",
+  "license": "MIT",
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./node": {
+      "types": "./dist/node.d.ts",
+      "default": "./dist/node.js"
+    },
+    "./dev-proxy": {
+      "types": "./dist/dev-proxy.d.ts",
+      "default": "./dist/dev-proxy.js"
+    },
+    "./preview-status": {
+      "types": "./dist/preview-status.d.ts",
+      "default": "./dist/preview-status.js"
+    },
+    "./worker": {
+      "types": "./dist/worker.d.ts",
+      "default": "./dist/worker.js"
+    },
+    "./worker-entry": {
+      "types": "./dist/worker-entry.d.ts",
+      "default": "./dist/worker-entry.js"
+    },
+    "./boot": {
+      "types": "./dist/boot.d.ts",
+      "default": "./dist/boot.js"
+    },
+    "./build": {
+      "types": "./dist/build.d.ts",
+      "default": "./dist/build.js"
+    },
+    "./on-demand": {
+      "types": "./dist/on-demand.d.ts",
+      "default": "./dist/on-demand.js"
+    },
+    "./freshness": {
+      "types": "./dist/freshness.d.ts",
+      "default": "./dist/freshness.js"
+    }
+  },
+  "bin": {
+    "mockingbird-preview": "./dist/cli.js"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
+    "directory": "packages/adapters/preview"
+  },
+  "mockingbird": {
+    "runtime": "portable",
+    "layer": "adapter",
+    "entries": {
+      "node": "node",
+      "dev-proxy": "portable",
+      "preview-status": "portable",
+      "worker": "portable",
+      "worker-entry": "portable",
+      "boot": "portable",
+      "build": "node",
+      "cli": "node",
+      "on-demand": "portable",
+      "freshness": "portable"
+    }
+  },
+  "scripts": {
+    "build": "bun ../../../scripts/bundle-service.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "biome check .",
+    "test": "bun test",
+    "pack:check": "bun ../../../scripts/pack-check.ts",
+    "portability": "bun ../../../scripts/portability.ts"
+  },
+  "devDependencies": {
+    "@types/bun": "1.4.0",
+    "@types/node": "22.20.1",
+    "@playwright/test": "1.65.0",
+    "esbuild": "0.28.2"
+  },
+  "peerDependencies": {
+    "esbuild": ">=0.28.0"
+  },
+  "peerDependenciesMeta": {
+    "esbuild": {
+      "optional": true
+    }
+  }
+}

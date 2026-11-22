@@ -15,9 +15,15 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import { bodySha256, jwt } from "./crypto.js"
 import { document } from "./generated/openapi.js"
 import { LIVEKIT_NAMESPACE, LiveKitAPI } from "./index.js"
+import { signalControls } from "./signal-controls.js"
 import { JOB_STATUSES, type JobStatus, type LiveKitTrack } from "./state.js"
 
 export const LIVEKIT_PRESETS: Record<string, FaultPreset> = {
+  network_loss: {
+    description:
+      "Drop active signaling sockets in this namespace; clients may resume the retained peers within ten seconds",
+    rules: [],
+  },
   unavailable: { description: "The next request loses its connection", rules: [{ drop: true }] },
   rate_limited: {
     description: "LiveKit answers resource_exhausted",
@@ -59,6 +65,29 @@ export type LiveKitRuntime = ServiceRuntime<LiveKitAPI> & { readonly webhooks: W
 const error = (status: number, message: string) =>
   Response.json({ error: { type: "mockingbird_admin", message } }, { status })
 const admin = (runtime: ServiceRuntime<LiveKitAPI>): AdminRoutes => ({
+  ...signalControls(runtime),
+  "POST /faults/presets/network_loss": ({ namespace }) => {
+    runtime.applyPreset("network_loss", namespace)
+    return Response.json({ preset: "network_loss", rules: [] }, { status: 201 })
+  },
+  "GET /signal/connections": ({ namespace }) =>
+    Response.json({
+      connections: runtime
+        .instance(namespace)
+        .state.connections.list({ order: "oldest" })
+        .map(({ value }) => value),
+    }),
+  "POST /signal/disconnect": ({ namespace, body }) => {
+    const input = body as { room?: string; identity?: string } | null
+    if (
+      !input ||
+      typeof input.room !== "string" ||
+      (input.identity !== undefined && typeof input.identity !== "string")
+    )
+      return error(400, "room and optional identity must be strings")
+    runtime.instance(namespace).disconnectSignal(input.room, input.identity)
+    return Response.json({ disconnected: true })
+  },
   "POST /dispatches/:id/jobs": ({ namespace, params, body }) => {
     if (!body || typeof body !== "object" || Array.isArray(body))
       return error(400, "expected a JSON object")
@@ -113,6 +142,15 @@ const admin = (runtime: ServiceRuntime<LiveKitAPI>): AdminRoutes => ({
       .publish(params.room as string, params.identity as string, input ?? {})
     return track ? Response.json(track, { status: 201 }) : error(404, "participant not found")
   },
+  "GET /rooms/:room/participants/:identity/media": ({ namespace, params }) =>
+    Response.json({
+      tracks: runtime
+        .instance(namespace)
+        .state.media.list({
+          where: (row) => row.room === params.room && row.identity === params.identity,
+        })
+        .map(({ value }) => value),
+    }),
   "GET /rooms/:room/participants/:identity/inbox": ({ namespace, params }) => {
     const participant = runtime
       .instance(namespace)
@@ -194,5 +232,11 @@ export const createRuntime = (options: LiveKitRuntimeOptions = {}): LiveKitRunti
       }),
     admin,
   })
+  const applyPreset = runtime.applyPreset.bind(runtime)
+  runtime.applyPreset = (name, namespace = "default", overrides = {}) => {
+    const rules = applyPreset(name, namespace, overrides)
+    if (name === "network_loss") runtime.instance(namespace).disconnectSignal()
+    return rules
+  }
   return Object.assign(runtime, { webhooks: hub })
 }

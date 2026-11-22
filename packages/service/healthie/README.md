@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-healthie
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Healthie GraphQL API**, covering the legacy surface our backend still
 calls:
@@ -18,7 +18,7 @@ implementation against a subset of Healthie's schema written by hand. Selection 
 fragments, variables, `__typename` and validation errors therefore behave as they do on
 Healthie, and the emulator returns only the fields a document asks for.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/healthie/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/healthie/SUPPORT.md)
 - Healthie publishes an SDL but no OpenAPI. `openapi.yaml` describes the HTTP side: one GraphQL
   operation and the file-download route. The GraphQL schema is `HEALTHIE_SDL`.
 
@@ -112,7 +112,7 @@ GraphQL root fields: `currentUser`, `user(id)`, `users(keywords, should_paginate
 
 ### User groups and organization members (best guess, not oracle-verified)
 
-Added for [issue #761](https://github.com/crvouga-organization/mockingbird/issues/761). No Healthie sandbox
+Added for [issue #761](https://github.com/crvouga/mockingbird/issues/761). No Healthie sandbox
 credentials were available, so this is a **best guess from Healthie's published schema reference
 (API version 2024-06-01), not oracle-verified**: the
 [`userGroups`](https://docs.gethealthie.com/reference/2024-06-01/queries/usergroups) and
@@ -277,7 +277,7 @@ backend uses, so it ships as a normal `dependency` rather than being bundled.
 - Every Healthie operation our consumer no longer calls: providers, metrics, charting, chat,
   Stripe card mutations, `userGroup` (singular), `createApiKey`. Querying one fails GraphQL
   validation, as a typo would. Of the fields named in
-  [issue #761](https://github.com/crvouga-organization/mockingbird/issues/761), only `userGroups`,
+  [issue #761](https://github.com/crvouga/mockingbird/issues/761), only `userGroups`,
   `organizationMembers` and `User.state_licenses` are modelled; these are explicitly not:
   - Appointments: `appointments`, `appointmentTypes`, `availableSlotsForRange`,
     `createAppointment`, `updateAppointment`, `deleteAppointment`, `User.appointment_types`.
@@ -323,4 +323,4 @@ backend uses, so it ships as a normal `dependency` rather than being bundled.
 | `document`, `operationIds`, `supportedOperationIds` | values | The HTTP contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8816. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

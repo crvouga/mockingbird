@@ -29,7 +29,8 @@
     "sites/storybook"
   ],
   "overrides": {
-    "postcss": "^8.5.30"
+    "postcss": "^8.5.30",
+    "vite": "8.3.7"
   },
   "trustedDependencies": [
     "embedded-postgres",
@@ -46,6 +47,7 @@
     "setup": "bun scripts/setup.ts",
     "build": "turbo run build",
     "storybook": "bun run --cwd sites/storybook dev",
+    "preview:ui": "bun scripts/preview-ui.ts",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",
@@ -91,7 +93,7 @@
     "docs:build": "turbo run build --filter=@crvouga/mockingbird-docs...",
     "docs:preview": "bun run docs:build && bun run --cwd sites/docs preview",
     "prepare": "husky",
-    "gh": "open https://github.com/crvouga-organization/mockingbird/actions",
+    "gh": "open https://github.com/crvouga/mockingbird/actions",
     "release:plan": "bun scripts/release/plan.ts",
     "release:publish": "bun scripts/release/publish.ts",
     "release:smoke": "bun scripts/release/consumer-smoke.ts",

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-daily
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Daily.co** REST API for test suites: rooms (create, get, update,
 delete, presence, eject), meeting tokens (mint and validate), meetings (list and get),
@@ -11,7 +11,7 @@ transcript written to the stack's S3. Every EMR
 booking creates a room and a token; today a broken Daily integration is silent because booking
 swallows the error. Against the emulator it is observable and assertable.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/daily/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/daily/SUPPORT.md)
 - The contract (`openapi.yaml`) is trimmed from Daily's documented REST API to the calls our
   backend and EMR make, with the fields they send.
 
@@ -112,7 +112,7 @@ This is a **best guess, not oracle-verified**, based on Daily's
 [lifecycle events](https://docs.daily.co/reference/daily-js/events/lifecycle-events)
 and [participants](https://docs.daily.co/reference/daily-js/instance-methods/participants)
 reference. It implements `join`, `leave`, `destroy`, `on`, `off`, `meetingState`,
-`participants`, `setLocalAudio`, and `setLocalVideo`; inject the factory in place of
+`participants`, `localAudio`, `localVideo`, `setLocalAudio`, and `setLocalVideo`; inject the factory in place of
 Daily's factory. It does not intercept an already-created daily-js call or load the CDN.
 Signed joins require `settings.apiKeys` to contain the key used to mint the meeting token.
 `headers` carries namespace and admin authentication headers; this is a test-only admin
@@ -125,7 +125,26 @@ observation explicitly. A removed participant or deleted room emits `left-meetin
 Permission refusal emits `camera-error`. Remote tracks report `loading` until disabled
 (`off`); remote audio/video transport and placeholder media are not implemented.
 The error labels and polling timing are emulator choices, not verified Daily wire parity.
-The complete DailyCall interface and unmodified SDK/Chromium compatibility are not claimed.
+The complete DailyCall interface and unmodified SDK compatibility are not claimed.
+A real Chromium fixture proves two pages joining, local MediaStreamTracks, remote presence,
+media toggles, synthetic participants, lifecycle events and cleanup; it uses fake browser
+camera/microphone devices and the served stand-in, not Daily servers.
+
+For script-based callers, replace the Daily CDN script URL with
+`<emulator-origin>/daily-js/stand-in.js`. It installs `globalThis.DailyIframe` with
+`createCallObject`, `getCallInstance`, and `destroy`. The package's `./browser` export also
+provides `createDailyIframe(options)` for explicit dependency injection. Each factory permits
+one call object until it is destroyed. The script embeds no admin credentials; pass any
+required admin/namespace headers through `createCallObject({headers})`. Applications which
+already bundle the published daily-js factory must alias or inject this module at build time;
+changing a REST base URL cannot replace that SDK's private transport.
+
+Local media acquisition emits `track-started`; leaving/destroying emits `track-stopped` and
+stops each local track. No remote WebRTC track, CDN iframe protocol, or network quality
+measurement is fabricated. The exact supported subset follows the official
+[daily-js types](https://github.com/daily-co/daily-js/blob/master/index.d.ts), with emulator
+choices documented above. `bun scripts/generate-browser.ts` regenerates the served script
+from the same call-object implementation; `--check` detects stale generated output.
 
 Synthetic peers use `POST /__admin/rooms/:name/participants` with
 `{user_name, owner?, video?, audio?}`. List with `GET` on that route, and update or
@@ -237,6 +256,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `room_
 
 | Export | Kind | Description |
 | --- | --- | --- |
+| `createCallObject`, `createDailyIframe` (`./browser`) | functions | Fetch-only browser call and singleton factory; see the supported lifecycle subset above. |
 | `DailyAPI` | class | The in-process emulator: `fetch(request)`, `reset()`, `inspectToken(token, keys?)`, `setPresence(name, participants)`, `endSession(name, input)`, `emit(type, payload, version?)`, `rooms()`. Options: `sqlite`, `now`, `namespace`, `settings`, `onWebhook`, `transcripts`, `transcriptFormat`. |
 | `createRuntime` | function | The emulator with the full service contract. Options: `webhooks: {url, secret, signature?: "hex" \| "daily", retryDelaysMs?, fetch?}`, `transcripts: {endpoint, bucket, region?, accessKeyId?, secretAccessKey?, keyPattern?, fetch?}`, `transcriptFormat?: "json" \| "vtt"`, `settings`, `clock`, `seed`, `adminKey`, `onLog`. |
 | `DAILY_PRESETS` | object | Every named fault preset. |
@@ -251,7 +271,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`): `room_
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8800. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
 
 For a one-shot join failure, `POST /__admin/call-fault {type}` accepts `ejected`,
 `exp-token`, `no-room`, `exp-room`, `nbf-room`, or `room-full`. The next browser join

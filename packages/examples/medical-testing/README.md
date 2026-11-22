@@ -29,8 +29,9 @@ The output is `packages/examples/medical-testing/preview-dist`. Serve it with an
 This build includes the [browser runtime adapter](../../adapters/browser/README.md): shared virtual
 files, Node library polyfills and browser-local Node/Bun/Deno servers. See its compatibility table
 for supported APIs and explicit limits; this does not turn the browser into a complete host OS.
-The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets; Cloudflare only
-serves files, while all application requests execute inside the browser. To publish a distinct
+The colocated `wrangler.jsonc` configures Cloudflare Workers Static Assets plus a small Worker
+(`src/worker.ts`) that only answers `/__dev/*`, the [dev proxy](#dev-resources). Every
+application request still executes inside the browser. To publish a distinct
 PR environment from CI, use Wrangler with `--name mockingbird-lab-pr-<number>` from this package
 directory. Deployment requires `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in GitHub Actions
 repository secrets. No deployment is performed by the build command. The System preview workflow builds a downloadable
@@ -43,18 +44,68 @@ Standalone links use `?surface=app`, `?surface=system`, `?surface=emulators` or
 fresh demonstration world. URLs do not contain patient data or session state.
 
 The reusable, framework-free `mountSystemHarness` export in `@crvouga/mockingbird-ui` accepts
-`{ id, label, mount(host, signal) }` entries. A mount resolves with a disposer when ready and
+`{ id, label, description?, icon?, mount(host, signal) }` entries, plus optional `services` and `docsUrl`
+for the System screen. A mount resolves with a disposer when ready and
 rejects on failure (the shell offers Retry). Use dynamic imports inside mount for optional UI.
 An adapter may mount a client, an iframe, or a controller/inspector for a non-client service.
 Abort cancels pending work on teardown, and late mount results are disposed. The host owns the
 system's topology and transports; the shell never imports application or emulator code.
 The current lab client has module-scoped ports and supports one system per document.
 
+### Live, self-updating previews
+
+An open preview always knows where CI is and updates itself; no reload is ever needed.
+
+- **CI state, pushed by CI, no state of its own.** The lab's preview uses the reusable workflow
+  every project can use ([Live PR previews](../../../docs/PREVIEWS.md)). When a build starts,
+  deploys or fails, and when `CI` starts or finishes for the PR, it writes the status into the
+  preview Worker's own configuration (`wrangler secret bulk`). The stateless Worker
+  (`createPreviewWorker` in `src/worker.ts`) serves it as Server-Sent Events at `/__preview/live`,
+  and the tab polls `/__preview/status` if SSE is unavailable. No GitHub token, database or
+  Durable Object.
+- **Updates without reloading.** `index.html` loads the package's boot loader (`preview.js`),
+  which is never swapped. It runs the app version `version.json` names (`app-<hash>.js`, built
+  from `src/app.ts` by `scripts/build-preview.ts`, stamped with the PR head at deploy). When a
+  newer version deploys, it unmounts the running app and imports the new one into the same page:
+  the switcher order and each service's mode carry over; the demonstration
+  world starts fresh. Updates apply after a short countdown (**Update now** / **Not now**), or at
+  once in a background tab; turn auto-update off on the System screen.
+- **Freshness everywhere.** A dot on the switcher bar shows live / building / update ready /
+  failed / offline, and the System screen's **Preview** card shows the version this tab runs and
+  its age, the latest deploy, the build and checks with links to their runs, and the connection.
+
+### The System screen
+
+**System** (press **←** from the app) is the preview's control panel:
+
+- **Apps**: every surface in the order the switcher's arrows go through them, each with its icon.
+  Drag a row by its grip (or use the arrow keys on it) to reorder, and click a row to take it
+  out of the switcher or put it back. Open still reaches any of them. The order and those choices
+  are kept in the browser.
+- **Dev proxy**: whether the dev proxy on this origin is reachable, and that it only uses
+  allow-listed non-production credentials.
+- **Services**: every third-party service the app talks to (`src/composition/services.ts`), each
+  with an **Emulated | Dev** control, or the reason it can only be emulated.
+
+### Dev resources
+
+Switching a service to **Dev** sends its emulator's requests through the Worker's `/__dev` proxy
+to a real non-production resource: Stripe test mode, Junction's sandbox, a dev Resend account. The
+proxy attaches the `<SERVICE>_*` credentials, and only ones that match the non-production
+allow-list in `src/worker.ts`. That list holds Stripe test keys and Junction's sandbox keys, whose
+format proves they are not production. Pin your dev account's identifier there to enable Twilio,
+FCM, Resend or Slack. A production key is refused even if a pattern would match it. Nothing is
+rebuilt, and no credential reaches the browser: the proxy, on the page's own origin, injects them
+and refuses requests from any other site. The workflow copies the credentials from GitHub Actions
+secrets to each PR's Worker. How it works, the safety model, the providers and their limits are in
+[Dev resources](../../../docs/DEV_RESOURCES.md). The wiring is `src/composition/dev.ts` (browser)
+and `src/worker.ts` (proxy).
+
 ## Ports and adapters
 
 The application's domain and HTTP code under `src/app/` use plain application contracts and
 never import Mockingbird. The client uses those HTTP routes; its administration page renders
-the shared React and Ant Design UI through the same scoped fetch in both run modes. The
+the shared React and HeroUI admin UI through the same scoped fetch in both run modes. The
 synthetic report generator is explicit demonstration
 data; it must be replaced with a provider report ingestion path for a real deployment:
 
@@ -145,8 +196,10 @@ Notifications app (or `/notifications/` on the standalone server).
   code and a link, stored only as salted hashes. Both expire after 10 minutes, work once, and are
   replaced by a newer email. Five wrong guesses burn the code, and a new one can be requested
   every 30 seconds. The three demo accounts sign in by their addresses; any other address creates
-  a patient account. Embedded in the docs site the link has nowhere to point, so the code field
-  also accepts the pasted link; on the standalone server the link works when clicked.
+  a patient account. On the standalone server the link points at the server and works when clicked. In a browser tab
+  (the docs site, a preview) it points at the page the app is shown on, and a click on it in
+  Notifications signs in right there, in the tab that sent it; the code field also accepts the
+  pasted link.
 - **Phone verification** (`src/app/http/routes/account.ts`). Twilio Verify sends and checks the
   code; the number is saved only after an approved check, and order texts go to it by SMS or
   WhatsApp, whichever the member chose.
@@ -166,8 +219,7 @@ the resend cooldown and preferences.
 ## Run it
 
 **In the browser, no server:** visit `/examples/medical-testing` and click "Launch the app",
-or open the standalone static preview. The arrows on the switcher pill (middle left until you
-drag it to another edge, where it stays) step through System, Lab workspace, Emulators and
+or open the standalone static preview. The arrows on the thin bar across the top step through System, Lab workspace, Emulators and
 Notifications; hover one to see where it goes. These surfaces share the same running database and emulators.
 The emulator inspector includes SQL queries, state, clock, faults, journal and routes.
 

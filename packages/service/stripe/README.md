@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-stripe
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful, in-process emulator of the [Stripe API](https://docs.stripe.com/api) for test suites: accounts
 chosen by API key, customers and balances, payment methods, payment and setup intents, charges,
@@ -13,7 +13,7 @@ fanned out to every matching endpoint. Responses are rendered at the caller's `S
 differential property tests against Stripe test mode.
 
 - Operation coverage (119 of 123 operations in the vendored spec, with reasons for each gap):
-  [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/stripe/SUPPORT.md)
+  [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/SUPPORT.md)
 - Stripe API reference: https://docs.stripe.com/api · Upstream OpenAPI: https://github.com/stripe/openapi
 
 ## Install
@@ -520,6 +520,24 @@ recorded prices (listed in `synthesizedLookupKeys`). Pass your own with `createR
 by [Stripe](https://docs.stripe.com/api/promotion_codes/list), and preserves its stored spelling.
 The filter composes with `active`, `coupon`, customer, created-time and pagination filters.
 
+## Forwarding to a Stripe test-mode account
+
+`createRuntime({ upstream: { baseUrl, fetch, rewriteAuth?, mode? } })` opts into the shared
+forwarding controls. Mode starts as `emulated`; `PUT /__admin/upstream {"mode":"forward"}` (per
+namespace) sends API calls to `baseUrl` + path + query through `fetch`. Only `/v1/*` forwards:
+hosted Checkout (`/c/...`), the customer portal (`/p/...`) and the Stripe.js stand-in (`/v3`)
+answer 501 in forward mode, and `/__admin/*` always stays local. Without `upstream`,
+`PUT /__admin/upstream {"mode":"forward"}` answers 409.
+
+Authentication rewriting happens on a separate outgoing Request and is never kept in the journal
+or snapshots. Redirects come back unfollowed; the transport must honor the Request's abort
+signal, and a transport failure behaves like a dropped connection. Forwarded responses are
+relayed as-is and **not mirrored into emulator state** (there is no forwarded-response journal
+hook for this service), so switching back to emulated resumes the emulator's own records. Tested
+with injected transports only; this is not live-vendor parity evidence. In a browser preview,
+`createDevResources(...).upstream("stripe")` from `@crvouga/mockingbird-preview` supplies the transport
+and the dev proxy attaches the real test-mode credentials server side, refusing live keys.
+
 ## API
 
 `StripeAPI` is the engine; `createRuntime` wraps it in the service contract. From
@@ -606,4 +624,4 @@ or the repo secret via `bun run parity:remote -- stripe`) and exits 2 without on
 leaves out account-global ones (account profile, lifetime balance, lingering test clocks and
 webhook endpoints).
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird) — agent integration guide: [README](https://github.com/crvouga-organization/mockingbird#readme) · [llms.txt](https://github.com/crvouga-organization/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).

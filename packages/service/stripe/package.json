@@ -38,10 +38,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/service/stripe"
   },
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/stripe#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/stripe#readme",
   "keywords": [
     "mockingbird",
     "service",
@@ -96,7 +96,7 @@
         "GET /__admin/faults/presets",
         "GET /__admin/ui"
       ],
-      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "scripts": {
@@ -104,7 +104,7 @@
     "generate": "bun ../../openapi/codegen/dist/cli.js",
     "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
-    "build": "bun ../../../scripts/bundle-service.ts",
+    "build": "bun ../../../packages/ui/scripts/bundle.ts --ssr src/ui/server.tsx && bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.scripts.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
@@ -118,7 +118,8 @@
   "dependencies": {
     "@crvouga/mockingbird-runtime": "workspace:*",
     "@crvouga/mockingbird-service-sqlite": "workspace:*",
-    "hono": "4.13.11"
+    "hono": "4.13.11",
+    "@crvouga/mockingbird-ui": "workspace:*"
   },
   "devDependencies": {
     "fast-check": "4.9.0",
@@ -138,10 +139,25 @@
     "@crvouga/mockingbird-sqlite": "workspace:*",
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
-    "@crvouga/mockingbird-ui": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
     "@crvouga/mockingbird-commands": "workspace:*",
     "@crvouga/mockingbird-adapter-node": "workspace:*",
-    "stripe-v17": "npm:stripe@17.7.0"
+    "@crvouga/mockingbird-preview": "workspace:*",
+    "stripe-v17": "npm:stripe@17.7.0",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "imports": {
+    "#ui/server": {
+      "types": "./src/ui/server.tsx",
+      "bun": "./src/ui/server.tsx",
+      "browser": "./src/ui/server.tsx",
+      "default": "./dist-ui/server.js"
+    }
   }
 }

@@ -25,14 +25,17 @@ export const emailAuthRoutes = new Hono<AppEnv>()
 export const SIGN_IN_LINK_PARAM = "sign-in"
 
 /**
- * Where the emailed link points. On the standalone server that is the server
- * itself, so the link works when clicked. In-process there is no address to
- * come back to, so it is the app's internal one and the client accepts the
- * link pasted into the code field instead.
+ * The emailed link. On the standalone server it points at the server itself, so it works when
+ * clicked. In a browser tab the app has no address of its own: the link points at the page it is
+ * shown on (`signInPage`), and the page follows a click on it without leaving the tab. With
+ * neither, as in a test, it is the app's internal address, and the client accepts the link pasted
+ * into the code field instead.
  */
-const linkOrigin = (requestUrl: string): string => {
-  const url = new URL(requestUrl)
-  return url.port ? url.origin : APP_ORIGIN
+export const signInLink = (requestUrl: string, signInPage: string | undefined, token: string) => {
+  const request = new URL(requestUrl)
+  const url = new URL(signInPage ?? (request.port ? request.origin : APP_ORIGIN))
+  url.searchParams.set(SIGN_IN_LINK_PARAM, token)
+  return url.href
 }
 
 /**
@@ -59,7 +62,7 @@ emailAuthRoutes.post("/start", async (c) => {
     await sendSignInCode(c.get("notifier"), {
       email,
       code: issued.code,
-      link: `${linkOrigin(c.req.url)}/?${SIGN_IN_LINK_PARAM}=${issued.linkToken}`,
+      link: signInLink(c.req.url, c.get("signInPage"), issued.linkToken),
       expiresInMinutes: issued.expiresInMinutes,
     })
   } catch {

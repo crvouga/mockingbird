@@ -29,7 +29,10 @@
     "preview:build": "bun scripts/build-preview.ts"
   },
   "dependencies": {
+    "@crvouga/mockingbird-adapter-browser": "workspace:*",
     "@crvouga/mockingbird-notifications": "workspace:*",
+    "@crvouga/mockingbird-preview": "workspace:*",
+    "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-service-fcm": "workspace:*",
     "@crvouga/mockingbird-service-junction": "workspace:*",
     "@crvouga/mockingbird-service-oauth": "workspace:*",
@@ -38,16 +41,20 @@
     "@crvouga/mockingbird-service-slack": "workspace:*",
     "@crvouga/mockingbird-service-stripe": "workspace:*",
     "@crvouga/mockingbird-service-twilio": "workspace:*",
-    "hono": "4.13.11",
-    "htm": "3.1.1",
-    "oauth4webapi": "3.8.8",
-    "preact": "10.24.3",
     "@crvouga/mockingbird-ui": "workspace:*",
-    "@crvouga/mockingbird-adapter-browser": "workspace:*"
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "hono": "4.13.11",
+    "oauth4webapi": "3.8.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@crvouga/mockingbird-admin-ui": "workspace:*",
     "@types/bun": "1.4.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "esbuild": "0.28.2"
   }
 }

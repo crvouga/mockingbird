@@ -14,6 +14,6 @@ export const Loading: StoryObj = cove({ transport: () => () => new Promise<Respo
 export const Unreachable: StoryObj = {
   ...cove({ transport: () => () => Promise.reject(new TypeError("Failed to fetch")) }),
   play: async ({ canvasElement }) => {
-    await person(canvasElement).find('.cove-alert-error[role="alert"]', "Failed to fetch")
+    await person(canvasElement).find('[role="alert"]', "Failed to fetch")
   },
 }

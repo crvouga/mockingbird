@@ -38,10 +38,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/service/daily"
   },
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/daily#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/daily#readme",
   "keywords": [
     "mockingbird",
     "service",
@@ -89,12 +89,12 @@
         "GET /__admin/faults/presets",
         "GET /__admin/ui"
       ],
-      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "scripts": {
-    "generate": "bun ../../openapi/codegen/dist/cli.js",
-    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
+    "generate": "bun ../../openapi/codegen/dist/cli.js && bun scripts/generate-browser.ts",
+    "generate:check": "bun ../../openapi/codegen/dist/cli.js --check && bun scripts/generate-browser.ts --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
     "build": "bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -122,6 +122,8 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-adapter-node": "workspace:*"
+    "@crvouga/mockingbird-adapter-node": "workspace:*",
+    "@playwright/test": "1.65.0",
+    "esbuild": "0.28.2"
   }
 }

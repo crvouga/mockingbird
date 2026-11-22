@@ -6,6 +6,8 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
  * point of this mock, so it keeps the text and blocks (the request journal never does).
  */
 export type SlackMessage = {
+  upstream?: true
+  sentForReal?: true
   id: string
   /** Webhook path (`/services/T/B/X`) and/or channel id and name, for `?to=` matching. */
   to: string[]

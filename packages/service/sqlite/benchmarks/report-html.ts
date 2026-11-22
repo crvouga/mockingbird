@@ -1,5 +1,5 @@
 import path from "node:path";
-import { renderHtmlReport } from "./harness/html-report.ts";
+import { renderHtmlReport } from "./harness/html-report.tsx";
 import type { BenchReport } from "./harness/types.ts";
 
 const root = path.resolve(import.meta.dir);

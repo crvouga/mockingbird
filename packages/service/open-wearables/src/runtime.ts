@@ -116,13 +116,18 @@ export const createRuntime = (options: WearablesRuntimeOptions = {}): WearablesR
       { name: "providers", label: "Providers" },
       { name: "connections", label: "Connections" },
       { name: "tasks", label: "Sync tasks" },
+      { name: "authorizations", label: "Preview authorizations" },
       { name: "settings", label: "Settings" },
     ],
-    create: ({ sqlite, namespace, clock }) =>
+    create: ({ sqlite, namespace, publicNamespace, clock }) =>
       new WearablesAPI({
         sqlite,
         namespace,
         now: clock.now,
+        browserPrefix:
+          publicNamespace === "default"
+            ? ""
+            : `${options.adminPrefix ?? "/__admin"}/ns/${encodeURIComponent(publicNamespace)}`,
         ...(options.settings ? { settings: options.settings } : {}),
       }),
     admin,

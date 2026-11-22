@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-infisical
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 A **wip** portable Infisical emulator for Universal Auth and the raw-secret surface used by
 `@infisical/sdk` **3.0.91**. Organizations, project environments, folders, permissions, tokens,

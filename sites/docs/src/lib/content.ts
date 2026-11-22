@@ -7,7 +7,7 @@
 import { CHECKOUT } from "./quick-start.ts"
 
 const DOCS_PUBLIC = "sites/docs/public/"
-const HOME = "https://github.com/crvouga-organization/mockingbird"
+const HOME = "https://github.com/crvouga/mockingbird"
 
 /** Emoji SVG used for the docs favicon. */
 export const MARK_REPO_PATH = `${DOCS_PUBLIC}identity/mockingbird.svg`
@@ -474,7 +474,7 @@ npx mockingbird-junction serve --port 8787                           # one servi
 }
 
 export const AGENTS =
-  "Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests."
+  "Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests."
 
 /**
  * The pages of a guide that has them: `docs/ADMIN_CONTROLS.md` is the hub, and each control is

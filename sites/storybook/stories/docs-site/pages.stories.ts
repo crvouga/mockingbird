@@ -25,6 +25,20 @@ export default {
       "sites/docs/src/pages/examples/index.astro",
       "sites/docs/src/pages/examples/medical-testing.astro",
       "sites/docs/src/layouts/Base.astro",
+      "sites/docs/src/ui/site-shell.tsx",
+      "sites/docs/src/ui/search.tsx",
+      "sites/docs/src/ui/catalog.tsx",
+      "sites/docs/src/ui/coverage.tsx",
+      "sites/docs/src/ui/guide.tsx",
+      "sites/docs/src/ui/docs-index.tsx",
+      "sites/docs/src/ui/identity.tsx",
+      "sites/docs/src/ui/social-card.tsx",
+      "sites/docs/src/ui/not-found.tsx",
+      "sites/docs/src/ui/primitives.tsx",
+      "sites/docs/src/ui/service-card.tsx",
+      "sites/docs/src/ui/code.tsx",
+      "sites/docs/src/ui/install.tsx",
+      "sites/docs/src/ui/prose.tsx",
     ],
   },
 } satisfies Meta
@@ -75,6 +89,8 @@ export const AdminControlsSection: StoryObj = at("/#admin-controls")
 export const NotificationsSection: StoryObj = at("/#notifications")
 export const Why: StoryObj = at("/why")
 export const Coverage: StoryObj = at("/coverage")
+/** The coverage table sorted by its Operations column, most covered first (`?sort=&dir=`). */
+export const CoverageSorted: StoryObj = at("/coverage?sort=coverage&dir=desc")
 export const Identity: StoryObj = at("/identity")
 export const SocialCard: StoryObj = at("/identity/social-card")
 /** Tagged `expect-404`: `verify` lets the page's own 404 status through. */
@@ -89,6 +105,10 @@ export const Guide: StoryObj<{ guide: string }> = {
 }
 
 export const Services: StoryObj = at("/services")
+/** The catalog filtered to one category and the featured emulators. */
+export const ServicesFiltered: StoryObj = at("/services?category=payments&featured=1")
+/** The catalog's empty state: a query nothing matches. */
+export const ServicesNoMatch: StoryObj = at("/services?q=nothing-matches-this-query")
 
 /** A service's page (`services/[name].astro`); pick any emulator in Controls. */
 export const Service: StoryObj<{ service: string }> = {

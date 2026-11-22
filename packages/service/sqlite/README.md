@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-sqlite
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Pure TypeScript, completely in-memory SQLite engine aiming for **full SQLite3 SQL dialect parity**
 (same statements, same results). Use it in tests (or the browser) wherever you want real SQLite SQL
@@ -9,7 +9,7 @@ FTS, and copy-on-write snapshots for per-test isolation. It is also the default 
 behind every Mockingbird HTTP emulator (Stripe, Junction, GeneByGene, ...).
 
 > Formerly [`@crvouga/sqlite-mem`](https://www.npmjs.com/package/@crvouga/sqlite-mem)
-> ([archived repo](https://github.com/crvouga-organization/sqlite-mem)). Migrate by replacing the package name;
+> ([archived repo](https://github.com/crvouga/sqlite-mem)). Migrate by replacing the package name;
 > the API is unchanged.
 
 - Runs in modern browsers, Node.js and Bun
@@ -30,12 +30,12 @@ Files marked (shipped) are included in the npm package next to this README.
 | [COMPATIBILITY.md](./COMPATIBILITY.md) (shipped) | Feature matrix + verify commands |
 | [COMPATIBILITY-AUDIT.md](./COMPATIBILITY-AUDIT.md) (shipped) | Audit evidence |
 | [AGENTS.md](./AGENTS.md) (shipped) | Contributor docs: architecture, how to change code, test/compat gates |
-| [DROP-IN-CONTRACT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/docs/DROP-IN-CONTRACT.md) | Falsifiable drop-in claim (what "same" means) |
-| [PROOF.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/docs/PROOF.md) | Evidence argument + what is not proven |
-| [GAP-ANALYSIS.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/docs/GAP-ANALYSIS.md) | Phase 0 gap analysis vs the full drop-in catalog |
-| [GAP-CATALOG.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/docs/GAP-CATALOG.md) | Current unproven / thin / intentional inventory |
-| [DIVERGENCES.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/DIVERGENCES.md) | Auto-generated intentional divergences (machine-readable: `compat/divergences.json`, shipped) |
-| [PERFORMANCE.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/benchmarks/PERFORMANCE.md) | Performance notes |
+| [DROP-IN-CONTRACT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/docs/DROP-IN-CONTRACT.md) | Falsifiable drop-in claim (what "same" means) |
+| [PROOF.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/docs/PROOF.md) | Evidence argument + what is not proven |
+| [GAP-ANALYSIS.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/docs/GAP-ANALYSIS.md) | Phase 0 gap analysis vs the full drop-in catalog |
+| [GAP-CATALOG.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/docs/GAP-CATALOG.md) | Current unproven / thin / intentional inventory |
+| [DIVERGENCES.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/DIVERGENCES.md) | Auto-generated intentional divergences (machine-readable: `compat/divergences.json`, shipped) |
+| [PERFORMANCE.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/benchmarks/PERFORMANCE.md) | Performance notes |
 
 ## Install
 
@@ -261,7 +261,7 @@ The engine is deterministic by default:
 
 Goal: **SQL dialect** behavioural parity vs SQLite **3.51.0** / **3.53.0** for the sync API. Full
 matrix: [COMPATIBILITY.md](./COMPATIBILITY.md). Contract:
-[DROP-IN-CONTRACT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/docs/DROP-IN-CONTRACT.md).
+[DROP-IN-CONTRACT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/docs/DROP-IN-CONTRACT.md).
 
 This is **not** a drop-in replacement for `sql.js`, `@sqlite.org/sqlite-wasm`, or better-sqlite3's
 full Node API. There is no `.sqlite` file codec, no `create_function` / custom collations, no
@@ -350,7 +350,7 @@ handle/wrapper to preserve serialization; do not mutate the database during an o
 The immediate durability opener encodes one full SQLM/PGMM snapshot per batch and compares fixed-size pages (default
 16 KiB). This targets small to moderate databases, not unbounded datasets. It avoids per-row
 storage IO, but encoding is still O(database size). It is not an SQLite file or OPFS VFS.
-See [the browser benchmark](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/sqlite/benchmarks/DURABILITY.md) for measurements and limits.
+See [the browser benchmark](https://github.com/crvouga/mockingbird/blob/main/packages/service/sqlite/benchmarks/DURABILITY.md) for measurements and limits.
 
 For higher write throughput, use `openBufferedDurableDatabase({ key, backend?, ... })`.
 The returned `BufferedDurable<Database>` keeps the synchronous SQL API and schedules a save
@@ -534,12 +534,12 @@ SQLITE_MEM_FUZZ_SEED=12345 SQLITE_MEM_FUZZ_PATH='0:1' bun test tests/fuzz  # exa
 ```
 
 A React + Vite SQL playground lives in
-[`examples/react-vite`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite/examples/react-vite)
+[`examples/react-vite`](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite/examples/react-vite)
 (`bun run example` from this package after `bun install` there). More working examples:
-[`tests/contract/api/`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite/tests/contract/api)
-and [`tests/contract/parameters/`](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/sqlite/tests/contract/parameters).
+[`tests/contract/api/`](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite/tests/contract/api)
+and [`tests/contract/parameters/`](https://github.com/crvouga/mockingbird/tree/main/packages/service/sqlite/tests/contract/parameters).
 
-Released automatically from the [Mockingbird monorepo](https://github.com/crvouga-organization/mockingbird)
-(see [Releasing](https://github.com/crvouga-organization/mockingbird/blob/main/docs/RELEASING.md)). License: MIT ([LICENSE](./LICENSE)).
+Released automatically from the [Mockingbird monorepo](https://github.com/crvouga/mockingbird)
+(see [Releasing](https://github.com/crvouga/mockingbird/blob/main/docs/RELEASING.md)). License: MIT ([LICENSE](./LICENSE)).
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird) — agent integration guide: [README](https://github.com/crvouga-organization/mockingbird#readme) · [llms.txt](https://github.com/crvouga-organization/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).

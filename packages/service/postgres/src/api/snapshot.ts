@@ -76,6 +76,10 @@ export class Snapshot {
     return openSnapshot(this, options);
   }
 
+  openWithClock(now: Date | Clock | "system", options: Omit<DatabaseOptions, "now"> = {}): Database {
+    return openSnapshot(this, { ...options, now }, true);
+  }
+
   /**
    * Decode `bytes` once and freeze the result. The same `Uint8Array` object
    * returns the same {@link Snapshot} (WeakMap), so later {@link open} calls
@@ -130,7 +134,7 @@ export function captureSnapshot(
 }
 
 /** @internal */
-export function openSnapshot(snapshot: Snapshot, options: DatabaseOptions = {}): Database {
+export function openSnapshot(snapshot: Snapshot, options: DatabaseOptions = {}, overrideClock = false): Database {
   const seed = options.seed ?? snapshot.seed;
   const randomMode = options.random ?? snapshot.randomMode;
   const systemClock = options.now === "system" || (options.now === undefined && snapshot.systemClock);
@@ -138,7 +142,7 @@ export function openSnapshot(snapshot: Snapshot, options: DatabaseOptions = {}):
   const prng = randomMode === "os" ? new OsEntropy() : new Prng(seed);
   if (randomMode !== "os") prng.setState(snapshot.prngState);
   let now = resolveClock(systemClock ? "system" : options.now);
-  if (!systemClock) {
+  if (!systemClock && !overrideClock) {
     const ms = snapshot.nowMs;
     now = () => new Date(ms);
   }

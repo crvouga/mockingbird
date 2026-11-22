@@ -145,7 +145,13 @@
     "@crvouga/mockingbird-service-wholescripts": "workspace:*",
     "@crvouga/mockingbird-service-whoop": "workspace:*",
     "@crvouga/mockingbird-service-workos": "workspace:*",
-    "jose": "6.2.2"
+    "@crvouga/mockingbird-ui": "workspace:*",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "jose": "6.2.2",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@crvouga/mockingbird-fleet": "workspace:*",
@@ -153,6 +159,8 @@
     "@playwright/test": "1.65.0",
     "@storybook/html-vite": "10.6.6",
     "@types/bun": "1.4.0",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
     "embedded-postgres": "18.3.0-beta.17",
     "playwright-bdd": "9.2.1",
     "storybook": "10.6.6",

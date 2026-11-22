@@ -271,7 +271,7 @@ test("discovery, console and errors share authentication and accurate capabiliti
           new Request(ui, { headers: { "x-mockingbird-admin-key": "synthetic-admin-only" } }),
         )
       ).text(),
-    ).toContain("Mockingbird Fleet")
+    ).toContain("Fleet console")
   } finally {
     await fleet.close()
   }

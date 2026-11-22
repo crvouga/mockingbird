@@ -15,6 +15,7 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+import { dailyBrowserScript } from "./generated/browser-script.js"
 import { document } from "./generated/openapi.js"
 import {
   DAILY_NAMESPACE,
@@ -475,5 +476,27 @@ export const createRuntime = (options: DailyRuntimeOptions = {}): DailyRuntime =
     }),
     admin: adminRoutes,
   })
+  const handle = runtime.fetch.bind(runtime)
+  runtime.fetch = async (request) => {
+    const url = new URL(request.url)
+    if (request.method === "GET" && url.pathname === "/daily-js/stand-in.js") {
+      const namespace = runtime.namespaceOf(request)
+      const configuration = {
+        baseUrl: url.origin,
+        adminPrefix: options.adminPrefix ?? "/__admin",
+        headers: { "x-mockingbird-namespace": namespace },
+      }
+      return new Response(
+        `${dailyBrowserScript}\nMockingbirdDaily.install(${JSON.stringify(configuration)});`,
+        {
+          headers: {
+            "content-type": "text/javascript; charset=utf-8",
+            "cache-control": "no-store",
+          },
+        },
+      )
+    }
+    return handle(request)
+  }
   return Object.assign(runtime, { webhooks: hub })
 }

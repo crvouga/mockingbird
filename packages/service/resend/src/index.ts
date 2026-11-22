@@ -157,6 +157,9 @@ const validationResponse = (issue: BodyIssue): Response => {
   return error(422, "validation_error", `Invalid \`${field}\` field.`)
 }
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
 const list = (value: unknown): string[] =>
   value === undefined || value === null
     ? []
@@ -293,6 +296,42 @@ export class ResendAPI implements FetchAPI {
     if (options.fixtures) {
       this.expansion.configureFixtures(options.fixtures, seedResend)
       syncFromExpanded(this.state, this.expansion)
+    }
+  }
+
+  async recordForwarded(request: Request, response: Response): Promise<void> {
+    const path = new URL(request.url).pathname
+    if (request.method !== "POST" || !["/emails", "/emails/batch"].includes(path)) return
+    const payload: unknown = await request.json().catch(() => undefined)
+    const result: unknown = await response.json().catch(() => undefined)
+    if (!isRecord(result)) return
+    const inputs = path === "/emails/batch" ? (Array.isArray(payload) ? payload : []) : [payload]
+    const outputs =
+      path === "/emails/batch" ? (Array.isArray(result.data) ? result.data : []) : [result]
+    for (const [index, input] of inputs.entries()) {
+      const output: unknown = outputs[index]
+      if (!isRecord(input) || !isRecord(output) || typeof output.id !== "string") continue
+      const toHeader = list(input.to)
+      this.state.outbox.record({
+        id: `upstream:${output.id}`,
+        upstream: true,
+        sentForReal: true,
+        from: typeof input.from === "string" ? input.from : "",
+        to: toHeader.map(bareAddress),
+        toHeader,
+        cc: list(input.cc).map(bareAddress),
+        bcc: list(input.bcc).map(bareAddress),
+        replyTo: list(input.reply_to),
+        subject: typeof input.subject === "string" ? input.subject : "",
+        html: typeof input.html === "string" ? input.html : null,
+        text: typeof input.text === "string" ? input.text : null,
+        tags: tagsOf(input.tags),
+        headers: stringRecord(input.headers),
+        attachments: [],
+        idempotencyKey: null,
+        scheduledAt: typeof input.scheduled_at === "string" ? input.scheduled_at : null,
+        createdAt: this.iso(),
+      })
     }
   }
 

@@ -6,6 +6,7 @@ import type {
   RequestLog,
   ServiceInstance,
   ServiceRuntime,
+  UpstreamOptions,
 } from "@crvouga/mockingbird-service"
 import {
   normalizeBootControls,
@@ -129,6 +130,7 @@ export const runCli = async (spec: CliSpec, argv: string[]): Promise<number> => 
 export type LogFormat = "pretty" | "json" | "off"
 
 export type CommonServeOptions = {
+  upstream?: UpstreamOptions
   adminPrefix?: string
   adminKey: string | undefined
   seed: string | undefined
@@ -152,6 +154,7 @@ export type CommonServeOptions = {
  * `serveTarget`, which is also how `serve --config` finds services by name.
  */
 export type ServeTarget = {
+  supportsUpstream?: boolean
   packageVersion?: string
   name: string
   defaultPort: number
@@ -421,6 +424,7 @@ export const resolveServeControls = async (
 
 /** A service entry in `mockingbird.json`. */
 export type ConfigService = {
+  upstream?: { baseUrl: string; mode?: "emulated" | "forward" }
   /** Stable config key is the instance identity; target defaults to that key. */
   target?: string
   publicOrigin?: string

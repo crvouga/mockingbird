@@ -11,7 +11,6 @@ import {
   type FleetManifest,
   type ServiceInput,
 } from "./discovery.js"
-import { BROWSER_JS } from "./generated/browser.js"
 import {
   filterFromSearch,
   matches,
@@ -21,7 +20,6 @@ import {
   type SourceStatus,
 } from "./model.js"
 import { READERS } from "./sources.js"
-import { renderPage } from "./ui/page.js"
 
 export type HarnessOptions = {
   /** A running fleet controller's `adminBase` (`http://127.0.0.1:9000/__admin/fleet`). */
@@ -435,13 +433,16 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
       return gateway ? gateway.fetch(request) : errorBody(404, `no route ${path}`)
     if (request.method !== "GET" && request.method !== "HEAD")
       return errorBody(405, "the notification harness is read-only")
-    if (path === "/" || path === "/index.html")
+    if (path === "/" || path === "/index.html") {
+      // Loaded on first request only: the page carries the whole stylesheet.
+      const { renderPage } = await import("./ui/page.js")
       return new Response(
         renderPage({ title, defaultTab: options.defaultTab ?? "notifications" }),
         {
           headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
         },
       )
+    }
     if (path === "/api/admin") {
       await rediscover()
       const fleet = options.fleet?.replace(/\/+$/, "")
@@ -457,10 +458,13 @@ export const createNotificationHarness = (options: HarnessOptions = {}): Notific
           : null,
       })
     }
-    if (path === "/ui.js")
-      return new Response(BROWSER_JS, {
+    if (path === "/ui.js") {
+      // The prebuilt React UI (packages/ui/scripts/bundle.ts), loaded on first request only.
+      const { BUNDLE } = await import("#ui/client-bundle")
+      return new Response(BUNDLE, {
         headers: { "content-type": "text/javascript; charset=utf-8", "cache-control": "no-store" },
       })
+    }
     if (path === "/api/health") return json(200, { status: "ok", sources: [...statuses.values()] })
     if (path === "/api/sources") {
       await rediscover()

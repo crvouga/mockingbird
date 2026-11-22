@@ -1,5 +1,5 @@
 /**
- * A provider's hosted page ships a small inline script: the OAuth pages remember a theme and
+ * A provider's hosted page ships a small inline script: the OAuth handoff pages
  * follow their own redirect, the Stripe checkout page formats the card fields and fills test
  * cards. A pasted page's scripts never run (see `pasteHtml`), because running one means
  * evaluating a string, which a Content Security Policy without `'unsafe-eval'` refuses. The
@@ -12,25 +12,8 @@
 const byId = <T extends HTMLElement>(host: HTMLElement, id: string): T | null =>
   host.querySelector<T>(`#${CSS.escape(id)}`)
 
-const OAUTH_THEME_KEY = "oauth-mock-theme"
-
 /** The OAuth emulator's pages: account chooser, consent, and the two callback handoffs. */
 export const attachOAuthPage = (host: HTMLElement): (() => void) => {
-  const page = host.querySelector<HTMLElement>(":scope > .page")
-  const inputs = [...host.querySelectorAll<HTMLInputElement>('input[name="oauth-theme"]')]
-  const apply = (value: string): void => {
-    if (page) page.dataset.theme = value
-    for (const input of inputs) input.checked = input.value === value
-    try {
-      sessionStorage.setItem(OAUTH_THEME_KEY, value)
-    } catch {}
-  }
-  try {
-    const saved = sessionStorage.getItem(OAUTH_THEME_KEY)
-    if (saved && ["system", "light", "dark"].includes(saved)) apply(saved)
-  } catch {}
-  for (const input of inputs) input.addEventListener("change", () => apply(input.value))
-
   // The handoff pages send the browser back to the app by themselves. Both go through the
   // paste's submit and link interceptor, so neither navigates the surrounding page.
   let cancelled = false

@@ -10,6 +10,7 @@ import {
   type RequestLog,
   type ServiceRuntime,
   signers,
+  type UpstreamOptions,
   type WebhookEndpoint,
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
@@ -187,6 +188,7 @@ type WebhookHubOptionsSubset = {
 }
 
 export type CustomerIoRuntimeOptions = {
+  upstream?: UpstreamOptions
   sqlite?: SqliteClient
   clock?: Clock
   /** Real-time clock for webhook freshness/signing; injectable for deterministic tests. */
@@ -475,6 +477,8 @@ export const createRuntime = (options: CustomerIoRuntimeOptions = {}): CustomerI
   })
   const runtime = createServiceRuntime<CustomerIoAPI>({
     name: CUSTOMERIO_NAMESPACE,
+    ...(options.upstream ? { upstream: options.upstream } : {}),
+    onForwardResponse: (api, request, response) => api.recordForwarded(request, response),
     document,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
     ...(options.clock ? { clock: options.clock } : {}),

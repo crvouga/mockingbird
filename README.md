@@ -8,7 +8,7 @@
 
 Run your entire application system in the browser for pull-request previews, backed by local emulators with real API contracts. Inspect apps, services, databases and notifications in one harness.
 
-[![CI](https://github.com/crvouga-organization/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga-organization/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-2563eb)](#license)
+[![CI](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml/badge.svg)](https://github.com/crvouga/mockingbird/actions/workflows/pr.yml) [![License](https://img.shields.io/badge/license-MIT-2563eb)](#license)
 
 [Quick start](#quick-start) · [Notifications](#notifications) · [Why](docs/WHY.md) · [Design](docs/DESIGN.md) · [Guides](#guides) · [Catalog](https://mockingbird.chrisvouga.dev/services) · [llms.txt](llms.txt)
 
@@ -76,7 +76,7 @@ A fleet is the default. These are for when it is more than the job needs:
 - **In-process, in a test.** `createRuntime().fetch(request)` answers the SDK inside the test process, with no port and no server. See the checkout below.
 - **Mounted in your app.** `createRuntime().mount("/api/mock/google")` serves an emulator under your own origin. See [Getting started](docs/GETTING_STARTED.md#mount-an-emulator-inside-your-app).
 - **From code.** `startFleet(config, { load, dashboard: true })` from `@crvouga/mockingbird-fleet` starts the same fleet inside a test runner's global setup. See [Fleets](docs/FLEETS.md#dashboard).
-- **Hosted.** [Fleet Cloud](https://github.com/crvouga-organization/mockingbird/blob/main/sites/fleet/README.md) hosts fleets at stable URLs. `mockingbird-fleet plan` and `apply` send it a `mockingbird.yaml` declaration, and `serve --config mockingbird.yaml` runs the same file locally.
+- **Hosted.** [Fleet Cloud](https://github.com/crvouga/mockingbird/blob/main/sites/fleet/README.md) hosts fleets at stable URLs. `mockingbird-fleet plan` and `apply` send it a `mockingbird.yaml` declaration, and `serve --config mockingbird.yaml` runs the same file locally.
 
 ### In-process, in a test
 
@@ -352,12 +352,12 @@ npx mockingbird-junction serve --port 8787                           # one servi
 
 ## For coding agents
 
-Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
+Run the emulators as a fleet: install `@crvouga/mockingbird-fleet` and the service packages, write `mockingbird.json`, and start `npx mockingbird-fleet serve --config mockingbird.json --dashboard --ready-file ready.json`; read each emulator's URL from `ready.json` rather than guessing a port. Every npm package ships an agent index at `node_modules/<package>/DISCOVERY.md`. It points to the local behavior guide, exact capability matrix, machine-readable contract or compatibility evidence, public types, parity oracle, runtime introspection, and issue-reporting contract. [`llms.txt`](llms.txt) indexes those files with the parity each service declares, and the docs site publishes the same source material as markdown and JSON. When an emulator diverges from the real API, lacks a feature you call, or the vendor you need is not in the catalog, file an issue: [the filing guide](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md) gives the title format, templates and the behavior spec for feature and service requests.
 
 ## Contributing
 
 ```bash
-git clone https://github.com/crvouga-organization/mockingbird.git && cd mockingbird
+git clone https://github.com/crvouga/mockingbird.git && cd mockingbird
 bun run setup   # install, build every package, create .env.local
 bun test
 ```
@@ -381,8 +381,10 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | [Releasing](docs/RELEASING.md) | How packages get from `main` to npm using Trusted Publishing, without a stored npm token. |
 | [Secrets runbook](docs/SECRETS.md) | Where every credential lives, who needs it, and how to run live parity without ever holding a sandbox key: GitHub Actions repo secrets are the only secret store. |
 | [AWS implementation and oracle coverage](docs/AWS_COVERAGE.md) | The LocalStack expansion is work in progress. No new LocalStack or live AWS oracle run was performed during integration. Implemented services have local transport and state tests; scaffold packages explicitly reject vendor operations. `bun run parity` fails when no scenario exists or the local oracle is unavailable. |
+| [Dev resources](docs/DEV_RESOURCES.md) | Run an app against its emulators, then point any one third-party service at a real **non-production** resource (Stripe test mode, Junction's sandbox, your dev Resend account) without rebuilding, redeploying, or putting a credential in the browser. Production is never reachable: every credential must match a non-production allow-list you write, and known production formats are refused regardless. |
 | [Emulate coverage audit](docs/EMULATE_COVERAGE.md) | Mockingbird covers the 14 public providers in [Emulate](https://emulate.dev/) and [vercel-labs/emulate](https://github.com/vercel-labs/emulate). The comparison target is the npm package `emulate@0.12.1`, pinned in `packages/parity/package-oracle/package.json` and `bun.lock`. Licensed handler sources are pinned to commit `c77cb73e7ab525c5260dd36c04c91a54a23e7e75`; `packages/http/provider/port.json` records every source path and SHA-256 digest. |
 | [Infrastructure and orchestration emulators](docs/INFRASTRUCTURE_EMULATORS.md) | This document defines the boundaries and planned evidence for the Docker Engine, Hermes peer-run, and GitHub REST packages. |
+| [Live PR previews](docs/PREVIEWS.md) | Give every pull request a live, self-updating preview of your app on Cloudflare Workers (or Vercel), with one workflow file and no setup beyond the credentials any hosting needs. |
 
 ## License
 

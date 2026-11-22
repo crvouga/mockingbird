@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-runtime
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 The runtime every Mockingbird emulator service is built on: the router, the `/__admin` API and
 page, snapshots, faults, the clock, and the HTTP and OpenAPI helpers. Each
@@ -41,6 +41,20 @@ services; depend on a service's own exports for those capabilities.
 To leave the admin page's client out of a single-file application bundle, mark it external
 (`esbuild --external:./admin-ui.js`); `/__admin/ui` then answers 503 and everything else works.
 
+
+## Canonical preview package and compatibility
+
+Worker hosting, the MessagePort bridge, artifact loading and the Node HTTP adapter are implemented
+once in [`@crvouga/mockingbird-preview`](../adapters/preview/README.md). The existing runtime
+`preview/*` exports remain supported compatibility adapters; they delegate to that package and
+preserve their public signatures, first generation `1`, promise-shaped `ready`, explicit cookie
+headers and error messages. New consumers can use the canonical package directly for URL policies,
+opaque errors by default, SharedWorker identities, bounded artifacts and static deployment helpers.
+
+The artifact formats intentionally differ: legacy `{version: 1}` manifests identify decoded
+JavaScript bytes, while canonical `{format: 1}` manifests identify the downloaded bytes and include
+commit, size and encoding. One bounded loader understands both. Never reinterpret a legacy gzip
+hash as a canonical packed-byte hash; generate a new manifest when migrating.
 
 ## System harness for application previews
 

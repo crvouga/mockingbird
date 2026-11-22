@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/html-vite"
 import type { Notification } from "../src/model.js"
-import type { AppOptions, PushSkin } from "../src/ui/app.js"
+import type { AppOptions, PushSkin } from "../src/ui/types.js"
 import { ANDROID_TOKEN, art, base, IOS_TOKEN, push } from "./fixtures.js"
 import { mount } from "./mount.js"
 
@@ -173,3 +173,11 @@ export const AndroidSilencedApp: Story = {
     initial: { only: "push", push: { skin: "android" }, local: { silent: ["acme-shop"] } },
   }),
 }
+
+// Dark Mode: dark notification material on iOS, the Material You dark shade on Android.
+const dark = { theme: "dark" }
+export const DarkIosStack: Story = { args: device("ios", many(ios)), globals: dark }
+export const DarkIosExpanded: Story = { ...IosExpandedImageDataBadgeSound, globals: dark }
+export const DarkIosLongPressPreview: Story = { ...IosLongPressPreview, globals: dark }
+export const DarkAndroidShade: Story = { args: device("android", many(android)), globals: dark }
+export const DarkAndroidLongPressSettings: Story = { ...AndroidLongPressSettings, globals: dark }

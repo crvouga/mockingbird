@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-sqs
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful Amazon SQS emulator for AWS SDK v3 (AWS JSON) and for older SDKs and clients that speak the AWS query protocol. It models standard and FIFO queues, message attributes, visibility and receipt handles, batches, deduplication, purge locking, and dead-letter redrive without contacting AWS.
 

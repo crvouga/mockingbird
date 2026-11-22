@@ -196,6 +196,19 @@
         },
         "publicPath": {
           "type": "string"
+        },
+        "upstream": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["baseUrl"],
+          "properties": {
+            "baseUrl": {
+              "type": "string"
+            },
+            "mode": {
+              "enum": ["emulated", "forward"]
+            }
+          }
         }
       }
     },

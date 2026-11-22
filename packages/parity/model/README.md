@@ -88,4 +88,4 @@ Exported types: `Side` (`"real" | "mock"`), `SymbolicRef` (`{ type; handle }`), 
 - [`@crvouga/mockingbird-canonicalize`](https://www.npmjs.com/package/@crvouga/mockingbird-canonicalize) — rewrites ids to canonical tokens using the table.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — the runner that ties them together.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

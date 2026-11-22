@@ -1,0 +1,1286 @@
+# Reusable: a live, self-updating preview of each pull request on Cloudflare Workers (or Vercel).
+#
+# A project adopts it with one workflow file (see docs/PREVIEWS.md):
+#
+#   on:
+#     pull_request: { types: [opened, synchronize, reopened, closed] }
+#     workflow_run: { workflows: [CI], types: [requested, completed] }
+#   permissions: { contents: read, pull-requests: write }
+#   jobs:
+#     preview:
+#       uses: crvouga/mockingbird/.github/workflows/preview.yml@main
+#       with: { name: my-app, build: bun run preview:build, outdir: preview-dist }
+#       secrets:
+#         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+#         CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+#
+# Permissions, and why: `contents: read` checks out the code; `pull-requests: write` writes the
+# preview link (or section) into the PR description and reads the PR's head and changed files.
+# `mode: named-previews` also needs `deployments: write` for its GitHub Deployments. Nothing else.
+#
+# Trust boundary. Pull request code (its lockfile, install scripts, build, and anything they leave
+# on disk) runs only in the build jobs, which get no secret, a read-only token
+# (`permissions: contents: read`) and nothing from the deploy. They hand the built files to the
+# deploy jobs as an artifact. The jobs that hold CLOUDFLARE_* / VERCEL_* / WORKER_SECRETS and the
+# write token never check out or run the PR's code: they validate the artifact (regular files only,
+# within the size and count limits), recheck that the PR is still open at the built commit, and
+# deploy with tools the workflow pins (wrangler from npm, a wrangler config rebuilt from an
+# allowlist) or the `mockingbird-preview` CLI installed from the PR's base commit.
+#
+#   pull_request opened/synchronize/reopened → build (untrusted), then deploy (trusted), status
+#   pull_request closed                      → delete the preview
+#   workflow_run of the project's CI         → checks status (running / passed / failed)
+#   push to the default branch               → with `cache-paths`, build only, to save the cache
+#
+# Forks get no secrets, so their PRs are skipped. workflow_run always runs the caller's workflow
+# from the default branch, so checks status starts once the caller file is on it.
+#
+# `mode: named-previews` (opt-in) instead deploys each PR as Preview `pr-<n>` of one assets-only
+# Worker per site (free plan at any traffic, served at `pr-<n>.<host>`), through the
+# `mockingbird-preview` CLI: no Worker script, no per-PR Worker, no `/__preview/*` live status.
+#
+#   pull_request opened/synchronize/reopened → per site (concurrently): build and gate checks
+#                                              (untrusted), upload and prove version.json
+#                                              (trusted), checks again (untrusted); a GitHub
+#                                              Deployment and the PR description section
+#   pull_request closed                      → delete every site's Preview, confirm it gone
+#   push (e.g. main)                         → the branch's Preview, with a strict gate
+#   schedule / workflow_dispatch             → sweep: orphans, retention, capacity
+
+name: Preview
+
+on:
+  workflow_call:
+    inputs:
+      mode:
+        description: "`worker` (default): a Worker per PR, `<name>-pr-<number>`, with live status. `named-previews`: Preview `pr-<number>` of one assets-only Worker per site."
+        type: string
+        default: worker
+      hosting:
+        description: "worker mode: where previews are hosted. `cloudflare` (default): a Worker per PR. `vercel`: a static Vercel deployment aliased per PR (VERCEL_TOKEN, VERCEL_PROJECT_ID, optional VERCEL_ORG_ID)."
+        type: string
+        default: cloudflare
+      name:
+        description: Worker name prefix; each PR deploys `<name>-pr-<number>`. In named-previews mode without `sites`, the assets-only Worker's name.
+        type: string
+        default: ""
+      sites:
+        description: "named-previews: JSON array of `{ name, worker?, build?, outdir?, config?, host?, checks? }`, one Preview of its own Worker each. Empty: one site from name / build / outdir / wrangler-config / host / checks."
+        type: string
+        default: ""
+      host:
+        description: "The custom domain previews are served under: named-previews `pr-<n>.<host>`; hosting vercel `<name>-pr-<n>.<host>`. Empty: the host's own URL."
+        type: string
+        default: ""
+      checks:
+        description: "named-previews: a module (relative to working-directory) whose default export `(origin, fetch) => Promise<{ name, ok, detail? }[]>` runs before and after upload."
+        type: string
+        default: ""
+      retention-days:
+        description: "named-previews: the sweep removes Previews of open PRs not deployed for this long."
+        type: string
+        default: "7"
+      capacity:
+        description: "named-previews: the sweep keeps at most this many PR Previews per Worker (newest first)."
+        type: string
+        default: "80"
+      working-directory:
+        description: Where install, build, the CLI and wrangler run.
+        type: string
+        default: "."
+      install:
+        description: "Installs dependencies (must make the `mockingbird-preview` CLI available). Empty: `bun install --frozen-lockfile`, `pnpm install --frozen-lockfile` or `npm ci` by package-manager."
+        type: string
+        default: ""
+      build:
+        description: Builds the preview into `outdir` (e.g. a script calling buildPreview()). Required unless every site of `sites` has its own.
+        type: string
+        default: ""
+      outdir:
+        description: The built preview, relative to working-directory. Required unless every site of `sites` has its own.
+        type: string
+        default: ""
+      wrangler-config:
+        description: A wrangler config (JSON, JSONC or TOML, relative to working-directory). Empty generates one that serves `outdir` with the package's Worker.
+        type: string
+        default: ""
+      cli:
+        description: Runs the `mockingbird-preview` CLI (in the build job from the PR's install; in credentialed jobs from the base commit's install).
+        type: string
+        default: bunx mockingbird-preview
+      bun-version:
+        type: string
+        default: "1.4.0"
+      wrangler:
+        type: string
+        default: bunx wrangler@4.50.0
+      runs-on:
+        description: "The build jobs' runner: a label, or JSON (an array of labels, or `{ group, labels }`)."
+        type: string
+        default: ubuntu-latest
+      timeout-minutes:
+        description: The build jobs' timeout.
+        type: number
+        default: 30
+      package-manager:
+        description: "`bun` (default), `pnpm` or `npm`: sets up the toolchain and the default install."
+        type: string
+        default: bun
+      node-version:
+        description: Node.js to set up (actions/setup-node), e.g. `22`. Set up whenever package-manager is not bun.
+        type: string
+        default: ""
+      node-version-file:
+        description: A file naming the Node.js version, e.g. `.nvmrc`.
+        type: string
+        default: ""
+      pnpm-version:
+        description: pnpm to set up; empty reads `packageManager` from package.json.
+        type: string
+        default: ""
+      cache-paths:
+        description: "Newline-separated paths to cache between builds (a package store, `.turbo`, …). Restored read-only on pull requests; saved only by builds on the default branch."
+        type: string
+        default: ""
+      cache-key-prefix:
+        description: The cache key's prefix; the key adds the OS, the lockfiles' hash and the commit.
+        type: string
+        default: preview
+      paths:
+        description: "Newline-separated globs (`*` within a path segment, `**` across, `!` excludes) of the files the preview ships. A push that changes none of them starts no build. Empty: every push builds."
+        type: string
+        default: ""
+      link-path:
+        description: The path (and query) the PR's preview link opens, e.g. `/` or `/?surface=app`.
+        type: string
+        default: /
+      pr-link:
+        description: Put the preview link at the top of the PR description. false leaves the description alone; the workflow's `url` output still has it.
+        type: boolean
+        default: true
+      max-file-mib:
+        description: "The per-file limit the artifact is checked against before upload. Empty: the host's (Cloudflare 25)."
+        type: string
+        default: ""
+      max-files:
+        description: "The file count limit the artifact is checked against before upload. Empty: the host's (Cloudflare 20000)."
+        type: string
+        default: ""
+      split-large-files:
+        description: Split files over the per-file limit into parts (`mockingbird-preview check --split`) that `loadSplitPreviewFile` joins in the browser.
+        type: boolean
+        default: false
+    outputs:
+      url:
+        description: The deployed preview's URL (worker mode).
+        value: ${{ jobs.deploy.outputs.url }}
+    # Only what the caller passes explicitly reaches this workflow (never `secrets: inherit`).
+    secrets:
+      CLOUDFLARE_API_TOKEN:
+        required: false
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
+      WORKER_SECRETS:
+        description: Optional `KEY=value` lines to set on the preview Worker (e.g. dev resource credentials). The Worker's code, which a PR controls, can read them.
+        required: false
+      VERCEL_TOKEN:
+        required: false
+      VERCEL_PROJECT_ID:
+        required: false
+      VERCEL_ORG_ID:
+        required: false
+      VERCEL_AUTOMATION_BYPASS_SECRET:
+        description: Vercel's "Protection Bypass for Automation" secret, when Deployment Protection is on.
+        required: false
+
+env:
+  # Does any of the newline-separated files on stdin match `$pats` (globs, `!` excludes, last wins)?
+  PREVIEW_PATHS_JQ: |
+    def re: gsub("(?<c>[.+^${}()|\\[\\]\\\\])"; "\\\(.c)")
+      | gsub("\\*\\*/"; "\u0001") | gsub("\\*\\*"; "\u0002") | gsub("\\*"; "[^/]*")
+      | gsub("\\?"; "[^/]") | gsub("\u0001"; "(.*/)?") | gsub("\u0002"; ".*") | "^" + . + "$";
+    ($pats | split("\n") | map(gsub("^\\s+|\\s+$"; "")) | map(select(. != "" and (startswith("#") | not)))) as $p
+    | [split("\n")[] | select(. != "") | . as $f
+        | reduce $p[] as $g (false;
+            if ($g | startswith("!")) then (if ($f | test($g[1:] | re)) then false else . end)
+            else (if ($f | test($g | re)) then true else . end) end)]
+    | any
+  # `bash -c "$PREVIEW_VALIDATE" - <dir> <max bytes per file> <max files>`: regular files and
+  # directories only, every file within the per-file limit, the count within the limit. Names
+  # every offending path and fails.
+  PREVIEW_VALIDATE: |
+    dir=$1 max_bytes=$2 max_files=$3 status=0
+    [ -d "$dir" ] || { echo "::error::No preview build at $dir"; exit 1; }
+    while IFS= read -r -d '' path; do
+      echo "::error::${path#"$dir"/} is not a regular file (symlinks and special files are refused)"; status=1
+    done < <(find "$dir" -mindepth 1 ! -type f ! -type d -print0)
+    while IFS= read -r -d '' path; do
+      size=$(stat -c %s "$path")
+      echo "::error::${path#"$dir"/} is $((size / 1048576)) MiB, over the $((max_bytes / 1048576)) MiB per-file limit (split-large-files: true splits it)"; status=1
+    done < <(find "$dir" -type f -size "+${max_bytes}c" -print0)
+    count=$(find "$dir" -type f | wc -l)
+    if [ "$count" -gt "$max_files" ]; then
+      echo "::error::$count files, over the $max_files files per deployment limit"; status=1
+    fi
+    [ "$status" = 0 ] && echo "$dir: $count files, within the limits"
+    exit "$status"
+
+jobs:
+  # ── mode: worker (default) ────────────────────────────────────────────────────────────────────
+  # Trusted: no checkout. Decides what to do and pushes the building / checks status.
+  preview:
+    if: inputs.mode != 'named-previews'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      mode: ${{ steps.paths.outputs.mode }}
+      pr: ${{ steps.ctx.outputs.pr }}
+      pr-url: ${{ steps.ctx.outputs.pr-url }}
+      sha: ${{ steps.ctx.outputs.sha }}
+      worker: ${{ steps.ctx.outputs.worker }}
+      exists: ${{ steps.exists.outputs.exists }}
+      max-bytes: ${{ steps.ctx.outputs.max-bytes }}
+      max-files: ${{ steps.ctx.outputs.max-files }}
+    steps:
+      - name: Resolve the pull request and what to do
+        id: ctx
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number || github.event.workflow_run.pull_requests[0].number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository || github.event.workflow_run.head_repository.full_name == github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.workflow_run.head_sha || github.sha }}
+          RUN_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+          RUN_URL: ${{ github.event.workflow_run.html_url }}
+          HAS_CLOUDFLARE: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          HAS_VERCEL: ${{ secrets.VERCEL_TOKEN != '' && secrets.VERCEL_PROJECT_ID != '' }}
+          HAS_WORKER_SECRETS: ${{ secrets.WORKER_SECRETS != '' }}
+          DEFAULT_BRANCH_PUSH: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+          CACHE_PATHS: ${{ inputs.cache-paths }}
+          HOSTING: ${{ inputs.hosting }}
+          MAX_FILE_MIB: ${{ inputs.max-file-mib }}
+          MAX_FILES: ${{ inputs.max-files }}
+          NAME: ${{ inputs.name }}
+        run: |
+          mode=skip
+          if [ -z "$NAME" ]; then
+            echo "::error::The per-PR Worker mode needs the name input."; exit 1
+          fi
+          case "$HOSTING" in
+            cloudflare) has_token=$HAS_CLOUDFLARE secrets="CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID"
+              default_mib=25 default_files=20000 ;;
+            vercel) has_token=$HAS_VERCEL secrets="VERCEL_TOKEN and VERCEL_PROJECT_ID"
+              default_mib=100 default_files=15000
+              if [ "$HAS_WORKER_SECRETS" = "true" ]; then
+                echo "::error::WORKER_SECRETS needs a Worker; a Vercel preview is static and runs no code."; exit 1
+              fi ;;
+            *) echo "::error::hosting is cloudflare or vercel, not '$HOSTING'."; exit 1 ;;
+          esac
+          if [ "$EVENT" = "push" ]; then
+            if [ "$DEFAULT_BRANCH_PUSH" = "true" ] && [ -n "$CACHE_PATHS" ]; then mode=warm
+            else echo "::notice::A push builds only on the default branch, to save cache-paths."; fi
+          elif [ -z "$PR_NUMBER" ] || [ "$SAME_REPO" != "true" ]; then
+            echo "::notice::Not a same-repository pull request; no preview."
+          elif [ "$has_token" != "true" ]; then
+            echo "::notice::Previews on $HOSTING need the $secrets secrets."
+          elif [ "$EVENT" = "pull_request" ] && [ "$ACTION" = "closed" ]; then mode=close
+          elif [ "$EVENT" = "pull_request" ]; then mode=deploy
+          elif [ "$EVENT" = "workflow_run" ]; then mode=checks
+          fi
+          checks_state=running
+          if [ "$ACTION" = "completed" ]; then
+            [ "$RUN_CONCLUSION" = "success" ] && checks_state=passed || checks_state=failed
+          fi
+          {
+            echo "mode=$mode"
+            echo "pr=$PR_NUMBER"
+            echo "pr-url=${PR_URL:-$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/pull/$PR_NUMBER}"
+            echo "sha=$HEAD_SHA"
+            echo "worker=$NAME-pr-$PR_NUMBER"
+            echo "checks-state=$checks_state"
+            echo "checks-url=$RUN_URL"
+            echo "run-url=$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "max-bytes=$(( ${MAX_FILE_MIB:-$default_mib} * 1048576 ))"
+            echo "max-files=${MAX_FILES:-$default_files}"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=$mode pr=$PR_NUMBER worker=$NAME-pr-$PR_NUMBER hosting=$HOSTING"
+
+      # A push whose changed files match none of `paths` builds nothing (the preview stays at the
+      # last commit that changed what it ships).
+      - &paths
+        name: Did this push change what the preview ships
+        id: paths
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MODE: ${{ steps.ctx.outputs.mode }}
+          PATHS: ${{ inputs.paths }}
+          PR: ${{ steps.ctx.outputs.pr }}
+          ACTION: ${{ github.event.action }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after || github.sha }}
+        run: |
+          mode=$MODE
+          if [ "$mode" = "deploy" ] && [ -n "$PATHS" ]; then
+            files=""
+            if [ "$ACTION" = "synchronize" ] || [ -z "$PR" ]; then
+              # A push: the files it changed. A new branch (before is all zeros) has no diff.
+              if [ -n "${BEFORE//0/}" ]; then
+                files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$BEFORE...$AFTER" --jq '.files | if length >= 300 then empty else .[].filename end' 2>/dev/null) || files=""
+              fi
+            else
+              # Opened or reopened: everything the pull request changes.
+              files=$(gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename' 2>/dev/null) || files=""
+            fi
+            # Unknown (a new branch, a force push, an API error, 300+ files): build.
+            if [ -n "$files" ] && [ "$(printf '%s\n' "$files" | jq -R -s --arg pats "$PATHS" "$PREVIEW_PATHS_JQ")" = "false" ]; then
+              echo "::notice::This push changes none of the paths the preview ships; no build."
+              mode=unchanged
+            fi
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+
+      # Status lives in the Worker's configuration. Writing it to a Worker that does not exist
+      # would create an empty one, so it is only written once the preview has been deployed.
+      - name: Does the preview exist
+        id: exists
+        if: inputs.hosting == 'cloudflare' && (steps.paths.outputs.mode == 'deploy' || steps.paths.outputs.mode == 'checks')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER/settings")
+          echo "exists=$([ "$code" = 200 ] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - uses: oven-sh/setup-bun@v2
+        if: inputs.hosting == 'cloudflare' && steps.exists.outputs.exists == 'true'
+        with:
+          bun-version: ${{ inputs.bun-version }}
+
+      # One helper for every status write: `push-status KEY STATE URL [MESSAGE]`.
+      - &status-helper
+        name: Status helper
+        run: |
+          cat > "$RUNNER_TEMP/push-status" <<'SCRIPT'
+          #!/usr/bin/env bash
+          # Writes PREVIEW_BUILD or PREVIEW_CHECKS into the preview's configuration: the Worker's
+          # secrets (wrangler), or the Vercel preview's status file (the base commit's CLI).
+          # Best effort: a failure only warns.
+          key=$1 state=$2 url=${3:-} message=${4:-}
+          file="$RUNNER_TEMP/preview-status.json"
+          ( umask 077; jq -n --arg key "$key" --arg state "$state" --arg version "$VERSION" --arg url "$url" \
+            --arg message "$message" '{($key): ({state: $state, version: $version, at: (now | todate)}
+              + (if $url != "" then {runUrl: $url} else {} end)
+              + (if $message != "" then {message: $message} else {} end) | tojson)}' > "$file" )
+          if [ "$HOSTING" = "vercel" ]; then
+            domain=()
+            if [ -n "$HOST" ]; then domain=(--domain "$HOST"); fi
+            (cd "$TRUSTED_DIR" && $CLI host-status --hosting vercel --name "$WORKER" "${domain[@]}" --values "$(cat "$file")")
+          else
+            (cd "$RUNNER_TEMP" && $WRANGLER secret bulk "$file" --name "$WORKER" > /dev/null) \
+              && echo "$WORKER: $key $state ${VERSION:0:7}" || echo "::warning::Could not update $WORKER's status"
+          fi
+          rm -f "$file"
+          SCRIPT
+          chmod +x "$RUNNER_TEMP/push-status"
+
+      - name: Tell the preview CI is running
+        if: inputs.hosting == 'cloudflare' && steps.paths.outputs.mode == 'checks' && steps.exists.outputs.exists == 'true'
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HOSTING: ${{ inputs.hosting }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          WRANGLER: ${{ inputs.wrangler }}
+          STATE: ${{ steps.ctx.outputs.checks-state }}
+          URL: ${{ steps.ctx.outputs.checks-url }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_CHECKS "$STATE" "$URL"'
+
+      - name: Tell the preview a build started
+        if: inputs.hosting == 'cloudflare' && steps.paths.outputs.mode == 'deploy' && steps.exists.outputs.exists == 'true'
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          HOSTING: ${{ inputs.hosting }}
+          WORKER: ${{ steps.ctx.outputs.worker }}
+          VERSION: ${{ steps.ctx.outputs.sha }}
+          WRANGLER: ${{ inputs.wrangler }}
+          URL: ${{ steps.ctx.outputs.run-url }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_BUILD building "$URL"'
+
+  # hosting: vercel — the status writes need the CLI, installed from the base commit.
+  vercel-status:
+    needs: preview
+    if: inputs.hosting == 'vercel' && (needs.preview.outputs.mode == 'deploy' || needs.preview.outputs.mode == 'checks')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TOOLCHAIN: "true"
+    steps:
+      - &trusted-checkout
+        name: Check out the trusted base commit (never the pull request's code)
+        if: env.TOOLCHAIN == 'true'
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.pull_request.base.sha || github.sha }}
+          persist-credentials: false
+      - &setup-bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - &setup-pnpm
+        if: env.TOOLCHAIN == 'true' && inputs.package-manager == 'pnpm'
+        uses: pnpm/action-setup@v4
+        with:
+          version: ${{ inputs.pnpm-version }}
+          package_json_file: ${{ inputs.working-directory }}/package.json
+      - &setup-node
+        if: env.TOOLCHAIN == 'true' && (inputs.node-version != '' || inputs.node-version-file != '' || inputs.package-manager != 'bun')
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ inputs.node-version }}
+          node-version-file: ${{ inputs.node-version-file }}
+      - &install
+        name: Install
+        if: env.TOOLCHAIN == 'true'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          INSTALL: ${{ inputs.install }}
+          PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        run: |
+          if [ -z "$INSTALL" ]; then
+            case "$PACKAGE_MANAGER" in
+              bun) INSTALL="bun install --frozen-lockfile" ;;
+              pnpm) INSTALL="pnpm install --frozen-lockfile" ;;
+              npm) INSTALL="npm ci" ;;
+              *) echo "::error::package-manager is bun, pnpm or npm, not '$PACKAGE_MANAGER'."; exit 1 ;;
+            esac
+          fi
+          eval "$INSTALL"
+      - *status-helper
+      - name: Tell the preview its status
+        continue-on-error: true
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          HOSTING: vercel
+          HOST: ${{ inputs.host }}
+          CLI: ${{ inputs.cli }}
+          TRUSTED_DIR: ${{ github.workspace }}/${{ inputs.working-directory }}
+          WORKER: ${{ needs.preview.outputs.worker }}
+          VERSION: ${{ needs.preview.outputs.sha }}
+          MODE: ${{ needs.preview.outputs.mode }}
+          STATE: ${{ github.event.action == 'completed' && (github.event.workflow_run.conclusion == 'success' && 'passed' || 'failed') || 'running' }}
+          CHECKS_URL: ${{ github.event.workflow_run.html_url }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          if [ "$MODE" = "checks" ]; then "$RUNNER_TEMP/push-status" PREVIEW_CHECKS "$STATE" "$CHECKS_URL"
+          else "$RUNNER_TEMP/push-status" PREVIEW_BUILD building "$RUN_URL"; fi
+
+  # Untrusted: the pull request's code. No secret, a read-only token, nothing it can reach after.
+  build:
+    needs: preview
+    if: needs.preview.outputs.mode == 'deploy' || needs.preview.outputs.mode == 'warm'
+    runs-on: ${{ (startsWith(inputs.runs-on, '[') || startsWith(inputs.runs-on, '{')) && fromJSON(inputs.runs-on) || inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    # A newer push cancels the older build of the same pull request.
+    concurrency:
+      group: preview-build-${{ github.repository }}-${{ inputs.name }}-${{ needs.preview.outputs.pr || github.ref }}
+      cancel-in-progress: true
+    env:
+      TOOLCHAIN: "true"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - &cache-restore
+        name: Restore the build cache (read-only)
+        if: inputs.cache-paths != ''
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ inputs.cache-paths }}
+          key: ${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/pnpm-lock.yaml', '**/package-lock.json') }}-${{ github.sha }}
+          restore-keys: |
+            ${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/pnpm-lock.yaml', '**/package-lock.json') }}-
+            ${{ inputs.cache-key-prefix }}-${{ runner.os }}-
+      - *install
+      - name: Build
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          BUILD: ${{ inputs.build }}
+        run: eval "$BUILD"
+      # Only a build on the default branch writes the cache; a pull request never does.
+      - &cache-save
+        name: Save the build cache (default branch only)
+        if: inputs.cache-paths != '' && github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ inputs.cache-paths }}
+          key: ${{ inputs.cache-key-prefix }}-${{ runner.os }}-${{ hashFiles('**/bun.lock', '**/bun.lockb', '**/pnpm-lock.yaml', '**/package-lock.json') }}-${{ github.sha }}
+
+      - name: Split files over the limit
+        if: needs.preview.outputs.mode == 'deploy' && inputs.split-large-files
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CLI: ${{ inputs.cli }}
+          OUTDIR: ${{ inputs.outdir }}
+          HOSTING: ${{ inputs.hosting }}
+          MAX_FILE_MIB: ${{ inputs.max-file-mib }}
+        run: |
+          args=(--outdir "$OUTDIR" --hosting "$HOSTING" --split)
+          if [ -n "$MAX_FILE_MIB" ]; then args+=(--max-file-mib "$MAX_FILE_MIB"); fi
+          $CLI check "${args[@]}"
+
+      - name: Stamp, preflight and package the preview
+        if: needs.preview.outputs.mode == 'deploy'
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          CLI: ${{ inputs.cli }}
+          WRANGLER: ${{ inputs.wrangler }}
+          HOSTING: ${{ inputs.hosting }}
+          OUTDIR: ${{ inputs.outdir }}
+          CONFIG: ${{ inputs.wrangler-config }}
+          WORKER: ${{ needs.preview.outputs.worker }}
+          VERSION: ${{ needs.preview.outputs.sha }}
+          PR: ${{ needs.preview.outputs.pr }}
+          PR_URL: ${{ needs.preview.outputs.pr-url }}
+          MAX_BYTES: ${{ needs.preview.outputs.max-bytes }}
+          MAX_FILES: ${{ needs.preview.outputs.max-files }}
+          ARTIFACT: ${{ runner.temp }}/preview-artifact
+        run: |
+          # version.json names the commit this deploy ships; open tabs update to it in place.
+          $CLI stamp --outdir "$OUTDIR" --version "$VERSION" --pr "$PR" --pr-url "$PR_URL"
+          # The same check the deploy job repeats: fail here, before uploading anything.
+          bash -c "$PREVIEW_VALIDATE" - "$OUTDIR" "$MAX_BYTES" "$MAX_FILES"
+          rm -rf "$ARTIFACT" && mkdir -p "$ARTIFACT"
+          cp -R "$OUTDIR" "$ARTIFACT/assets"
+          if [ "$HOSTING" = "cloudflare" ]; then
+            if [ -z "$CONFIG" ]; then
+              CONFIG="$RUNNER_TEMP/wrangler.json"
+              # Absolute: wrangler resolves config paths against the config file's directory.
+              $CLI wrangler-config --name "$WORKER" --assets "$(realpath "$OUTDIR")" > "$CONFIG"
+            fi
+            # Bundle the Worker here, so the deploy job only uploads it (`no_bundle`).
+            $WRANGLER deploy --dry-run --outdir "$ARTIFACT/worker" --config "$CONFIG" --name "$WORKER"
+            # The config as plain JSON: the deploy job keeps only an allowlist of its settings.
+            # shellcheck disable=SC2016
+            bun -e '
+              const [path, out] = process.argv.slice(1)
+              const text = await Bun.file(path).text()
+              let config
+              if (path.endsWith(".toml")) config = Bun.TOML.parse(text)
+              else {
+                let json = "", i = 0
+                while (i < text.length) {
+                  const c = text[i]
+                  if (c === "\"") { const start = i++; while (i < text.length && text[i] !== "\"") i += text[i] === "\\" ? 2 : 1; json += text.slice(start, ++i) }
+                  else if (c === "/" && text[i + 1] === "/") { while (i < text.length && text[i] !== "\n") i++ }
+                  else if (c === "/" && text[i + 1] === "*") { i = text.indexOf("*/", i + 2) + 2; if (i < 2) i = text.length }
+                  else { json += c; i++ }
+                }
+                config = JSON.parse(json.replace(/,(\s*[}\]])/g, "$1"))
+              }
+              const main = String(config.main ?? "")
+              config.main = main.split("/").pop().replace(/\.[cm]?[jt]sx?$/, "") + ".js"
+              await Bun.write(out, JSON.stringify(config, null, 2))
+            ' "$CONFIG" "$ARTIFACT/wrangler.json"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: needs.preview.outputs.mode == 'deploy'
+        with:
+          name: preview-build
+          path: ${{ runner.temp }}/preview-artifact
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Trusted: holds the credentials, never checks out or runs the pull request's code.
+  deploy:
+    needs: [preview, build]
+    if: always() && needs.preview.outputs.mode == 'deploy' && (needs.build.result == 'success' || needs.build.result == 'failure')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # One deploy per preview at a time; a newer one (or the close) cancels an older one.
+    concurrency:
+      group: preview-deploy-${{ github.repository }}-${{ inputs.name }}-${{ needs.preview.outputs.pr }}
+      cancel-in-progress: true
+    outputs:
+      url: ${{ steps.deploy.outputs.url }}
+    env:
+      TOOLCHAIN: ${{ inputs.hosting == 'vercel' }}
+      HOSTING: ${{ inputs.hosting }}
+      HOST: ${{ inputs.host }}
+      CLI: ${{ inputs.cli }}
+      WRANGLER: ${{ inputs.wrangler }}
+      WORKER: ${{ needs.preview.outputs.worker }}
+      VERSION: ${{ needs.preview.outputs.sha }}
+      PR: ${{ needs.preview.outputs.pr }}
+      PR_URL: ${{ needs.preview.outputs.pr-url }}
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      TRUSTED_DIR: ${{ github.workspace }}/${{ inputs.working-directory }}
+    steps:
+      # Is the built commit still the pull request's head? A superseded build is never published.
+      - name: Recheck the pull request head
+        id: recheck
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ needs.preview.outputs.sha }}
+          PATHS: ${{ inputs.paths }}
+        run: |
+          read -r state head < <(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR" --jq '.state + " " + .head.sha')
+          current=false
+          if [ "$state" != "open" ]; then
+            echo "::notice::#$PR is $state; nothing to deploy."
+          elif [ "$head" = "$SHA" ]; then current=true
+          else
+            files=""
+            if [ -n "$PATHS" ]; then
+              files=$(gh api "repos/$GITHUB_REPOSITORY/compare/$SHA...$head" --jq '.files | if length >= 300 then empty else .[].filename end' 2>/dev/null) || files=""
+            fi
+            if [ -n "$files" ] && [ "$(printf '%s\n' "$files" | jq -R -s --arg pats "$PATHS" "$PREVIEW_PATHS_JQ")" = "false" ]; then
+              echo "::notice::#$PR moved to ${head:0:7}, which changes nothing the preview ships; deploying ${SHA:0:7}."
+              current=true
+            else
+              echo "::notice::#$PR moved on to ${head:0:7}; skipping ${SHA:0:7}, the newer run deploys."
+            fi
+          fi
+          echo "current=$current" >> "$GITHUB_OUTPUT"
+
+      - *trusted-checkout
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+      - *status-helper
+
+      - uses: actions/download-artifact@v5
+        if: needs.build.result == 'success' && steps.recheck.outputs.current == 'true'
+        with:
+          name: preview-build
+          path: ${{ runner.temp }}/preview-artifact
+
+      - name: Validate the build
+        if: needs.build.result == 'success' && steps.recheck.outputs.current == 'true'
+        env:
+          ARTIFACT: ${{ runner.temp }}/preview-artifact
+          MAX_BYTES: ${{ needs.preview.outputs.max-bytes }}
+          MAX_FILES: ${{ needs.preview.outputs.max-files }}
+        run: bash -c "$PREVIEW_VALIDATE" - "$ARTIFACT/assets" "$MAX_BYTES" "$MAX_FILES"
+
+      - name: Deploy
+        id: deploy
+        if: needs.build.result == 'success' && steps.recheck.outputs.current == 'true'
+        env:
+          ARTIFACT: ${{ runner.temp }}/preview-artifact
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          WORKER_SECRETS: ${{ secrets.WORKER_SECRETS }}
+          MAX_FILE_MIB: ${{ inputs.max-file-mib }}
+          MAX_FILES: ${{ inputs.max-files }}
+        run: |
+          if [ "$HOSTING" = "vercel" ]; then
+            args=(--hosting vercel --name "$WORKER" --outdir "$ARTIFACT/assets" --pr "$PR" --pr-url "$PR_URL")
+            if [ -n "$HOST" ]; then args+=(--domain "$HOST"); fi
+            if [ -n "$MAX_FILE_MIB" ]; then args+=(--max-file-mib "$MAX_FILE_MIB"); fi
+            if [ -n "$MAX_FILES" ]; then args+=(--max-files "$MAX_FILES"); fi
+            out=$(cd "$TRUSTED_DIR" && $CLI host-deploy "${args[@]}")
+            echo "$out"
+            url=$(grep -Eo '^url=https://[^ ]+' <<< "$out" | tail -1 | cut -d= -f2-)
+          else
+            # wrangler runs from an empty directory of its own, on a config rebuilt from an
+            # allowlist: no build command, no file path the PR chose, the Worker already bundled.
+            deploy_dir="$RUNNER_TEMP/preview-deploy" && rm -rf "$deploy_dir" && mkdir -p "$deploy_dir"
+            entry=$(jq -r '.main' "$ARTIFACT/wrangler.json")
+            if ! [[ "$entry" =~ ^[A-Za-z0-9_.-]+\.js$ ]] || [ ! -f "$ARTIFACT/worker/$entry" ]; then
+              echo "::error::The build's bundled Worker entry is missing"; exit 1
+            fi
+            pr_json=$(jq -cn --argjson number "$PR" --arg url "$PR_URL" '{number: $number, url: $url}')
+            jq --arg name "$WORKER" --arg main "$ARTIFACT/worker/$entry" --arg base "$ARTIFACT/worker" \
+              --arg assets "$ARTIFACT/assets" --arg pr "$pr_json" '
+              def keep: ["compatibility_date", "compatibility_flags", "workers_dev", "preview_urls",
+                "vars", "durable_objects", "migrations", "kv_namespaces", "r2_buckets", "d1_databases",
+                "services", "queues", "ai", "browser", "analytics_engine_datasets", "hyperdrive",
+                "vectorize", "version_metadata", "observability", "limits", "placement", "logpush",
+                "triggers", "send_email", "dispatch_namespaces", "keep_vars", "routes", "route",
+                "tail_consumers", "workflows", "images", "assets"];
+              def built: ["name", "main", "rules", "find_additional_modules", "base_dir", "no_bundle",
+                "minify", "node_compat", "build", "alias", "define", "tsconfig", "jsx_factory",
+                "jsx_fragment", "upload_source_maps", "account_id", "$schema"];
+              def asset_keys: ["directory", "binding", "html_handling", "not_found_handling", "run_worker_first"];
+              (keys - keep - built) as $refused
+              | ((.assets // {}) | keys - asset_keys) as $refused_assets
+              | if ($refused | length) > 0 or ($refused_assets | length) > 0 then
+                  error("wrangler-config settings a preview deploy does not support: \(($refused + ($refused_assets | map("assets.\(.)"))) | join(", "))")
+                else . end
+              | with_entries(select(.key as $k | keep | index($k)))
+              | .name = $name | .main = $main | .no_bundle = true | .find_additional_modules = true
+              | .base_dir = $base | .rules = [{type: "ESModule", globs: ["**/*.js", "**/*.mjs"]}]
+              | if .assets then .assets.directory = $assets else . end
+              | .vars = ((.vars // {}) + {PREVIEW_PR: $pr})
+            ' "$ARTIFACT/wrangler.json" > "$deploy_dir/wrangler.json"
+            cd "$deploy_dir"
+            deploy() {
+              $WRANGLER deploy --config wrangler.json > "$RUNNER_TEMP/deploy.log" 2>&1
+            }
+            if ! deploy; then
+              # A preview first deployed with an older, Durable Object based version cannot drop that
+              # class in place. A preview holds no state worth keeping: delete it and deploy fresh.
+              if grep -qi "durable object" "$RUNNER_TEMP/deploy.log"; then
+                curl -s -o /dev/null -X DELETE -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+                  "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER?force=true"
+                deploy || { cat "$RUNNER_TEMP/deploy.log"; exit 1; }
+              else
+                cat "$RUNNER_TEMP/deploy.log"; exit 1
+              fi
+            fi
+            cat "$RUNNER_TEMP/deploy.log"
+            # Set the caller's KEY=value lines (empty values skipped); they go through a 0600 file
+            # that is removed at once.
+            file="$RUNNER_TEMP/worker-secrets.json"
+            ( umask 077; printf '%s\n' "$WORKER_SECRETS" | jq -Rn 'reduce inputs as $line ({};
+                ($line | capture("^(?<key>[A-Za-z_][A-Za-z0-9_]*)=(?<value>.*)$")? // null) as $pair
+                | if $pair != null and $pair.value != "" then .[$pair.key] = $pair.value else . end)' > "$file" )
+            echo "Secrets for this preview: $(jq -r 'keys | join(", ")' "$file")"
+            if [ "$(jq length "$file")" -gt 0 ]; then $WRANGLER secret bulk "$file" --name "$WORKER" > /dev/null; fi
+            rm -f "$file"
+            url=$(grep -Eo "https://$WORKER\.[a-z0-9-]+\.workers\.dev" "$RUNNER_TEMP/deploy.log" | tail -1)
+          fi
+          test -n "$url"
+          curl --fail --silent --show-error --retry 8 --retry-all-errors --retry-delay 5 "$url/version.json" > /dev/null
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "[Open preview]($url)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Tell the preview it deployed
+        if: steps.deploy.outputs.url != ''
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+        run: '"$RUNNER_TEMP/push-status" PREVIEW_BUILD deployed "$RUN_URL"'
+
+      - name: Tell the preview the build failed
+        if: failure() || (needs.build.result == 'failure' && steps.recheck.outputs.current == 'true')
+        continue-on-error: true
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+          EXISTS: ${{ needs.preview.outputs.exists }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          # Writing status to a Cloudflare Worker that does not exist would create an empty one.
+          if [ "$HOSTING" = "cloudflare" ] && [ "$EXISTS" != "true" ] && [ -z "$URL" ]; then exit 0; fi
+          "$RUNNER_TEMP/push-status" PREVIEW_BUILD failed "$RUN_URL" "The preview build or deploy failed"
+
+      - name: Put the preview link at the top of the PR
+        if: steps.deploy.outputs.url != '' && inputs.pr-link
+        uses: actions/github-script@v7
+        env:
+          PREVIEW_URL: ${{ steps.deploy.outputs.url }}
+          LINK_PATH: ${{ inputs.link-path }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const pull_number = Number(process.env.PR);
+            const { data: pr } = await github.rest.pulls.get({ owner, repo, pull_number });
+            const start = '<!-- system-preview:start -->';
+            const end = '<!-- system-preview:end -->';
+            const path = process.env.LINK_PATH || '/';
+            const link = new URL(path.startsWith('/') ? path : `/${path}`, process.env.PREVIEW_URL).href;
+            const links = `[Preview](${link})`;
+            const body = (pr.body || '').replace(/<!-- system-preview:start -->[\s\S]*?<!-- system-preview:end -->\s*/g, '').trimStart();
+            const next = `${start}\n${links}\n${end}\n\n${body}`;
+            if (pr.body !== next) await github.rest.pulls.update({ owner, repo, pull_number, body: next });
+
+  # Trusted: deletes the preview when the PR closes, cancelling any deploy still running.
+  remove:
+    needs: preview
+    if: needs.preview.outputs.mode == 'close'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: preview-deploy-${{ github.repository }}-${{ inputs.name }}-${{ needs.preview.outputs.pr }}
+      cancel-in-progress: true
+    env:
+      TOOLCHAIN: ${{ inputs.hosting == 'vercel' }}
+    steps:
+      - *trusted-checkout
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+      - name: Remove the preview
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          HOSTING: ${{ inputs.hosting }}
+          HOST: ${{ inputs.host }}
+          CLI: ${{ inputs.cli }}
+          TRUSTED_DIR: ${{ github.workspace }}/${{ inputs.working-directory }}
+          WORKER: ${{ needs.preview.outputs.worker }}
+        run: |
+          if [ "$HOSTING" = "vercel" ]; then
+            domain=()
+            if [ -n "$HOST" ]; then domain=(--domain "$HOST"); fi
+            cd "$TRUSTED_DIR" && $CLI host-remove --hosting vercel --name "$WORKER" "${domain[@]}"
+            exit
+          fi
+          # Delete only the script: `wrangler delete` also lists KV namespaces, which a
+          # deploy-scoped token may not read. A Worker that is already gone is fine.
+          status=$(curl -s -o "$RUNNER_TEMP/delete.json" -w '%{http_code}' -X DELETE \
+            -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+            "https://api.cloudflare.com/client/v4/accounts/$CLOUDFLARE_ACCOUNT_ID/workers/scripts/$WORKER?force=true")
+          case "$status" in
+            200|404) echo "Removed $WORKER (HTTP $status)" ;;
+            *) cat "$RUNNER_TEMP/delete.json"; exit 1 ;;
+          esac
+
+  # ── mode: named-previews ──────────────────────────────────────────────────────────────────────
+  # Previews `pr-<n>` of one assets-only Worker per site, through the `mockingbird-preview` CLI.
+
+  plan:
+    if: inputs.mode == 'named-previews'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      mode: ${{ steps.paths.outputs.mode }}
+      pr: ${{ steps.ctx.outputs.pr }}
+      branch: ${{ steps.ctx.outputs.branch }}
+      sha: ${{ steps.ctx.outputs.sha }}
+      sites: ${{ steps.ctx.outputs.sites }}
+    steps:
+      - name: Resolve what to do and the sites
+        id: ctx
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          HOSTING: ${{ inputs.hosting }}
+          SITES: ${{ inputs.sites }}
+          NAME: ${{ inputs.name }}
+          BUILD: ${{ inputs.build }}
+          OUTDIR: ${{ inputs.outdir }}
+          CONFIG: ${{ inputs.wrangler-config }}
+          HOST: ${{ inputs.host }}
+          CHECKS: ${{ inputs.checks }}
+        run: |
+          if [ "$HOSTING" != "cloudflare" ]; then
+            echo "::error::named-previews mode is Cloudflare Workers Previews; hosting '$HOSTING' is supported only in worker mode."; exit 1
+          fi
+          # One site from the single-site inputs, or the `sites` array; each site's missing fields
+          # fall back to those inputs. A site without a name, worker, build or outdir is an error.
+          if [ -z "$SITES" ]; then SITES='[{}]'; fi
+          sites=$(jq -c --arg name "$NAME" --arg build "$BUILD" --arg outdir "$OUTDIR" \
+            --arg config "$CONFIG" --arg host "$HOST" --arg checks "$CHECKS" '
+            if type != "array" or length == 0 then error("sites is a non-empty JSON array") else . end
+            | map({
+                name: (.name // .worker // $name),
+                worker: (.worker // .name // $name),
+                build: (.build // $build),
+                outdir: (.outdir // $outdir),
+                config: (.config // $config),
+                host: (.host // $host),
+                checks: (.checks // $checks)
+              })
+            | if any(.[]; .name == "" or .worker == "" or .build == "" or .outdir == "")
+              then error("every site needs a name (or worker), build and outdir") else . end
+            | if (map(.name) | unique | length) != length then error("site names repeat") else . end' \
+            <<< "$SITES")
+          mode=skip branch=""
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::Previews need CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets."
+          elif [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then mode=sweep
+          elif [ "$EVENT" = "pull_request" ]; then
+            if [ "$SAME_REPO" != "true" ]; then echo "::notice::Not a same-repository pull request; no preview."
+            elif [ "$ACTION" = "closed" ]; then mode=close
+            else mode=deploy; fi
+          elif [ "$EVENT" = "push" ] && [ "$REF_TYPE" = "branch" ]; then mode=deploy branch=$REF_NAME
+          fi
+          {
+            echo "mode=$mode"
+            echo "pr=$PR_NUMBER"
+            echo "branch=$branch"
+            echo "sha=$HEAD_SHA"
+            echo "sites=$sites"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=$mode pr=$PR_NUMBER branch=$branch sites=$(jq -r 'map(.name) | join(", ")' <<< "$sites")"
+
+      - *paths
+      # The PR section is written with the base commit's CLI, only when there is a PR to deploy.
+      - name: Does this run mark a pull request deploying
+        env:
+          MODE: ${{ steps.paths.outputs.mode }}
+          PR: ${{ steps.ctx.outputs.pr }}
+        run: if [ "$MODE" = "deploy" ] && [ -n "$PR" ]; then echo "TOOLCHAIN=true" >> "$GITHUB_ENV"; fi
+      - *trusted-checkout
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+      - name: Mark the PR's preview deploying
+        if: steps.paths.outputs.mode == 'deploy' && steps.ctx.outputs.pr != ''
+        continue-on-error: true
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLI: ${{ inputs.cli }}
+          PR: ${{ steps.ctx.outputs.pr }}
+          SHA: ${{ steps.ctx.outputs.sha }}
+          SITES: ${{ steps.ctx.outputs.sites }}
+        run: |
+          mapfile -t names < <(jq -r '.[].name' <<< "$SITES")
+          site_args=()
+          for name in "${names[@]}"; do site_args+=(--site "$name"); done
+          $CLI pr-section --repository "$GITHUB_REPOSITORY" --pr "$PR" --state deploying \
+            "${site_args[@]}" --attempted "$SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+  # Untrusted: each site's build and gate checks. No secret, a read-only token.
+  build-site:
+    needs: plan
+    if: inputs.mode == 'named-previews' && needs.plan.outputs.mode == 'deploy'
+    name: build ${{ matrix.site.name }}
+    runs-on: ${{ (startsWith(inputs.runs-on, '[') || startsWith(inputs.runs-on, '{')) && fromJSON(inputs.runs-on) || inputs.runs-on }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.plan.outputs.sites) }}
+    concurrency:
+      group: preview-build-${{ github.repository }}-${{ matrix.site.name }}-${{ needs.plan.outputs.pr || needs.plan.outputs.branch }}
+      cancel-in-progress: true
+    env:
+      TOOLCHAIN: "true"
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *cache-restore
+      - *install
+      - name: Build
+        env:
+          BUILD: ${{ matrix.site.build }}
+        run: eval "$BUILD"
+      - *cache-save
+      - name: Split files over the limit
+        if: inputs.split-large-files
+        env:
+          CLI: ${{ inputs.cli }}
+          OUTDIR: ${{ matrix.site.outdir }}
+          MAX_FILE_MIB: ${{ inputs.max-file-mib }}
+        run: |
+          args=(--outdir "$OUTDIR" --split)
+          if [ -n "$MAX_FILE_MIB" ]; then args+=(--max-file-mib "$MAX_FILE_MIB"); fi
+          $CLI check "${args[@]}"
+      - name: Gate checks, preflight and package
+        env:
+          CLI: ${{ inputs.cli }}
+          SITE: ${{ matrix.site.name }}
+          OUTDIR: ${{ matrix.site.outdir }}
+          CONFIG: ${{ matrix.site.config }}
+          CHECKS: ${{ matrix.site.checks }}
+          MAX_FILE_MIB: ${{ inputs.max-file-mib }}
+          MAX_FILES: ${{ inputs.max-files }}
+          ARTIFACT: ${{ runner.temp }}/preview-artifact
+        run: |
+          rm -rf "$ARTIFACT" && mkdir -p "$ARTIFACT"
+          if [ -n "$CHECKS" ]; then
+            $CLI gate-preview --site "$SITE" --outdir "$OUTDIR" --checks "$CHECKS" --out "$ARTIFACT/gate.json"
+          fi
+          bash -c "$PREVIEW_VALIDATE" - "$OUTDIR" "$(( ${MAX_FILE_MIB:-25} * 1048576 ))" "${MAX_FILES:-20000}"
+          cp -R "$OUTDIR" "$ARTIFACT/assets"
+          if [ -n "$CONFIG" ]; then cp "$CONFIG" "$ARTIFACT/site-config.jsonc"; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: preview-build-${{ matrix.site.name }}
+          path: ${{ runner.temp }}/preview-artifact
+          include-hidden-files: true
+          if-no-files-found: error
+          retention-days: 1
+
+  # Trusted: uploads each site's artifact with the base commit's CLI; never runs the PR's code.
+  site:
+    needs: [plan, build-site]
+    if: always() && inputs.mode == 'named-previews' && (needs.plan.outputs.mode == 'close' || (needs.plan.outputs.mode == 'deploy' && (needs.build-site.result == 'success' || needs.build-site.result == 'failure')))
+    name: ${{ matrix.site.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Each site deploys on its own; one failing does not cancel or hold back the others.
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.plan.outputs.sites) }}
+    # One deploy per site and PR (or branch) at a time; a newer one or the close cancels it.
+    concurrency:
+      group: preview-deploy-${{ github.repository }}-${{ matrix.site.name }}-${{ needs.plan.outputs.pr || needs.plan.outputs.branch }}
+      cancel-in-progress: true
+    env:
+      TOOLCHAIN: "true"
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GITHUB_TOKEN: ${{ github.token }}
+      CLI: ${{ inputs.cli }}
+      SITE: ${{ matrix.site.name }}
+      WORKER: ${{ matrix.site.worker }}
+      PR: ${{ needs.plan.outputs.pr }}
+      BRANCH: ${{ needs.plan.outputs.branch }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      ENVIRONMENT: preview/${{ matrix.site.name }}/pr-${{ needs.plan.outputs.pr }}
+      RESULT: ${{ github.workspace }}/.preview-results/${{ matrix.site.name }}.json
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - *trusted-checkout
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+
+      - name: Start the GitHub Deployment
+        if: needs.plan.outputs.mode == 'deploy' && needs.plan.outputs.pr != ''
+        continue-on-error: true
+        run: |
+          $CLI deployment --repository "$GITHUB_REPOSITORY" --environment "$ENVIRONMENT" \
+            --state in_progress --ref "$SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - uses: actions/download-artifact@v5
+        if: needs.plan.outputs.mode == 'deploy'
+        with:
+          name: preview-build-${{ matrix.site.name }}
+          path: ${{ runner.temp }}/preview-artifact
+
+      - name: Deploy the Preview
+        id: deploy
+        if: needs.plan.outputs.mode == 'deploy'
+        env:
+          HOST: ${{ matrix.site.host }}
+          MAX_FILE_MIB: ${{ inputs.max-file-mib }}
+          MAX_FILES: ${{ inputs.max-files }}
+          ARTIFACT: ${{ runner.temp }}/preview-artifact
+        run: |
+          # Assets only: the CLI refuses a config with a main, a binding, a var or run_worker_first.
+          # The gate ran in the build job; the checks after upload run in the verify job.
+          args=(--site "$SITE" --worker "$WORKER" --outdir "$ARTIFACT/assets" --commit "$SHA"
+            --repository "$GITHUB_REPOSITORY" --result "$RESULT")
+          if [ -n "$PR" ]; then args+=(--pr "$PR"); else args+=(--branch "$BRANCH"); fi
+          if [ -f "$ARTIFACT/site-config.jsonc" ]; then args+=(--config "$ARTIFACT/site-config.jsonc"); fi
+          if [ -f "$ARTIFACT/gate.json" ]; then args+=(--gate "$ARTIFACT/gate.json"); fi
+          if [ -n "$HOST" ]; then args+=(--host "$HOST"); fi
+          if [ -n "$MAX_FILE_MIB" ]; then args+=(--max-file-mib "$MAX_FILE_MIB"); fi
+          if [ -n "$MAX_FILES" ]; then args+=(--max-files "$MAX_FILES"); fi
+          status=0
+          $CLI deploy-preview "${args[@]}" || status=$?
+          if [ -f "$RESULT" ]; then
+            url=$(jq -r '.url // empty' "$RESULT")
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+            if [ -n "$url" ]; then echo "[$SITE preview]($url): $(jq -r .state "$RESULT")" >> "$GITHUB_STEP_SUMMARY"; fi
+          fi
+          exit "$status"
+
+      - name: Record a failure before upload
+        if: failure() && needs.plan.outputs.mode == 'deploy'
+        run: |
+          mkdir -p "$(dirname "$RESULT")"
+          [ -f "$RESULT" ] || jq -n --arg site "$SITE" --arg worker "$WORKER" --arg sha "$SHA" \
+            '{site: $site, worker: $worker, name: "", state: "failed", attempted: $sha,
+              message: "The build or deploy failed before upload; the previous deploy keeps serving"}' > "$RESULT"
+
+      - name: Finish the GitHub Deployment
+        if: always() && needs.plan.outputs.mode == 'deploy' && needs.plan.outputs.pr != ''
+        continue-on-error: true
+        env:
+          STATE: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          args=()
+          if [ -n "$URL" ]; then args+=(--url "$URL"); fi
+          $CLI deployment --repository "$GITHUB_REPOSITORY" --environment "$ENVIRONMENT" \
+            --state "$STATE" "${args[@]}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && needs.plan.outputs.mode == 'deploy'
+        with:
+          name: preview-result-${{ matrix.site.name }}
+          path: .preview-results/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 1
+
+      - name: Remove the Preview
+        if: needs.plan.outputs.mode == 'close'
+        run: $CLI remove-preview --worker "$WORKER" --pr "$PR"
+
+      - name: Remove the GitHub Deployments
+        if: needs.plan.outputs.mode == 'close'
+        continue-on-error: true
+        run: $CLI deployment --repository "$GITHUB_REPOSITORY" --environment "$ENVIRONMENT" --state removed
+
+  # Untrusted: each site's checks against what is now served. No secret, a read-only token.
+  verify:
+    needs: [plan, site]
+    if: always() && inputs.mode == 'named-previews' && needs.plan.outputs.mode == 'deploy' && needs.site.result != 'skipped' && needs.site.result != 'cancelled'
+    name: verify ${{ matrix.site.name }}
+    runs-on: ${{ (startsWith(inputs.runs-on, '[') || startsWith(inputs.runs-on, '{')) && fromJSON(inputs.runs-on) || inputs.runs-on }}
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.plan.outputs.sites) }}
+    env:
+      TOOLCHAIN: ${{ matrix.site.checks != '' }}
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+        if: matrix.site.checks != ''
+        with:
+          persist-credentials: false
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+      - uses: actions/download-artifact@v5
+        id: result
+        if: matrix.site.checks != ''
+        continue-on-error: true
+        with:
+          name: preview-result-${{ matrix.site.name }}
+          path: ${{ runner.temp }}/preview-result
+      - name: Checks after upload
+        if: matrix.site.checks != '' && steps.result.outcome == 'success'
+        env:
+          CLI: ${{ inputs.cli }}
+          CHECKS: ${{ matrix.site.checks }}
+          RESULT: ${{ runner.temp }}/preview-result/${{ matrix.site.name }}.json
+        run: |
+          if [ -f "$RESULT" ]; then $CLI check-preview --result "$RESULT" --checks "$CHECKS"; fi
+      - uses: actions/upload-artifact@v4
+        if: matrix.site.checks != '' && steps.result.outcome == 'success'
+        with:
+          name: preview-result-${{ matrix.site.name }}
+          path: ${{ runner.temp }}/preview-result/
+          if-no-files-found: ignore
+          overwrite: true
+          retention-days: 1
+
+  report:
+    needs: [plan, site, verify]
+    if: always() && inputs.mode == 'named-previews' && needs.plan.outputs.pr != '' && (needs.plan.outputs.mode == 'deploy' || needs.plan.outputs.mode == 'close')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      TOOLCHAIN: "true"
+    steps:
+      - *trusted-checkout
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+      - uses: actions/download-artifact@v5
+        if: needs.plan.outputs.mode == 'deploy'
+        with:
+          pattern: preview-result-*
+          path: ${{ runner.temp }}/preview-results
+          merge-multiple: true
+      - name: Update the PR description's preview section
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          CLI: ${{ inputs.cli }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          PR: ${{ needs.plan.outputs.pr }}
+          SHA: ${{ needs.plan.outputs.sha }}
+          SITES: ${{ needs.plan.outputs.sites }}
+        run: |
+          mapfile -t names < <(jq -r '.[].name' <<< "$SITES")
+          site_args=()
+          for name in "${names[@]}"; do site_args+=(--site "$name"); done
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$MODE" = "close" ]; then
+            $CLI pr-section --repository "$GITHUB_REPOSITORY" --pr "$PR" --state removed \
+              "${site_args[@]}" --run-url "$run_url"
+          else
+            $CLI pr-section --repository "$GITHUB_REPOSITORY" --pr "$PR" --state auto \
+              --results "$RUNNER_TEMP/preview-results" "${site_args[@]}" --attempted "$SHA" \
+              --run-url "$run_url"
+          fi
+
+  sweep:
+    needs: plan
+    if: inputs.mode == 'named-previews' && needs.plan.outputs.mode == 'sweep'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TOOLCHAIN: "true"
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      # schedule and workflow_dispatch run the default branch: trusted code.
+      - *trusted-checkout
+      - *setup-bun
+      - *setup-pnpm
+      - *setup-node
+      - *install
+      - name: Sweep orphaned, expired and over-capacity Previews
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CLI: ${{ inputs.cli }}
+          SITES: ${{ needs.plan.outputs.sites }}
+          RETENTION_DAYS: ${{ inputs.retention-days }}
+          CAPACITY: ${{ inputs.capacity }}
+        run: |
+          status=0
+          for worker in $(jq -r '.[].worker' <<< "$SITES" | sort -u); do
+            $CLI sweep --worker "$worker" --retention-days "$RETENTION_DAYS" --capacity "$CAPACITY" \
+              --repository "$GITHUB_REPOSITORY" || status=1
+          done
+          exit "$status"

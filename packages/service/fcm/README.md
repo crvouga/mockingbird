@@ -1,10 +1,10 @@
 # @crvouga/mockingbird-service-fcm
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Firebase Cloud Messaging HTTP v1** send API (`POST /v1/projects/{project_id}/messages:send`), the call `firebase-admin` makes. Projects, access tokens, and registration tokens are fixtures. There is no FCM sandbox. This package is `status: "wip"`.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/fcm/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/fcm/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from the FCM REST reference and firebase-admin 12.7.0 / 13.5.0.
 
 ## Install
@@ -134,7 +134,7 @@ firebase-admin maps `error.details[].errorCode` when `@type` is `type.googleapis
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`. CLI flag `--strict`. Port 8826. |
 | `createAdminTransport` (`./admin`) | Node | `{ origin, token? }` → `{ credential, agent, port, close }`. `agent` is an `https.Agent` aimed at the emulator. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
 
 ### Hosts without sockets
 
@@ -153,8 +153,12 @@ not the retired batch endpoint. Call `enableLegacyHttpTransport()` for these bat
 The default HTTP/2 transport needs a host-provided HTTP/2 adapter and is not supplied here.
 These helpers do not make firebase-admin itself a browser-native SDK.
 
-The credential, routing, strict authentication and outbox behavior are tested in-process;
-a browser host's HTTP shim remains that host's responsibility, not verified SDK parity.
+The browser adapter's `fcm.browser.test.ts` bundles unmodified firebase-admin 12.7.0 and
+13.5.0 in Chromium, uses the explicit Node HTTP-to-Fetch adapter (not a private SDK hook), and
+checks a single send plus legacy multicast against strict emulator authentication and outbox
+capture. Route only the documented FCM surface to the emulator and reject all other requests.
+This is local SDK compatibility evidence, not a live Firebase parity claim. The SDK's default
+HTTP/2 path remains unsupported; call `enableLegacyHttpTransport()` before multicast.
 
 ### Forwarding real HTTP v1 sends
 
