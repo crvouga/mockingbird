@@ -323,6 +323,23 @@ export function createBrowserSignalServer(options: {
     const queued = (work: () => Promise<void>) => {
       negotiation = negotiation.then(work).catch(() => close())
     }
+    // Subscriber offers carry an id the client echoes in its answer. A newer offer (a resume's ICE
+    // restart, a track added mid-negotiation) supersedes any still unanswered, so only the answer to
+    // the latest one is applied; like the LiveKit SFU, a stale answer is dropped instead of failing.
+    let offerId = 0
+    const offer = (init?: RTCOfferOptions, rewrite = (sdp: string) => sdp) =>
+      queued(async () => {
+        const description = await down.createOffer(init)
+        await down.setLocalDescription(description)
+        send({
+          case: "offer",
+          value: new SessionDescription({
+            type: "offer",
+            sdp: rewrite(description.sdp ?? ""),
+            id: ++offerId,
+          }),
+        })
+      })
     const trickle = (target: SignalTarget) => (event: RTCPeerConnectionIceEvent) => {
       if (event.candidate)
         send({
@@ -449,14 +466,7 @@ export function createBrowserSignalServer(options: {
             serverInfo: new ServerInfo({ version: "1.13.7", region: "fixture", protocol: 16 }),
           }),
         })
-        queued(async () => {
-          const offer = await down.createOffer({ iceRestart: true })
-          await down.setLocalDescription(offer)
-          send({
-            case: "offer",
-            value: new SessionDescription({ type: "offer", sdp: offer.sdp ?? "" }),
-          })
-        })
+        offer({ iceRestart: true })
       },
       async audio(track, participantSid, trackSid) {
         if (!(await permitted("canSubscribe"))) return
@@ -464,14 +474,9 @@ export function createBrowserSignalServer(options: {
           ? options.createMediaStream([track])
           : new MediaStream([track])
         const sender = down.addTrack(track, stream)
-        queued(async () => {
-          const offer = await down.createOffer()
-          await down.setLocalDescription(offer)
-          const sdp = (offer.sdp ?? "")
-            .replaceAll(stream.id, `${participantSid}|${trackSid}`)
-            .replaceAll(track.id, trackSid)
-          send({ case: "offer", value: new SessionDescription({ type: "offer", sdp }) })
-        })
+        offer(undefined, (sdp) =>
+          sdp.replaceAll(stream.id, `${participantSid}|${trackSid}`).replaceAll(track.id, trackSid),
+        )
         return () => {
           if (!closed) down.removeTrack(sender)
         }
@@ -488,8 +493,9 @@ export function createBrowserSignalServer(options: {
         try {
           const { message } = SignalRequest.fromBinary(bytes)
           if (message.case === "answer") {
-            const { sdp } = message.value
+            const { sdp, id } = message.value
             queued(async () => {
+              if ((id && id !== offerId) || down.signalingState !== "have-local-offer") return
               await down.setRemoteDescription({ type: "answer", sdp })
               await flush(down, SignalTarget.SUBSCRIBER)
             })
@@ -577,14 +583,7 @@ export function createBrowserSignalServer(options: {
         enabledPublishCodecs: [new Codec({ mime: "audio/opus" })],
       }),
     })
-    queued(async () => {
-      const offer = await down.createOffer()
-      await down.setLocalDescription(offer)
-      send({
-        case: "offer",
-        value: new SessionDescription({ type: "offer", sdp: offer.sdp ?? "" }),
-      })
-    })
+    offer()
   }
   const server = {
     ready,

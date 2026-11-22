@@ -1,5 +1,12 @@
 import { expect, test } from "bun:test"
-import { AddTrackRequest, SignalRequest, TrackSource, TrackType } from "@livekit/protocol"
+import {
+  AddTrackRequest,
+  SessionDescription,
+  SignalRequest,
+  SignalResponse,
+  TrackSource,
+  TrackType,
+} from "@livekit/protocol"
 import { type AudioSource, createBrowserSignalServer, type SignalPeer } from "./src/browser.js"
 import { jwt } from "./src/crypto.js"
 import { LiveKitAPI } from "./src/index.js"
@@ -156,3 +163,94 @@ for (const ending of ["close", "remove", "room", "reset"] as const) {
     }
   })
 }
+
+test("an answer to a superseded subscriber offer is dropped instead of closing the session", async () => {
+  const api = new LiveKitAPI()
+  api.join("room", { identity: "agent" })
+  let signalingState: RTCSignalingState = "stable"
+  let localSdp = ""
+  const applied: string[] = []
+  const offers: { id: number; sdp: string }[] = []
+  const left: unknown[] = []
+  let message: ((bytes: Uint8Array) => void) | undefined
+  let offered = 0
+  const server = createBrowserSignalServer({
+    api,
+    createMediaStream: () => ({ id: "stream" }) as MediaStream,
+    // Enforces the signaling states a real RTCPeerConnection does.
+    createPeerConnection: () =>
+      ({
+        get signalingState() {
+          return signalingState
+        },
+        createDataChannel: () => ({ readyState: "connecting", send() {} }),
+        addTrack: () => ({}),
+        removeTrack() {},
+        createOffer: async () => ({ type: "offer", sdp: `offer-${++offered}` }),
+        setLocalDescription: async (offer: RTCSessionDescriptionInit) => {
+          localSdp = offer.sdp ?? ""
+          signalingState = "have-local-offer"
+        },
+        setRemoteDescription: async ({ sdp }: RTCSessionDescriptionInit) => {
+          if (signalingState !== "have-local-offer")
+            throw new DOMException("Called in wrong state: stable", "InvalidStateError")
+          applied.push(`${sdp} for ${localSdp}`)
+          signalingState = "stable"
+        },
+        addIceCandidate: async () => {},
+        close() {
+          signalingState = "closed"
+        },
+      }) as unknown as RTCPeerConnection,
+  })
+  try {
+    const token = await jwt(secret, {
+      iss: "fixture",
+      sub: "client",
+      exp: Date.now() / 1000 + 60,
+      video: { roomJoin: true, room: "room" },
+    })
+    await server.accept({
+      url: new URL(`ws://fixture/rtc?access_token=${token}`),
+      onMessage(listener) {
+        message = listener
+      },
+      onClose() {},
+      deliver(bytes) {
+        const { message } = SignalResponse.fromBinary(bytes)
+        if (message.case === "offer") offers.push({ id: message.value.id, sdp: message.value.sdp })
+        if (message.case === "leave") left.push(message.value.reason)
+      },
+      accept() {},
+      refuse() {
+        throw new Error("Unexpected refusal")
+      },
+      close() {},
+    })
+    // A second offer (here: a track added before the first was answered) supersedes the first.
+    await server.publishAudio("room", "agent", {
+      kind: "audio",
+      id: "audio",
+      addEventListener() {},
+    } as unknown as MediaStreamTrack)
+    await tick()
+    expect(offers.map(({ id }) => id)).toEqual([1, 2])
+    // The client answers both offers in order, as livekit-client does.
+    for (const { id, sdp } of offers)
+      message?.(
+        new SignalRequest({
+          message: {
+            case: "answer",
+            value: new SessionDescription({ type: "answer", sdp: `answer-to-${sdp}`, id }),
+          },
+        }).toBinary(),
+      )
+    await tick()
+    await tick()
+    expect(left).toEqual([])
+    expect(server.connections).toBe(1)
+    expect(applied).toEqual(["answer-to-offer-2 for offer-2"])
+  } finally {
+    await server.close()
+  }
+})

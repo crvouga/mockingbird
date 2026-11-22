@@ -11,6 +11,9 @@ no GitHub token.
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
 - [Inputs](#inputs)
+- [Named Previews from your own script](#named-previews-from-your-own-script)
+- [Named Previews of one assets-only Worker](#named-previews-of-one-assets-only-worker)
+- [System previews: one registry, content-addressed parts, per-app updates](#system-previews-one-registry-content-addressed-parts-per-app-updates)
 - [Build on demand](#build-on-demand)
 - [Freshness for long-lived tabs](#freshness-for-long-lived-tabs)
 - [What a preview does not do](#what-a-preview-does-not-do)
@@ -93,7 +96,7 @@ flowchart LR
 That is all. The workflow generates the Worker's wrangler config (the package's Worker serving
 `outdir`), deploys `my-app-pr-<n>`, puts a **Preview** link at the top of the PR, keeps the
 preview's status live, and deletes the Worker when the PR closes. Forks get no secrets, so their
-PRs are skipped. The lab in this repo uses exactly this
+PRs are skipped. The lab in this repo uses this, minus the CI `workflow_run` trigger
 ([system-preview.yml](../.github/workflows/system-preview.yml)), with its own Worker to add the
 [dev resources](DEV_RESOURCES.md) proxy.
 
@@ -101,9 +104,10 @@ PRs are skipped. The lab in this repo uses exactly this
 
 | Input | Default | What it does |
 | --- | --- | --- |
-| `name` | (required) | Worker name prefix; each PR deploys `<name>-pr-<number>`. |
-| `build` | (required) | Builds the preview into `outdir`. |
-| `outdir` | (required) | The built preview, relative to `working-directory`. |
+| `mode` | `worker` | `worker`: a Worker per PR, as described above. `named-previews`: see [below](#named-previews-of-one-assets-only-worker). |
+| `name` | (required in `worker` mode) | Worker name prefix; each PR deploys `<name>-pr-<number>`. |
+| `build` | (required unless `sites` gives it) | Builds the preview into `outdir`. |
+| `outdir` | (required unless `sites` gives it) | The built preview, relative to `working-directory`. |
 | `working-directory` | `.` | Where install, build, the CLI and wrangler run. |
 | `install` | `bun install --frozen-lockfile` | Installs dependencies, including `@crvouga/mockingbird-preview`. |
 | `wrangler-config` | generated | Your own wrangler config, for a custom Worker built on `createPreviewWorker`. |
@@ -121,6 +125,147 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
          WORKER_SECRETS: |
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
+
+## Named Previews from your own script
+
+To deploy without the reusable workflow, use Cloudflare's named Worker Previews from a CI script
+with `createCloudflarePreviews` (see the
+[package README](../packages/adapters/preview/README.md#api)). You can know a Preview's URL before
+you build: `previewOrigin({ previewName, workerName, subdomain: await previews.subdomain() })`,
+or `customPreviewOrigin({ previewName, host })` on a custom domain. Run
+`servePreviews(null)` (or `servePreviews(host)`) once so the parent Worker serves its Previews;
+without it a deploy succeeds and its URL answers 404. `get(name)` confirms a removed Preview is
+gone, and `list()` is `[]` before the parent Worker's first deploy.
+
+## Named Previews of one assets-only Worker
+
+`mode: named-previews` is the opt-in alternative for a project that must stay on the Workers free
+plan at any traffic and serve every PR under its own domain. Each site is one **assets-only**
+Worker you create once (static files, no `main`), with Previews enabled on it. Each pull request
+becomes that Worker's named Preview `pr-<n>`, served at `pr-<n>.<host>` through your custom
+domain, or at the Preview's own workers.dev URL while that domain's certificate is being issued.
+No Worker script is deployed and no per-PR Worker is created: everything goes through
+`createCloudflarePreviews` in the `mockingbird-preview` CLI.
+
+```yaml
+# .github/workflows/preview.yml
+name: Preview
+on:
+  pull_request: { types: [opened, synchronize, reopened, closed] }
+  push: { branches: [main] }        # optional: a `main` Preview, with a strict gate
+  schedule: [{ cron: "17 4 * * *" }] # the sweep
+  workflow_dispatch:                 # the sweep, by hand
+permissions: { contents: read, pull-requests: write, deployments: write }
+jobs:
+  preview:
+    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    with:
+      mode: named-previews
+      host: preview.example.com
+      sites: >-
+        [{ "name": "app", "worker": "my-app-previews", "build": "bun run build", "outdir": "dist",
+           "checks": "scripts/preview-checks.ts" },
+         { "name": "storybook", "worker": "my-storybook-previews",
+           "build": "bun run build-storybook", "outdir": "storybook-static" }]
+    secrets:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+```
+
+- **Several sites per PR.** `sites` is a JSON array of `{ name, worker?, build?, outdir?, config?,
+  host?, checks? }` (missing fields fall back to the inputs of the same name; `worker` to `name`).
+  Each site is its own matrix job, so they build and deploy concurrently and one failing does not
+  cancel or hold back the others. Without `sites`, `name` / `build` / `outdir` /
+  `wrangler-config` / `host` / `checks` make one site.
+- **Assets only, refused otherwise.** A site's `config` (your Worker's `wrangler.json(c)`) may
+  declare only static-file settings (`name`, `compatibility_date`, `assets.directory`,
+  `assets.html_handling`, `assets.not_found_handling`, routes and similar). A `main`, any binding,
+  a var or `assets.run_worker_first` fails the deploy before anything is uploaded, so a preview
+  can never run billable Worker code. Its `compatibility_date` and asset handling are used for the
+  Preview. A `_headers` file in `outdir` is kept; `_redirects` is refused.
+- **Proof it is served.** After upload the CLI polls `version.json` (stamped with the commit) at
+  the Preview's origin until it names the commit (`waitUntilServing`).
+- **Your checks, before and after upload.** `checks` names a module whose default export is
+  `(origin, fetch) => Promise<{ name, ok, detail? }[]>`. It runs first against the built
+  directory (a gate; `fetch` reads the files), then against the deployed origin, re-read until it
+  passes or the deadline passes, since the edge moves machine by machine. A pull request's gate is
+  best effort: a failing one still uploads and the PR says **deployed, but failing its checks**. A
+  branch's gate (a `push`) is strict: nothing is uploaded and the last passing deploy keeps
+  serving.
+- **The PR description.** The workflow owns one block between `<!-- preview:start -->` and
+  `<!-- preview:end -->`, kept at the very top of the description: the status (deploying, live,
+  deployed but failing its checks, failed, removed, expired), a link to every site, the deployed and
+  attempted commits and the run. Text outside the block is never changed. A run that fails before
+  upload marks it failed and keeps the previous deployed commit and links, which keep serving.
+- **GitHub Deployments.** Each site's deploy is a Deployment in the transient environment
+  `preview/<site>/pr-<n>`, `in_progress` then `success` or `failure`, with the run as `log_url`.
+  Earlier deployments of the PR are marked inactive and deleted; closing the PR deletes them all.
+- **Removal and the sweep.** Closing the PR deletes every site's Preview and confirms it gone. A
+  missed close cannot leave an orphan forever: on `schedule` or `workflow_dispatch` the workflow
+  runs `mockingbird-preview sweep` for every site's Worker, which removes `pr-<n>` Previews of
+  closed PRs, those not deployed for `retention-days` (default 7) and the oldest beyond `capacity`
+  (default 80), confirms each gone and fails if any is left. An open PR whose Preview expired says
+  so in its description; pushing a commit deploys it again. Previews not named `pr-<n>` (a branch's)
+  are never swept.
+
+In `named-previews` mode the live status that needs a Worker script (`/__preview/*`: build and
+checks status, Server-Sent Events) is **not available**: an assets-only Worker runs no code, and
+`workflow_run` events are ignored. `version.json` is still stamped, so the boot loader's in-place
+updates (its `/version.json` poll) keep working.
+
+## System previews: one registry, content-addressed parts, per-app updates
+
+A preview that runs a whole system in one tab (several web apps, backends and emulators) declares
+its apps once and lets the library do the rest. Every app (and every backend) ships as one
+**part**: its built files, published under `parts/<app>/<pin>/…` next to a `part.json` index whose
+SHA-256 is the part's pin. The pin depends only on the bytes, so it is the same pin the shell
+loads, the dev loop swaps, and a deploy shares across previews. Two manifests point at parts:
+
+| Manifest             | Read by                  | Per app                                          |
+| -------------------- | ------------------------ | ------------------------------------------------ |
+| `parts.json`         | the shell, in the tab    | `entry`, `pin`, gzip `bytes`, backends, prefetch |
+| `preview-parts.json` | the deploy and the sweep | input hash, `pin`, `part.json` size              |
+
+- **One declaration per app.** `defineSystem({ apps, backends })` from `@crvouga/mockingbird-ui`
+  lists each app's id, label, route, part, the backends and emulators it calls, whether it is on
+  by default, and whether it mounts inline or in an isolated iframe. `mountSystem(host, system)`
+  derives the switcher, the System screen (with each app's backends and health, and which apps
+  call which backend), deep-link routes and the build's part list from it. Duplicate ids and two
+  apps on the same route are rejected when the registry is defined, so the build fails.
+- **Lazy by default.** `buildPreviewParts` (`@crvouga/mockingbird-preview/node`) builds each app
+  into its content-addressed part and writes `parts.json`, failing the build when the shell or a
+  part is over its gzip budget. A cold visit loads the shell and the one app opened, and boots
+  only the backends that app calls (`createBackendHost` boots each backend on its first request
+  and reports `not started` until then). Parts marked `prefetch` load while the tab is idle. A
+  part loads once, and a part whose pin did not change is never fetched again.
+- **Shared across previews.** `buildPreviewPartSet` also returns the parts, each with the input
+  hash of the files it was built from. A pull request that touches one app rebuilds and uploads
+  only that app; a part two PRs produce identically is uploaded once; unreferenced parts are
+  deleted after a retention window; and the shell can verify each part's size and SHA-256 against
+  its pin before running it (`loadPreviewPart`). A host without shared storage falls back to
+  uploading every part.
+  1. Plan with the input hashes:
+     `planPreviewParts({ base, candidate: { web: "…", admin: "…" }, hosted: await host.listParts() })`.
+  2. Build only the apps in `plan.build` (or wrap other build output with
+     `createPreviewPart({ app, input, files })`).
+  3. Plan again with `built`, make the manifest with
+     `createPreviewPartsManifest({ commit, parts: plan.parts })` and publish it with
+     `deployPreviewParts({ host, preview, manifest, built })`.
+  4. After `planPreviewSweep` removes previews, run `sweepPreviewParts` with the same names.
+- **Update one app, keep the rest.** `preview.applyManifest(next)` swaps only the apps and
+  backends whose pin changed. A changed app is remounted while the others keep their DOM and
+  state; a changed backend boots beside the old one, takes new requests once ready, and lets the
+  old one drain (bounded, then a typed `PreviewBackendDrainError`). Emulator and database state
+  stays. If the new backend fails to boot, the old one keeps serving and the shell offers Retry; a
+  change to the shared runtime is refused with a notice saying a reload is needed, and why.
+- **Dev loop.** `watchPreviewParts` rebuilds only the parts whose files changed and streams the
+  new manifest to the open tab (`partUpdatesResponse` / `followPartUpdates`), which swaps that one
+  app in place.
+
+See the [UI package README](../packages/ui/README.md#app-registry), and the preview package
+README's [System parts](../packages/adapters/preview/README.md#system-parts) and
+[Shared app parts](../packages/adapters/preview/README.md#shared-app-parts) for the API, the host
+interface, garbage collection, integrity checks and the Cloudflare flow.
 
 ## Build on demand
 
@@ -187,4 +332,10 @@ previews it does not manage against `capacity` too. See the
 - **A status change reaches open tabs within about 25 s.** It lands in a new Worker version,
   which an open SSE stream picks up when it reconnects; polling tabs see it on their next poll.
 - **A new version starts a fresh app.** Anything your app keeps in memory is gone after an
-  in-place update; what it keeps in `localStorage` stays.
+  in-place update; what it keeps in `localStorage` stays. A system preview fed load manifests
+  (`applyManifest`) restarts only the apps whose part changed.
+- **The deployed boot loader still swaps whole versions.** Per-app swaps run when you feed
+  `applyManifest` yourself (the dev loop, or your own freshness signal); the reusable workflow's
+  boot loader does not read `parts.json` yet.
+- **A backend request counts as in flight until its response body is read or cancelled.** A
+  response nobody reads holds the old generation until the drain deadline.

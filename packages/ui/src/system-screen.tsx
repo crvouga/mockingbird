@@ -39,7 +39,10 @@ import { IconMark } from "./system-mark.js"
 import { move, summarizeServices } from "./system-rotation.js"
 import type {
   SystemApp,
+  SystemBackend,
+  SystemBackends,
   SystemDevStatus,
+  SystemHealth,
   SystemService,
   SystemServiceMode,
   SystemServices,
@@ -58,6 +61,8 @@ export type SystemScreenProps = {
   docsUrl?: string | undefined
   /** The live preview's build status; its Preview card sits above the apps. */
   build?: SystemBuild | undefined
+  /** The backends and emulators behind the apps; with any app's `backends`, adds a Backends list. */
+  backends?: SystemBackends | undefined
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -85,6 +90,7 @@ export function SystemScreen(props: SystemScreenProps) {
       <div className="flex flex-col gap-10">
         {props.build ? <PreviewCard build={props.build} /> : null}
         <Apps {...props} />
+        <Backends apps={props.apps} backends={props.backends} />
         {props.services ? (
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <ServicesArea services={props.services} />
@@ -390,6 +396,7 @@ function AppToggle({
       {app.description ? (
         <span className="text-sm text-muted [overflow-wrap:anywhere]">{app.description}</span>
       ) : null}
+      <AppFacts app={app} />
     </span>
   )
   if (app.id === "system")
@@ -813,5 +820,149 @@ function ServiceRow({
         </Alert>
       ) : null}
     </li>
+  )
+}
+
+/** Under an app's description: the backends it calls, the code version it runs, and its health. */
+function AppFacts({ app }: { app: SystemApp }) {
+  const { backends, version, health } = app
+  if (!backends?.length && !version && !health) return null
+  return (
+    <span className="mt-0.5 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-muted">
+      {backends?.length ? (
+        <span data-testid={`system-app-backends-${app.id}`}>Calls {backends.join(", ")}</span>
+      ) : null}
+      {version ? (
+        <span className="font-mono" title={`Code version ${version}`}>
+          {version.slice(0, 12)}
+        </span>
+      ) : null}
+      {health ? <AppHealth id={app.id} probe={health} /> : null}
+    </span>
+  )
+}
+
+/** Runs the app's health probe once per mount of the System screen. */
+function AppHealth({
+  id,
+  probe,
+}: {
+  id: string
+  probe(signal: AbortSignal): Promise<SystemHealth> | SystemHealth
+}) {
+  const [result, setResult] = useState<SystemHealth>()
+  useEffect(() => {
+    const controller = new AbortController()
+    void (async () => {
+      let next: SystemHealth
+      try {
+        next = await probe(controller.signal)
+      } catch (error) {
+        next = { ok: false, message: message(error) }
+      }
+      if (!controller.signal.aborted) setResult(next)
+    })()
+    return () => controller.abort()
+  }, [probe])
+  const state = result === undefined ? "checking" : result.ok ? "ok" : "failed"
+  const text = result === undefined ? "Checking" : result.ok ? "Healthy" : "Unhealthy"
+  return (
+    <span
+      data-testid={`system-app-health-${id}`}
+      data-state={state}
+      title={result?.message ?? text}
+      className="inline-flex"
+    >
+      <StatusChip status={state === "checking" ? "info" : state === "ok" ? "ok" : "error"}>
+        {text}
+      </StatusChip>
+    </span>
+  )
+}
+
+// ---- Backends: what each app calls, and whether it has booted.
+
+const BACKEND_STATUS: Record<NonNullable<SystemBackend["state"]>, Status> = {
+  "not started": "neutral",
+  starting: "warning",
+  updating: "warning",
+  ready: "ok",
+  failed: "error",
+}
+
+function Backends({
+  apps,
+  backends,
+}: {
+  apps: readonly SystemApp[]
+  backends?: SystemBackends | undefined
+}) {
+  const headingId = useId()
+  const [known, setKnown] = useState<readonly SystemBackend[]>([])
+  useEffect(() => {
+    if (!backends) return
+    let alive = true
+    const refresh = async () => {
+      try {
+        const list = await backends.list()
+        if (alive) setKnown(list)
+      } catch {
+        if (alive) setKnown([])
+      }
+    }
+    void refresh()
+    const stop = backends.subscribe?.(() => void refresh())
+    return () => {
+      alive = false
+      stop?.()
+    }
+  }, [backends])
+  const usedBy = new Map<string, string[]>()
+  for (const app of apps)
+    for (const backend of app.backends ?? [])
+      usedBy.set(backend, [...(usedBy.get(backend) ?? []), app.label])
+  if (!backends && usedBy.size === 0) return null
+  const byId = new Map(known.map((backend) => [backend.id, backend]))
+  const ids = [...new Set([...known.map((backend) => backend.id), ...usedBy.keys()])]
+  return (
+    <section aria-labelledby={headingId}>
+      <SectionHead id={headingId} title="Backends">
+        <p className="mt-1 text-sm text-muted">
+          The backends and emulators running in this tab, and the apps that call them. Each boots on
+          its first request.
+        </p>
+      </SectionHead>
+      <ul
+        aria-label="Backends"
+        className="m-0 grid list-none grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-2 p-0"
+      >
+        {ids.map((id) => {
+          const backend = byId.get(id)
+          const users = usedBy.get(id) ?? []
+          return (
+            <li key={id} data-backend={id}>
+              <Card className="h-full flex-row items-center justify-between gap-3 px-3.5 py-3">
+                <span className="flex min-w-0 flex-col">
+                  <span className="font-medium text-foreground">{backend?.label ?? id}</span>
+                  <span className="text-sm text-muted">
+                    {backend?.kind === "emulator" ? "Emulator" : "Backend"} ·{" "}
+                    {users.length ? `used by ${users.join(", ")}` : "no app declares it"}
+                  </span>
+                </span>
+                {backend?.state ? (
+                  <span
+                    className="inline-flex shrink-0"
+                    data-state={backend.state.replace(" ", "-")}
+                    title={backend.message ?? backend.state}
+                  >
+                    <StatusChip status={BACKEND_STATUS[backend.state]}>{backend.state}</StatusChip>
+                  </span>
+                ) : null}
+              </Card>
+            </li>
+          )
+        })}
+      </ul>
+    </section>
   )
 }

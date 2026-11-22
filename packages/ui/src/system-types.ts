@@ -33,12 +33,51 @@ export type SystemServices = {
   setMode(id: string, mode: SystemServiceMode): Promise<void>
 }
 
+/** Where an in-tab backend or emulator is: lazy ones stay `not started` until first called. */
+export type SystemBackendState = "not started" | "starting" | "ready" | "failed" | "updating"
+
+/** One in-tab backend or emulator on the System screen. */
+export type SystemBackend = {
+  id: string
+  label?: string
+  kind?: "backend" | "emulator"
+  state?: SystemBackendState
+  /** Why it failed, or what it is doing ("Booting · 40%"). */
+  message?: string
+}
+
+/**
+ * The in-tab backends and emulators. `@crvouga/mockingbird-preview`'s `createBackendHost()` and
+ * `backendControls()` are ones; `subscribe` repaints the list when a state changes.
+ */
+export type SystemBackends = {
+  list(): Promise<readonly SystemBackend[]> | readonly SystemBackend[]
+  subscribe?(listener: () => void): () => void
+}
+
+/** What a surface's `health` probe answers. */
+export type SystemHealth = { ok: boolean; message?: string }
+
+/** A message the shell shows over the apps, such as why an update needs a reload. */
+export type SystemNotice = {
+  tone: "info" | "warning" | "error"
+  text: string
+  /** One button beside the text (Retry, Reload). */
+  action?: { label: string; run(): void }
+}
+
 /** A surface as the view shows it: on the System screen's rows and in the switcher's tooltips. */
 export type SystemApp = {
   id: string
   label: string
   description?: string | undefined
   icon?: SystemIcon | undefined
+  /** The backends and emulators it calls. */
+  backends?: readonly string[] | undefined
+  /** The version of its code running now (a part pin). */
+  version?: string | undefined
+  /** A cheap probe the System screen shows on its row. */
+  health?: ((signal: AbortSignal) => Promise<SystemHealth> | SystemHealth) | undefined
 }
 
 /** What a panel shows over its surface while it mounts, or after its mount failed. */
@@ -57,6 +96,10 @@ export type HarnessSnapshot = {
   statuses: readonly PanelStatus[]
   /** Where the System screen draws, once its panel has mounted. */
   systemHost?: HTMLElement | undefined
+  /** The code version each surface runs now, where `update()` changed it. */
+  versions: Readonly<Record<string, string>>
+  /** The notice over the apps, if any. */
+  notice?: SystemNotice | undefined
 }
 
 /** The harness as its React view (`system-view.tsx`) sees it. */
@@ -72,7 +115,11 @@ export type HarnessController = {
   retry(id: string): void
   setInRotation(id: string, included: boolean): void
   setOrder(ids: readonly string[]): void
+  /** Clears the notice over the apps. */
+  dismissNotice(): void
   services?: SystemServices | undefined
   docsUrl?: string | undefined
   build?: SystemBuild | undefined
+  /** The in-tab backends and emulators, for the System screen's Backends list. */
+  backends?: SystemBackends | undefined
 }
