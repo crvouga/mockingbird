@@ -257,6 +257,14 @@ Pass `snapshot` (`save()`, `load(file)`, `reset()`, optional `fileName()`) for a
 With `sections` or `snapshot`, System shows a section nav. Each link is a deep link, `?system=<id>` (`SYSTEM_SECTION_PARAM`), built-in ids included. With `syncUrl`, choosing a section writes it to the URL with `replaceState`. A load or reload at that URL (`?surface=system&system=flags`) opens System with that section current (`aria-current="location"` on its link, `data-current` on `[data-system-section]`) and scrolled into view. Leaving System removes the parameter.
 
 ```ts
+import { mountSystemHarness, type SystemSnapshot, type SystemSurface } from "@crvouga/mockingbird-ui"
+
+declare const host: HTMLElement
+declare const surfaces: SystemSurface[]
+declare const exportState: SystemSnapshot["save"]
+declare const importState: SystemSnapshot["load"]
+declare const resetState: SystemSnapshot["reset"]
+
 mountSystemHarness(host, surfaces, {
   syncUrl: true,
   sections: [{ id: "flags", label: "Flags", mount(el) { el.textContent = "new-results-view: on"; return () => el.replaceChildren() } }],
