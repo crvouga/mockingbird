@@ -16,6 +16,8 @@ The rules:
 
 - **Prefer HeroUI.** Import `Button`, `Card`, `Table`, `Tabs`, `TextField`, `Modal`, `Alert`, `Chip`, … from `@heroui/react` directly (compound parts: `Card.Header`, `Table.Row`; events: `onPress`). Icons come from `@gravity-ui/icons`, the set HeroUI's docs use.
 - **Use the shared components** below for the patterns every surface repeats; do not rebuild a top bar, a page header, an empty or error state, a code block or a status chip.
+- **Every full-page surface has the same frame**: `AppShell` (the surface's name, its nav, then its actions ending in `ThemeSwitch`) over a `PageHeader` (the screen's title) and the content. Secondary navigation and settings go in a sidebar under the bar, never in a second bar.
+- **Keep the branding out.** Name the surface (`product="Emulators"`), not Mockingbird.
 - **Style with the theme's tokens**, never raw colors: `bg-background`, `bg-surface`, `text-foreground`, `text-muted`, `border-border`, `bg-accent`, `text-danger`, … They follow light and dark on their own, so `dark:` variants are not needed.
 - **Put utility classes in `.tsx` files.** The precompiled stylesheet only scans `.tsx`.
 
@@ -43,7 +45,7 @@ From `@crvouga/mockingbird-ui/react` (peer dependencies: `react`, `react-dom`, `
 | Component | Props |
 | --- | --- |
 | `MockingbirdProvider` | `theme?: "system" \| "light" \| "dark"`, `locale?`, `navigate?(href)` (client-side routing for HeroUI links), `className?`. One per React root; `mount` and `renderPage` add it. |
-| `AppShell` | `product?`, `brandHref?`, `nav?: { label, href, current?, icon? }[]`, `actions?`, `fluid?`, `footer?`, `mainProps?` (attributes for its `<main>`), `children`. Sticky top bar with the brand; nav scrolls in its own row on a phone. |
+| `AppShell` | `product?`, `brandHref?`, `nav?: { label, href, current?, icon? }[]`, `actions?`, `footer?`, `mainProps?` (attributes for its `<main>`), `children`. Sticky top bar with the product's name; nav scrolls in its own row on a phone. One centered width (`SHELL_MAX_WIDTH`, 1536px) on every surface, so switching between them never moves the bar or the content (`fluid` is deprecated and ignored). |
 | `PageHeader` | `title`, `description?`, `actions?`, `eyebrow?`, `level?: 1 \| 2` |
 | `CenteredCard` | `title`, `description?`, `children`, `footer?`, `product?`, `notice?`, `size?: "sm" \| "md" \| "lg"`. Sign-in, consent, pairing and error pages: the brand over one card; the title is the page's `h1`. |
 | `EmptyState` | `title`, `description?`, `icon?`, `action?` |
@@ -53,7 +55,7 @@ From `@crvouga/mockingbird-ui/react` (peer dependencies: `react`, `react-dom`, `
 | `JsonView` | `value`, plus `CodeBlock`'s `label`, `copyable`, `maxHeight`, `wrap` |
 | `KeyValueList` | `items: { label, value, mono?, id? }[]` (a `<dl>`, two columns, stacked on a phone) |
 | `StatusChip` | `status: "ok" \| "warning" \| "error" \| "info" \| "neutral"`, `children`, `size?`, `dot?`. The one mapping from meaning to color. |
-| `Brand`, `Logo` | `product?`, `href?`, `size?` / `size?` |
+| `Brand`, `Logo` | `product?`, `href?`, `size?` / `size?`. With a `product`, just that name, no Mockingbird mark: surfaces read like any other app. Without one, the Mockingbird lockup, which only the docs site shows. |
 | `ThemeSwitch`, `useMockingbirdTheme()` | Light / dark / system, for `AppShell`'s `actions`. |
 
 `MOCKINGBIRD` (name, icon, tagline, docs and repo URLs) is exported from here and from the root.

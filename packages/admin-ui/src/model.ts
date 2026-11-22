@@ -18,6 +18,8 @@ export type AdminConfig = {
   service: string
   /** Admin APIs presented by this shell. Omit for the service-local API above. */
   apis?: readonly AdminApiConfig[]
+  /** The name in the top bar. Default "Emulators". */
+  title?: string
 }
 export type MembersConfig = {
   currentUserId: string

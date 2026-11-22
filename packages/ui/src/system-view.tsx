@@ -273,7 +273,8 @@ const readDock = (storage: () => Store): Dock => {
   } catch {
     /* Storage can be unavailable or hold something else; fall back to the default. */
   }
-  return { edge: "left", at: 0.5 }
+  // The bottom-left corner: out of the way of every app's top bar, sidebar and page header.
+  return { edge: "bottom", at: 0 }
 }
 const writeDock = (storage: () => Store, value: Dock) => {
   try {

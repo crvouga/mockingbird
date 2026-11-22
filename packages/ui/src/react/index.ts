@@ -6,7 +6,12 @@
  */
 export { MARK_FONT_FAMILY, MOCKINGBIRD } from "../brand.js"
 export { THEME_STORAGE_KEY } from "../theme-preference.js"
-export { AppShell, type AppShellNavItem, type AppShellProps } from "./app-shell.js"
+export {
+  AppShell,
+  type AppShellNavItem,
+  type AppShellProps,
+  SHELL_MAX_WIDTH,
+} from "./app-shell.js"
 export { Brand, type BrandProps, Logo, type LogoProps } from "./brand.js"
 export { CenteredCard, type CenteredCardProps } from "./centered-card.js"
 export { CodeBlock, type CodeBlockProps, JsonView, type JsonViewProps } from "./code-block.js"

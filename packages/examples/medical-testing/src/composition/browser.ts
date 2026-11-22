@@ -87,7 +87,8 @@ export const mount = async (
               mount: (panel) => {
                 notifications = mountNotifications(panel, {
                   harness: demo.notifications,
-                  title: "Cove notifications",
+                  title: "Notifications",
+                  shell: true,
                 })
                 return () => notifications?.destroy()
               },

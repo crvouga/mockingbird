@@ -150,7 +150,7 @@ function SourceChips() {
   )
 }
 
-function Toolbar({ heading }: { heading: boolean }) {
+function Toolbar({ heading }: { heading: boolean | "page" }) {
   const store = useStore()
   const { state, actions, handle, sound } = store
   const phone = store.frame.size === "phone"
@@ -194,7 +194,7 @@ function Toolbar({ heading }: { heading: boolean }) {
     <div className="flex flex-none flex-col gap-3 px-4 pt-4 sm:px-6" data-testid={TEST_IDS.topbar}>
       {heading ? (
         <PageHeader
-          level={2}
+          level={heading === "page" ? 1 : 2}
           title={store.title()}
           description="Every text, push, email and chat message the app sent, as the recipient sees it."
           actions={
@@ -764,8 +764,11 @@ function Inspector() {
 
 export type NotificationsAppProps = {
   store: Store
-  /** Show the title as a page header (when no app shell around the UI names it). Default true. */
-  heading?: boolean
+  /**
+   * Show the title as a page header. Default true (a section heading); `"page"` makes it the page's
+   * `h1`, as every screen in an app shell has.
+   */
+  heading?: boolean | "page"
 }
 
 /** The whole harness UI for one store. `createApp` and the dashboard render it. */

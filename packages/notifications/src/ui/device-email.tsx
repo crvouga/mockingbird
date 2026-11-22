@@ -195,7 +195,7 @@ function Reader({ open, items, me }: { open: Notification; items: Notification[]
                     {a.size ? (
                       <>
                         {" "}
-                        <span style={{ color: "#5f6368", fontWeight: 400 }}>
+                        <span className="att-size">
                           {Math.max(1, Math.round(a.size / 1024))} KB
                         </span>
                       </>
@@ -411,7 +411,7 @@ export function EmailDevice() {
           <span className="lbl">Mail</span>
         </span>
         <div className="mail-search">
-          <IconButton svg={icons.search("#444746", 20)} />
+          <IconButton svg={icons.search("currentColor", 20)} />
           <span className="placeholder">Search mail</span>
           <IconButton svg={icons.tune()} />
         </div>

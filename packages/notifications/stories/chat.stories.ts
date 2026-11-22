@@ -82,3 +82,9 @@ export const UnsafeMarkupIsEscaped: Story = {
   ]),
 }
 export const NarrowWindow: Story = { args: only(channels), tags: ["vp-mobile"] }
+
+// Dark Mode: the team chat window's dark theme.
+const dark = { theme: "dark" }
+export const DarkChannelWithHistory: Story = { ...ChannelWithHistory, globals: dark }
+export const DarkBlockKit: Story = { ...BlockKit, globals: dark }
+export const DarkRichTextAndImages: Story = { ...RichTextAndImages, globals: dark }

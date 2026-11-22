@@ -265,3 +265,23 @@ export const WhatsAppConversation: Story = {
 export const WhatsAppVerificationCode: Story = {
   args: only(whatsappInbox(), { sms: { to: PHONE, thread: "whatsapp:Verify" } }),
 }
+
+// Dark Mode: the Messages app as iOS draws it with the theme switch (or the system) on dark.
+const dark = { theme: "dark" }
+export const DarkThreadList: Story = {
+  args: only([...smsInbox(), ...whatsappInbox()]),
+  globals: dark,
+}
+export const DarkConversationWithCode: Story = {
+  args: only([verify], { sms: { to: PHONE, thread: "Verify" } }),
+  globals: dark,
+}
+export const DarkConversationWithTapback: Story = {
+  ...ConversationWithTapback,
+  globals: dark,
+}
+export const DarkLongPressTapbackMenu: Story = {
+  ...ConversationLongPressTapbackMenu,
+  globals: dark,
+}
+export const DarkWhatsAppConversation: Story = { ...WhatsAppConversation, globals: dark }

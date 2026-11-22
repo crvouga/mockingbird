@@ -3,7 +3,6 @@ import {
   ErrorState,
   LoadingState,
   MockingbirdProvider,
-  StatusChip,
   THEME_STORAGE_KEY,
   ThemeSwitch,
 } from "@crvouga/mockingbird-ui/react"
@@ -427,10 +426,64 @@ function Workspace({ host, config }: { host: HTMLElement; config: AdminConfig })
         )
     }
   }
+  const emulatorPicker = (
+    <div className="flex min-w-0 flex-col gap-2" data-admin-context>
+      {apiConfigs.length > 1 ? (
+        <SearchSelect
+          ariaLabel="Emulator"
+          value={apiConfig.id}
+          onChange={(next) => goTo(next, "overview")}
+          choices={apiConfigs.map((candidate) => ({
+            value: candidate.id,
+            label: apiName(candidate),
+          }))}
+          className="w-full"
+        />
+      ) : (
+        <span className="truncate text-sm font-semibold capitalize text-foreground">
+          {apiName(apiConfig)}
+        </span>
+      )}
+      <Vendor config={config} service={apiConfig.service} />
+    </div>
+  )
+  const connection = (
+    <div className="flex min-w-0 flex-col gap-2" data-admin-connection>
+      <SearchSelect
+        ariaLabel="Namespace"
+        value={namespace}
+        onChange={setNamespace}
+        choices={[...new Set([namespace, ...(namespaces.data?.namespaces ?? [])])].map((name) => ({
+          value: name,
+          label: name,
+        }))}
+        className="w-full"
+      />
+      <Form
+        className="flex items-end gap-2"
+        onSubmit={(event) => {
+          event.preventDefault()
+          setKey(draftKey.trim())
+          setRevision((n) => n + 1)
+        }}
+      >
+        <TextInput
+          ariaLabel="Admin key"
+          type="password"
+          placeholder="Admin key"
+          value={draftKey}
+          onChange={setDraftKey}
+          className="min-w-0 flex-1"
+        />
+        <Button type="submit" variant="secondary" size="sm">
+          Connect
+        </Button>
+      </Form>
+    </div>
+  )
   return (
     <AppShell
-      product="Admin"
-      fluid
+      product={config.title ?? "Emulators"}
       actions={
         <>
           <Button variant="secondary" size="sm" onPress={() => setPaletteOpen(true)}>
@@ -440,111 +493,64 @@ function Workspace({ host, config }: { host: HTMLElement; config: AdminConfig })
               <Kbd.Content>K</Kbd.Content>
             </Kbd>
           </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            isIconOnly
+            aria-label="Refresh"
+            onPress={() => setRevision((n) => n + 1)}
+          >
+            <ArrowRotateRight className="size-4" />
+          </Button>
           <ThemeSwitch />
         </>
       }
     >
-      <div className="flex flex-col gap-6">
+      <div>
         <div
-          className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3 border-b border-separator pb-4"
-          data-admin-context
-        >
-          <div className="flex min-w-0 flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-2">
-              {apiConfigs.length > 1 ? (
-                <SearchSelect
-                  ariaLabel="Emulator"
-                  value={apiConfig.id}
-                  onChange={(next) => goTo(next, "overview")}
-                  choices={apiConfigs.map((candidate) => ({
-                    value: candidate.id,
-                    label: apiName(candidate),
-                  }))}
-                  className="w-56"
-                />
-              ) : (
-                <span className="text-lg font-semibold capitalize text-foreground">
-                  {apiName(apiConfig)}
-                </span>
-              )}
-              <StatusChip status="ok" dot>
-                Live
-              </StatusChip>
-            </div>
-            <Vendor config={config} service={apiConfig.service} />
-          </div>
-          <div className="flex flex-wrap items-end gap-2">
-            <SearchSelect
-              ariaLabel="Namespace"
-              value={namespace}
-              onChange={setNamespace}
-              choices={[...new Set([namespace, ...(namespaces.data?.namespaces ?? [])])].map(
-                (name) => ({ value: name, label: name }),
-              )}
-              className="w-44"
-            />
-            <Form
-              className="flex items-end gap-2"
-              onSubmit={(event) => {
-                event.preventDefault()
-                setKey(draftKey.trim())
-                setRevision((n) => n + 1)
-              }}
-            >
-              <TextInput
-                ariaLabel="Admin key"
-                type="password"
-                placeholder="Admin key"
-                value={draftKey}
-                onChange={setDraftKey}
-                className="w-40"
-              />
-              <Button type="submit" variant="secondary">
-                Connect
-              </Button>
-            </Form>
-            <Button variant="secondary" onPress={() => setRevision((n) => n + 1)}>
-              <ArrowRotateRight className="size-4" />
-              Refresh
-            </Button>
-          </div>
-        </div>
-        <div
-          className={narrow ? "flex flex-col gap-6" : "grid grid-cols-[13rem_minmax(0,1fr)] gap-8"}
+          className={narrow ? "flex flex-col gap-6" : "grid grid-cols-[14rem_minmax(0,1fr)] gap-8"}
         >
           {narrow ? (
-            <Choose
-              ariaLabel="Screen"
-              value={selected}
-              onChange={(next) => goTo(apiConfig.id, next)}
-              choices={nav.map((item) => ({ value: item.key, label: item.label }))}
-            />
+            <div className="flex flex-col gap-3">
+              {emulatorPicker}
+              <Choose
+                ariaLabel="Screen"
+                value={selected}
+                onChange={(next) => goTo(apiConfig.id, next)}
+                choices={nav.map((item) => ({ value: item.key, label: item.label }))}
+              />
+              {connection}
+            </div>
           ) : (
-            <nav aria-label="Admin screens" className="sticky top-20 self-start">
-              <ListBox
-                aria-label="Screens"
-                selectionMode="single"
-                disallowEmptySelection
-                selectedKeys={[selected]}
-                onSelectionChange={(keys) => {
-                  const [next] = keys === "all" ? [] : [...keys]
-                  if (next !== undefined) goTo(apiConfig.id, String(next))
-                }}
-                className="p-0"
-              >
-                {nav.map((item) => (
-                  <ListBox.Item
-                    key={item.key}
-                    id={item.key}
-                    textValue={item.label}
-                    className="data-[selected=true]:bg-default data-[selected=true]:text-foreground"
-                  >
-                    <span className="text-muted [&_svg]:size-4">{item.icon}</span>
-                    <span className="truncate">{item.label}</span>
-                  </ListBox.Item>
-                ))}
-              </ListBox>
-            </nav>
+            <div className="sticky top-20 flex flex-col gap-4 self-start">
+              {emulatorPicker}
+              <nav aria-label="Admin screens">
+                <ListBox
+                  aria-label="Screens"
+                  selectionMode="single"
+                  disallowEmptySelection
+                  selectedKeys={[selected]}
+                  onSelectionChange={(keys) => {
+                    const [next] = keys === "all" ? [] : [...keys]
+                    if (next !== undefined) goTo(apiConfig.id, String(next))
+                  }}
+                  className="p-0"
+                >
+                  {nav.map((item) => (
+                    <ListBox.Item
+                      key={item.key}
+                      id={item.key}
+                      textValue={item.label}
+                      className="data-[selected=true]:bg-default data-[selected=true]:text-foreground"
+                    >
+                      <span className="text-muted [&_svg]:size-4">{item.icon}</span>
+                      <span className="truncate">{item.label}</span>
+                    </ListBox.Item>
+                  ))}
+                </ListBox>
+              </nav>
+              <div className="border-t border-separator pt-4">{connection}</div>
+            </div>
           )}
           <div className="flex min-w-0 flex-col gap-6">
             <ErrorNotice

@@ -123,3 +123,6 @@ export const PhoneWidthEmailTab: Story = {
   args: base(all, { initial: { only: "email" } }),
   tags: ["vp-mobile"],
 }
+
+/** In the shared app shell (`shell: true`): the top bar and theme switch every surface has. */
+export const InAppShell: Story = { args: base(all, { shell: true }) }

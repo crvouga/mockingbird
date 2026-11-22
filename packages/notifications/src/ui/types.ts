@@ -34,6 +34,12 @@ export type AppOptions = {
   motion?: MotionPreference
   /** Fill the host element and scroll inside it, for a tab or panel in another app. */
   embedded?: boolean
+  /**
+   * Draw the shared app shell around the UI (the top bar with the title and the theme switch), as
+   * a full page in its own right: the same frame as the admin, the System screen and the example
+   * apps. The host scrolls. Overrides `embedded`.
+   */
+  shell?: boolean
   /** Which devices to show. Default all of them: `sms`, `push`, `email` and `chat`. */
   channels?: Channel[]
   /**

@@ -60,7 +60,6 @@ export function Dashboard({ model, store, title, asideRef, actions }: DashboardP
     <div data-testid={TEST_IDS.dashboard} data-tab={active} className="min-h-full">
       <AppShell
         product={title}
-        fluid
         actions={
           <>
             <div
@@ -122,9 +121,9 @@ export function Dashboard({ model, store, title, asideRef, actions }: DashboardP
 /** The standalone page with no emulators to administer: the shell around the notifications UI. */
 export function NotificationsPage({ store, title }: { store: Store; title: string }) {
   return (
-    <AppShell product={title} fluid actions={<ThemeSwitch />}>
-      <div className="-mx-4 -my-6 sm:-mx-6">
-        <NotificationsApp store={store} />
+    <AppShell product={title} actions={<ThemeSwitch />}>
+      <div className="-mx-4 -mt-4 sm:-mx-6">
+        <NotificationsApp store={store} heading="page" />
       </div>
     </AppShell>
   )

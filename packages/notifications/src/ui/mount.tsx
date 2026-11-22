@@ -51,13 +51,20 @@ const handleFor = (store: Store, destroy: () => void): AppHandle => ({
  */
 export function createApp(host: HTMLElement, options: AppOptions = {}): AppHandle {
   const title = options.title ?? host.dataset.title
-  const store = createStore(title ? { ...options, title } : options)
+  const settings = options.shell ? { ...options, embedded: false } : options
+  const store = createStore(title ? { ...settings, title } : settings)
   store.start()
   const root = render(
     host,
-    <MockingbirdProvider {...(options.embedded ? { className: "h-full" } : {})}>
-      <NotificationsApp store={store} />
-    </MockingbirdProvider>,
+    options.shell ? (
+      <MockingbirdProvider className="min-h-full">
+        <NotificationsPage store={store} title={store.title()} />
+      </MockingbirdProvider>
+    ) : (
+      <MockingbirdProvider {...(options.embedded ? { className: "h-full" } : {})}>
+        <NotificationsApp store={store} />
+      </MockingbirdProvider>
+    ),
   )
   let destroyed = false
   return handleFor(store, () => {
