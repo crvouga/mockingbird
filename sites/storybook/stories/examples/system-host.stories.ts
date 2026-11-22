@@ -10,6 +10,7 @@ import {
   ROTATION_KEY,
   SWITCHER_BAR_HEIGHT,
 } from "../../../../packages/ui/src/system-rotation.js"
+import { THEME_STORAGE_KEY } from "../../../../packages/ui/src/theme-preference.js"
 
 /**
  * The harness inside somebody else's app: a page with its own colors, type and fixed chrome, and
@@ -22,6 +23,12 @@ export default {
   parameters: {
     layout: "fullscreen",
     sources: ["packages/ui/src/system-harness.ts", "packages/ui/src/system-view.tsx"],
+  },
+  // A visitor who never chose a theme on a Mockingbird page: nothing saved, nothing pinned.
+  beforeEach: () => {
+    localStorage.removeItem(THEME_STORAGE_KEY)
+    document.documentElement.removeAttribute("data-theme")
+    document.documentElement.classList.remove("dark", "light")
   },
 } satisfies Meta
 
