@@ -11,6 +11,7 @@ no GitHub token.
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
 - [Inputs](#inputs)
+- [Previews of several apps: shared parts](#previews-of-several-apps-shared-parts)
 - [What a preview does not do](#what-a-preview-does-not-do)
 
 ## How it works
@@ -119,6 +120,27 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
          WORKER_SECRETS: |
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
+
+## Previews of several apps: shared parts
+
+A preview that bundles several apps can publish each app once as a content-addressed **part**
+(`parts/<app>/<pin>/…`) shared by every preview on the same host, plus a small per-preview
+manifest mapping apps to pins. A pull request that touches one app then rebuilds and uploads only
+that app; a part two PRs produce identically is uploaded once; unreferenced parts are deleted
+after a retention window; and the shell verifies each part's size and SHA-256 against its pin
+before running it. A host without shared storage falls back to uploading every part.
+
+1. Plan with the input hashes your build tool computes:
+   `planPreviewParts({ base, candidate: { web: "…", admin: "…" }, hosted: await host.listParts() })`.
+2. Build only the apps in `plan.build` and wrap each with
+   `createPreviewPart({ app, input, files })`.
+3. Plan again with `built`, make the manifest with
+   `createPreviewPartsManifest({ commit, parts: plan.parts })` and publish it with
+   `deployPreviewParts({ host, preview, manifest, built })`.
+4. After `planPreviewSweep` removes previews, run `sweepPreviewParts` with the same names.
+
+See [Shared app parts](../packages/adapters/preview/README.md#shared-app-parts) for the host
+interface, garbage collection, integrity checks and the Cloudflare flow.
 
 ## Your own lifecycle
 

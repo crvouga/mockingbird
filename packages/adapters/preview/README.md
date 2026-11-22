@@ -85,6 +85,12 @@ The application must honor the boot/request AbortSignals to terminate work it st
   previews. `capacityCounts: "managed"` (default) applies `capacity` to managed previews only;
   `"all"` counts every listed preview, including ones `owns` rejects, so a plan stays under a
   limit on the Previews of a Worker.
+- `createPreviewPart`, `planPreviewParts`, `createPreviewPartsManifest`,
+  `parsePreviewPartsManifest`, `deployPreviewParts`, `planPreviewPartSweep`,
+  `sweepPreviewParts`, `loadPreviewPart`, `previewPartAssetFiles`, `previewPartPath` and
+  `PREVIEW_PARTS_MANIFEST` publish each app of a preview once under `parts/<app>/<pin>/` and
+  share it across previews, so a pull request rebuilds and uploads only the apps it changed. See
+  [Shared app parts](#shared-app-parts).
 - `createCloudflarePreviews({ accountId, workerName, token, fetch })` returns `deploy`, `list` and
   `remove`. `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
   callback. It checks current facts before upload and immediately before deployment, sends only
@@ -139,6 +145,59 @@ The application must honor the boot/request AbortSignals to terminate work it st
   (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
   `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
   `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
+
+## Shared app parts
+
+A preview of several apps need not be one standalone bundle. Each app is a **part**, published
+once under `parts/<app>/<pin>/…` (immutable, shared by every preview on the same host), and a
+preview is a small manifest (`preview-parts.json`, `PREVIEW_PARTS_MANIFEST`) mapping each app
+to the pin it runs, next to the shell. A pull request then rebuilds only the apps whose input
+changed and uploads only the pins the host does not already hold.
+
+- **Identity.** The consumer's build tool supplies each app's *input hash*. The *pin* is the
+  SHA-256 of the part's canonical `part.json`, which lists each output file's path, size, SHA-256
+  and content type, so it depends only on the output: two builds that produce the same files
+  share a pin, whatever their inputs. `createPreviewPart({ app, input, files })` computes it;
+  `previewPartPath(app, pin, file?)` names where it is published.
+- **Plan.** `planPreviewParts({ base, candidate, built?, hosted? })` is pure: `build` lists the
+  apps whose input hash the base manifest does not know (or whose base pin has left the host),
+  `parts` the pins known so far (reused or built), and `upload` the known pins the host lacks,
+  each once. Call it with the candidate's input hashes, build what `build` names with
+  `createPreviewPart`, call it again with `built`, then
+  `createPreviewPartsManifest({ commit, parts: plan.parts })`. `parsePreviewPartsManifest`
+  validates a manifest read back from a host.
+- **Deploy.** `deployPreviewParts({ host, preview, manifest, built })` uploads the parts the host
+  lacks, then the manifest last. A pin already present is never uploaded again, so a retry after
+  an interrupted upload only finishes the job. A part the host lacks that was not built is refused
+  before the manifest is published.
+- **Host.** `PreviewPartsHost` is injected: `listParts()` (complete parts with an `updatedAt`),
+  `uploadPart(part, preview)` (idempotent; write the files, then `part.json` last, so a listed
+  part is always complete), `uploadManifest(preview, manifest)` and `deletePart({ app, pin })`.
+  A host without `listParts` has no shared storage (a plain static deploy): every part is then
+  uploaded into each preview, so reused parts' bytes must be in `built` too (for example from the
+  build tool's cache). Plans are otherwise the same.
+- **Garbage collection.** `planPreviewPartSweep({ parts, manifests, removed, now, retentionMs })`
+  lists the hosted parts no live manifest references and older than the retention window, which
+  also protects a deploy that has uploaded parts but not yet its manifest. `removed` takes the
+  names `planPreviewSweep` removes, so a removed preview's pins stay while another manifest
+  references them. A manifest that does not parse throws: nothing is deleted on an uncertain
+  reference. `sweepPreviewParts({ host, … })` runs the plan and deletes; it is a no-op on a host
+  without shared storage. Retention counts from a part's `updatedAt`, so a deploy that reuses an
+  old, currently unreferenced pin races a concurrent sweep: run sweeps apart from deploys (as the
+  sweep job of a preview workflow already is).
+- **Integrity.** `loadPreviewPart(manifest, app, { baseUrl, fetch?, maximumBytes?, signal? })` is
+  what the shell calls before executing an app: `part.json` must match the pin's size and
+  SHA-256, and every file the size and SHA-256 it lists, with the same no-store, no-credentials,
+  no-redirect and bounded download as `loadPreviewArtifact`. It returns the verified files by path.
+- **Cloudflare.** `previewPartAssetFiles(manifest, parts)` flattens a preview into static files
+  (`/parts/<app>/<pin>/…` and `/preview-parts.json`) for `createCloudflarePreviews().deploy`.
+  The Worker's asset upload session asks only for content it does not already hold, so a second
+  preview sends only the changed part's new files; the bytes of every part must still be present
+  locally to compute the asset manifest. For a shared object store (no local bytes for unchanged
+  parts), implement `PreviewPartsHost` on it instead.
+
+The acceptance tests (`parts.test.ts`) use an injected in-memory host and a recorded Cloudflare
+asset-session flow; no live cloud credentials were used.
 
 ## Cookies, redirects and trust
 
