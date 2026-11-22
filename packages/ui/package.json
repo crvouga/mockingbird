@@ -20,6 +20,14 @@
       "types": "./dist/system-harness.d.ts",
       "default": "./dist/system-harness.js"
     },
+    "./launcher": {
+      "types": "./dist/preview-launcher.d.ts",
+      "default": "./dist/preview-launcher.js"
+    },
+    "./freshness": {
+      "types": "./dist/freshness-indicator.d.ts",
+      "default": "./dist/freshness-indicator.js"
+    },
     "./react": {
       "types": "./dist/react/index.d.ts",
       "default": "./dist/react/index.js"
