@@ -87,6 +87,9 @@
       "peerDependencies": {
         "esbuild": ">=0.28.0",
       },
+      "optionalPeers": [
+        "esbuild",
+      ],
     },
     "packages/adapters/bun": {
       "name": "@crvouga/mockingbird-adapter-bun",
