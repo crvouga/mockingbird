@@ -2,6 +2,7 @@
  * `mockingbird-preview`: the commands a preview workflow runs.
  *
  *   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+ *     [--state-version <v>]
  *   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
  *     [--run-url <url>] [--summary <s>] [--message <m>] [--wrangler <cmd>]
  *   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
@@ -40,6 +41,7 @@ export type PreviewCliIo = {
 
 const USAGE = `Usage:
   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+    [--state-version <v>]
   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
     [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
@@ -223,11 +225,18 @@ const status = async (args: Args, io: PreviewCliIo): Promise<number> => {
 }
 
 const stamp = async (args: Args, io: PreviewCliIo): Promise<number> => {
-  only(args, ["outdir", "version", "pr", "pr-url"])
+  only(args, ["outdir", "version", "pr", "pr-url", "state-version"])
   const outdir = requiredArg(args, "outdir")
   const version = requiredArg(args, "version")
   const pr = prArg(args)
-  await stampPreviewVersion({ outdir, version, ...(pr === undefined ? {} : { pr }) })
+  const stateVersion = optionalArg(args, "state-version")
+  if (stateVersion === "") throw new UsageError("--state-version needs a value")
+  await stampPreviewVersion({
+    outdir,
+    version,
+    ...(pr === undefined ? {} : { pr }),
+    ...(stateVersion === undefined ? {} : { stateVersion }),
+  })
   io.stdout(`version.json: ${version.slice(0, 7)} (${resolve(outdir)})`)
   return 0
 }

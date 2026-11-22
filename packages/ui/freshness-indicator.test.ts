@@ -121,3 +121,47 @@ test("freshnessBuild projects freshness onto the harness's SystemBuild and appli
   expect(swapped).toEqual([current])
   build.destroy()
 })
+
+// #873: a newer build whose stateVersion differs resets the preview's data.
+test("freshnessBuild marks a stateVersion change as resetsData and never applies it on its own", async () => {
+  const before: FreshnessIdentity = { ...running, stateVersion: "schema-1" }
+  const after: FreshnessIdentity = { ...current, stateVersion: "schema-2" }
+  let value: FreshnessValue = { state: "current", running: before, changed: [] }
+  const listeners = new Set<(value: FreshnessValue) => void>()
+  const feed: FreshnessFeed = {
+    get: () => value,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+  }
+  const plans: unknown[] = []
+  const build = freshnessBuild({
+    freshness: feed,
+    auto: true,
+    onUpdate: (plan) => void plans.push(plan),
+  })
+  value = {
+    state: "newer-live",
+    running: before,
+    current: after,
+    changed: ["app"],
+    update: { kind: "reload" },
+  }
+  for (const listener of listeners) listener(value)
+  await Promise.resolve()
+  expect(build.get().update).toMatchObject({ available: true, auto: true, resetsData: true })
+  build.setAutoUpdate(true)
+  await Promise.resolve()
+  expect(plans).toEqual([])
+  expect(freshnessView(value, NOW).detail).toBe(
+    "Changed: app. Updating resets this preview's data.",
+  )
+  // The person still can.
+  await build.applyUpdate()
+  expect(plans).toEqual([{ kind: "reload" }])
+  // The same stateVersion is an ordinary update.
+  value = { ...value, current: { ...after, stateVersion: "schema-1" } }
+  expect(freshnessView(value, NOW).detail).toBe("Changed: app.")
+  build.destroy()
+})

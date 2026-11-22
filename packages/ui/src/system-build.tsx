@@ -187,8 +187,93 @@ const ROWS = [
   ["connection", "Connection"],
 ] as const
 
+/** Saves the preview's in-tab data as a file (the System screen's `snapshot.save`). */
+export type PreviewCardSnapshot = { save(): Promise<Blob> }
+
+const downloadName = (version: string, blob: Blob) =>
+  `preview-data-${shortSha(version)}${blob.type.includes("json") ? ".json" : ""}`
+
+/** Hands `blob` to the browser as a download named `name`. */
+function download(blob: Blob, name: string, doc: Document) {
+  const url = URL.createObjectURL(blob)
+  const link = doc.createElement("a")
+  link.href = url
+  link.download = name
+  link.hidden = true
+  doc.body.append(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+type SaveState = { state: "idle" | "saving" | "saved" } | { state: "failed"; message: string }
+
+/**
+ * Said before an update that resets the preview's data: it waits for the person, and Save (when
+ * the screen has a snapshot) downloads the data first.
+ */
+function ResetsDataNotice({
+  version,
+  running,
+  snapshot,
+}: {
+  version: string
+  running: string
+  snapshot?: PreviewCardSnapshot | undefined
+}) {
+  const [save, setSave] = useState<SaveState>({ state: "idle" })
+  const root = useRef<HTMLDivElement>(null)
+  const onSave = async () => {
+    if (!snapshot) return
+    setSave({ state: "saving" })
+    try {
+      const blob = await snapshot.save()
+      download(blob, downloadName(running, blob), root.current?.ownerDocument ?? document)
+      setSave({ state: "saved" })
+    } catch (error) {
+      setSave({ state: "failed", message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+  return (
+    <div ref={root} data-testid="system-preview-resets-data">
+      <Alert status="warning">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>New version {shortSha(version)} resets this preview's data</Alert.Title>
+          <Alert.Description>
+            It won't update on its own.{" "}
+            {snapshot
+              ? "Save the data first if you want to keep it, then update."
+              : "Update when you're ready to start over."}
+            {save.state === "saved" ? " Saved." : null}
+            {save.state === "failed" ? ` Couldn't save: ${save.message}` : null}
+          </Alert.Description>
+        </Alert.Content>
+        {snapshot ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            className="self-center"
+            isDisabled={save.state === "saving"}
+            onPress={() => void onSave()}
+          >
+            {save.state === "saving" ? "Saving…" : save.state === "saved" ? "Save again" : "Save"}
+          </Button>
+        ) : null}
+      </Alert>
+    </div>
+  )
+}
+
 /** The System screen's Preview card: this tab's version, the latest deploy, build, checks and connection. */
-export function PreviewCard({ build }: { build: SystemBuild }) {
+export function PreviewCard({
+  build,
+  snapshot,
+}: {
+  build: SystemBuild
+  /** Offers Save before an update that resets the preview's data. */
+  snapshot?: PreviewCardSnapshot | undefined
+}) {
   const state = useBuildState(build)
   const headingId = useId()
   const hintId = useId()
@@ -196,6 +281,8 @@ export function PreviewCard({ build }: { build: SystemBuild }) {
   const next = nextVersion(state)
   const { current, latest, build: event, checks, update } = state
   const failedUpdate = update.available && update.error !== undefined
+  const resetsData =
+    update.available && update.resetsData === true && !update.applying && !failedUpdate
   const chip = update.applying
     ? "Updating"
     : failedUpdate
@@ -338,6 +425,7 @@ export function PreviewCard({ build }: { build: SystemBuild }) {
     <section
       aria-labelledby={headingId}
       data-testid="system-preview"
+      data-resets-data={resetsData ? "true" : undefined}
       data-tone={status.tone}
       data-connection={state.connection}
     >
@@ -372,6 +460,15 @@ export function PreviewCard({ build }: { build: SystemBuild }) {
               </div>
             ))}
           </dl>
+          {resetsData && next ? (
+            // Keyed: a different pending version starts a fresh Save.
+            <ResetsDataNotice
+              key={next}
+              version={next}
+              running={current.version}
+              snapshot={snapshot}
+            />
+          ) : null}
           {failedUpdate ? (
             <Alert status="danger" role="alert">
               <Alert.Indicator />

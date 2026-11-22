@@ -22,7 +22,11 @@ export type PreviewApp = {
 export type BootPreviewOptions = {
   /** The element the app mounts into, or a selector. Default "#preview". */
   host?: HTMLElement | string
-  /** Default "./version.json". */
+  /**
+   * Default "./version.json", resolved against `baseUrl`. The live poller reads this same file
+   * (unless `live.versionUrl` says otherwise), so boot and updates never disagree about what is
+   * deployed.
+   */
   versionUrl?: string
   /** Passed through to `createLivePreview` (countdown, storage, …). */
   live?: Partial<Omit<LivePreviewOptions, "current" | "load">>
@@ -30,7 +34,12 @@ export type BootPreviewOptions = {
   importEntry?: (url: string) => Promise<unknown>
   /** Default the global `fetch`. */
   fetch?: typeof fetch
-  /** Where relative URLs resolve. Default `location.href`. */
+  /**
+   * The deployment root: where `versionUrl` and each version's entry resolve. The loader that
+   * `buildPreview` emits passes its own directory (`new URL("./", import.meta.url)`), so a deep
+   * link such as `/settings/profile` still reads `/version.json`. Default `document.baseURI`
+   * (the page's address, or its `<base href>`).
+   */
   baseUrl?: string
   /** Where the host selector is looked up. Default `document`. */
   document?: Pick<Document, "querySelector">
@@ -52,7 +61,10 @@ export async function bootPreview(options: BootPreviewOptions = {}): Promise<Liv
       ? ((options.document ?? document).querySelector(target) as HTMLElement | null)
       : target
   if (host === null) throw new Error(`No element matches ${target}`)
-  const baseUrl = options.baseUrl ?? location.href
+  const baseUrl =
+    options.baseUrl ??
+    (globalThis as { document?: { baseURI?: string } }).document?.baseURI ??
+    location.href
   const doFetch = options.fetch ?? ((input, init) => fetch(input, init))
   const importEntry = options.importEntry ?? ((url: string) => import(/* @vite-ignore */ url))
   try {
@@ -65,6 +77,7 @@ export async function bootPreview(options: BootPreviewOptions = {}): Promise<Liv
     }
     const live: LivePreview = createLivePreview({
       ...options.live,
+      versionUrl: options.live?.versionUrl ?? versionUrl,
       current,
       ...(current.pr && options.live?.pr === undefined ? { pr: current.pr } : {}),
       load: async (version) => {

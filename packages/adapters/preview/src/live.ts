@@ -14,7 +14,17 @@
 import type { PreviewStatusSnapshot } from "./preview-status.js"
 
 /** `/version.json`: the deployed build. */
-export type PreviewVersion = { version: string; builtAt: string; entry: string }
+export type PreviewVersion = {
+  version: string
+  builtAt: string
+  entry: string
+  /**
+   * The shape of the data the build keeps in the tab (a schema or seed version). A newer build
+   * with a different `stateVersion`, or one that starts or stops naming one, resets that data:
+   * it is offered (`update.resetsData`) but never applied on its own.
+   */
+  stateVersion?: string
+}
 
 /** Structurally identical to the UI package's `SystemBuildState`. */
 export type LiveBuildState = {
@@ -43,6 +53,8 @@ export type LiveBuildState = {
     auto: boolean
     autoApplyAt?: string
     error?: string
+    /** Present (true) when the pending version's `stateVersion` differs from the running one. */
+    resetsData?: boolean
   }
   pr?: { number: number; url: string }
 }
@@ -147,6 +159,14 @@ const isVersion = (value: unknown): value is PreviewVersion => {
   const { version, builtAt, entry } = value as Record<string, unknown>
   return typeof version === "string" && typeof builtAt === "string" && typeof entry === "string"
 }
+
+/** The version's `stateVersion`, or undefined when it names none (or a non-string). */
+const stateOf = (version: PreviewVersion): string | undefined =>
+  typeof version.stateVersion === "string" ? version.stateVersion : undefined
+
+/** `true` when moving from `running` to `next` resets the data the preview keeps in the tab. */
+const previewResetsData = (running: PreviewVersion, next: PreviewVersion): boolean =>
+  stateOf(running) !== stateOf(next)
 
 const deepFreeze = <T>(value: T): T => {
   if (typeof value === "object" && value !== null) {
@@ -258,6 +278,7 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
 
   const buildState = (): LiveBuildState => {
     const next = target()
+    const resetsData = next !== undefined && previewResetsData(current, next)
     const latest = snapshot?.deployed
       ? { version: snapshot.deployed.version, at: snapshot.deployed.at }
       : deployed
@@ -300,6 +321,7 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
         auto,
         ...(autoApplyAt === undefined ? {} : { autoApplyAt: new Date(autoApplyAt).toISOString() }),
         ...(error === undefined ? {} : { error }),
+        ...(resetsData ? { resetsData } : {}),
       },
       ...(pr ? { pr } : {}),
     }
@@ -327,6 +349,8 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
     const wanted =
       next !== undefined &&
       auto &&
+      // A build that resets the tab's data waits for the person, however long it takes.
+      !previewResetsData(current, next) &&
       !applying &&
       postponed !== next.version &&
       failed !== next.version
@@ -521,7 +545,9 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
     // The running bundle's chunks are gone: a newer build replaced them. Move to it now.
     void (async () => {
       await checkVersion()
-      if (target() !== undefined) await applyUpdate()
+      const next = target()
+      // Even a broken lazy chunk does not wipe the person's data without asking.
+      if (next !== undefined && !previewResetsData(current, next)) await applyUpdate()
     })()
   }
 

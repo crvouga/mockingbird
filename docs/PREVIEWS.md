@@ -46,7 +46,17 @@ flowchart LR
   `version.json`, stamped with the PR head at deploy, names your app's hashed entry. When a newer
   one is live, the loader unmounts the running app and imports the new one into the same page,
   after a short countdown (**Update now** / **Not now**), or at once in a background tab. A lazy
-  chunk that a deploy removed also triggers the update.
+  chunk that a deploy removed also triggers the update. `index.html` loads the loader by absolute
+  path (`/preview.js`, or `buildPreview({ base })` under a sub-path) and the loader reads
+  `version.json` and each entry from its own directory, so a reload or shared link at any route
+  (`/settings/profile`) boots; the live poller reads that same `version.json`.
+- **Updates that reset data wait for you.** A preview that keeps its backends' state in the tab
+  (a database in IndexedDB, say) stamps the shape of that data with
+  `mockingbird-preview stamp --state-version <v>`. When a newer build's `stateVersion` differs (or
+  one starts or stops naming one), the toast says "New version abc1234 resets this preview's
+  data" and never applies it on its own, not even in a background tab or after a broken lazy
+  chunk; the Preview card says the same and, with the System screen's snapshot, offers **Save**
+  before **Update now**.
 - **Freshness everywhere**, when your app uses `mountSystemHarness` from `@crvouga/mockingbird-ui`
   with the `build` the boot loader passes: a status dot on the switcher, an update toast, and a
   Preview card on the System screen (this tab's version and age, the latest deploy, build and
@@ -313,7 +323,9 @@ answers `current`, `newer-live` (naming the apps whose part changed), `newer-bui
 `@crvouga/mockingbird-ui` show it as a quiet dot on the switcher and a line with **Update now**,
 **What changed** and **Keep this version**. When only one app's part changed, Update now hands
 your app that one app to swap; otherwise it reloads the shell. Keeping emulator and database state
-across that reload is up to your app's snapshot support.
+across that reload is up to your app's snapshot support. A build identity may also carry
+`stateVersion` (`createBuildIdentity({ …, stateVersion })`): a newer build with a different one is
+marked `resetsData` and `freshnessBuild` never applies it on its own, even with `auto`.
 
 ## Your own lifecycle
 
