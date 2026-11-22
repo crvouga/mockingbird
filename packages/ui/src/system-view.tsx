@@ -632,7 +632,10 @@ function UpdateToast({
   const { update } = state
   const showing =
     update.available && (update.applying || update.error !== undefined || next !== dismissed)
-  const ticking = update.available && !update.applying && update.auto && !!update.autoApplyAt
+  // An update that resets the preview's data never counts down, whatever the source says.
+  const resets = update.resetsData === true
+  const ticking =
+    update.available && !update.applying && update.auto && !!update.autoApplyAt && !resets
   useEffect(() => {
     if (!ticking) return
     const timer = setInterval(() => setTick((value) => value + 1), 1000)
@@ -725,6 +728,7 @@ function UpdateToast({
       role="status"
       data-testid="system-update-toast"
       data-mode={mode}
+      data-resets-data={resets ? "true" : undefined}
       hidden={!showing}
       onKeyDown={(event) => {
         if (event.key === "Escape" && !update.applying) later()
@@ -737,7 +741,11 @@ function UpdateToast({
         <span
           aria-hidden="true"
           className={`size-2 shrink-0 rounded-full ring-4 ${
-            mode === "error" ? "bg-danger ring-danger-soft" : "bg-accent ring-accent-soft"
+            mode === "error"
+              ? "bg-danger ring-danger-soft"
+              : resets
+                ? "bg-warning ring-warning-soft"
+                : "bg-accent ring-accent-soft"
           }`}
         />
       )}
@@ -748,6 +756,13 @@ function UpdateToast({
           <>
             <strong className="font-semibold text-foreground">Couldn't update to {target}.</strong>{" "}
             {update.error}
+          </>
+        ) : resets ? (
+          <>
+            <strong className="font-semibold text-foreground">
+              New version {target} resets this preview's data
+            </strong>{" "}
+            · it waits for you; save on System first to keep it
           </>
         ) : (
           <>

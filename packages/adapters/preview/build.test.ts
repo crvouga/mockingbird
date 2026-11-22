@@ -73,9 +73,15 @@ describe("buildPreview", () => {
       outdir,
       esbuild: { define: { __FIXTURE__: '"x"' } },
     })
-    const src = /<script type="module" src="([^"]+)"><\/script>/.exec(read(outdir, "index.html"))?.[1]
+    const src = /<script type="module" src="([^"]+)"><\/script>/.exec(
+      read(outdir, "index.html"),
+    )?.[1]
     expect(src).toBe("/preview.js")
-    for (const page of ["https://x.test/", "https://x.test/settings/profile", "https://x.test/a/b/c?d=1#e"])
+    for (const page of [
+      "https://x.test/",
+      "https://x.test/settings/profile",
+      "https://x.test/a/b/c?d=1#e",
+    ])
       expect(new URL(src ?? "", page).href).toBe("https://x.test/preview.js")
     // The loader resolves version.json and the entry against its own URL (the deployment root),
     // never against the page's address.
@@ -132,6 +138,18 @@ describe("stampPreviewVersion", () => {
     const plain = JSON.parse(read(outdir, "version.json"))
     expect(plain.pr).toBeUndefined()
     expect(plain.entry).toBe("./app-XYZ.js")
+  })
+
+  test("writes stateVersion when given (#873)", async () => {
+    const outdir = join(root, "stamp-state")
+    rmSync(outdir, { recursive: true, force: true })
+    mkdirSync(outdir)
+    writeFileSync(join(outdir, "build.json"), JSON.stringify({ entry: "./app-XYZ.js" }))
+    await stampPreviewVersion({ outdir, version: "abc", stateVersion: "schema-2" })
+    expect(JSON.parse(read(outdir, "version.json")).stateVersion).toBe("schema-2")
+    await expect(stampPreviewVersion({ outdir, version: "abc", stateVersion: "" })).rejects.toThrow(
+      "stateVersion",
+    )
   })
 
   test("fails without build.json", async () => {

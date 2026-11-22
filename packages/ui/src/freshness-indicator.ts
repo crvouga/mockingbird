@@ -14,7 +14,17 @@
 import { ago, type SystemBuild, type SystemBuildState, shortSha } from "./system-build-status.js"
 
 /** The build a tab runs (structurally `BuildIdentity`). */
-export type FreshnessIdentity = { commit: string; builtAt: string; parts: Record<string, string> }
+export type FreshnessIdentity = {
+  commit: string
+  builtAt: string
+  parts: Record<string, string>
+  /** The shape of the data the build keeps in the tab; a change resets that data. */
+  stateVersion?: string
+}
+
+/** True when going from `running` to `next` resets the data the preview keeps in the tab. */
+const freshnessResetsData = (running: FreshnessIdentity, next: FreshnessIdentity) =>
+  running.stateVersion !== next.stateVersion
 /** The next build (structurally `FreshnessNext`). */
 export type FreshnessNextBuild = {
   state: "queued" | "building" | "publishing" | "failed"
@@ -112,8 +122,9 @@ export function freshnessView(value: FreshnessValue, now: number, kept?: string)
       }
     case "newer-live": {
       const { changed, update } = value
-      const detail =
+      const detail = `${
         changed.length === 0 ? "Only the shell changed." : `Changed: ${appList(changed)}.`
+      }${freshnessResetsData(value.running, value.current) ? " Updating resets this preview's data." : ""}`
       return {
         visible: kept !== value.current.commit,
         tone: "ready",
@@ -296,6 +307,8 @@ export function freshnessBuild(options: FreshnessBuildOptions): SystemBuild & { 
     const latest = value.state === "newer-live" ? value.current : running
     const next =
       value.state === "newer-building" || value.state === "newer-failed" ? value.next : undefined
+    const resetsData =
+      value.state === "newer-live" && freshnessResetsData(value.running, value.current)
     return {
       current: { version: running.commit, builtAt: running.builtAt },
       latest: { version: latest.commit, at: latest.builtAt },
@@ -321,6 +334,7 @@ export function freshnessBuild(options: FreshnessBuildOptions): SystemBuild & { 
         applying,
         auto,
         ...(error ? { error } : {}),
+        ...(resetsData ? { resetsData } : {}),
       },
       ...(options.pr ? { pr: options.pr } : {}),
     }
@@ -330,6 +344,9 @@ export function freshnessBuild(options: FreshnessBuildOptions): SystemBuild & { 
     state = project()
     for (const listener of listeners) listener(state)
   }
+  /** A build that resets the preview's data waits for the person, even with auto on. */
+  const resets = (of: FreshnessValue) =>
+    of.state === "newer-live" && freshnessResetsData(of.running, of.current)
   const applyUpdate = async () => {
     if (value.state !== "newer-live" || applying) return
     applying = true
@@ -354,7 +371,7 @@ export function freshnessBuild(options: FreshnessBuildOptions): SystemBuild & { 
     if (next.state !== "unknown") checkedAt = new Date().toISOString()
     if (fresh) error = undefined
     emit()
-    if (fresh && auto) void applyUpdate()
+    if (fresh && auto && !resets(next)) void applyUpdate()
   })
   return {
     get: () => state,
@@ -369,7 +386,7 @@ export function freshnessBuild(options: FreshnessBuildOptions): SystemBuild & { 
     setAutoUpdate(on) {
       auto = on
       emit()
-      if (on) void applyUpdate()
+      if (on && !resets(value)) void applyUpdate()
     },
     destroy() {
       unsubscribe()

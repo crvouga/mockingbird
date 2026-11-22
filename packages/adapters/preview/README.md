@@ -184,12 +184,14 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `ASSETS` binding's `/version.json`), the optional dev proxy serves its `basePath` with only the
   string env values, and everything else is `env.ASSETS.fetch(request)`. The `/worker-entry` export
   (`dist/worker-entry.js`) default-exports `createPreviewWorker()`, ready to be a wrangler `main`.
-- `bootPreview({ host?, versionUrl?, live? })`, from the `/boot` export (browser), is the boot
-  loader: it fetches `version.json` (no-store), imports the entry it names, calls its
-  `start(host, { build })` and follows every newer deploy with `createLivePreview`. On failure it
-  writes a readable message into the host (default `#preview`) and rejects.
-- `buildPreview({ entry, outdir, title?, hostId?, esbuild? })` and
-  `stampPreviewVersion({ outdir, version, pr?, builtAt? })`, from the `/build` export (Bun / Node;
+- `bootPreview({ host?, versionUrl?, baseUrl?, live? })`, from the `/boot` export (browser), is the
+  boot loader: it fetches `version.json` (no-store), imports the entry it names, calls its
+  `start(host, { build })` and follows every newer deploy with `createLivePreview`, which polls the
+  same `version.json`. Both resolve against `baseUrl`, the deployment root (default
+  `document.baseURI`). On failure it writes a readable message into the host (default `#preview`)
+  and rejects.
+- `buildPreview({ entry, outdir, title?, hostId?, base?, esbuild? })` and
+  `stampPreviewVersion({ outdir, version, pr?, builtAt?, stateVersion? })`, from the `/build` export (Bun / Node;
   `esbuild` is a peer dependency), build the static preview (hashed `app-<hash>.js`, `preview.js`,
   `index.html`, `build.json`, a development `version.json`) and stamp `version.json` with the
   commit a deploy ships. See [Building the preview](#building-the-preview).
@@ -736,16 +738,30 @@ await buildPreview({
 `buildPreview` empties `outdir`, bundles the app as one hashed entry (`app-<hash>.js`, ESM,
 code-split, ES2022, minified; `esbuild` options are merged in, while the entry, output, format,
 splitting and file naming stay fixed), bundles the stable boot loader `preview.js` (which calls
-`bootPreview({ host: "#<hostId>" })`), and writes `build.json` (`{ entry }`), a development
-`version.json` and `index.html` (`<main id="<hostId>">` plus the boot script; `hostId` defaults to
-`preview`). The build may be a cache replay of an older commit's identical output, so the commit is
-stamped at deploy time by `stampPreviewVersion` (or `mockingbird-preview stamp`), which writes
-`version.json` as `{ version, builtAt, entry, pr? }`.
+`bootPreview({ host: "#<hostId>", baseUrl: <its own directory> })`), and writes `build.json`
+(`{ entry }`), a development `version.json` and `index.html` (`<main id="<hostId>">` plus the boot
+script; `hostId` defaults to `preview`). `index.html` loads the boot script by absolute path,
+`<base>preview.js` (`base` defaults to `/`; set it, with leading and trailing slashes, when the
+preview is served under a sub-path), and the loader resolves `version.json` and every entry against
+its own URL. So the single-page-application fallback can serve `index.html` at any deep link
+(`/settings/profile`) and the preview still boots, where a page-relative `./preview.js` would have
+asked for `/settings/preview.js` and received HTML. The build may be a cache replay of an older
+commit's identical output, so the commit is stamped at deploy time by `stampPreviewVersion` (or
+`mockingbird-preview stamp`), which writes `version.json` as `{ version, builtAt, entry, pr?,
+stateVersion? }`.
+
+`stateVersion` names the shape of the data the preview keeps in the tab (a schema or seed
+version). When the newly deployed `version.json` names a different one than the tab runs (or one
+starts or stops naming one), the update resets that data: `createLivePreview` reports
+`update.resetsData: true` and never applies it on its own (no countdown, not in a hidden tab, not
+after a lazy chunk fails to load); `applyUpdate()` still does when the person asks. The UI
+package's toast and Preview card say so, and the card offers Save first.
 
 ### The CLI
 
 ```sh
-mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>] \
+  [--state-version <v>]
 mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha> \
   [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
 mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>] \
@@ -812,9 +828,13 @@ import { bootPreview } from "@crvouga/mockingbird-preview/boot"
 await bootPreview({ host: "#app", live: { storage: localStorage } })
 ```
 
-It fetches `./version.json` (no-store), creates `createLivePreview({ current, pr, load })` where
-`load` imports the version's entry relative to the page and calls its `start(host, { build: live })`
-(which returns a disposer), and starts it. The lower-level client is `createLivePreview`:
+It fetches `./version.json` (no-store), creates `createLivePreview({ current, pr, load, versionUrl })`
+(the live poller reads the same `version.json`) where `load` imports the version's entry and calls
+its `start(host, { build: live })`
+(which returns a disposer), and starts it. Both resolve against `baseUrl`, default
+`document.baseURI`; by hand in a module served from the deployment root, pass
+`baseUrl: new URL("./", import.meta.url).href` so deep links boot. The lower-level client is
+`createLivePreview`:
 
 ```ts
 import { createLivePreview, type PreviewVersion } from "@crvouga/mockingbird-preview"

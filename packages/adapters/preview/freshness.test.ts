@@ -10,6 +10,7 @@ import {
   type FreshnessVisibility,
   freshnessFromLaunch,
   freshnessStatusResponse,
+  parseBuildIdentity,
   parseFreshnessStatus,
   planFreshnessUpdate,
   watchFreshness,
@@ -242,6 +243,13 @@ describe("status documents", () => {
       parts: { app: part, admin: "pin" },
     })
     expect(identity).toEqual({ commit: A, builtAt: AT, parts: { app: part.sha256, admin: "pin" } })
+    // #873: the shape of the data the build keeps in the tab travels with its identity.
+    const stated = createBuildIdentity({ commit: A, builtAt: AT, stateVersion: "schema-2" })
+    expect(stated).toEqual({ commit: A, builtAt: AT, parts: {}, stateVersion: "schema-2" })
+    expect(parseFreshnessStatus({ current: stated })?.current?.stateVersion).toBe("schema-2")
+    expect(
+      parseBuildIdentity({ commit: A, builtAt: AT, stateVersion: 3 })?.stateVersion,
+    ).toBeUndefined()
     const file = createFreshnessStatusFile({ current: identity })
     expect(file.path).toBe("freshness.json")
     expect(JSON.parse(new TextDecoder().decode(file.bytes))).toEqual({ current: identity })

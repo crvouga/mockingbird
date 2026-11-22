@@ -22,6 +22,12 @@ export type BuildIdentity = {
   commit: string
   builtAt: string
   parts: Record<string, string>
+  /**
+   * The shape of the data the build keeps in the tab (a schema or seed version), as in
+   * `version.json`. A newer build with a different one resets that data, so it is never applied
+   * on its own.
+   */
+  stateVersion?: string
 }
 
 /** The next build of a preview, while it is not current. */
@@ -93,6 +99,7 @@ export function createBuildIdentity(options: {
   commit: string
   builtAt?: string
   parts?: Record<string, string | Pick<PreviewArtifact, "sha256">>
+  stateVersion?: string
 }): BuildIdentity {
   const parts: Record<string, string> = {}
   for (const [app, part] of Object.entries(options.parts ?? {}))
@@ -101,6 +108,7 @@ export function createBuildIdentity(options: {
     commit: options.commit,
     builtAt: options.builtAt ?? new Date().toISOString(),
     parts,
+    ...(options.stateVersion === undefined ? {} : { stateVersion: options.stateVersion }),
   })
   if (!identity) throw new Error("Invalid build identity")
   return identity
@@ -118,7 +126,13 @@ export function parseBuildIdentity(value: unknown): BuildIdentity | undefined {
     if (!app || typeof pin !== "string" || !pin) return undefined
     pins[app] = pin
   }
-  return { commit, builtAt, parts: pins }
+  const { stateVersion } = value
+  return {
+    commit,
+    builtAt,
+    parts: pins,
+    ...(typeof stateVersion === "string" && stateVersion ? { stateVersion } : {}),
+  }
 }
 
 /** Validates a status document; undefined when malformed. */

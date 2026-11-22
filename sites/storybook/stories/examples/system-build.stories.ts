@@ -1,5 +1,10 @@
+import { mount } from "@crvouga/mockingbird-ui/react/client"
+import { renderPage } from "@crvouga/mockingbird-ui/react/server"
+import { MOCKINGBIRD_CSS } from "@crvouga/mockingbird-ui/styles"
 import type { Meta, StoryObj } from "@storybook/html-vite"
+import { createElement } from "react"
 import { expect, userEvent, waitFor, within } from "storybook/test"
+import { PreviewCard } from "../../../../packages/ui/src/system-build.js"
 import {
   mountSystemHarness,
   type SystemBuild,
@@ -7,6 +12,7 @@ import {
 } from "../../../../packages/ui/src/system-harness.js"
 import { SYSTEM_ICONS } from "../../../../packages/ui/src/system-icons.js"
 import { ORDER_KEY, ROTATION_KEY } from "../../../../packages/ui/src/system-rotation.js"
+import { frame, frameDocument } from "../../src/frame.js"
 
 /**
  * A live PR preview that knows about CI: the switcher's status dot, the update toast beside the
@@ -45,6 +51,7 @@ type Scenario =
   | "offline"
   | "applying"
   | "error"
+  | "resets-data"
 
 function scenario(name: Scenario): SystemBuildState {
   const upToDate: SystemBuildState = {
@@ -135,6 +142,12 @@ function scenario(name: Scenario): SystemBuildState {
       return { ...upToDate, connection: "offline", checkedAt: minutes(2) }
     case "applying":
       return { ...ready, update: { ...ready.update, applying: true } }
+    case "resets-data":
+      // The new build changes the shape of the in-tab data: it waits, with no countdown.
+      return {
+        ...ready,
+        update: { available: true, applying: false, auto: true, resetsData: true },
+      }
     case "error":
       return {
         ...ready,
@@ -583,5 +596,127 @@ export const Phone: StoryObj = {
       document.documentElement.clientWidth,
     )
     await expect(document.documentElement.scrollHeight).toBeLessThanOrEqual(window.innerHeight)
+  },
+}
+
+/**
+ * The new version resets this preview's data (its `stateVersion` differs): the toast says so and
+ * never counts down, even with auto-update on; the card says it too, and Update now still applies it.
+ */
+export const ResetsData: StoryObj = {
+  render: live("resets-data", { delay: 300 }),
+  play: async ({ canvasElement }) => {
+    const preview = await card(canvasElement)
+    const note = toast(canvasElement)
+    await expect(note).toBeVisible()
+    await expect(note).toHaveAttribute("data-resets-data", "true")
+    await expect(note).toHaveTextContent(/^New version b81e07c resets this preview's data/)
+    await expect(note).not.toHaveTextContent("updating in")
+    await expect(preview.getByRole("switch", { name: "Auto-update" })).toBeChecked()
+    const notice = within(preview.getByTestId("system-preview-resets-data"))
+    await expect(notice.getByText("New version b81e07c resets this preview's data")).toBeVisible()
+    await expect(notice.getByText(/It won't update on its own/)).toBeVisible()
+    // Without a snapshot there is nothing to save.
+    await expect(notice.queryByRole("button", { name: "Save" })).toBeNull()
+    await waitFor(() =>
+      expect(overlaps(note, within(canvasElement).getByTestId("system-switcher"))).toBe(false),
+    )
+    // A second later it still waits.
+    await new Promise((resolve) => setTimeout(resolve, 1200))
+    await expect(control().calls.apply).toBe(0)
+    await expect(note).not.toHaveTextContent("updating in")
+    await userEvent.click(within(note).getByRole("button", { name: "Update now" }))
+    await expect(control().calls.apply).toBe(1)
+    await waitFor(() => expect(note).not.toBeVisible(), { timeout: 3000 })
+    await expect(preview.queryByTestId("system-preview-resets-data")).toBeNull()
+  },
+}
+
+/** On a phone: the longer "resets this preview's data" toast still sits beside the pill, never over it. */
+export const ResetsDataPhone: StoryObj = {
+  render: live("resets-data"),
+  globals: { viewport: { value: "phone" } },
+  play: async ({ canvasElement }) => {
+    await card(canvasElement)
+    const note = toast(canvasElement)
+    await expect(note).toHaveTextContent("resets this preview's data")
+    await waitFor(() =>
+      expect(overlaps(note, within(canvasElement).getByTestId("system-switcher"))).toBe(false),
+    )
+    await expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(
+      document.documentElement.clientWidth,
+    )
+  },
+}
+
+let saved = 0
+/**
+ * The Preview card on its own, with the screen's snapshot: Save downloads the in-tab data before
+ * an update that resets it, then Update now applies it. A failing save says why.
+ */
+const cardWithSnapshot = (fail?: string) => () => {
+  saved = 0
+  fake = fakeBuild(scenario("resets-data"), { delay: 300 })
+  const build = fake.build
+  const snapshot = {
+    async save() {
+      saved++
+      await new Promise((resolve) => setTimeout(resolve, 150))
+      if (fail) throw new Error(fail)
+      return new Blob(['{"patients":3}'], { type: "application/json" })
+    },
+  }
+  const iframe = frame(
+    renderPage(createElement("div", { id: "card", style: { padding: "16px" } }), {
+      title: "Preview card",
+      css: MOCKINGBIRD_CSS,
+    }),
+  )
+  iframe.addEventListener(
+    "load",
+    () => {
+      const host = iframe.contentDocument?.getElementById("card")
+      if (host) mount(host, createElement(PreviewCard, { build, snapshot }))
+    },
+    { once: true },
+  )
+  return iframe
+}
+
+const frameCard = async (canvasElement: HTMLElement) => {
+  const doc = await frameDocument(canvasElement)
+  await waitFor(() => expect(doc.querySelector('[data-testid="system-preview"]')).not.toBeNull())
+  return within(doc.querySelector<HTMLElement>('[data-testid="system-preview"]') as HTMLElement)
+}
+
+export const ResetsDataSaveFirst: StoryObj = {
+  render: cardWithSnapshot(),
+  play: async ({ canvasElement }) => {
+    const preview = await frameCard(canvasElement)
+    const notice = within(preview.getByTestId("system-preview-resets-data"))
+    await expect(notice.getByText(/Save the data first/)).toBeVisible()
+    await userEvent.click(notice.getByRole("button", { name: "Save" }))
+    await waitFor(() => expect(notice.getByRole("button", { name: "Save again" })).toBeVisible())
+    await expect(saved).toBe(1)
+    await expect(notice.getByText(/Saved\./)).toBeVisible()
+    await userEvent.click(preview.getByRole("button", { name: "Update now" }))
+    await expect(control().calls.apply).toBe(1)
+    await waitFor(() => expect(preview.queryByTestId("system-preview-resets-data")).toBeNull(), {
+      timeout: 3000,
+    })
+  },
+}
+
+export const ResetsDataSaveFailed: StoryObj = {
+  render: cardWithSnapshot("The database is busy."),
+  play: async ({ canvasElement }) => {
+    const preview = await frameCard(canvasElement)
+    const notice = within(preview.getByTestId("system-preview-resets-data"))
+    await userEvent.click(notice.getByRole("button", { name: "Save" }))
+    await waitFor(() =>
+      expect(notice.getByText(/Couldn't save: The database is busy\./)).toBeVisible(),
+    )
+    await expect(control().calls.apply).toBe(0)
+    await expect(preview.getByRole("button", { name: "Update now" })).toBeEnabled()
   },
 }
