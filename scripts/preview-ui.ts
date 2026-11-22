@@ -140,7 +140,11 @@ if (dnsName) {
 mkdirSync(join(root, ".worktree"), { recursive: true })
 writeFileSync(
   stateFile,
-  JSON.stringify({ pid: process.pid, port, ...(published ? { httpsPort } : {}) } satisfies State),
+  JSON.stringify({
+    pid: process.pid,
+    port,
+    ...(published && httpsPort !== undefined ? { httpsPort } : {}),
+  } satisfies State),
 )
 
 const lan = Object.values(networkInterfaces())
