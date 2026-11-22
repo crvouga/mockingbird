@@ -32,6 +32,7 @@ export {
 } from "./preview-launcher.js"
 export { CSS_RESET, scopeReset } from "./reset.js"
 export {
+  DOCK_KEY,
   defineSystem,
   INCLUDED_KEY,
   type MountSystemOptions,
@@ -67,6 +68,8 @@ export {
   type SystemDevStatus,
   type SystemHarness,
   type SystemHarnessOptions,
+  type SystemHarnessStorage,
+  type SystemHarnessUrl,
   type SystemHealth,
   type SystemNotice,
   type SystemPreview,
