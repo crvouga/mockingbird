@@ -27,11 +27,14 @@ export default defineConfig({
       directives: [...PAGE_CSP_DIRECTIVES],
       // Shiki highlights with style="" attributes, which cannot be hashed. server/headers.ts also
       // swaps the <style> hashes for 'unsafe-inline', since live examples add styles at runtime.
+      // No `style-src` resource is listed, so Astro keeps its default, 'self'.
       styleDirective: {
-        resources: ["'self'", { resource: "'unsafe-inline'", kind: "attribute" }],
+        resources: [{ resource: "'unsafe-inline'", kind: "attribute" }],
       },
     },
   },
+  // integrations/catalog/markdown.ts renders every document and highlights it itself.
+  markdown: { syntaxHighlight: false },
   redirects: {
     "/docs/infrastructure-mocks": "/docs/infrastructure-emulators",
     "/docs/infrastructure-mocks.md": "/docs/infrastructure-emulators.md",
