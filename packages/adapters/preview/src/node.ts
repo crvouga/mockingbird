@@ -81,6 +81,16 @@ export async function listenPreview(
   }
 }
 export {
+  assertPreviewAssets,
+  checkPreviewAssets,
+  formatPreviewAssetProblems,
+  PREVIEW_ASSET_LIMITS,
+  PreviewAssetLimitError,
+  type PreviewAssetLimits,
+  type PreviewAssetProblem,
+  type PreviewAssetReport,
+} from "./assets-check.js"
+export {
   type BuildPreviewPartsOptions,
   type BuiltPreviewParts,
   buildPreviewPartSet,

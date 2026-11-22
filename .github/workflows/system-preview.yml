@@ -36,6 +36,8 @@ jobs:
       cli: bun ../../adapters/preview/dist/cli.js
       # The lab's own Worker: the package's preview Worker plus the dev resources proxy.
       wrangler-config: wrangler.jsonc
+      # The lab app is the surface the PR link opens.
+      link-path: /?surface=app
     # Only these reach the preview workflow; the dev resource credentials are optional.
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
