@@ -11,8 +11,8 @@
  *     --dry-run        hand the credentials over and check them, then stop (no agent, no PR)
  *     --yes            skip the confirmation prompt
  *
- * The queue is /resolve-issues' order: the oldest open `agent-reported` issues, parity first, then
- * bug, then feature, that nobody has claimed (no assignee), that need no further report details
+ * The queue is /resolve-issues' order: the oldest open `agent-reported` issues, failing release
+ * checks first (`ci-failure`, filed by the Release workflow), then parity, then bug, then feature, that nobody has claimed (no assignee), that need no further report details
  * (no `needs-info`) and that no open PR already closes. `needs-oracle-check` issues stay eligible
  * for documented best guesses or explicit unsupported errors.
  *
@@ -74,8 +74,11 @@ const DEFAULT_MODEL = "claude-opus-5-5"
 const HANDSHAKE_TIMEOUT_MS = 15 * 60_000
 const POLL_MS = 5_000
 
-/** Queue order: /resolve-issues takes parity first, then bug, then feature. */
-export const QUEUE_KINDS = ["parity", "bug", "feature"] as const
+/**
+ * Queue order: /resolve-issues takes a failing release check first (it holds every publish), then
+ * parity, then bug, then feature.
+ */
+export const QUEUE_KINDS = ["ci-failure", "parity", "bug", "feature"] as const
 
 /** Missing report details can block; missing oracle evidence must not stall the queue. */
 export const WAITING_LABELS = ["needs-info"] as const

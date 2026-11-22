@@ -7,9 +7,8 @@
 # ci.yml. Those hold the publish, not the merge, and a failing one opens a GitHub issue. Add a slow
 # check there, not here.
 #
-# Required status checks on main (scripts/pr-ready.ts REQUIRED_CHECKS): Commitlint, and Check,
-# which passes only when every job it needs passed. Lint can be renamed or split freely; rename
-# Commitlint or Check and update that list in the same change.
+# Required status checks on main (scripts/pr-ready.ts REQUIRED_CHECKS): Commitlint, and Check
+# (Biome). These two are the whole gate; rename either and update that list in the same change.
 #
 # Local replica of everything, release checks included: bun run check:full
 name: CI
@@ -65,9 +64,10 @@ jobs:
             Use a Conventional Commits title, e.g. "feat: add junction emulator".
 
   # Biome over the whole repository: format and lint, reported as inline annotations on the diff.
-  # No build and no turbo, so it needs only node_modules from the cache.
-  lint:
-    name: Lint
+  # No build and no turbo, so it needs only node_modules from the cache. One job, so a pull request
+  # starts two runners in all.
+  check:
+    name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -77,18 +77,5 @@ jobs:
         with:
           turbo-cache: "false"
 
-      - run: bunx biome ci --reporter=github .
-
-  check:
-    name: Check
-    if: always()
-    needs: [lint]
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - name: Every job this change needs passed
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-        run: |
-          echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null
+      - name: Biome format and lint
+        run: bunx biome ci --reporter=github .

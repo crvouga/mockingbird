@@ -120,7 +120,7 @@ secrets checks and accepts the same reporting flags.
 
 Every check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + check).
 
-A pull request is held only by **Commitlint** and **Lint** (Biome format and lint), so it merges in about a minute. Everything else is a **release check**: it runs on `main` after the merge, in the Release workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), and holds the publish rather than the merge. A failing release check opens a GitHub issue labelled `ci-failure` (one per check; later failures comment on it, and it closes itself when the check passes again), so a red `main` is fixed forward from its issue.
+A pull request is held only by **Commitlint** and **Check** (Biome format and lint), so it merges in about a minute. Everything else is a **release check**: it runs on `main` after the merge, in the Release workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), and holds the publish rather than the merge. A failing release check, or a failing publish job, upserts a GitHub issue labelled `ci-failure` and `agent-reported`: one per check, and one per failing turbo task for Static and the shards (`@crvouga/mockingbird-ui#test`), with the command that reproduces it. Later failures comment on it, a check that breaks again reopens its issue, and it closes itself when the check passes on `main`. Those issues head the [`/resolve-issues`](#agent-commands) queue, so a red `main` is queued work, fixed forward from its issue.
 
 The release checks run the same turbo graph as `bun run check`, spread over parallel runners ([`scripts/ci-plan.ts`](../scripts/ci-plan.ts) splits it and fails if the split drifts from the `check` script): a **Static** job (format, lint, boundaries, generated-file drift) and four **Shard** jobs, each running build, typecheck, test, pack and portability for a quarter of the packages. **Consumer smoke**, **npm names** and the **Fleet container** build run beside them. Every package is in scope on each run; turbo's content hashes replay whatever did not change. The **Release checks** job passes when all of them passed, and the publish needs it.
 
@@ -171,7 +171,7 @@ pull-request check has passed:
 | Check | What it is |
 | --- | --- |
 | Commitlint | Conventional Commits on the PR's commits, and a Conventional Commits title |
-| Check | Biome format and lint over the whole repository (rolls up the Lint job) |
+| Check | Biome format and lint over the whole repository |
 
 There is no
 required review, no required approval, and an unresolved review thread does not block the merge.

@@ -167,9 +167,8 @@ bun run pr:ready pr --ready
 bun run pr:ready checks
 ```
 
-`checks` covers **every** check on the PR. The required ones are Commitlint and Check. Check rolls
-up the CI workflow's Lint job (Biome format and lint), so a failing Lint fails Check too; fix the
-lint. Build, tests and the rest of `bun run check` are release checks: they run on `main` after the
+`checks` covers **every** check on the PR. The required ones are Commitlint and Check (Biome
+format and lint); a failing Check is a lint or format finding to fix. Build, tests and the rest of `bun run check` are release checks: they run on `main` after the
 merge and never appear on the PR. A check that ran outside the CI
 workflow and is not in that list fails this command — add its name to `REQUIRED_CHECKS` in
 `scripts/pr-ready.ts` and run `bun run pr:ready ruleset --apply`. A skipped check is not a
