@@ -1,0 +1,10 @@
+{
+  "status": 200,
+  "body": {
+    "totalRecords": 0,
+    "pageIndex": 0,
+    "data": [],
+    "error": null,
+    "success": true
+  }
+}
