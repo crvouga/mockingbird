@@ -22,8 +22,8 @@ export function Logo({ size = 24, className }: LogoProps) {
 
 export type BrandProps = {
   /**
-   * The surface's name after the wordmark: "Admin", "Fleet Cloud", "Notifications", or the
-   * emulated product on an emulator's page ("Google sign-in").
+   * The surface's name, shown instead of the Mockingbird lockup: "Emulators", "Fleet Cloud",
+   * "Notifications", or the emulated product on an emulator's page ("Google sign-in").
    */
   product?: ReactNode
   /** Makes the wordmark a link (the surface's home). */
@@ -33,9 +33,16 @@ export type BrandProps = {
   className?: string
 }
 
-/** Mark, wordmark and the surface's name: the same lockup at the top of every surface. */
+/**
+ * The name at the top of a surface. With a `product` it is that name alone, with no Mockingbird
+ * mark: an admin, a harness or an example app should read like any other app, not like an ad.
+ * Without one it is the Mockingbird lockup (mark and wordmark), which only Mockingbird's own site
+ * shows.
+ */
 export function Brand({ product, href, size = 24, className }: BrandProps) {
-  const lockup = (
+  const lockup = product ? (
+    <span className="truncate font-semibold tracking-tight text-foreground">{product}</span>
+  ) : (
     <>
       <Logo size={size} />
       <span className="font-semibold tracking-tight text-foreground">{MOCKINGBIRD.name}</span>
@@ -49,21 +56,13 @@ export function Brand({ product, href, size = 24, className }: BrandProps) {
       {href ? (
         <a
           href={href}
-          className="inline-flex items-center gap-2 rounded-sm no-underline outline-none focus-visible:ring-2 focus-visible:ring-focus"
+          className="inline-flex min-w-0 items-center gap-2 rounded-sm no-underline outline-none focus-visible:ring-2 focus-visible:ring-focus"
         >
           {lockup}
         </a>
       ) : (
         lockup
       )}
-      {product ? (
-        <>
-          <span aria-hidden="true" className="text-muted">
-            /
-          </span>
-          <span className="truncate font-medium text-muted">{product}</span>
-        </>
-      ) : null}
     </span>
   )
 }

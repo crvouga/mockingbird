@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import {
+  DEFAULT_NEXT_SHORTCUT,
+  DEFAULT_PREVIOUS_SHORTCUT,
   DEFAULT_SYSTEM_SHORTCUT,
   matchesShortcut,
   parseShortcut,
   SYSTEM_SECTION_IDS,
+  shortcutKeys,
+  startsShortcut,
   validateSections,
 } from "./src/system-shortcut.ts"
 
@@ -68,6 +72,40 @@ describe("systemShortcut (#872)", () => {
     expect(() => parseShortcut("Hyper+S")).toThrow("unknown modifier Hyper")
     expect(() => parseShortcut("Alt+Alt+S")).toThrow("unknown modifier")
     expect(() => parseShortcut("Alt+Shift")).toThrow("no key after the modifiers")
+  })
+})
+
+describe("discoverable shortcuts", () => {
+  test("the bracket keys step through the apps, whatever Shift makes them type", () => {
+    const previous = parseShortcut(DEFAULT_PREVIOUS_SHORTCUT)
+    const next = parseShortcut(DEFAULT_NEXT_SHORTCUT)
+    const held = { altKey: true, shiftKey: true }
+    expect(matchesShortcut(key({ key: "{", code: "BracketLeft", ...held }), previous)).toBe(true)
+    expect(matchesShortcut(key({ key: "}", code: "BracketRight", ...held }), next)).toBe(true)
+    expect(matchesShortcut(key({ key: "}", code: "BracketRight", ...held }), previous)).toBe(false)
+    expect(matchesShortcut(key({ key: "{", code: "BracketLeft", shiftKey: true }), previous)).toBe(
+      false,
+    )
+  })
+
+  test("a shortcut is drawn as key caps, with a Mac's symbols on a Mac", () => {
+    expect(shortcutKeys(parseShortcut("shift+alt+s"))).toEqual(["Alt", "Shift", "S"])
+    expect(shortcutKeys(parseShortcut("Alt+Shift+S"), true)).toEqual(["⌥", "⇧", "S"])
+    expect(shortcutKeys(parseShortcut("Cmd+Ctrl+["), true)).toEqual(["⌃", "⌘", "["])
+    expect(shortcutKeys(parseShortcut("Ctrl+ArrowLeft"))).toEqual(["Ctrl", "←"])
+    expect(shortcutKeys(parseShortcut("f2"))).toEqual(["F2"])
+  })
+
+  test("holding a shortcut's modifiers starts it; Shift alone or another key does not", () => {
+    const all = [parseShortcut("Alt+Shift+S"), parseShortcut("Alt+Shift+[")]
+    expect(startsShortcut(key({ key: "Alt", altKey: true }), all)).toBe(true)
+    expect(startsShortcut(key({ key: "Shift", altKey: true, shiftKey: true }), all)).toBe(true)
+    expect(startsShortcut(key({ key: "Shift", shiftKey: true }), all)).toBe(false)
+    expect(startsShortcut(key({ key: "Control", ctrlKey: true }), all)).toBe(false)
+    expect(startsShortcut(key({ key: "Control", ctrlKey: true, altKey: true }), all)).toBe(false)
+    expect(startsShortcut(key({ key: "s", altKey: true, shiftKey: true }), all)).toBe(false)
+    // The last modifier released.
+    expect(startsShortcut(key({ key: "Alt" }), all)).toBe(false)
   })
 })
 

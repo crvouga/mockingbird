@@ -32,6 +32,8 @@ export {
 } from "./preview-launcher.js"
 export { CSS_RESET, scopeReset } from "./reset.js"
 export {
+  DEFAULT_NEXT_SHORTCUT,
+  DEFAULT_PREVIOUS_SHORTCUT,
   DEFAULT_SYSTEM_SHORTCUT,
   DOCK_KEY,
   defineSystem,
@@ -61,6 +63,7 @@ export {
   type PreviewSystemSurface,
   planPartUpdate,
   ROTATION_KEY,
+  SWITCHER_BAR_HEIGHT,
   SYSTEM_SECTION_IDS,
   SYSTEM_SECTION_PARAM,
   type SystemBackend,

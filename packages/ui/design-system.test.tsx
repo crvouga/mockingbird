@@ -86,15 +86,9 @@ describe("server rendering", () => {
         <LoadingState />
       </AppShell>,
     )
-    for (const text of [
-      "Mockingbird",
-      "Admin",
-      "Customers",
-      "Succeeded",
-      "cus_1",
-      "Nothing yet",
-      "boom",
-    ])
+    // A named surface shows its own name, not the Mockingbird lockup.
+    expect(html).not.toContain(">Mockingbird<")
+    for (const text of ["Admin", "Customers", "Succeeded", "cus_1", "Nothing yet", "boom"])
       expect(html).toContain(text)
     expect(html).toContain('aria-current="page"')
     expect(html).toContain("data-mockingbird")

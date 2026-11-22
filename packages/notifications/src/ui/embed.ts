@@ -37,11 +37,16 @@ const install = (host: HTMLElement) => {
 
 /**
  * Mount the live harness UI inside `host`. It fills the element and scrolls inside it
- * (`embedded`), and leaves the page URL alone unless `syncUrl` is set.
+ * (`embedded`), or with `shell` is a whole page in the shared app shell that the host scrolls,
+ * and leaves the page URL alone unless `syncUrl` is set.
  */
 export const mountNotifications = (host: HTMLElement, options: MountOptions = {}): AppHandle => {
   if (options.injectStyles ?? true) install(host)
-  return createApp(host, { embedded: true, syncUrl: false, ...storeOptions(options) })
+  return createApp(host, {
+    embedded: !options.shell,
+    syncUrl: false,
+    ...storeOptions(options),
+  })
 }
 
 /**

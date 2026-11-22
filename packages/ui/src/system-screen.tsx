@@ -170,7 +170,6 @@ export function SystemScreen(props: SystemScreenProps) {
   return (
     <AppShell product="System" actions={<ThemeSwitch />}>
       <PageHeader
-        eyebrow="Mockingbird preview"
         title="System"
         description="Everything this preview runs, in this browser tab."
         actions={

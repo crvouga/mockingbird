@@ -1,15 +1,15 @@
 /**
  * The System harness's React view, loaded lazily by `system-harness.ts`. One React root draws the
- * switcher pill (with its tooltip, status dot and update toast) in the harness's chrome layer, and
- * portals each panel's loading or error state and the System screen into their own hosts.
+ * switcher bar into the strip across the top of the shell, its tooltip, update toast and notice
+ * into the harness's chrome layer below it, and portals each panel's loading or error state and the System screen into their own hosts.
  *
  * Mockingbird's stylesheet goes into the document once, scoped (`scope-css.ts`) to the `.msh-ui`
  * containers this view draws in, so Preflight and HeroUI's classes restyle nothing of the host
  * page or of the surfaces' own content. (Shadow roots would isolate further, but React Aria's
  * press handling, behind every HeroUI button and switch, does not work across a shadow boundary.)
  */
-import { ArrowLeft, ArrowRight, TriangleExclamation } from "@gravity-ui/icons"
-import { Button, buttonVariants, Card, Separator, Spinner } from "@heroui/react"
+import { ArrowLeft, ArrowRight, Sliders, TriangleExclamation } from "@gravity-ui/icons"
+import { Button, Card, Spinner } from "@heroui/react"
 import {
   type ReactNode,
   useCallback,
@@ -36,10 +36,16 @@ import {
 } from "./system-build-status.js"
 import { SYSTEM_ICONS } from "./system-icons.js"
 import { IconMark } from "./system-mark.js"
-import { DOCK_KEY, stepRotation } from "./system-rotation.js"
+import { SWITCHER_BAR_HEIGHT, stepRotation } from "./system-rotation.js"
 import { SystemScreen } from "./system-screen.js"
 import { notEmulated, type ServicesStore, trackServices } from "./system-services-store.js"
-import { matchesShortcut, parseShortcut } from "./system-shortcut.js"
+import {
+  matchesShortcut,
+  parseShortcut,
+  type Shortcut,
+  shortcutKeys,
+  startsShortcut,
+} from "./system-shortcut.js"
 import type { HarnessController, HarnessSnapshot, SystemApp } from "./system-types.js"
 import { applyStoredTheme, THEME_STORAGE_KEY } from "./theme-preference.js"
 
@@ -130,7 +136,7 @@ const useSnapshot = (controller: HarnessController): HarnessSnapshot =>
   useStore(controller.subscribe, controller.get)
 
 /**
- * The theme on a layer drawn over the host's own background (the pill, a panel's status): what
+ * The theme on a layer drawn over the host's own background (the bar, a panel's status): what
  * `MockingbirdProvider` sets, without its page background.
  */
 function Layer({
@@ -250,42 +256,39 @@ function Harness({ controller }: { controller: HarnessController }) {
   )
 }
 
-// ---- The switcher pill: arrows through the rotation, dragged to dock on any edge.
+// ---- The switcher bar: a thin strip across the top with arrows through the rotation.
 
-type Dock = { edge: "left" | "right" | "top" | "bottom"; at: number }
-const MARGIN = 8
-type Tip = "previous" | "next" | "dot" | "dev"
-/** How long a press on the pill opens System, unless it moves first (then it is a drag). */
-export const LONG_PRESS_MS = 500
+type Tip = "previous" | "next" | "dot" | "dev" | "system"
 
-type Store = Pick<Storage, "getItem" | "setItem">
-const readDock = (storage: () => Store): Dock => {
-  try {
-    const saved = JSON.parse(storage().getItem(DOCK_KEY) ?? "null") as Partial<Dock>
-    if (
-      saved &&
-      ["left", "right", "top", "bottom"].includes(saved.edge ?? "") &&
-      typeof saved.at === "number" &&
-      saved.at >= 0 &&
-      saved.at <= 1
-    )
-      return saved as Dock
-  } catch {
-    /* Storage can be unavailable or hold something else; fall back to the default. */
-  }
-  return { edge: "left", at: 0.5 }
+/**
+ * A control in the bar: an icon and no words, faint until hovered or focused, so the strip stays
+ * out of the way of the app under it.
+ */
+const BAR_BUTTON =
+  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded p-0 text-muted opacity-60 outline-offset-1 hover:bg-default hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus"
+
+/** How long the shortcuts' modifiers are held before the bar shows what each shortcut does. */
+const HINT_DELAY_MS = 350
+
+const isMac = (doc: Document) => /Mac|iPhone|iPad/.test(doc.defaultView?.navigator.platform ?? "")
+
+/** A shortcut drawn as key caps. Read out through `aria-keyshortcuts`, so hidden here. */
+function Keys({ shortcut, mac }: { shortcut: Shortcut; mac: boolean }) {
+  return (
+    <span aria-hidden="true" data-shortcut="" className="inline-flex items-center gap-0.5">
+      {shortcutKeys(shortcut, mac).map((key) => (
+        <kbd
+          key={key}
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-surface-secondary px-1 font-sans text-[10px] leading-none text-muted"
+        >
+          {key}
+        </kbd>
+      ))}
+    </span>
+  )
 }
-const writeDock = (storage: () => Store, value: Dock) => {
-  try {
-    storage().setItem(DOCK_KEY, JSON.stringify(value))
-  } catch {
-    /* The position is a convenience; switching still works without storage. */
-  }
-}
 
-const ARROW = `${buttonVariants({ variant: "ghost", size: "sm", isIconOnly: true })} rounded-full`
-
-/** The services not emulated, kept current: the pill's dev badge. */
+/** The services not emulated, kept current: the bar's dev badge. */
 function useNotEmulated(store: ServicesStore | undefined) {
   const subscribe = useCallback(
     (listener: () => void) => store?.watch(listener) ?? (() => {}),
@@ -314,18 +317,9 @@ function Chrome({
   openSystem(section?: string): void
 }) {
   const { shell, build } = controller
-  const win = shell.ownerDocument.defaultView ?? window
-  const pill = useRef<HTMLDivElement>(null)
   const tipBox = useRef<HTMLDivElement>(null)
   const buttons = useRef(new Map<Tip, HTMLButtonElement>())
-  const placeToast = useRef<() => void>(() => {})
   const [tip, setTip] = useState<Tip>()
-  const [dragging, setDragging] = useState(false)
-  /**
-   * True from a drag's first move (or a long-press opening System) until just after the
-   * release, so the click it ends with does not act.
-   */
-  const dragged = useRef(false)
   const openRef = useRef(() => openSystem())
   openRef.current = () => openSystem()
 
@@ -334,165 +328,66 @@ function Chrome({
   const neighbour = (step: -1 | 1) =>
     appOf(stepRotation(snapshot.order, snapshot.excluded, snapshot.current, step))
   const label = (step: -1 | 1) => `${step < 0 ? "Previous" : "Next"}: ${neighbour(step).label}`
+  const current = controller.apps.find((app) => app.id === snapshot.current)
 
-  // Docking: where the pill rests, kept across reloads, kept in place across resizes.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: set up once per harness.
-  useLayoutEffect(() => {
-    const switcher = pill.current
-    if (!switcher) return
-    let dock = readDock(controller.storage)
-    let x = 0
-    let y = 0
-    const limits = () => {
-      const maxX = Math.max(0, shell.clientWidth - switcher.offsetWidth - MARGIN)
-      const maxY = Math.max(0, shell.clientHeight - switcher.offsetHeight - MARGIN)
-      return { minX: Math.min(MARGIN, maxX), minY: Math.min(MARGIN, maxY), maxX, maxY }
-    }
-    const position = () => {
-      const { maxX, maxY } = limits()
-      x = Math.max(0, Math.min(x, maxX + MARGIN))
-      y = Math.max(0, Math.min(y, maxY + MARGIN))
-      switcher.style.left = `${x}px`
-      switcher.style.top = `${y}px`
-      placeToast.current()
-    }
-    const settle = () => {
-      const { minX, minY, maxX, maxY } = limits()
-      const along = (min: number, max: number) => min + (max - min) * dock.at
-      x = dock.edge === "left" ? minX : dock.edge === "right" ? maxX : along(minX, maxX)
-      y = dock.edge === "top" ? minY : dock.edge === "bottom" ? maxY : along(minY, maxY)
-      position()
-    }
-    const snap = () => {
-      const { minX, minY, maxX, maxY } = limits()
-      x = Math.max(minX, Math.min(x, maxX))
-      y = Math.max(minY, Math.min(y, maxY))
-      const fraction = (value: number, min: number, max: number) =>
-        max > min ? (value - min) / (max - min) : 0.5
-      const distances = { left: x - minX, right: maxX - x, top: y - minY, bottom: maxY - y }
-      const edge = (Object.keys(distances) as Dock["edge"][]).reduce((a, b) =>
-        distances[b] < distances[a] ? b : a,
-      )
-      dock = {
-        edge,
-        at: edge === "left" || edge === "right" ? fraction(y, minY, maxY) : fraction(x, minX, maxX),
-      }
-      writeDock(controller.storage, dock)
-      switcher.style.transition = win.matchMedia("(prefers-reduced-motion: reduce)").matches
-        ? "none"
-        : "left 160ms ease-out, top 160ms ease-out"
-      settle()
-    }
-    let drag: { x: number; y: number; left: number; top: number } | undefined
-    /** The pill has moved under this press (it is a drag, not a long-press). */
-    let moving = false
-    // A press held still for LONG_PRESS_MS opens System; moving first makes it a drag instead.
-    let pressTimer: number | undefined
-    const cancelPress = () => {
-      if (pressTimer !== undefined) win.clearTimeout(pressTimer)
-      pressTimer = undefined
-    }
-    const down = (event: globalThis.PointerEvent) => {
-      if (event.button !== 0) return
-      dragged.current = false
-      moving = false
-      switcher.style.transition = "none"
-      drag = { x: event.clientX, y: event.clientY, left: x, top: y }
-      cancelPress()
-      pressTimer = win.setTimeout(() => {
-        pressTimer = undefined
-        if (!drag || moving) return
-        // Swallow the click this press ends with, as a drag's is.
-        dragged.current = true
-        setTip(undefined)
-        openRef.current()
-      }, LONG_PRESS_MS)
-    }
-    const moved = (event: globalThis.PointerEvent) => {
-      if (!drag) return
-      const dx = event.clientX - drag.x
-      const dy = event.clientY - drag.y
-      if (!moving && Math.hypot(dx, dy) > 5) {
-        cancelPress()
-        moving = true
-        dragged.current = true
-        setTip(undefined)
-        setDragging(true)
-        // Capture only once it is a drag, so a plain press still clicks the arrow under it.
-        try {
-          switcher.setPointerCapture(event.pointerId)
-        } catch {
-          /* A synthetic pointer has nothing to capture; its moves still reach the pill. */
-        }
-      }
-      if (!moving) return
-      x = drag.left + dx
-      y = drag.top + dy
-      position()
-    }
-    const release = () => {
-      cancelPress()
-      if (!drag) return
-      drag = undefined
-      setDragging(false)
-      if (moving) snap()
-      if (dragged.current) {
-        // The click that ends a drag arrives after pointerup; let it through on the next task.
-        win.setTimeout(() => {
-          dragged.current = false
-        })
-      }
-    }
-    // A right-click, the context-menu key or Shift+F10 on the pill (and a touch long-press,
-    // where the browser fires it) opens System instead of the browser's menu.
-    const menu = (event: MouseEvent) => {
-      event.preventDefault()
-      cancelPress()
-      if (moving) return
-      // A touch held down: swallow the click its release may send, as after a long-press.
-      if (drag) dragged.current = true
-      setTip(undefined)
-      openRef.current()
-    }
-    switcher.addEventListener("contextmenu", menu)
-    switcher.addEventListener("pointerdown", down)
-    switcher.addEventListener("pointermove", moved)
-    switcher.addEventListener("pointerup", release)
-    switcher.addEventListener("pointercancel", release)
-    switcher.addEventListener("lostpointercapture", release)
-    const resize = new ResizeObserver(() => {
-      switcher.style.transition = "none"
-      settle()
-    })
-    resize.observe(shell)
-    resize.observe(switcher)
-    settle()
-    return () => {
-      resize.disconnect()
-      cancelPress()
-      switcher.removeEventListener("contextmenu", menu)
-      switcher.removeEventListener("pointerdown", down)
-      switcher.removeEventListener("pointermove", moved)
-      switcher.removeEventListener("pointerup", release)
-      switcher.removeEventListener("pointercancel", release)
-      switcher.removeEventListener("lostpointercapture", release)
-    }
-  }, [])
-
-  // The keyboard shortcut that opens System from anywhere in the page.
+  // The keyboard shortcuts, from anywhere in the page: open System, and step through the rotation.
+  const { systemShortcut, switchShortcuts } = controller
+  const stepKeys = controller.switcher && switchShortcuts ? switchShortcuts : undefined
+  const shortcuts = useMemo(
+    () => ({
+      system: systemShortcut ? parseShortcut(systemShortcut) : undefined,
+      previous: stepKeys ? parseShortcut(stepKeys.previous) : undefined,
+      next: stepKeys ? parseShortcut(stepKeys.next) : undefined,
+    }),
+    [systemShortcut, stepKeys],
+  )
+  const mac = isMac(shell.ownerDocument)
+  const stepRef = useRef((_step: -1 | 1) => {})
+  stepRef.current = (step) => controller.show(neighbour(step).id)
+  // While the shortcuts' modifiers are held, the bar says what each shortcut does.
+  const [hints, setHints] = useState(false)
   useEffect(() => {
-    const text = controller.systemShortcut
-    if (text === false || text === undefined) return
-    const shortcut = parseShortcut(text)
+    const all = [shortcuts.system, shortcuts.previous, shortcuts.next].filter(
+      (shortcut): shortcut is Shortcut => !!shortcut,
+    )
+    if (all.length === 0) return
     const doc = shell.ownerDocument
+    const view = doc.defaultView
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const hide = () => {
+      clearTimeout(timer)
+      timer = undefined
+      setHints(false)
+    }
+    const held = (event: KeyboardEvent) => {
+      if (!startsShortcut(event, all)) return hide()
+      timer ??= setTimeout(() => setHints(true), HINT_DELAY_MS)
+    }
     const press = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !matchesShortcut(event, shortcut)) return
+      held(event)
+      if (event.defaultPrevented) return
+      const run =
+        shortcuts.system && matchesShortcut(event, shortcuts.system)
+          ? () => openRef.current()
+          : shortcuts.previous && matchesShortcut(event, shortcuts.previous)
+            ? () => stepRef.current(-1)
+            : shortcuts.next && matchesShortcut(event, shortcuts.next)
+              ? () => stepRef.current(1)
+              : undefined
+      if (!run) return
       event.preventDefault()
-      openRef.current()
+      run()
     }
     doc.addEventListener("keydown", press)
-    return () => doc.removeEventListener("keydown", press)
-  }, [controller.systemShortcut, shell])
+    doc.addEventListener("keyup", held)
+    view?.addEventListener("blur", hide)
+    return () => {
+      hide()
+      doc.removeEventListener("keydown", press)
+      doc.removeEventListener("keyup", held)
+      view?.removeEventListener("blur", hide)
+    }
+  }, [shortcuts, shell])
 
   const dev = useNotEmulated(store)
   const devText =
@@ -501,8 +396,10 @@ function Chrome({
       : dev.length === 1
         ? `${dev[0]?.label} is not emulated: it uses its dev resource`
         : `${dev.length} services are not emulated: ${dev.map((service) => service.label).join(", ")}`
-  const shortcutText = controller.systemShortcut ? `, or press ${controller.systemShortcut}` : ""
-  const description = `${devText ? `${devText}. ` : ""}Long-press or right-click to open System${shortcutText}.`
+  const shortcutText = controller.systemShortcut
+    ? `Press ${controller.systemShortcut} to open System.`
+    : ""
+  const description = `${devText ? `${devText}. ` : ""}${shortcutText}`.trim()
 
   // Tooltips: hover with a mouse, or keyboard focus. Native listeners, so a synthetic
   // `pointerenter` reaches them as a real one does. Bound again when the dev badge comes or goes.
@@ -511,9 +408,9 @@ function Chrome({
     const cleanups: (() => void)[] = []
     for (const [name, button] of buttons.current) {
       const enter = (event: globalThis.PointerEvent) => {
-        if (event.pointerType === "mouse" && !dragged.current) flushSync(() => setTip(name))
+        if (event.pointerType === "mouse") flushSync(() => setTip(name))
       }
-      const leave = () => setTip((current) => (current === name ? undefined : current))
+      const leave = () => setTip((shown) => (shown === name ? undefined : shown))
       const focus = () => {
         if (button.matches(":focus-visible")) flushSync(() => setTip(name))
       }
@@ -531,13 +428,15 @@ function Chrome({
     return () => {
       for (const cleanup of cleanups) cleanup()
     }
-  }, [devText !== undefined])
+  }, [devText !== undefined, build !== undefined])
 
   const register = (name: Tip) => (node: HTMLButtonElement | null) => {
     if (node) buttons.current.set(name, node)
     else buttons.current.delete(name)
   }
 
+  const tipShortcut =
+    tip === "previous" || tip === "next" || tip === "system" ? shortcuts[tip] : undefined
   const destination = tip === "previous" ? neighbour(-1) : tip === "next" ? neighbour(1) : undefined
   const dotStatus = useDotStatus(build)
   const tipText =
@@ -545,132 +444,179 @@ function Chrome({
       ? dotStatus?.text
       : tip === "dev"
         ? devText
-        : tip
-          ? label(tip === "previous" ? -1 : 1)
-          : undefined
+        : tip === "system"
+          ? "System"
+          : tip
+            ? label(tip === "previous" ? -1 : 1)
+            : undefined
 
-  // Above the pill, centered on the button, kept inside the shell.
+  // Just below the bar, centered on the button, kept inside the shell.
   // biome-ignore lint/correctness/useExhaustiveDependencies: placed whenever its text changes.
   useLayoutEffect(() => {
     const box = tipBox.current
     const target = tip ? buttons.current.get(tip) : undefined
-    const switcher = pill.current
-    if (!box || !target || !switcher) return
-    const outer = shell.getBoundingClientRect()
+    const layer = box?.offsetParent
+    if (!box || !target || !layer) return
+    const outer = layer.getBoundingClientRect()
     const rect = target.getBoundingClientRect()
-    const pillRect = switcher.getBoundingClientRect()
     const left = rect.left - outer.left + (rect.width - box.offsetWidth) / 2
-    const above = pillRect.top - outer.top - box.offsetHeight - 8
-    box.style.left = `${Math.max(4, Math.min(left, shell.clientWidth - box.offsetWidth - 4))}px`
-    box.style.top = `${above >= 4 ? above : pillRect.bottom - outer.top + 8}px`
-  }, [tip, tipText])
-
-  const go = (step: -1 | 1) => {
-    if (dragged.current) return
-    controller.show(neighbour(step).id)
-  }
+    box.style.left = `${Math.max(4, Math.min(left, layer.clientWidth - box.offsetWidth - 4))}px`
+    box.style.top = "6px"
+  }, [tip, tipText, tipShortcut])
 
   return (
-    <Layer theme={theme} className="pointer-events-none absolute inset-0">
-      {/* biome-ignore lint/a11y/useSemanticElements: a draggable pill of buttons, not a form fieldset. */}
-      <div
-        ref={pill}
-        role="group"
-        aria-label={devText ? "Switch apps · not all services emulated" : "Switch apps"}
-        aria-description={description}
-        data-testid="system-switcher"
-        data-dev={devText ? "" : undefined}
-        hidden={!controller.switcher}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") setTip(undefined)
-        }}
-        className={`pointer-events-auto absolute flex touch-none items-center gap-0.5 rounded-full border bg-overlay [-webkit-touch-callout:none] ${
-          devText ? "border-warning" : "border-border"
-        } p-1 text-foreground shadow-overlay select-none ${
-          dragging ? "cursor-grabbing [&_button]:cursor-grabbing" : "cursor-grab"
-        }`}
-      >
-        {([-1, 1] as const).map((step) => {
-          const name = step < 0 ? "previous" : "next"
-          return [
-            step > 0 ? <Separator key="separator" orientation="vertical" className="h-5" /> : null,
-            <button
-              key={name}
-              ref={register(name)}
-              type="button"
-              className={ARROW}
-              aria-label={step < 0 ? "Previous app" : "Next app"}
-              aria-description={label(step)}
-              data-tip={label(step)}
-              data-testid={`system-switcher-${name}`}
-              onClick={() => go(step)}
-            >
-              {step < 0 ? (
-                <ArrowLeft className="size-4" aria-hidden="true" />
-              ) : (
-                <ArrowRight className="size-4" aria-hidden="true" />
-              )}
-            </button>,
-          ]
-        })}
-        {build ? (
-          <BuildDot
-            build={build}
-            register={register("dot")}
-            onOpen={() => {
-              if (!dragged.current) controller.show("system")
+    <>
+      {
+        // Always drawn, and hidden while there is no app to switch to (`setSurfaces` can add one).
+        <Portal host={controller.bar} theme={theme} style="height:100%">
+          {/* biome-ignore lint/a11y/useSemanticElements: a bar of buttons, not a form fieldset. */}
+          <div
+            role="group"
+            aria-label={devText ? "Switch apps · not all services emulated" : "Switch apps"}
+            {...(description ? { "aria-description": description } : {})}
+            data-testid="system-switcher"
+            data-dev={devText ? "" : undefined}
+            hidden={!controller.switcher}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setTip(undefined)
             }}
-          />
-        ) : null}
-        {devText ? (
-          // A shape as well as a color: a triangle on the pill's other corner, without resizing it.
-          <button
-            ref={register("dev")}
-            type="button"
-            data-testid="system-dev-badge"
-            aria-label={`${devText}. Open System's services`}
-            onClick={() => {
-              if (!dragged.current) openSystem("services")
-            }}
-            className="absolute -top-1.5 -left-1.5 flex size-5 cursor-pointer items-center justify-center rounded-md bg-warning p-0 text-warning-foreground ring-2 ring-overlay outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+            className={`flex items-center gap-0.5 border-b bg-background px-1.5 text-foreground select-none ${
+              devText ? "border-warning" : "border-transparent"
+            }`}
+            style={{ height: SWITCHER_BAR_HEIGHT }}
           >
-            <TriangleExclamation aria-hidden="true" className="size-3" />
-          </button>
+            {([-1, 1] as const).map((step) => {
+              const name = step < 0 ? "previous" : "next"
+              return (
+                <button
+                  key={name}
+                  ref={register(name)}
+                  type="button"
+                  className={BAR_BUTTON}
+                  aria-label={step < 0 ? "Previous app" : "Next app"}
+                  aria-description={label(step)}
+                  aria-keyshortcuts={stepKeys?.[name]}
+                  data-tip={label(step)}
+                  data-testid={`system-switcher-${name}`}
+                  onClick={() => controller.show(neighbour(step).id)}
+                >
+                  {step < 0 ? (
+                    <ArrowLeft className="size-3" aria-hidden="true" />
+                  ) : (
+                    <ArrowRight className="size-3" aria-hidden="true" />
+                  )}
+                </button>
+              )
+            })}
+            {/* No words in the bar: the shown surface's name is for assistive technology only. */}
+            <span data-testid="system-switcher-current" className="sr-only" aria-live="polite">
+              {current?.label}
+            </span>
+            <span className="ml-auto flex shrink-0 items-center gap-0.5">
+              {devText ? (
+                // A shape as well as a color: a triangle while any service is not emulated.
+                <button
+                  ref={register("dev")}
+                  type="button"
+                  data-testid="system-dev-badge"
+                  aria-label={`${devText}. Open System's services`}
+                  onClick={() => openSystem("services")}
+                  className={`${BAR_BUTTON} text-warning opacity-100`}
+                >
+                  <TriangleExclamation aria-hidden="true" className="size-3" />
+                </button>
+              ) : null}
+              {build ? (
+                <BuildDot
+                  build={build}
+                  register={register("dot")}
+                  onOpen={() => controller.show("system")}
+                />
+              ) : null}
+              <button
+                ref={register("system")}
+                type="button"
+                aria-label="System"
+                aria-keyshortcuts={systemShortcut || undefined}
+                data-testid="system-switcher-system"
+                aria-current={snapshot.current === "system" ? "page" : undefined}
+                onClick={() => openSystem()}
+                className={`${BAR_BUTTON} aria-[current=page]:text-foreground aria-[current=page]:opacity-100`}
+              >
+                <Sliders aria-hidden="true" className="size-3" />
+              </button>
+            </span>
+          </div>
+        </Portal>
+      }
+      <Layer theme={theme} className="pointer-events-none absolute inset-0">
+        <Notice notice={snapshot.notice} dismiss={controller.dismissNotice} />
+        {build ? (
+          <UpdateToast build={build} focusDot={() => buttons.current.get("dot")?.focus()} />
         ) : null}
-      </div>
-      <Notice notice={snapshot.notice} dismiss={controller.dismissNotice} />
-      {build ? (
-        <UpdateToast
-          build={build}
-          shell={shell}
-          pill={pill}
-          placeToast={placeToast}
-          visiblePill={controller.switcher}
-          focusDot={() => buttons.current.get("dot")?.focus()}
-        />
-      ) : null}
-      <div
-        ref={tipBox}
-        role="tooltip"
-        hidden={!tip}
-        className="tooltip pointer-events-none absolute flex items-center gap-2 whitespace-nowrap text-foreground"
-      >
-        {tip === "dev" ? (
-          <TriangleExclamation aria-hidden="true" className="size-3.5 text-warning" />
-        ) : tip === "dot" && dotStatus ? (
-          <span aria-hidden="true" className={`size-2 rounded-full ${TONE_FILL[dotStatus.tone]}`} />
-        ) : destination ? (
-          <IconMark
-            icon={
-              destination.icon ?? (destination.id === "system" ? SYSTEM_ICONS.system : undefined)
-            }
-            label={destination.label}
-            size="sm"
-          />
+        <div
+          ref={tipBox}
+          role="tooltip"
+          hidden={!tip || hints}
+          className="tooltip pointer-events-none absolute flex items-center gap-2 whitespace-nowrap text-foreground"
+        >
+          {tip === "dev" ? (
+            <TriangleExclamation aria-hidden="true" className="size-3.5 text-warning" />
+          ) : tip === "dot" && dotStatus ? (
+            <span
+              aria-hidden="true"
+              className={`size-2 rounded-full ${TONE_FILL[dotStatus.tone]}`}
+            />
+          ) : tip === "system" ? (
+            <IconMark icon={SYSTEM_ICONS.system} label="System" size="sm" />
+          ) : destination ? (
+            <IconMark
+              icon={
+                destination.icon ?? (destination.id === "system" ? SYSTEM_ICONS.system : undefined)
+              }
+              label={destination.label}
+              size="sm"
+            />
+          ) : null}
+          {tipText}
+          {tipShortcut ? <Keys shortcut={tipShortcut} mac={mac} /> : null}
+        </div>
+        {hints ? (
+          // The modifiers are held: every shortcut, under the control it presses.
+          <div
+            data-testid="system-shortcut-hints"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-1 top-1.5 flex items-start justify-between gap-2 text-foreground"
+          >
+            <span
+              className={`flex items-center gap-3 whitespace-nowrap ${stepKeys ? "tooltip" : ""}`}
+            >
+              {([-1, 1] as const).map((step) => {
+                const shortcut = step < 0 ? shortcuts.previous : shortcuts.next
+                return shortcut ? (
+                  <span key={step} className="flex items-center gap-1.5">
+                    {step < 0 ? (
+                      <ArrowLeft className="size-3 text-muted" />
+                    ) : (
+                      <ArrowRight className="size-3 text-muted" />
+                    )}
+                    {neighbour(step).label}
+                    <Keys shortcut={shortcut} mac={mac} />
+                  </span>
+                ) : null
+              })}
+            </span>
+            {shortcuts.system ? (
+              <span className="tooltip flex items-center gap-1.5 whitespace-nowrap">
+                <Sliders className="size-3 text-muted" />
+                System
+                <Keys shortcut={shortcuts.system} mac={mac} />
+              </span>
+            ) : null}
+          </div>
         ) : null}
-        {tipText}
-      </div>
-    </Layer>
+      </Layer>
+    </>
   )
 }
 
@@ -707,13 +653,13 @@ function useMaybeBuildState(build: SystemBuild | undefined) {
 const DOT_RING: Record<string, string> = {
   ok: "",
   building:
-    "absolute inset-0 rounded-full border-2 border-warning border-r-transparent border-b-transparent motion-safe:animate-spin",
-  ready: "absolute inset-px rounded-full border border-accent opacity-70",
+    "absolute inset-0.5 rounded-full border-2 border-warning border-r-transparent border-b-transparent motion-safe:animate-spin",
+  ready: "absolute inset-[3px] rounded-full border border-accent opacity-70",
   failed: "",
   offline: "",
 }
 
-/** On the pill's corner, without changing its size: what this preview's build is doing. */
+/** In the bar, a fixed size whatever it shows: what this preview's build is doing. */
 function BuildDot({
   build,
   register,
@@ -735,41 +681,24 @@ function BuildDot({
       data-live={String(live)}
       aria-label={`Preview status: ${status.text}`}
       onClick={onOpen}
-      className="group absolute -top-1.5 -right-1.5 size-5 cursor-pointer rounded-full p-0 outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+      className="group relative size-5 shrink-0 cursor-pointer rounded-full p-0 outline-offset-1 focus-visible:outline-2 focus-visible:outline-focus"
     >
       <span
         aria-hidden="true"
-        className={`absolute inset-1 rounded-full ring-2 ring-overlay transition-shadow group-hover:ring-4 ${
-          status.tone === "offline" ? "border-2 border-muted bg-overlay" : TONE_FILL[status.tone]
+        // Up to date is the quiet state: a small, faint dot. The others ask for attention.
+        className={`absolute rounded-full transition group-hover:scale-125 group-hover:opacity-100 group-focus-visible:opacity-100 ${
+          status.tone === "ok" ? "inset-[7px] opacity-60" : "inset-1.5"
+        } ${
+          status.tone === "offline" ? "border-2 border-muted bg-background" : TONE_FILL[status.tone]
         }`}
       />
-      {status.tone === "ok" && live ? (
-        <span
-          aria-hidden="true"
-          className="absolute inset-1 rounded-full bg-success opacity-60 motion-safe:animate-ping"
-        />
-      ) : null}
       {DOT_RING[status.tone] ? <span aria-hidden="true" className={DOT_RING[status.tone]} /> : null}
     </button>
   )
 }
 
-/** Beside the pill (never over it) while an update is ready, applying, or failed. */
-function UpdateToast({
-  build,
-  shell,
-  pill,
-  placeToast,
-  visiblePill,
-  focusDot,
-}: {
-  build: SystemBuild
-  shell: HTMLElement
-  pill: { current: HTMLDivElement | null }
-  placeToast: { current: () => void }
-  visiblePill: boolean
-  focusDot(): void
-}) {
+/** Under the bar's right end (never over it) while an update is ready, applying, or failed. */
+function UpdateToast({ build, focusDot }: { build: SystemBuild; focusDot(): void }) {
   const state = useBuildState(build)
   const toast = useRef<HTMLDivElement>(null)
   const [dismissed, setDismissed] = useState<string>()
@@ -787,64 +716,6 @@ function UpdateToast({
     const timer = setInterval(() => setTick((value) => value + 1), 1000)
     return () => clearInterval(timer)
   }, [ticking])
-
-  /** Beside the pill on the side with room, else below or above it; never over it. */
-  const place = useCallback(() => {
-    const node = toast.current
-    if (!node || node.hidden) return
-    const GAP = 10
-    const EDGE = 8
-    const width = shell.clientWidth
-    const height = shell.clientHeight
-    node.style.maxWidth = `${Math.max(160, Math.min(380, width - EDGE * 2))}px`
-    const box = shell.getBoundingClientRect()
-    const rect = pill.current?.getBoundingClientRect()
-    const edges =
-      !visiblePill || !rect
-        ? { left: EDGE, right: EDGE, top: height - EDGE, bottom: height - EDGE }
-        : {
-            left: rect.left - box.left,
-            right: rect.right - box.left,
-            top: rect.top - box.top,
-            bottom: rect.bottom - box.top,
-          }
-    const w = node.offsetWidth
-    const h = node.offsetHeight
-    const middleY = (edges.top + edges.bottom) / 2 - h / 2
-    const middleX = (edges.left + edges.right) / 2 - w / 2
-    const clampX = (value: number) => Math.max(EDGE, Math.min(value, width - w - EDGE))
-    const clampY = (value: number) => Math.max(EDGE, Math.min(value, height - h - EDGE))
-    const candidates = {
-      right: {
-        x: edges.right + GAP,
-        y: clampY(middleY),
-        fits: edges.right + GAP + w <= width - EDGE,
-      },
-      left: { x: edges.left - GAP - w, y: clampY(middleY), fits: edges.left - GAP - w >= EDGE },
-      below: {
-        x: clampX(middleX),
-        y: edges.bottom + GAP,
-        fits: edges.bottom + GAP + h <= height - EDGE,
-      },
-      above: { x: clampX(middleX), y: edges.top - GAP - h, fits: edges.top - GAP - h >= EDGE },
-    }
-    // Facing into the page first: right of a pill on the left edge, above one at the bottom.
-    const roomRight = width - edges.right
-    const roomBelow = height - edges.bottom
-    const horizontal =
-      roomRight >= edges.left ? (["right", "left"] as const) : (["left", "right"] as const)
-    const vertical =
-      roomBelow >= edges.top ? (["below", "above"] as const) : (["above", "below"] as const)
-    const sideways = Math.min(edges.left, roomRight) <= Math.min(edges.top, roomBelow)
-    const order = sideways ? [...horizontal, ...vertical] : [...vertical, ...horizontal]
-    const side = order.find((name) => candidates[name].fits) ?? vertical[0]
-    const chosen = candidates[side]
-    node.dataset.side = side
-    node.style.left = `${chosen.x}px`
-    node.style.top = `${chosen.y}px`
-  }, [shell, pill, visiblePill])
-  placeToast.current = place
-  useLayoutEffect(() => place())
 
   // Leave focus somewhere sensible rather than on a hidden button.
   const wasShowing = useRef(showing)
@@ -879,7 +750,7 @@ function UpdateToast({
       onKeyDown={(event) => {
         if (event.key === "Escape" && !update.applying) later()
       }}
-      className="pointer-events-auto absolute w-max flex-row flex-wrap items-center gap-x-3 gap-y-2 py-2.5 pr-2.5 pl-3.5 text-sm shadow-overlay motion-safe:animate-in motion-safe:zoom-in-95"
+      className="pointer-events-auto absolute top-2 right-2 w-max max-w-[min(380px,calc(100%-1rem))] flex-row flex-wrap items-center gap-x-3 gap-y-2 py-2.5 pr-2.5 pl-3.5 text-sm shadow-overlay motion-safe:animate-in motion-safe:zoom-in-95"
     >
       {mode === "applying" ? (
         <Spinner size="sm" aria-hidden="true" />

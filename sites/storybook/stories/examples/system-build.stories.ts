@@ -16,7 +16,7 @@ import { frame, frameDocument } from "../../src/frame.js"
 
 /**
  * A live PR preview that knows about CI: the switcher's status dot, the update toast beside the
- * pill, and the Preview card at the top of the System screen. The build comes from a fake,
+ * bar, and the Preview card at the top of the System screen. The build comes from a fake,
  * controllable `SystemBuild` (the lab's preview uses `createLivePreview()`).
  */
 export default {
@@ -294,7 +294,7 @@ const overlaps = (a: Element, b: Element) => {
 const surface = (canvas: HTMLElement) =>
   canvas.querySelector("section[data-surface]:not([hidden])")?.getAttribute("data-surface")
 
-/** Up to date and live: a green dot on the pill, every row of the Preview card filled in. */
+/** Up to date and live: a green dot on the bar, every row of the Preview card filled in. */
 export const UpToDate: StoryObj = {
   render: live("live"),
   play: async ({ canvasElement }) => {
@@ -338,7 +338,7 @@ export const UpToDate: StoryObj = {
   },
 }
 
-/** A newer commit is building: an amber spinning dot; the pill keeps its size whatever the dot shows. */
+/** A newer commit is building: an amber spinning dot; the bar keeps its size whatever the dot shows. */
 export const Building: StoryObj = {
   render: live("building"),
   play: async ({ canvasElement }) => {
@@ -360,7 +360,7 @@ export const Building: StoryObj = {
   },
 }
 
-/** A new version is deployed: the toast beside the pill counts down to updating itself. */
+/** A new version is deployed: the toast beside the bar counts down to updating itself. */
 export const UpdateReady: StoryObj = {
   render: live("ready"),
   play: async ({ canvasElement }) => {
@@ -572,7 +572,7 @@ export const TimesTick: StoryObj = {
   },
 }
 
-/** On a phone: the card's rows stack, and the toast sits beside or below the pill, never over it. */
+/** On a phone: the card's rows stack, and the toast sits beside or below the bar, never over it. */
 export const Phone: StoryObj = {
   render: live("ready"),
   globals: { viewport: { value: "phone" } },
@@ -632,7 +632,7 @@ export const ResetsData: StoryObj = {
   },
 }
 
-/** On a phone: the longer "resets this preview's data" toast still sits beside the pill, never over it. */
+/** On a phone: the longer "resets this preview's data" toast still sits beside the bar, never over it. */
 export const ResetsDataPhone: StoryObj = {
   render: live("resets-data"),
   globals: { viewport: { value: "phone" } },

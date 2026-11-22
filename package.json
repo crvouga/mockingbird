@@ -47,6 +47,7 @@
     "setup": "bun scripts/setup.ts",
     "build": "turbo run build",
     "storybook": "bun run --cwd sites/storybook dev",
+    "preview:ui": "bun scripts/preview-ui.ts",
     "typecheck": "turbo run typecheck",
     "lint": "turbo run lint",
     "test": "turbo run test",

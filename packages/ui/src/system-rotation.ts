@@ -138,7 +138,13 @@ export function writeOrder(storage: () => Store, order: readonly string[]): void
   }
 }
 
-/** Storage key holding where the switcher pill is docked (`{ edge, at }`), as JSON. */
+/** The height of the switcher bar across the top of the shell, in CSS pixels. */
+export const SWITCHER_BAR_HEIGHT = 24
+
+/**
+ * @deprecated The switcher is a fixed bar across the top now and keeps no position; nothing
+ * reads or writes this key. Kept so hosts that clear it by name still compile.
+ */
 export const DOCK_KEY = "mockingbird.system-switcher.dock"
 
 /** `list` with the item at `from` moved to `to`. */

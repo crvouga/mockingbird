@@ -1,5 +1,29 @@
 import { describe, expect, test } from "bun:test"
 import { formatPhone, signInLinkToken } from "./format.js"
+import { followSignInLink, onSignInLink } from "./signInLink.js"
+
+describe("following a sign-in link in the page", () => {
+  const page = "https://preview.example.test/lab/?surface=app"
+  test("a link to this page is handed to the sign-in screen", () => {
+    const tokens: string[] = []
+    const stop = onSignInLink((token) => tokens.push(token))
+    expect(followSignInLink(`${page}&sign-in=abc.def`, page)).toBe(true)
+    expect(tokens).toEqual(["abc.def"])
+    stop()
+    expect(followSignInLink(`${page}&sign-in=abc.def`, page)).toBe(true)
+    expect(tokens).toEqual(["abc.def"])
+  })
+  test("any other link is left to the browser", () => {
+    const stop = onSignInLink(() => {
+      throw new Error("not a sign-in link to this page")
+    })
+    expect(followSignInLink("https://elsewhere.example.test/?sign-in=abc.def", page)).toBe(false)
+    expect(followSignInLink("https://preview.example.test/other?sign-in=abc.def", page)).toBe(false)
+    expect(followSignInLink("https://preview.example.test/lab/?surface=app", page)).toBe(false)
+    expect(followSignInLink("not a url", page)).toBe(false)
+    stop()
+  })
+})
 
 describe("sign-in link", () => {
   test("the token is read from a pasted link or a page address", () => {

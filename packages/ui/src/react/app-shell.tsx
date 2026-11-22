@@ -12,7 +12,10 @@ export type AppShellNavItem = {
 
 export type AppShellProps = {
   children?: ReactNode
-  /** The surface's name beside the wordmark ("Admin", "Fleet Cloud", "Stripe"). */
+  /**
+   * The surface's name, the only title in the bar ("Emulators", "Fleet Cloud", "Stripe"). Without
+   * it the bar shows the Mockingbird lockup, which only Mockingbird's own site wants.
+   */
   product?: ReactNode
   /** Where the wordmark links: the surface's home. */
   brandHref?: string
@@ -23,7 +26,10 @@ export type AppShellProps = {
   nav?: AppShellNavItem[]
   /** Right side of the bar: a theme switch, a user menu, a primary action. Keep it short. */
   actions?: ReactNode
-  /** Full width content for dense screens (tables, logs). Default: centered, at most 1280px. */
+  /**
+   * @deprecated Ignored. Every surface uses the same centered width (`SHELL_MAX_WIDTH`), so moving
+   * between them never shifts the bar or the content.
+   */
   fluid?: boolean
   /** Below the content, for a status line or links. */
   footer?: ReactNode
@@ -36,19 +42,27 @@ export type AppShellProps = {
  * actions) over the page content. One layout everywhere, so every surface reads as the same
  * product. Single-purpose pages (sign-in, consent, pairing) use `CenteredCard` instead.
  */
+/** The one content width of every surface, in pixels. */
+export const SHELL_MAX_WIDTH = 1536
+
+const WIDTH = "mx-auto w-full max-w-[1536px]"
+
 export function AppShell({
   children,
   product,
   brandHref,
   nav,
   actions,
-  fluid = false,
   footer,
   mainProps,
 }: AppShellProps) {
-  const width = fluid ? "w-full" : "mx-auto w-full max-w-[1280px]"
+  const width = WIDTH
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground" data-mockingbird-shell>
+    <div
+      // The panel's height inside the System harness (which sets the variable), else the viewport's.
+      className="flex min-h-[var(--mb-app-height,100dvh)] flex-col bg-background text-foreground"
+      data-mockingbird-shell
+    >
       <header className="sticky top-0 z-40 border-b border-separator bg-background/90 backdrop-blur">
         <div
           className={`${width} flex flex-wrap items-center gap-x-6 gap-y-0 px-4 sm:px-6 min-h-14`}

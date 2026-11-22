@@ -28,7 +28,7 @@ export const icons = {
     svg(
       24,
       24,
-      `<path d="M19 13v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 19.5v-13A1.5 1.5 0 0 1 4.5 5H11" stroke="#007aff" stroke-width="1.8" stroke-linecap="round"/><path d="m9.5 14.5.6-3.1 8.8-8.8a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1l-8.8 8.8-3.6.1Z" stroke="#007aff" stroke-width="1.8" stroke-linejoin="round"/>`,
+      `<path d="M19 13v6.5a1.5 1.5 0 0 1-1.5 1.5h-13A1.5 1.5 0 0 1 3 19.5v-13A1.5 1.5 0 0 1 4.5 5H11" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="m9.5 14.5.6-3.1 8.8-8.8a1.5 1.5 0 0 1 2.1 0l.9.9a1.5 1.5 0 0 1 0 2.1l-8.8 8.8-3.6.1Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>`,
     ),
   search: (c = "currentColor", s = 16) =>
     svg(
@@ -42,7 +42,7 @@ export const icons = {
       20,
       `<rect x="4" y="1" width="6" height="11" rx="3" fill="${c}"/><path d="M1.5 9a5.5 5.5 0 0 0 11 0M7 14.5V18" stroke="${c}" stroke-width="1.6" stroke-linecap="round"/>`,
     ),
-  chevronRight: (c = "#c4c4c6") =>
+  chevronRight: (c = "currentColor") =>
     svg(
       8,
       13,
@@ -52,7 +52,7 @@ export const icons = {
     svg(
       13,
       21,
-      `<path d="M11 2 2.5 10.5 11 19" stroke="#007aff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`,
+      `<path d="M11 2 2.5 10.5 11 19" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>`,
     ),
   plus: () =>
     svg(

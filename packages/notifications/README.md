@@ -233,7 +233,7 @@ Mockingbird's stylesheet (`@crvouga/mockingbird-ui/styles`) and the device skins
 `injectStyles: false` to serve them yourself. Options: `harness`, or `fetch` and `baseUrl` for a harness on
 another origin; `channels` (which devices to show); `layout` (`auto`, `tabs` or `grid`) and `tabs` (show the
 channel tabs); `chrome` (show the header and filters); `scale` (draw the devices smaller, `0.5` to `1`); `sound`; `motion`
-(`auto`, `full` or `reduce`); `onArrive`; and `syncUrl`, which reads and writes `?view=`-style
+(`auto`, `full` or `reduce`); `onArrive`; `openLink`, called with the address of a link clicked in a message, which returns true when the embedder followed it itself (a link back into its own app in the same page) instead of letting it open in a new tab; and `syncUrl`, which reads and writes `?view=`-style
 links on the page. The [lab ordering example](https://github.com/crvouga/mockingbird/tree/main/packages/examples/medical-testing)
 mounts it as its Notifications tab.
 

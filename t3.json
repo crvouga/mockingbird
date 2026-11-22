@@ -1,0 +1,15 @@
+{
+  "$schema": "https://t3.codes/schema/t3.json",
+  "scripts": [
+    {
+      "name": "Lab Testing Example App System",
+      "command": "bun install && bun run preview:ui",
+      "icon": "play"
+    },
+    {
+      "name": "Storybook",
+      "command": "bun install && bun run storybook",
+      "icon": "play"
+    }
+  ]
+}

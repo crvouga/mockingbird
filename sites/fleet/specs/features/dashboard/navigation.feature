@@ -64,7 +64,7 @@ Feature: Getting around the dashboard
 
     Scenario: The brand leads to the list of organizations
       When they open the fleet "Staging"
-      And they follow "Mockingbird"
+      And they follow "Fleet Cloud"
       Then they see the page "Organizations"
       And the address is "/orgs"
 

@@ -7,7 +7,6 @@ import {
   type SystemSurface,
 } from "../../../../packages/ui/src/system-harness.js"
 import {
-  DOCK_KEY,
   INCLUDED_KEY,
   ORDER_KEY,
   ROTATION_KEY,
@@ -30,7 +29,7 @@ export default {
   },
 } satisfies Meta
 
-const KEYS = [ROTATION_KEY, ORDER_KEY, INCLUDED_KEY, DOCK_KEY]
+const KEYS = [ROTATION_KEY, ORDER_KEY, INCLUDED_KEY]
 const reset = () => {
   for (const key of KEYS) localStorage.removeItem(key)
 }
@@ -127,7 +126,7 @@ export const ShowAndHide: StoryObj = {
       await page.findByTestId("system-switcher", {}, { timeout: 3000 })
       await waitFor(() => expect(log).toEqual(["mount call", "show call"]))
       await expect(live()).toBe(true)
-      // The pill's arrows hide it: its tracks stop, and it stays mounted.
+      // The bar's arrows hide it: its tracks stop, and it stays mounted.
       await userEvent.click(page.getByRole("button", { name: "Next app" }))
       await waitFor(() => expect(current().active()).toBe("notes"))
       await expect(live()).toBe(false)
@@ -199,7 +198,7 @@ const PATHS: Record<string, string> = {
 let shown: string[] = []
 let original = ""
 
-/** #884: the pill's arrows tell the host once, and the host maps surfaces to its own URLs. */
+/** #884: the bar's arrows tell the host once, and the host maps surfaces to its own URLs. */
 export const HostUrls: StoryObj = {
   render: render(
     () => [
@@ -233,7 +232,7 @@ export const HostUrls: StoryObj = {
       await waitFor(() => expect(current().active()).toBe("care"))
       await expect(location.pathname).toBe("/care-hub/patients/7")
       await expect(shown).toEqual([])
-      // The pill's arrow: one call with the new id, before its mount resolves.
+      // The bar's arrow: one call with the new id, before its mount resolves.
       await userEvent.click(page.getByRole("button", { name: "Next app" }))
       await waitFor(() => expect(current().active()).toBe("partner"))
       await expect(shown).toEqual(["partner"])
@@ -309,7 +308,7 @@ export const DefaultExcluded: StoryObj = {
   },
 }
 
-/** #885.2: with a custom `storage`, the rotation, order and pill position live there alone. */
+/** #885.2: with a custom `storage`, the rotation and order live there alone. */
 let store = new Map<string, string>()
 let localWrites: string[] = []
 let restoreSetItem: (() => void) | undefined
@@ -328,7 +327,7 @@ export const CustomStorage: StoryObj = {
       },
     },
     () => {
-      store = new Map([[DOCK_KEY, JSON.stringify({ edge: "right", at: 0.25 })]])
+      store = new Map()
       localWrites = []
       const setItem = Storage.prototype.setItem
       Storage.prototype.setItem = function (this: Storage, key: string, value: string) {
@@ -343,11 +342,7 @@ export const CustomStorage: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     try {
-      const pill = await page.findByTestId("system-switcher", {}, { timeout: 3000 })
-      // The pill sits where the custom store says: the right edge.
-      await waitFor(() =>
-        expect(pill.getBoundingClientRect().left).toBeGreaterThan(canvasElement.clientWidth / 2),
-      )
+      await page.findByTestId("system-switcher", {}, { timeout: 3000 })
       const toggle = await page.findByRole("switch", { name: "Care hub in switcher" })
       await userEvent.click(toggle)
       await expect(store.get(ROTATION_KEY)).toBe('["care"]')

@@ -349,9 +349,9 @@ function ThreadList({ to }: { to: string | null }) {
         </div>
         <h1>Messages</h1>
         <div className="ios-search">
-          <Glyph svg={icons.search("rgba(60,60,67,.6)", 15)} />
+          <Glyph svg={icons.search("currentColor", 15)} />
           <span>Search</span>
-          <Glyph svg={icons.mic("rgba(60,60,67,.6)")} />
+          <Glyph svg={icons.mic("currentColor")} />
         </div>
       </div>
       {threads.length && to ? (
