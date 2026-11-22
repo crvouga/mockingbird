@@ -208,7 +208,9 @@ export function SystemScreen(props: SystemScreenProps) {
             </ul>
           </nav>
         ) : null}
-        {props.build ? wrap("preview", <PreviewCard build={props.build} />) : null}
+        {props.build
+          ? wrap("preview", <PreviewCard build={props.build} snapshot={props.snapshot} />)
+          : null}
         {wrap("apps", <Apps {...props} />)}
         {hasBackends
           ? wrap("backends", <Backends apps={props.apps} backends={props.backends} />)
