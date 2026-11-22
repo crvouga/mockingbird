@@ -1,0 +1,43 @@
+/*
+ * The docs site's one stylesheet: Tailwind CSS v4, HeroUI v3 and the Mockingbird theme
+ * (@crvouga/mockingbird-ui/theme.css), compiled with the site's own markup as the source. Every
+ * page is React components (src/ui) styled with utility classes and the theme's tokens; the few
+ * rules below cover markup no component draws: Shiki's highlighted code.
+ */
+
+@import "@crvouga/mockingbird-ui/theme.css";
+
+@source "../";
+/* The build-time markdown renderer emits the code frames of every README and guide. */
+@source "../../integrations/catalog/markdown.ts";
+
+/*
+ * Shiki colors each token for both themes (`--shiki-light`, `--shiki-dark`); show the one the page
+ * is in. The page follows the system unless the visitor pinned light or dark (ThemeSwitch).
+ */
+.shiki,
+.shiki span {
+  color: var(--shiki-light);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light):not([data-theme="light"]) .shiki,
+  :root:not(.light):not([data-theme="light"]) .shiki span {
+    color: var(--shiki-dark);
+  }
+}
+
+:root.dark .shiki,
+:root.dark .shiki span,
+:root[data-theme="dark"] .shiki,
+:root[data-theme="dark"] .shiki span {
+  color: var(--shiki-dark);
+}
+
+@layer base {
+  html {
+    /* Headings reached by a hash link clear the sticky top bar. */
+    scroll-padding-top: 5rem;
+    scrollbar-gutter: stable;
+  }
+}

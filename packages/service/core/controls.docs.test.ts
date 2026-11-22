@@ -160,7 +160,7 @@ describe("the admin controls guide is easy to find a control in", () => {
       // Each emulator's DISCOVERY.md, the admin UI's views, and the landing page's cards.
       ...[...read("scripts/service-discovery.ts").matchAll(/\$\{GUIDE\}\/([a-z-]+)/g)],
       ...["components.tsx", "controls.tsx", "state.tsx"].flatMap((file) => [
-        ...read(`packages/admin-ui/src/${file}`).matchAll(/<ViewTitle page="([a-z-]+)"/g),
+        ...read(`packages/admin-ui/src/${file}`).matchAll(/<ViewTitle\s+page="([a-z-]+)"/g),
       ]),
       ...cards("ADMIN_CONTROLS"),
     ].map(([, name]) => slugOf(name as string))

@@ -7,6 +7,7 @@
 import { loaders } from "virtual:mockingbird/runtimes"
 import { createNotificationHarness, type Notification } from "@crvouga/mockingbird-notifications"
 import { type AppHandle, mountNotifications } from "@crvouga/mockingbird-notifications/ui"
+import { chipClass, methodChipClass } from "../../ui/landing/chips.ts"
 import {
   CHECKOUT_STEPS,
   createNotificationsDemo,
@@ -44,7 +45,7 @@ const createRuntimes = async (): Promise<DemoRuntimes> => {
   ) as DemoRuntimes
 }
 
-/** Boot the demo inside `root` (`NotificationsDemo.astro`). Resolves to its teardown. */
+/** Boot the demo inside `root` (`ui/landing/notifications-demo.tsx`). Resolves to its teardown. */
 export const mountNotificationsDemo = async (root: HTMLElement): Promise<() => void> => {
   const stage = root.querySelector<HTMLElement>("[data-demo-stage]")
   const host = root.querySelector<HTMLElement>("[data-demo-host]")
@@ -126,29 +127,42 @@ export const mountNotificationsDemo = async (root: HTMLElement): Promise<() => v
 
   // ── Sending ──────────────────────────────────────────────────────────────────
 
+  /** One request on the call line: method, path, status and the emulator that answered. */
+  const writeCall = (method: string, path: string, status: number, where: string) => {
+    if (!caption) return
+    const ok = status >= 200 && status < 300
+    const methodEl = document.createElement("span")
+    methodEl.className = methodChipClass(method)
+    methodEl.dataset.m = method
+    methodEl.textContent = method
+    const pathEl = document.createElement("code")
+    pathEl.className = "min-w-0 truncate font-mono text-xs text-foreground"
+    pathEl.textContent = path
+    const statusEl = document.createElement("span")
+    statusEl.className = `${chipClass(ok ? "success" : "warning")} shrink-0`
+    statusEl.dataset.callStatus = ""
+    statusEl.textContent = String(status)
+    const serviceEl = document.createElement("span")
+    serviceEl.className = "ml-auto hidden shrink-0 whitespace-nowrap text-muted sm:inline"
+    serviceEl.textContent = where
+    caption.replaceChildren(methodEl, pathEl, statusEl, serviceEl)
+  }
+
   const showCall = (call: DemoCall) => {
     if (!caption) return
-    const ok = call.status >= 200 && call.status < 300
-    caption.replaceChildren()
-    const method = document.createElement("span")
-    method.className = "method"
-    method.dataset.m = call.method
-    method.textContent = call.method
-    const path = document.createElement("code")
-    path.textContent = call.path
-    const status = document.createElement("span")
-    status.className = `badge ${ok ? "badge-ok" : "badge-warn"}`
-    status.textContent = String(call.status)
-    const service = document.createElement("span")
-    service.className = "notif-call-service"
-    service.textContent = `${SERVICE_LABELS[call.service]} emulator, in this tab`
-    caption.append(method, path, status, service)
+    writeCall(
+      call.method,
+      call.path,
+      call.status,
+      `${SERVICE_LABELS[call.service]} emulator, in this tab`,
+    )
     caption.dataset.service = call.service
     caption.dataset.status = String(call.status)
     // Restart the flash that draws the eye to a new line.
-    caption.classList.remove("is-fresh")
+    caption.classList.remove("motion-safe:animate-pulse")
     void caption.offsetWidth
-    caption.classList.add("is-fresh")
+    caption.classList.add("motion-safe:animate-pulse")
+    later(900, () => caption.classList.remove("motion-safe:animate-pulse"))
   }
 
   const send = async (action: DemoAction, order?: number) => {
@@ -182,26 +196,14 @@ export const mountNotificationsDemo = async (root: HTMLElement): Promise<() => v
       await demo.reset()
       await harness.sync()
       if (disposed) return
+      // The call line first: the devices empty as soon as the UI remounts.
+      if (caption) {
+        writeCall("POST", "/__admin/reset", 200, "every emulator, in this tab")
+        caption.dataset.service = "all"
+      }
       // A fresh mount forgets the open conversation and message, which no longer exist.
       ui.destroy()
       await mountUi()
-      if (caption) {
-        caption.replaceChildren()
-        const method = document.createElement("span")
-        method.className = "method"
-        method.dataset.m = "POST"
-        method.textContent = "POST"
-        const path = document.createElement("code")
-        path.textContent = "/__admin/reset"
-        const status = document.createElement("span")
-        status.className = "badge badge-ok"
-        status.textContent = "200"
-        const service = document.createElement("span")
-        service.className = "notif-call-service"
-        service.textContent = "every emulator, in this tab"
-        caption.append(method, path, status, service)
-        caption.dataset.service = "all"
-      }
     } finally {
       if (!disposed) setBusy(false)
     }

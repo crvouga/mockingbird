@@ -29,7 +29,7 @@ test("no source file in the browser path evaluates a string", () => {
 
 const bundle = join(import.meta.dir, "dist/browser.js")
 
-// `test` depends on `build`. The bundle inlines the shared admin UI (React and Ant Design), the
+// `test` depends on `build`. The bundle inlines the shared admin UI (React and HeroUI), the
 // notifications UI and this app, so this covers the code they run, not only what is written here.
 test.skipIf(!existsSync(bundle))("the built browser bundle never evaluates a string", () => {
   const code = readFileSync(bundle, "utf8")

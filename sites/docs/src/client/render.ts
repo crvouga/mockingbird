@@ -14,6 +14,21 @@ const SQL_KEYWORDS = new Set(
   ),
 )
 
+/** Token colors, from the theme: keywords and keys in the accent, strings green, numbers amber. */
+const SQL = {
+  keyword: "text-accent",
+  string: "text-success",
+  number: "text-warning-soft-foreground",
+  comment: "italic text-muted",
+} as const
+
+const JSON_TOKENS = {
+  key: "text-accent",
+  string: "text-success",
+  number: "text-warning-soft-foreground",
+  literal: "text-danger",
+} as const
+
 /** SQL token classes for the postgres and sqlite consoles. */
 export function highlightSql(source: string): string {
   let out = ""
@@ -28,14 +43,14 @@ export function highlightSql(source: string): string {
     if (c === "-" && next === "-") {
       const end = source.indexOf("\n", i)
       const stop = end === -1 ? n : end
-      paint("sql-c", source.slice(i, stop))
+      paint(SQL.comment, source.slice(i, stop))
       i = stop
       continue
     }
     if (c === "/" && next === "*") {
       const end = source.indexOf("*/", i + 2)
       const stop = end === -1 ? n : end + 2
-      paint("sql-c", source.slice(i, stop))
+      paint(SQL.comment, source.slice(i, stop))
       i = stop
       continue
     }
@@ -52,7 +67,7 @@ export function highlightSql(source: string): string {
         }
         j++
       }
-      paint("sql-s", source.slice(i, j))
+      paint(SQL.string, source.slice(i, j))
       i = j
       continue
     }
@@ -61,7 +76,7 @@ export function highlightSql(source: string): string {
       if (tag) {
         const end = source.indexOf(tag, i + tag.length)
         const stop = end === -1 ? n : end + tag.length
-        paint("sql-s", source.slice(i, stop))
+        paint(SQL.string, source.slice(i, stop))
         i = stop
         continue
       }
@@ -69,7 +84,7 @@ export function highlightSql(source: string): string {
     if (c >= "0" && c <= "9" && (i === 0 || !/[A-Za-z0-9_]/.test(source[i - 1] ?? ""))) {
       let j = i + 1
       while (j < n && /[0-9.]/.test(source[j] ?? "")) j++
-      paint("sql-n", source.slice(i, j))
+      paint(SQL.number, source.slice(i, j))
       i = j
       continue
     }
@@ -77,7 +92,7 @@ export function highlightSql(source: string): string {
       let j = i + 1
       while (j < n && /[A-Za-z0-9_]/.test(source[j] ?? "")) j++
       const word = source.slice(i, j)
-      if (SQL_KEYWORDS.has(word.toLowerCase())) paint("sql-k", word)
+      if (SQL_KEYWORDS.has(word.toLowerCase())) paint(SQL.keyword, word)
       else out += escapeHtml(word)
       i = j
       continue
@@ -97,9 +112,11 @@ export function highlightJson(value: unknown): string {
     /(&quot;(?:\\.|[^\\&]|&(?!quot;))*?&quot;)(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?/g,
     (match, str: string | undefined, colon: string | undefined, lit: string | undefined) => {
       if (str)
-        return colon ? `<span class="jk">${str}</span>${colon}` : `<span class="js">${str}</span>`
-      if (lit) return `<span class="jl">${lit}</span>`
-      return `<span class="jn">${match}</span>`
+        return colon
+          ? `<span class="${JSON_TOKENS.key}">${str}</span>${colon}`
+          : `<span class="${JSON_TOKENS.string}">${str}</span>`
+      if (lit) return `<span class="${JSON_TOKENS.literal}">${lit}</span>`
+      return `<span class="${JSON_TOKENS.number}">${match}</span>`
     },
   )
 }

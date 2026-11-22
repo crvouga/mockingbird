@@ -1,6 +1,6 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
 import type { InspectorTab, RouteContext } from "../../core/index.js";
-import { escapeAttr, escapeHtml, renderInspectorPage } from "../../core/index.js";
+import { chip, renderInspectorPage, section, table, type Block, type Inline } from "../../core/index.js";
 import { getLinearStore } from "../store.js";
 import type { LinearUser } from "../entities.js";
 
@@ -21,7 +21,7 @@ type TabId = (typeof TABS)[number]["id"];
 export function inspectorRoutes({ app, store }: RouteContext): void {
   const ls = () => getLinearStore(store);
 
-  app.get("/", (c) => {
+  app.get("/", async (c) => {
     const requested = c.req.query("tab") ?? "issues";
     const active = TABS.some((tab) => tab.id === requested) ? (requested as TabId) : "issues";
     const body =
@@ -38,10 +38,10 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
                 : active === "webhooks"
                   ? webhooksView()
                   : issuesView();
-    return c.html(renderInspectorPage("Linear Inspector", TABS, active, body, SERVICE_LABEL));
+    return c.html(await renderInspectorPage("Linear Inspector", TABS, active, body, SERVICE_LABEL));
   });
 
-  function issuesView(): string {
+  function issuesView(): Block[] {
     const rows = ls()
       .issues.all()
       .sort((a, b) => a.identifier.localeCompare(b.identifier))
@@ -56,22 +56,22 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
           .join(", ");
         return [
           linkCell(`/?tab=issues&issue=${encodeURIComponent(issue.linear_id)}`, issue.identifier),
-          escapeHtml(issue.title),
-          escapeHtml(team?.key ?? issue.team_id),
-          escapeHtml(state?.name ?? issue.state_id),
-          escapeHtml(userLabel(assignee)),
-          escapeHtml(userLabel(delegate)),
-          escapeHtml(labels),
-          escapeHtml(issue.updated_at),
+          issue.title,
+          team?.key ?? issue.team_id,
+          state?.name ?? issue.state_id,
+          userLabel(assignee),
+          userLabel(delegate),
+          labels,
+          issue.updated_at,
         ];
       });
-    return section(
+    return [section(
       "Issues",
       table(["ID", "Title", "Team", "State", "Assignee", "Delegate", "Labels", "Updated"], rows, "No issues."),
-    );
+    )];
   }
 
-  function teamsView(): string {
+  function teamsView(): Block[] {
     const rows = ls()
       .teams.all()
       .sort((a, b) => a.key.localeCompare(b.key))
@@ -83,163 +83,142 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
           .join(", ");
         const issueCount = ls().issues.count((issue) => issue.team_id === team.linear_id);
         return [
-          escapeHtml(team.key),
-          escapeHtml(team.name),
-          escapeHtml(String(issueCount)),
-          escapeHtml(stateNames),
-          escapeHtml(team.private ? "private" : "public"),
+          team.key,
+          team.name,
+          String(issueCount),
+          stateNames,
+          team.private ? "private" : "public",
         ];
       });
-    return section("Teams", table(["Key", "Name", "Issues", "States", "Access"], rows, "No teams."));
+    return [section("Teams", table(["Key", "Name", "Issues", "States", "Access"], rows, "No teams."))];
   }
 
-  function usersView(): string {
+  function usersView(): Block[] {
     const rows = ls()
       .users.all()
       .sort((a, b) => a.email.localeCompare(b.email))
       .map((user) => [
-        escapeHtml(user.display_name),
-        escapeHtml(user.email),
-        escapeHtml(user.app ? "app" : "user"),
-        escapeHtml(user.admin ? "admin" : "member"),
-        escapeHtml(user.active ? "active" : "inactive"),
-        escapeHtml(String(ls().issues.count((issue) => issue.assignee_id === user.linear_id))),
+        user.display_name,
+        user.email,
+        user.app ? "app" : "user",
+        user.admin ? "admin" : "member",
+        chip(user.active ? "active" : "inactive"),
+        String(ls().issues.count((issue) => issue.assignee_id === user.linear_id)),
       ]);
-    return section("Users", table(["Name", "Email", "Kind", "Role", "Status", "Assigned"], rows, "No users."));
+    return [section("Users", table(["Name", "Email", "Kind", "Role", "Status", "Assigned"], rows, "No users."))];
   }
 
-  function projectsView(): string {
+  function projectsView(): Block[] {
     const projectRows = ls()
       .projects.all()
       .map((project) => [
-        escapeHtml(project.name),
-        escapeHtml(project.state),
-        escapeHtml(
-          project.team_id ? (ls().teams.findOneBy("linear_id", project.team_id)?.key ?? project.team_id) : "workspace",
-        ),
-        escapeHtml(String(ls().issues.count((issue) => issue.project_id === project.linear_id))),
+        project.name,
+        project.state,
+        project.team_id ? (ls().teams.findOneBy("linear_id", project.team_id)?.key ?? project.team_id) : "workspace",
+        String(ls().issues.count((issue) => issue.project_id === project.linear_id)),
       ]);
     const cycleRows = ls()
       .cycles.all()
       .map((cycle) => [
-        escapeHtml(cycle.name),
-        escapeHtml(String(cycle.number)),
-        escapeHtml(ls().teams.findOneBy("linear_id", cycle.team_id)?.key ?? cycle.team_id),
-        escapeHtml(String(ls().issues.count((issue) => issue.cycle_id === cycle.linear_id))),
+        cycle.name,
+        String(cycle.number),
+        ls().teams.findOneBy("linear_id", cycle.team_id)?.key ?? cycle.team_id,
+        String(ls().issues.count((issue) => issue.cycle_id === cycle.linear_id)),
       ]);
-    return (
-      section("Projects", table(["Name", "State", "Team", "Issues"], projectRows, "No projects.")) +
+    return [
+      section("Projects", table(["Name", "State", "Team", "Issues"], projectRows, "No projects.")),
       section("Cycles", table(["Name", "Number", "Team", "Issues"], cycleRows, "No cycles."))
-    );
+    ];
   }
 
-  function agentsView(): string {
+  function agentsView(): Block[] {
     const rows = ls()
       .agentSessions.all()
       .map((session) => {
         const issue = session.issue_id ? ls().issues.findOneBy("linear_id", session.issue_id) : undefined;
         const agent = ls().users.findOneBy("linear_id", session.agent_user_id);
         return [
-          escapeHtml(session.linear_id),
-          escapeHtml(session.state),
-          escapeHtml(issue?.identifier ?? ""),
-          escapeHtml(userLabel(agent)),
-          escapeHtml(String(ls().agentActivities.count((activity) => activity.session_id === session.linear_id))),
-          escapeHtml(session.updated_at),
+          session.linear_id,
+          chip(session.state),
+          issue?.identifier ?? "",
+          userLabel(agent),
+          String(ls().agentActivities.count((activity) => activity.session_id === session.linear_id)),
+          session.updated_at,
         ];
       });
-    return section(
+    return [section(
       "Agent Sessions",
       table(["ID", "State", "Issue", "Agent", "Activities", "Updated"], rows, "No agent sessions."),
-    );
+    )];
   }
 
-  function authView(): string {
+  function authView(): Block[] {
     const appRows = ls()
       .oauthApps.all()
       .map((oauthApp) => [
-        escapeHtml(oauthApp.name),
-        escapeHtml(oauthApp.client_id),
-        escapeHtml(oauthApp.actor),
-        escapeHtml(oauthApp.scopes.join(", ")),
-        escapeHtml(oauthApp.app_user_id ? userLabel(ls().users.findOneBy("linear_id", oauthApp.app_user_id)) : ""),
+        oauthApp.name,
+        oauthApp.client_id,
+        oauthApp.actor,
+        oauthApp.scopes.join(", "),
+        oauthApp.app_user_id ? userLabel(ls().users.findOneBy("linear_id", oauthApp.app_user_id)) : "",
       ]);
     const tokenRows = ls()
       .tokens.all()
       .map((token) => [
-        escapeHtml(maskToken(token.token)),
-        escapeHtml(token.type),
-        escapeHtml(token.actor_type),
-        escapeHtml(token.user_id ? userLabel(ls().users.findOneBy("linear_id", token.user_id)) : (token.app_id ?? "")),
-        escapeHtml(token.scopes.join(", ")),
-        escapeHtml(token.revoked ? "revoked" : (token.expires_at ?? "active")),
+        maskToken(token.token),
+        token.type,
+        token.actor_type,
+        token.user_id ? userLabel(ls().users.findOneBy("linear_id", token.user_id)) : (token.app_id ?? ""),
+        token.scopes.join(", "),
+        token.revoked ? chip("revoked") : token.expires_at ?? chip("active"),
       ]);
-    return (
-      section("OAuth Apps", table(["Name", "Client ID", "Actor", "Scopes", "App User"], appRows, "No OAuth apps.")) +
+    return [
+      section("OAuth Apps", table(["Name", "Client ID", "Actor", "Scopes", "App User"], appRows, "No OAuth apps.")),
       section("Tokens", table(["Token", "Type", "Actor", "Subject", "Scopes", "Status"], tokenRows, "No tokens."))
-    );
+    ];
   }
 
-  function webhooksView(): string {
+  function webhooksView(): Block[] {
     const webhookRows = ls()
       .webhooks.all()
       .map((webhook) => [
-        escapeHtml(webhook.label),
-        escapeHtml(webhook.url),
-        escapeHtml(webhook.enabled ? "enabled" : "disabled"),
-        escapeHtml(webhook.resource_types.join(", ")),
-        escapeHtml(
+        webhook.label,
+        webhook.url,
+        chip(webhook.enabled ? "enabled" : "disabled"),
+        webhook.resource_types.join(", "),
           webhook.team_id
             ? (ls().teams.findOneBy("linear_id", webhook.team_id)?.key ?? webhook.team_id)
             : "all public teams",
-        ),
       ]);
     const deliveryRows = ls()
       .webhookDeliveries.all()
       .slice(-30)
       .reverse()
       .map((delivery) => [
-        escapeHtml(delivery.event),
-        escapeHtml(delivery.action),
-        escapeHtml(String(delivery.status ?? "")),
-        escapeHtml(delivery.error ?? ""),
-        escapeHtml(delivery.url),
-        escapeHtml(delivery.created_at),
+        delivery.event,
+        delivery.action,
+        delivery.status == null ? "" : chip(String(delivery.status)),
+        delivery.error ?? "",
+        delivery.url,
+        delivery.created_at,
       ]);
-    return (
+    return [
       section(
         "Webhook Subscriptions",
         table(["Label", "URL", "Status", "Resources", "Scope"], webhookRows, "No webhooks."),
-      ) +
+      ),
       section(
         "Webhook Deliveries",
         table(["Event", "Action", "Status", "Error", "URL", "Created"], deliveryRows, "No deliveries."),
       )
-    );
+    ];
   }
 }
 
-function section(title: string, body: string): string {
-  return `<section class="inspector-section">
-  <h2>${escapeHtml(title)}</h2>
-  ${body}
-</section>`;
-}
 
-function table(headers: string[], rows: string[][], empty: string): string {
-  if (rows.length === 0) return `<p class="inspector-empty">${escapeHtml(empty)}</p>`;
-  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
-  const rowHtml = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("\n");
-  return `<table class="inspector-table">
-  <thead><tr>${headerHtml}</tr></thead>
-  <tbody>
-${rowHtml}
-  </tbody>
-</table>`;
-}
 
-function linkCell(href: string, label: string): string {
-  return `<a href="${escapeAttr(href)}">${escapeHtml(label)}</a>`;
+function linkCell(href: string, label: string): Inline {
+  return { link: label, href };
 }
 
 function userLabel(user: LinearUser | undefined): string {

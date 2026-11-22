@@ -51,7 +51,7 @@ test("the sign-in code is offered above the keyboard", async ({ page }) => {
 
 | Device | Main test ids | State attributes |
 | --- | --- | --- |
-| Top bar | `namespace`, `search`, `view-devices`, `view-timeline`, `follow`, `sound-toggle`, `connection`, `source`, `notice`, `toast`, `toast-undo` | `source`: `data-name`, `data-service`, `data-ok`, `data-count`. `connection`: `data-state`. |
+| Header and filters | `namespace`, `search`, `view-devices`, `view-timeline`, `follow`, `sound-toggle`, `connection`, `source`, `notice`, `toast`, `toast-undo` | `source`: `data-name`, `data-service`, `data-ok`, `data-count`. `connection`: `data-state`. |
 | Channel tabs | `channel-tabs`, `channel-tab`, `channel-tab-unread` | Root: `data-layout` (`grid` or `tabs`), `data-tab` (`all`, `sms`, `push`, `email`, `chat`). `channel-tab`: `data-value`, `aria-selected`, `data-unread`. |
 | Messages | `sms-device`, `sms-recipient`, `sms-thread` (`-name`, `-preview`, `-time`, `-unread`), `sms-conversation`, `sms-back`, `sms-bubble`, `sms-code`, `sms-menu`, `sms-menu-tapback`, `sms-tapback`, `sms-empty` | `sms-device`: `data-screen` (`threads` or `conversation`), `data-recipient`, `data-thread`. `sms-thread`: `data-pinned`, `data-muted`. |
 | Push | `push-device`, `push-recipient`, `push-skin`, `push-group`, `push-group-more`, `push-notification` (`-title`, `-body`, `-app`, `-time`, `-image`, `-data`, `-meta`), `push-clear`, `push-options`, `push-preview`, `push-settings`, `push-clear-all`, `push-empty` | `push-device`: `data-skin` (`ios` or `android`), `data-platform`. `push-notification`: `data-expanded`, `data-app`, `data-stacked`. |

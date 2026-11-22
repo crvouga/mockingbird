@@ -1,21 +1,20 @@
-import { EditOutlined, PlusOutlined } from "@ant-design/icons"
-import {
-  Alert,
-  App,
-  Button,
-  Card,
-  Empty,
-  Flex,
-  Form,
-  Input,
-  Modal,
-  Select,
-  Space,
-  Tag,
-  Typography,
-} from "antd"
+import { EmptyState } from "@crvouga/mockingbird-ui/react"
+import { Pencil, Plus } from "@gravity-ui/icons"
+import { Alert, Button, Chip, Form, Modal, Pagination } from "@heroui/react"
 import { useState } from "react"
-import { DataTable, ErrorNotice, Refresh, useAction, useResource, ViewTitle } from "./components.js"
+import {
+  DataTable,
+  ErrorNotice,
+  Refresh,
+  SearchSelect,
+  Section,
+  TextInput,
+  useAction,
+  useChrome,
+  usePortal,
+  useResource,
+  ViewTitle,
+} from "./components.js"
 import type { Api, StatePage, StateRecord, StateView } from "./model.js"
 import { pretty, recordRow } from "./model.js"
 
@@ -36,56 +35,57 @@ export function StateExplorer({
     collections.find((item) => item.count > 0) ??
     collections[0]
   return (
-    <Flex vertical gap="large">
-      <Flex gap="middle" wrap align="center" justify="space-between">
-        <ViewTitle page="journal-and-state">State</ViewTitle>
-        <Refresh loading={shape.loading} onClick={shape.reload} />
-      </Flex>
+    <div className="flex flex-col gap-6">
+      <ViewTitle
+        page="journal-and-state"
+        description="The records the emulator holds in this namespace, by collection."
+        actions={<Refresh loading={shape.loading} onClick={shape.reload} />}
+      >
+        State
+      </ViewTitle>
       <ErrorNotice error={shape.error} retry={shape.reload} />
-      <Select<string>
-        aria-label="Collection"
-        loading={shape.loading}
+      <SearchSelect
+        label="Collection"
+        ariaLabel="Collection"
         placeholder="Choose a collection"
         value={collection?.name ?? null}
         onChange={setSelection}
-        showSearch
-        optionFilterProp="label"
-        style={{ width: "100%", maxWidth: 460 }}
-        options={
-          shape.data?.collections.map((item) => ({
-            value: item.name,
-            label: `${item.label} (${item.count})`,
-          })) ?? []
-        }
+        choices={collections.map((item) => ({
+          value: item.name,
+          label: `${item.label} (${item.count})`,
+        }))}
+        className="w-full max-w-md"
       />
       {!shape.loading && !shape.error && !collection && (
-        <Empty description="No collections in this namespace" />
+        <EmptyState
+          title="No collections in this namespace"
+          description="Records appear here once the emulator stores something."
+        />
       )}
       {collection && (
-        <Card title={collection.label} extra={<Tag>{collection.source}</Tag>}>
-          <Flex vertical gap="middle">
-            {collection.description && (
-              <Typography.Paragraph>{collection.description}</Typography.Paragraph>
-            )}
-            <Space wrap>
-              {collection.fields.map((field) => (
-                <Tag key={field.name}>
-                  {field.name}: {field.kind}
-                  {field.optional ? "?" : ""}
-                </Tag>
-              ))}
-            </Space>
-            <Records
-              key={collection.name}
-              api={api}
-              collection={collection.name}
-              sql={sql}
-              revision={revision}
-            />
-          </Flex>
-        </Card>
+        <Section
+          title={collection.label}
+          description={collection.description}
+          actions={<Chip size="sm">{collection.source}</Chip>}
+        >
+          <div className="flex flex-wrap gap-1.5">
+            {collection.fields.map((field) => (
+              <Chip key={field.name} size="sm" variant="secondary" className="font-mono">
+                {field.name}: {field.kind}
+                {field.optional ? "?" : ""}
+              </Chip>
+            ))}
+          </div>
+          <Records
+            key={collection.name}
+            api={api}
+            collection={collection.name}
+            sql={sql}
+            revision={revision}
+          />
+        </Section>
       )}
-    </Flex>
+    </div>
   )
 }
 
@@ -109,23 +109,28 @@ function Records({
   const records = resource.data?.records ?? []
   const rows = records.map(recordRow)
   return (
-    <Flex vertical gap="middle">
-      <Flex gap="middle" wrap justify="space-between">
+    <div className="flex min-w-0 flex-col gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         {sql ? (
-          <Alert
-            type="info"
-            showIcon
-            title="Browse records here; use the SQL view to change database rows."
-          />
+          <Alert status="accent" className="flex-1">
+            <Alert.Indicator />
+            <Alert.Content>
+              <Alert.Description>
+                Browse records here; use the SQL view to change database rows.
+              </Alert.Description>
+            </Alert.Content>
+          </Alert>
         ) : (
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setEditor("new")}>
+          <Button onPress={() => setEditor("new")}>
+            <Plus className="size-4" />
             New record
           </Button>
         )}
         <Refresh loading={resource.loading} onClick={resource.reload} />
-      </Flex>
+      </div>
       <ErrorNotice error={resource.error} retry={resource.reload} />
       <DataTable
+        label={`${collection} records`}
         rows={rows}
         rowKeys={records.map((record) => record.id)}
         loading={resource.loading}
@@ -135,32 +140,47 @@ function Records({
           : {
               action: (_: Record<string, unknown>, index: number) => (
                 <Button
-                  icon={<EditOutlined />}
+                  isIconOnly
+                  size="sm"
+                  variant="ghost"
                   aria-label={`Edit ${records[index]?.id}`}
-                  onClick={() => setEditor(records[index] ?? null)}
-                />
+                  onPress={() => setEditor(records[index] ?? null)}
+                >
+                  <Pencil className="size-4" />
+                </Button>
               ),
             })}
       />
-      <Flex gap="small" wrap align="center">
-        <Button disabled={page === 0 || resource.loading} onClick={() => setPage(page - 1)}>
-          Previous
-        </Button>
-        <Typography.Text>
+      <Pagination size="sm" className="flex flex-wrap items-center gap-3">
+        <Pagination.Summary>
           Page {page + 1} · {resource.data?.count ?? 0} records
-        </Typography.Text>
-        <Button
-          disabled={resource.data?.next == null || resource.loading}
-          onClick={() => {
-            const next = resource.data?.next
-            if (next == null) return
-            setCursors((values) => [...values.slice(0, page), next])
-            setPage(page + 1)
-          }}
-        >
-          Next
-        </Button>
-      </Flex>
+        </Pagination.Summary>
+        <Pagination.Content>
+          <Pagination.Item>
+            <Pagination.Previous
+              isDisabled={page === 0 || resource.loading}
+              onPress={() => setPage(page - 1)}
+            >
+              <Pagination.PreviousIcon />
+              Previous
+            </Pagination.Previous>
+          </Pagination.Item>
+          <Pagination.Item>
+            <Pagination.Next
+              isDisabled={resource.data?.next == null || resource.loading}
+              onPress={() => {
+                const next = resource.data?.next
+                if (next == null) return
+                setCursors((values) => [...values.slice(0, page), next])
+                setPage(page + 1)
+              }}
+            >
+              Next
+              <Pagination.NextIcon />
+            </Pagination.Next>
+          </Pagination.Item>
+        </Pagination.Content>
+      </Pagination>
       {editor && (
         <RecordEditor
           api={api}
@@ -174,7 +194,7 @@ function Records({
           }}
         />
       )}
-    </Flex>
+    </div>
   )
 }
 
@@ -191,96 +211,112 @@ function RecordEditor({
   close: () => void
   refresh: () => void
 }) {
-  const { message, modal } = App.useApp()
-  const [form] = Form.useForm<{ id: string; value: string }>()
+  const portal = usePortal()
+  const { notify, confirm } = useChrome()
+  const editing = record !== "new"
+  const [id, setId] = useState(editing ? record.id : "")
+  const [value, setValue] = useState(editing ? pretty(record.value) : "{}")
   const action = useAction(api, () => {
-    void message.success("Record saved")
+    notify("Record saved")
     refresh()
     close()
   })
   const deleting = useAction(api, () => {
-    void message.success("Record deleted")
+    notify("Record deleted")
     refresh()
     close()
   })
-  const editing = record !== "new"
-  const save = async (values: { id: string; value: string }) => {
-    const value: unknown = JSON.parse(values.value)
+  const save = async () => {
+    const parsed: unknown = JSON.parse(value)
     await action.run(
       editing ? "PUT" : "POST",
       editing ? `${base}/${encodeURIComponent(record.id)}` : base,
-      editing ? { value } : { ...(values.id.trim() ? { id: values.id.trim() } : {}), value },
+      editing ? { value: parsed } : { ...(id.trim() ? { id: id.trim() } : {}), value: parsed },
     )
   }
   return (
-    <Modal
-      open
-      title={editing ? "Edit record" : "New record"}
-      onCancel={close}
-      onOk={() => form.submit()}
-      confirmLoading={action.busy}
-      destroyOnHidden
-      width={720}
+    <Modal.Backdrop
+      isOpen
+      onOpenChange={(open) => {
+        if (!open) close()
+      }}
+      {...portal}
     >
-      <Flex vertical gap="middle">
-        <ErrorNotice error={action.error ?? deleting.error} />
-        <Form
-          form={form}
-          layout="vertical"
-          initialValues={{
-            id: editing ? record.id : "",
-            value: editing ? pretty(record.value) : "{}",
-          }}
-          onFinish={save}
-        >
-          <Form.Item
-            name="id"
-            label="Record ID"
-            extra={editing ? undefined : "Leave blank to generate an ID"}
-          >
-            <Input disabled={editing} autoComplete="off" />
-          </Form.Item>
-          <Form.Item
-            name="value"
-            label="JSON value"
-            rules={[
-              { required: true },
-              {
-                validator: async (_, value: string) => {
-                  try {
-                    JSON.parse(value)
-                  } catch {
-                    throw new Error("Enter valid JSON")
-                  }
-                },
-              },
-            ]}
-          >
-            <Input.TextArea rows={12} spellCheck={false} />
-          </Form.Item>
-        </Form>
-        {editing && (
-          <Button
-            danger
-            loading={deleting.busy}
-            onClick={() => {
-              modal.confirm({
-                title: "Delete this record?",
-                content: record.id,
-                onOk: async () => {
-                  const ok = await deleting.run(
-                    "DELETE",
-                    `${base}/${encodeURIComponent(record.id)}`,
-                  )
-                  if (!ok) throw new Error("Delete failed")
-                },
-              })
+      <Modal.Container size="lg" scroll="inside">
+        <Modal.Dialog>
+          <Modal.CloseTrigger />
+          <Modal.Header>
+            <Modal.Heading>{editing ? "Edit record" : "New record"}</Modal.Heading>
+          </Modal.Header>
+          <Form
+            id="mockingbird-record-editor"
+            className="contents"
+            onSubmit={(event) => {
+              event.preventDefault()
+              void save()
             }}
           >
-            Delete record
-          </Button>
-        )}
-      </Flex>
-    </Modal>
+            <Modal.Body className="flex flex-col gap-4">
+              <ErrorNotice error={action.error ?? deleting.error} />
+              <TextInput
+                label="Record ID"
+                name="id"
+                value={id}
+                onChange={setId}
+                isDisabled={editing}
+                {...(editing ? {} : { description: "Leave blank to generate an ID" })}
+              />
+              <TextInput
+                label="JSON value"
+                name="value"
+                rows={12}
+                monospace
+                value={value}
+                onChange={setValue}
+                isRequired
+                validate={(text) => {
+                  try {
+                    JSON.parse(text)
+                    return null
+                  } catch {
+                    return "Enter valid JSON"
+                  }
+                }}
+              />
+            </Modal.Body>
+            <Modal.Footer className="flex flex-wrap justify-between gap-2">
+              {editing ? (
+                <Button
+                  variant="danger-soft"
+                  isPending={deleting.busy}
+                  onPress={() =>
+                    confirm({
+                      title: "Delete this record?",
+                      content: record.id,
+                      okText: "Delete record",
+                      danger: true,
+                      onOk: () =>
+                        deleting.run("DELETE", `${base}/${encodeURIComponent(record.id)}`),
+                    })
+                  }
+                >
+                  Delete record
+                </Button>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <Button variant="tertiary" onPress={close}>
+                  Cancel
+                </Button>
+                <Button type="submit" isPending={action.busy}>
+                  Save
+                </Button>
+              </div>
+            </Modal.Footer>
+          </Form>
+        </Modal.Dialog>
+      </Modal.Container>
+    </Modal.Backdrop>
   )
 }

@@ -89,7 +89,7 @@
     "generate": "bun ../../openapi/codegen/dist/cli.js",
     "generate:check": "bun ../../openapi/codegen/dist/cli.js --check",
     "openapi:check": "bun ../../openapi/codegen/dist/cli.js --validate",
-    "build": "bun ../../../scripts/bundle-service.ts",
+    "build": "bun ../../../packages/ui/scripts/bundle.ts --ssr src/ui/server.tsx && bun ../../../scripts/bundle-service.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "biome check .",
     "test": "bun test",
@@ -99,7 +99,8 @@
   },
   "dependencies": {
     "@crvouga/mockingbird-runtime": "workspace:*",
-    "@crvouga/mockingbird-service-sqlite": "workspace:*"
+    "@crvouga/mockingbird-service-sqlite": "workspace:*",
+    "@crvouga/mockingbird-ui": "workspace:*"
   },
   "devDependencies": {
     "@aws-sdk/client-cognito-identity-provider": "3.1132.0",
@@ -115,6 +116,21 @@
     "@crvouga/mockingbird-testing": "workspace:*",
     "amazon-cognito-identity-js": "6.3.17",
     "fast-check": "4.9.0",
-    "jose": "6.2.2"
+    "jose": "6.2.2",
+    "@gravity-ui/icons": "2.23.1",
+    "@heroui/react": "3.2.7",
+    "@heroui/styles": "3.2.7",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "imports": {
+    "#ui/server": {
+      "types": "./src/ui/server.tsx",
+      "bun": "./src/ui/server.tsx",
+      "browser": "./src/ui/server.tsx",
+      "default": "./dist-ui/server.js"
+    }
   }
 }

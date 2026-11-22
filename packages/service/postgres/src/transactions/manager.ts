@@ -22,7 +22,8 @@ interface Snapshot {
  */
 export class TransactionManager {
   private base: Snapshot | null = null;
-  private savepoints: Array<{ name: string; snap: Snapshot }> = [];
+  /** `internal`: the emulator's own statement wrapper, not a subtransaction the session can see */
+  private savepoints: Array<{ name: string; snap: Snapshot; internal: boolean }> = [];
   /** every hold taken in this transaction (BEGIN and each SAVEPOINT), released when it ends */
   private holds: number[] = [];
   /**
@@ -37,9 +38,12 @@ export class TransactionManager {
     return this.base !== null;
   }
 
-  /** Inside a SAVEPOINT. */
+  /**
+   * Inside a SAVEPOINT the session made. The emulator's own savepoints (the statement wrappers of
+   * {@link savepoint} with `internal`) are not subtransactions PostgreSQL would see.
+   */
   get inSubtransaction(): boolean {
-    return this.savepoints.length > 0;
+    return this.savepoints.some((savepoint) => !savepoint.internal);
   }
 
   private takeSnapshot(): Snapshot {
@@ -124,11 +128,12 @@ export class TransactionManager {
     this.releaseHolds();
   }
 
-  savepoint(name: string): void {
+  /** `internal`: an emulator statement wrapper, invisible to `SET TRANSACTION`'s subtransaction checks. */
+  savepoint(name: string, internal = false): void {
     if (this.base === null) {
       throw pgError("transaction_state", "SAVEPOINT can only be used in transaction blocks", "25P01");
     }
-    this.savepoints.push({ name, snap: this.takeSnapshot() });
+    this.savepoints.push({ name, snap: this.takeSnapshot(), internal });
   }
 
   releaseSavepoint(name: string): void {

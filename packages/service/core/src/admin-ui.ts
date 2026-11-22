@@ -1,25 +1,10 @@
 import { requestBaseUrl } from "@crvouga/mockingbird-core"
+import { escapeHtml, renderDocument } from "@crvouga/mockingbird-ui/document"
 import { type AdminClient, loadAdminClient } from "./admin-client.js"
 import type { AdminRoutes } from "./control.js"
 import { ADMIN_BRANDS_PATH, ADMIN_KEY_HEADER, ADMIN_PREFIX } from "./control.js"
 import type { AdminExtension, AdminUi } from "./surface.js"
 import { STANDARD_ADMIN_ROUTES } from "./surface.js"
-
-const escapeHtml = (value: string): string =>
-  value.replace(/[&<>"']/g, (char) => {
-    switch (char) {
-      case "&":
-        return "&amp;"
-      case "<":
-        return "&lt;"
-      case ">":
-        return "&gt;"
-      case '"':
-        return "&quot;"
-      default:
-        return "&#39;"
-    }
-  })
 
 /** One service's vendor chip: what `GET <adminPrefix>/ui/brands.json` returns under its name. */
 export type AdminBrand = {
@@ -73,22 +58,13 @@ const adminDocument = (client: AdminClient, service: string, adminPrefix: string
     brandsUrl: `${adminPrefix}${ADMIN_BRANDS_PATH}`,
     service,
   })
-  return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
-<title>${name} admin</title>
-<style>html,body{margin:0;min-height:100%}#admin-root{min-height:100%}</style>
-</head>
-<body>
-<main id="admin-root" data-mockingbird-admin data-admin-ui-library="antd" data-service="${name}">
-<noscript>Enable JavaScript to use administration.</noscript>
-</main>
-${script}
-</body>
-</html>`
+  // The same document head as every Mockingbird page (title suffix, favicon, color scheme). The
+  // client bundle brings the design system's stylesheet itself, so only the root's height is here.
+  return renderDocument({
+    title: `${service} admin`,
+    css: "html,body,[data-mockingbird-root],#admin-root{min-height:100%}body{margin:0}",
+    body: `<main id="admin-root" data-mockingbird-admin data-admin-ui-library="heroui" data-service="${name}"><noscript>Enable JavaScript to use administration.</noscript></main>${script}`,
+  })
 }
 
 const htmlResponse = (body: string): Response =>

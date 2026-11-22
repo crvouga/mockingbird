@@ -244,6 +244,18 @@ export class Database {
    * throws. Nested calls use savepoints.
    */
   transaction<T>(fn: () => T): T {
+    return this.runTransaction(fn, false);
+  }
+
+  /**
+   * @internal {@link transaction} for one statement of the wire server: when nested, its savepoint
+   * is the emulator's own statement wrapper, not a subtransaction the session can see (#861).
+   */
+  statementTransaction<T>(fn: () => T): T {
+    return this.runTransaction(fn, true);
+  }
+
+  private runTransaction<T>(fn: () => T, internal: boolean): T {
     this.assertOpen();
     this.durabilityObserver?.assertWritable();
     this.apiTransactionDepth++;
@@ -260,7 +272,7 @@ export class Database {
         }
       }
       const name = `__api_transaction_${++this.transactionSequence}`;
-      this.transactions.savepoint(name);
+      this.transactions.savepoint(name, internal);
       try {
         const value = fn();
         this.transactions.releaseSavepoint(name);
