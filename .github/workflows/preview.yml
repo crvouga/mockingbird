@@ -569,7 +569,8 @@ jobs:
           if [ "$HOSTING" = "cloudflare" ]; then
             if [ -z "$CONFIG" ]; then
               CONFIG="$RUNNER_TEMP/wrangler.json"
-              $CLI wrangler-config --name "$WORKER" --assets "$OUTDIR" > "$CONFIG"
+              # Absolute: wrangler resolves config paths against the config file's directory.
+              $CLI wrangler-config --name "$WORKER" --assets "$(realpath "$OUTDIR")" > "$CONFIG"
             fi
             # Bundle the Worker here, so the deploy job only uploads it (`no_bundle`).
             $WRANGLER deploy --dry-run --outdir "$ARTIFACT/worker" --config "$CONFIG" --name "$WORKER"

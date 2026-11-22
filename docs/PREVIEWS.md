@@ -1,7 +1,7 @@
 # Live PR previews
 
-Give every pull request a live, self-updating preview of your app on Cloudflare Workers, with one
-workflow file and no setup beyond the Cloudflare credentials any hosting needs.
+Give every pull request a live, self-updating preview of your app on Cloudflare Workers (or
+Vercel), with one workflow file and no setup beyond the credentials any hosting needs.
 
 Each preview shows where CI is (a build for a newer commit running, deployed or failed; the PR's
 checks running, passed or failed) and updates itself in place when a newer version deploys: an
@@ -11,6 +11,12 @@ no GitHub token.
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
 - [Inputs](#inputs)
+- [What a pull request can reach](#what-a-pull-request-can-reach)
+- [Only build what changed](#only-build-what-changed)
+- [Runner, toolchain and caches](#runner-toolchain-and-caches)
+- [Asset limits and large files](#asset-limits-and-large-files)
+- [The PR link](#the-pr-link)
+- [Hosting on Vercel](#hosting-on-vercel)
 - [Named Previews from your own script](#named-previews-from-your-own-script)
 - [Named Previews of one assets-only Worker](#named-previews-of-one-assets-only-worker)
 - [System previews: one registry, content-addressed parts, per-app updates](#system-previews-one-registry-content-addressed-parts-per-app-updates)
@@ -24,13 +30,18 @@ no GitHub token.
 flowchart LR
   PR["Pull request<br/>opened / pushed / closed"] --> WF["Reusable workflow<br/>preview.yml"]
   CI["Your CI workflow<br/>(workflow_run)"] --> WF
-  WF -- "build, stamp version.json,<br/>wrangler deploy" --> W["Preview Worker<br/>&lt;name&gt;-pr-&lt;n&gt;"]
+  WF -- "build (no secrets) → artifact →<br/>deploy (no PR code)" --> W["Preview Worker<br/>&lt;name&gt;-pr-&lt;n&gt;"]
   WF -- "wrangler secret bulk<br/>PREVIEW_BUILD / PREVIEW_CHECKS" --> W
   W -- "SSE /__preview/live<br/>(fallback: polling /__preview/status)" --> Tab["Open tab<br/>boot loader"]
   W -- "/version.json" --> Tab
   Tab -- "import app-&lt;hash&gt;.js in place" --> App["Your app"]
 ```
 
+- **The PR's code builds where there is nothing to steal.** A build job checks out the PR, installs
+  and builds it with no secret and a read-only token, stamps `version.json` and uploads the files
+  as an artifact. A separate deploy job, which never checks out or runs the PR's code, validates
+  that artifact, rechecks the PR is still at that commit and deploys it (see
+  [What a pull request can reach](#what-a-pull-request-can-reach)).
 - **Status is pushed by CI into the Worker itself.** When a build starts, deploys or fails, and
   when your CI workflow starts or finishes for the PR, the workflow writes `PREVIEW_BUILD` or
   `PREVIEW_CHECKS` into the preview Worker's configuration with `wrangler secret bulk`, using the
@@ -90,6 +101,8 @@ flowchart LR
    on:
      pull_request: { types: [opened, synchronize, reopened, closed] }
      workflow_run: { workflows: [CI], types: [requested, completed] }   # your CI workflow's name
+   # contents: read checks out the code; pull-requests: write puts the preview link in the PR
+   # description and reads the PR's head and changed files. Nothing else is needed.
    permissions: { contents: read, pull-requests: write }
    jobs:
      preview:
@@ -118,11 +131,23 @@ PRs are skipped. The lab in this repo uses this, minus the CI `workflow_run` tri
 | `name` | (required in `worker` mode) | Worker name prefix; each PR deploys `<name>-pr-<number>`. |
 | `build` | (required unless `sites` gives it) | Builds the preview into `outdir`. |
 | `outdir` | (required unless `sites` gives it) | The built preview, relative to `working-directory`. |
+| `hosting` | `cloudflare` | `cloudflare`: a Worker per PR. `vercel`: see [Hosting on Vercel](#hosting-on-vercel). |
 | `working-directory` | `.` | Where install, build, the CLI and wrangler run. |
-| `install` | `bun install --frozen-lockfile` | Installs dependencies, including `@crvouga/mockingbird-preview`. |
-| `wrangler-config` | generated | Your own wrangler config, for a custom Worker built on `createPreviewWorker`. |
-| `cli` | `bunx mockingbird-preview` | How to run the package's CLI (`stamp`, `wrangler-config`). |
+| `install` | by `package-manager` | Installs dependencies, including `@crvouga/mockingbird-preview`. Empty: `bun install --frozen-lockfile`, `pnpm install --frozen-lockfile` or `npm ci`. |
+| `wrangler-config` | generated | Your own wrangler config (JSON, JSONC or TOML), for a custom Worker built on `createPreviewWorker`. |
+| `cli` | `bunx mockingbird-preview` | How to run the package's CLI (`stamp`, `wrangler-config`, `check`, `host-*`). |
 | `bun-version` / `wrangler` | `1.4.0` / `bunx wrangler@4.50.0` | Tool versions. |
+| `runs-on` / `timeout-minutes` | `ubuntu-latest` / `30` | The build jobs' runner (a label, or JSON: `["self-hosted", "8-core"]`, `{ "group": "big" }`) and timeout. |
+| `package-manager` | `bun` | `bun`, `pnpm` or `npm`: sets up pnpm and Node (`pnpm/action-setup`, `actions/setup-node`) and picks the install. |
+| `node-version` / `node-version-file` / `pnpm-version` | none / none / from `packageManager` | Toolchain versions. |
+| `cache-paths` / `cache-key-prefix` | none / `preview` | Paths to cache between builds; restored read-only on PRs, saved only on the default branch. |
+| `paths` | every push builds | Globs of the files the preview ships; a push changing none of them builds nothing. |
+| `link-path` / `pr-link` | `/` / `true` | Where the PR's **Preview** link opens; `false` leaves the PR description alone. |
+| `max-file-mib` / `max-files` | the host's | Asset limits the build is checked against before upload. |
+| `split-large-files` | `false` | Split files over the per-file limit into verified parts. |
+| `host` | none | `hosting: vercel`: serve `<name>-pr-<n>.<host>` (a domain on the Vercel project). |
+
+The workflow's `url` output is the deployed preview's URL, for your own steps.
 
 Secrets are passed explicitly, never with `secrets: inherit`, so the workflow sees only what you
 hand it: the two Cloudflare values, and optionally `WORKER_SECRETS`, `KEY=value` lines to set on
@@ -135,6 +160,180 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
          WORKER_SECRETS: |
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
+
+## What a pull request can reach
+
+A pull request's author controls its code, its lockfile, its install scripts and its build. The
+workflow treats all of it as untrusted, same-repository PRs included (contractors, agents and
+compromised dependencies are not a trust boundary):
+
+| Job | Runs PR code | Holds |
+| --- | --- | --- |
+| `preview` / `plan` (decide, status) | no (no checkout) | the deploy credentials, the write token |
+| `build` / `build-site` | **yes** | nothing: no secret, `permissions: contents: read` |
+| `deploy` / `site` / `remove` / `report` / `sweep` | no | the deploy credentials, `WORKER_SECRETS`, the write token |
+| `verify` (named mode checks after upload) | **yes** | nothing |
+
+- **Nothing from the build reaches a credentialed job but files.** The build uploads `outdir` (and,
+  on Cloudflare, the Worker bundled by `wrangler deploy --dry-run` plus the wrangler config as
+  data) as an artifact. The deploy job validates it before anything else: regular files and
+  directories only (a symlink or special file is refused by path), every file within the per-file
+  limit, the count within the per-deployment limit.
+- **The deploy runs only tools the workflow chose.** On Cloudflare it runs `wrangler` (the
+  `wrangler` input, from npm) from an empty directory of its own, on a config rebuilt from an
+  allowlist of your wrangler config's settings: the Worker is uploaded already bundled
+  (`no_bundle`), and a setting that would run code or read a file in the deploy job (`build`,
+  `containers`, `text_blobs`, `wasm_modules`, `data_blobs`, `site`, `env`, …) is either dropped
+  because the build job already applied it, or refused by name. On Vercel and in named mode, the
+  `mockingbird-preview` CLI comes from a checkout of the PR's **base commit** (the default branch
+  for pushes and schedules) installed with `install`, never from the PR's install. So the PR's
+  copy of the CLI must exist on your default branch first: a PR that adds the package gets its
+  first preview after it merges.
+- **The deploy publishes only the PR's current head.** Before deploying it reads the PR
+  (`GET /pulls/{n}`) and skips, with a notice, when the PR closed or moved to another commit.
+- **What a PR can still reach**: its own preview. On Cloudflare the preview Worker's code is the
+  PR's, so it can read `WORKER_SECRETS` at runtime; pass only credentials meant for previews (the
+  [dev resources](DEV_RESOURCES.md) sandbox keys), never production ones. It cannot read the
+  Cloudflare or Vercel token, the GitHub write token, or another PR's preview.
+
+## Only build what changed
+
+Give `paths` the globs of the files your preview is built from. A push whose changed files match
+none of them starts no build, and the preview stays at the last commit that changed what it ships:
+
+```yaml
+      with:
+        paths: |
+          src/**
+          package.json
+          bun.lock
+          !src/**/*.md
+```
+
+`*` matches within one path segment, `**` across segments, `!` excludes, and later patterns win.
+A pull request being opened compares all its files; a push compares what that push changed. When
+the diff is unknown (a new branch, a force push the API cannot compare, more than 300 files) the
+preview builds. You can instead filter on your trigger with `on.pull_request.paths`; then also run
+the workflow on `closed` without the filter, so closing still deletes the preview, and keep the
+`workflow_run` trigger unfiltered, since status updates still need it.
+
+Pushes in quick succession always leave the preview at the newest commit: one build and one deploy
+per PR run at a time (a newer one cancels the older), and each deploy rechecks the PR head first. A
+build superseded only by commits that change none of `paths` still deploys.
+
+## Runner, toolchain and caches
+
+```yaml
+      with:
+        runs-on: '["self-hosted", "linux", "8-core"]'   # or a label, or '{ "group": "big" }'
+        timeout-minutes: 45
+        package-manager: pnpm
+        node-version-file: .nvmrc                       # or node-version: 22
+        cache-paths: |
+          ~/.local/share/pnpm/store
+          .turbo
+        build: pnpm turbo run preview:build
+```
+
+`runs-on` and `timeout-minutes` apply to the build jobs; the deploy jobs are small and run on
+`ubuntu-latest`. `package-manager` sets up pnpm (`pnpm-version`, or your `packageManager` field)
+and Node (`node-version` / `node-version-file`), and when `install` is empty runs
+`pnpm install --frozen-lockfile` (or `npm ci`, or `bun install --frozen-lockfile`). Bun is always
+set up, for `bunx wrangler`.
+
+`cache-paths` is restored read-only in every build (`actions/cache/restore`) under a key of
+`cache-key-prefix`, the OS, the lockfiles' hash and the commit, falling back to the newest cache
+of the same lockfiles, then of any. It is saved only by a build on the default branch: a pull
+request never writes a cache the default branch later restores. Add
+`push: { branches: [main] }` to your triggers and a push to the default branch builds once,
+without deploying, to save it.
+
+## Asset limits and large files
+
+Hosts cap what a static deployment may hold: Workers static assets refuse a file over 25 MiB and
+take at most 20 000 files on the free plan. The build job checks `outdir` against these limits
+right after the build, and the deploy job checks the artifact again, so an oversized file fails
+fast, naming the file, instead of as a late upload error. Raise or lower the limits with
+`max-file-mib` / `max-files` (a paid Workers plan allows 100 000 files).
+
+To ship a file over the limit, set `split-large-files: true` (or run
+`mockingbird-preview check --outdir dist --split` in your own build). Each file over the limit is
+replaced by numbered parts next to a SHA-256 manifest:
+
+```
+workers/backend.js   →   workers/backend.js.parts.json, workers/backend.js.part-000, -001, …
+```
+
+Load it in the browser with `loadSplitPreviewFile("/workers/backend.js")` from
+`@crvouga/mockingbird-preview`: it fetches the parts, checks each part's and the whole file's size
+and SHA-256, and returns the original bytes (or fetches the file directly when it was not split).
+Run `mockingbird-preview check --outdir dist` locally to see the same preflight.
+
+## The PR link
+
+The workflow keeps one `[Preview](<url><link-path>)` link between
+`<!-- system-preview:start -->` and `<!-- system-preview:end -->` at the top of the PR
+description. `link-path` (default `/`) is where it opens: give `/?surface=app` if your
+`mountSystemHarness` app has a surface with that id, or any other path. A project that manages
+its own links block sets `pr-link: false` and writes the link itself from the workflow's `url`
+output:
+
+```yaml
+jobs:
+  preview:
+    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    with: { name: my-app, build: bun run preview:build, outdir: preview-dist, pr-link: false }
+    secrets: { ... }
+  link:
+    needs: preview
+    if: needs.preview.outputs.url != ''
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Preview at ${{ needs.preview.outputs.url }}"
+```
+
+## Hosting on Vercel
+
+`hosting: vercel` hosts each PR's preview as a static Vercel deployment instead of a Worker, with
+only Vercel credentials:
+
+```yaml
+    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    with:
+      name: my-app
+      hosting: vercel
+      host: preview.example.com   # optional: <name>-pr-<n>.preview.example.com; else <name>-pr-<n>.vercel.app
+      build: bun run preview:build
+      outdir: preview-dist
+    secrets:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}   # the team, when the project has one
+```
+
+- **Deploy.** The `mockingbird-preview host-deploy` command (from the base commit's install)
+  uploads the built files with a `vercel.json` (no build, single-page fallback, `no-store` on
+  `version.json` and `/__preview/*`), aliases the deployment to the PR's host name, and deletes the
+  deployment the alias pointed at before. Closing the PR removes the alias and the deployment.
+- **Live status.** Vercel runs no code for a static preview, so the status lives in a file:
+  `/__preview/status` holds the same snapshot the Worker serves. A status change (build
+  started, deployed or failed; your CI running, passed or failed) creates a new deployment from the
+  files Vercel already holds, which uploads only the changed status file, and moves the alias. The
+  boot loader finds no `/__preview/live` stream and polls `/__preview/status`, as it does whenever
+  Server-Sent Events are unavailable. In-place updates from `version.json` work as on Workers.
+- **Limits.** `WORKER_SECRETS` is refused (a static preview cannot use secrets); the asset limits
+  default to 100 MiB per file and 15 000 files. If Deployment Protection covers preview
+  deployments, pass `VERCEL_AUTOMATION_BYPASS_SECRET` so status writes can read the preview's
+  state, and give viewers access as your protection settings require.
+- **Evidence.** The Vercel REST calls (`POST /v2/files`, `POST /v13/deployments` with
+  `missing_files` retries, `POST /v2/deployments/{id}/aliases`, `GET /v4/aliases/{alias}`,
+  `DELETE /v2/aliases/{id}`, `DELETE /v13/deployments/{id}`), the `vercel.json` overrides and the
+  default limits follow Vercel's public documentation: a **best guess, not verified** against a
+  live Vercel account. The package's `PreviewHosting` interface (`exists`, `deploy`, `setStatus`,
+  `remove`) is what another host would implement.
+
+To deploy with your own tooling instead, run `mockingbird-preview stamp` in your build and deploy
+`outdir` yourself: `version.json` and the boot loader's in-place updates work on any static host.
 
 ## Named Previews from your own script
 
@@ -196,9 +395,12 @@ jobs:
 - **Proof it is served.** After upload the CLI polls `version.json` (stamped with the commit) at
   the Preview's origin until it names the commit (`waitUntilServing`).
 - **Your checks, before and after upload.** `checks` names a module whose default export is
-  `(origin, fetch) => Promise<{ name, ok, detail? }[]>`. It runs first against the built
-  directory (a gate; `fetch` reads the files), then against the deployed origin, re-read until it
-  passes or the deadline passes, since the edge moves machine by machine. A pull request's gate is
+  `(origin, fetch) => Promise<{ name, ok, detail? }[]>`. It is your PR's code, so it never runs
+  where the credentials are: it runs first in the build job against the built directory (a gate;
+  `fetch` reads the files; `mockingbird-preview gate-preview`), whose results the deploy reads
+  (`deploy-preview --gate`), then in a credential-free `verify` job against the deployed origin,
+  re-read until it passes or the deadline passes, since the edge moves machine by machine
+  (`mockingbird-preview check-preview`). A pull request's gate is
   best effort: a failing one still uploads and the PR says **deployed, but failing its checks**. A
   branch's gate (a `push`) is strict: nothing is uploaded and the last passing deploy keeps
   serving.

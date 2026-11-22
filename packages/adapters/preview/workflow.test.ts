@@ -305,6 +305,58 @@ if [ "$1" = deploy ]; then cp wrangler.json "${out}/config.json"; echo "Deployed
     }
   })
 
+  test("#862 the build job bundles the Worker and hands its JSONC config over as plain JSON data", () => {
+    const work = dir("work")
+    mkdirSync(join(work, "dist"))
+    writeFileSync(join(work, "dist", "index.html"), "<h1>hi</h1>")
+    writeFileSync(
+      join(work, "wrangler.jsonc"),
+      `{
+  // the lab's own Worker
+  "name": "lab", /* inline */ "main": "src/worker.ts",
+  "compatibility_date": "2026-11-13",
+  "assets": { "directory": "./dist", "binding": "ASSETS", "run_worker_first": ["/__dev/*", "/x//y"], },
+}`,
+    )
+    const bin = dir("bin")
+    executable(join(bin, "fake-cli"), "exit 0")
+    executable(
+      join(bin, "fake-wrangler"),
+      `while [ $# -gt 0 ]; do case "$1" in --outdir) out=$2; shift 2 ;; *) shift ;; esac; done
+mkdir -p "$out" && echo "export default {}" > "$out/worker.js"`,
+    )
+    const temp = dir("runner-temp")
+    const run = runStep(
+      step("build", "Stamp, preflight and package the preview").run,
+      {
+        RUNNER_TEMP: temp,
+        ARTIFACT: join(temp, "preview-artifact"),
+        CLI: join(bin, "fake-cli"),
+        WRANGLER: join(bin, "fake-wrangler"),
+        HOSTING: "cloudflare",
+        OUTDIR: "dist",
+        CONFIG: "wrangler.jsonc",
+        WORKER: "lab-pr-1",
+        VERSION: "c1",
+        PR: "1",
+        PR_URL: "https://github.com/acme/app/pull/1",
+        MAX_BYTES: String(25 * 1024 * 1024),
+        MAX_FILES: "20000",
+      },
+      bin,
+      work,
+    )
+    expect(run.stderr).toBe("")
+    expect(run.code).toBe(0)
+    const config = JSON.parse(readFileSync(join(temp, "preview-artifact", "wrangler.json"), "utf8"))
+    expect(config.main).toBe("worker.js")
+    expect(config.assets.run_worker_first).toEqual(["/__dev/*", "/x//y"])
+    expect(existsSync(join(temp, "preview-artifact", "worker", "worker.js"))).toBe(true)
+    expect(readFileSync(join(temp, "preview-artifact", "assets", "index.html"), "utf8")).toBe(
+      "<h1>hi</h1>",
+    )
+  })
+
   test("#862 WORKER_SECRETS cannot ride along to a Vercel preview, which runs no code", () => {
     const run = runStep(step("preview", "ctx").run, {
       EVENT: "pull_request",

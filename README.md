@@ -384,7 +384,7 @@ Building, testing and `bun run check` need no secrets and no accounts. Live pari
 | [Dev resources](docs/DEV_RESOURCES.md) | Run an app against its emulators, then point any one third-party service at a real **non-production** resource (Stripe test mode, Junction's sandbox, your dev Resend account) without rebuilding, redeploying, or putting a credential in the browser. Production is never reachable: every credential must match a non-production allow-list you write, and known production formats are refused regardless. |
 | [Emulate coverage audit](docs/EMULATE_COVERAGE.md) | Mockingbird covers the 14 public providers in [Emulate](https://emulate.dev/) and [vercel-labs/emulate](https://github.com/vercel-labs/emulate). The comparison target is the npm package `emulate@0.12.1`, pinned in `packages/parity/package-oracle/package.json` and `bun.lock`. Licensed handler sources are pinned to commit `c77cb73e7ab525c5260dd36c04c91a54a23e7e75`; `packages/http/provider/port.json` records every source path and SHA-256 digest. |
 | [Infrastructure and orchestration emulators](docs/INFRASTRUCTURE_EMULATORS.md) | This document defines the boundaries and planned evidence for the Docker Engine, Hermes peer-run, and GitHub REST packages. |
-| [Live PR previews](docs/PREVIEWS.md) | Give every pull request a live, self-updating preview of your app on Cloudflare Workers, with one workflow file and no setup beyond the Cloudflare credentials any hosting needs. |
+| [Live PR previews](docs/PREVIEWS.md) | Give every pull request a live, self-updating preview of your app on Cloudflare Workers (or Vercel), with one workflow file and no setup beyond the credentials any hosting needs. |
 
 ## License
 
