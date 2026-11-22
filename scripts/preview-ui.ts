@@ -2,12 +2,20 @@
  * Run the Mockingbird-owned UI (System, Lab, Emulators, Notifications) from this checkout and make
  * it reachable from another device, such as a phone.
  *
- * Builds the lab's static system preview, serves it on every interface, and, when Tailscale is
- * running, also publishes it over HTTPS inside the tailnet. The HTTPS address matters on a phone:
- * the lab signs in with `crypto.subtle`, which browsers only expose on HTTPS or localhost.
+ * Serves the lab's system preview from the dev server (`devPreview`): built in memory, rebuilt
+ * when a source file is saved, and swapped into every open tab in place, with no reload. It
+ * listens on every interface and, when Tailscale is running, is also published over HTTPS inside
+ * the tailnet. The HTTPS address matters on a phone: the lab signs in with `crypto.subtle`, which
+ * browsers only expose on HTTPS or localhost.
  *
- *   bun scripts/preview-ui.ts            # build, then serve
- *   bun scripts/preview-ui.ts --no-build # serve the last build
+ *   bun scripts/preview-ui.ts            # build the packages it uses, then serve and watch
+ *   bun scripts/preview-ui.ts --no-build # skip the package build (they are built already)
+ *   bun scripts/preview-ui.ts --packages # also rebuild workspace packages when their source changes
+ *   bun scripts/preview-ui.ts --static   # the minified build a deploy ships, served as files
+ *
+ * The lab's own source (`packages/examples/medical-testing/src`) is watched directly. A workspace
+ * package is read from its `dist`, so a change to one reaches the tab when that package is built
+ * again: by hand, or by `--packages`, which keeps `turbo watch` running beside the server.
  *
  * Ports never collide. Each checkout gets its own pair, derived from its path, so several
  * worktrees serve side by side and a checkout's addresses stay the same from run to run; a port
@@ -81,40 +89,72 @@ const firstFree = async (
 }
 const port = await firstFree(flag("port", earlier?.port ?? 20000 + slot * 5), listens)
 
-if (!process.argv.includes("--no-build")) {
-  const build = Bun.spawnSync(
-    [
-      "bunx",
-      "turbo",
-      "run",
-      "preview:build",
-      "--filter=@crvouga/mockingbird-example-medical-testing",
-    ],
-    { cwd: root, stdio: ["ignore", "inherit", "inherit"] },
-  )
-  if (build.exitCode !== 0) process.exit(build.exitCode ?? 1)
-}
-if (!existsSync(join(dist, "index.html"))) {
-  console.error(`No preview build at ${dist}. Run without --no-build.`)
-  process.exit(1)
-}
-
-const server = Bun.serve({
-  port,
-  hostname: "0.0.0.0",
-  async fetch(request) {
-    const pathname = decodeURIComponent(new URL(request.url).pathname)
-    const path = normalize(join(dist, pathname))
-    const file = Bun.file(path.startsWith(dist) && !pathname.endsWith("/") ? path : "")
-    const found = file.size > 0 && (await file.exists())
-    return new Response(found ? file : Bun.file(join(dist, "index.html")), {
-      headers: { "cache-control": "no-store" },
-    })
-  },
-})
-
+// Declared before anything can call `stop`.
 let published = false
 let httpsPort: number | undefined
+
+const example = join(root, "packages/examples/medical-testing")
+const filter = "--filter=@crvouga/mockingbird-example-medical-testing"
+const fixed = process.argv.includes("--static")
+const turbo = (...args: string[]) =>
+  Bun.spawnSync(["bunx", "turbo", ...args], { cwd: root, stdio: ["ignore", "inherit", "inherit"] })
+
+if (!process.argv.includes("--no-build")) {
+  // The dev server builds the lab itself; it only needs the packages the lab imports.
+  const build = fixed
+    ? turbo("run", "preview:build", filter)
+    : turbo("run", "build", `${filter}^...`)
+  if (build.exitCode !== 0) process.exit(build.exitCode ?? 1)
+}
+
+const children: Bun.Subprocess[] = []
+let stopStatic = () => {}
+if (fixed) {
+  if (!existsSync(join(dist, "index.html"))) {
+    console.error(`No preview build at ${dist}. Run without --no-build.`)
+    process.exit(1)
+  }
+  const server = Bun.serve({
+    port,
+    hostname: "0.0.0.0",
+    async fetch(request) {
+      const pathname = decodeURIComponent(new URL(request.url).pathname)
+      const path = normalize(join(dist, pathname))
+      const file = Bun.file(path.startsWith(dist) && !pathname.endsWith("/") ? path : "")
+      const found = file.size > 0 && (await file.exists())
+      return new Response(found ? file : Bun.file(join(dist, "index.html")), {
+        headers: { "cache-control": "no-store" },
+      })
+    },
+  })
+  stopStatic = () => server.stop(true)
+} else {
+  const spawn = (command: string[], cwd: string) => {
+    const child = Bun.spawn(command, { cwd, stdio: ["ignore", "inherit", "inherit"] })
+    children.push(child)
+    return child
+  }
+  const server = spawn(
+    ["bun", "scripts/dev-preview.ts", `--port=${port}`, "--host=0.0.0.0", "--strict-port"],
+    example,
+  )
+  void server.exited.then((code) => {
+    if (code !== 0) console.error(`The dev server stopped (exit ${code}).`)
+    stop(code ?? 1)
+  })
+  if (process.argv.includes("--packages"))
+    spawn(["bunx", "turbo", "watch", "build", `${filter}^...`], root)
+  // Listening, with the first build done, before the addresses are printed.
+  for (let waited = 0; waited < 60_000; waited += 100) {
+    const up = await fetch(`http://127.0.0.1:${port}/__preview/status`).then(
+      (response) => response.ok,
+      () => false,
+    )
+    if (up) break
+    await Bun.sleep(100)
+  }
+}
+
 const status = tailscale("status", "--json")
 const dnsName =
   status?.exitCode === 0
@@ -157,9 +197,14 @@ console.log(`  This machine:  http://localhost:${port}`)
 if (published) console.log(`  Phone (HTTPS): https://${dnsName}:${httpsPort}  (tailnet only)`)
 console.log(`  Plain HTTP:    ${lan.join("  ")}`)
 if (!published) console.log("  Sign-in needs HTTPS or localhost; over plain HTTP it will fail.")
-console.log(`  Screens: ?surface=system | app | emulators | notifications\n`)
+console.log(`  Screens: ?surface=system | app | emulators | notifications`)
+console.log(
+  fixed
+    ? "  Serving the built files: run it again to see a change.\n"
+    : "  Watching: save a file and open tabs update in place.\n",
+)
 
-const stop = () => {
+function stop(code = 0) {
   if (published) tailscale("serve", `--https=${httpsPort}`, "off")
   try {
     if ((JSON.parse(readFileSync(stateFile, "utf8")) as State).pid === process.pid)
@@ -167,8 +212,9 @@ const stop = () => {
   } catch {
     /* Already gone, or a newer run's. */
   }
-  server.stop(true)
-  process.exit(0)
+  for (const child of children) child.kill()
+  stopStatic()
+  process.exit(code)
 }
-process.on("SIGINT", stop)
-process.on("SIGTERM", stop)
+process.on("SIGINT", () => stop())
+process.on("SIGTERM", () => stop())

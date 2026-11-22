@@ -1,6 +1,8 @@
 /**
- * `mockingbird-preview`: the commands a preview workflow runs.
+ * `mockingbird-preview`: the dev loop, and the commands a preview workflow runs.
  *
+ *   mockingbird-preview dev --entry <file> [--port <n>] [--host <name>] [--title <t>]
+ *     [--host-id <id>] [--base <path>]
  *   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
  *     [--state-version <v>]
  *   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
@@ -43,6 +45,8 @@ export type PreviewCliIo = {
 }
 
 const USAGE = `Usage:
+  mockingbird-preview dev --entry <file> [--port <n>] [--host <name>] [--title <text>]
+    [--host-id <id>] [--base <path>]
   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
     [--state-version <v>]
   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
@@ -262,6 +266,39 @@ const wranglerConfig = (args: Args, io: PreviewCliIo): number => {
   return 0
 }
 
+/**
+ * `dev`: serves the preview and rebuilds on save until interrupted. A project whose build needs
+ * esbuild options (plugins, defines) calls `devPreview` from a script of its own instead.
+ */
+const dev = async (args: Args, io: PreviewCliIo): Promise<number> => {
+  only(args, ["entry", "port", "host", "title", "host-id", "base"])
+  const entry = requiredArg(args, "entry")
+  const port = optionalArg(args, "port")
+  if (port !== undefined && !(Number.isInteger(Number(port)) && Number(port) >= 0))
+    throw new UsageError("--port is a port number")
+  const hostname = optionalArg(args, "host")
+  const title = optionalArg(args, "title")
+  const hostId = optionalArg(args, "host-id")
+  const base = optionalArg(args, "base")
+  // Loaded here: esbuild is an optional peer dependency the other commands never need.
+  const { devPreview } = await import("./dev-server.js")
+  const preview = await devPreview({
+    entry,
+    ...(port === undefined ? {} : { port: Number(port) }),
+    ...(hostname === undefined ? {} : { hostname }),
+    ...(title === undefined ? {} : { title }),
+    ...(hostId === undefined ? {} : { hostId }),
+    ...(base === undefined ? {} : { base }),
+    log: io.stdout,
+  })
+  await new Promise<void>((done) => {
+    process.once("SIGINT", done)
+    process.once("SIGTERM", done)
+  })
+  await preview.close()
+  return 0
+}
+
 /** Runs the CLI; resolves with the exit code. */
 export async function runPreviewCli(
   argv: readonly string[],
@@ -288,6 +325,7 @@ export async function runPreviewCli(
     return status(args, io)
   }
   try {
+    if (command === "dev") return await dev(parseArgs(rest), io)
     if (command === "stamp") return await stamp(parseArgs(rest), io)
     if (command === "wrangler-config") return wranglerConfig(parseArgs(rest), io)
     const named =

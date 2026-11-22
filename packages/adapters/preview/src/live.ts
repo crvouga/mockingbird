@@ -102,7 +102,7 @@ export type LivePreviewOptions = {
   versionUrl?: string
   /** Loads and mounts a version; returns its disposer. The boot loader supplies this. */
   load(version: PreviewVersion): Promise<Disposer>
-  /** Auto-apply delay. Default 10 000 ms. */
+  /** Auto-apply delay. Default 10 000 ms. `0` applies a new version as soon as it is live. */
   countdownMs?: number
   /** Persists the auto-update preference under `mockingbird.preview.auto-update`. */
   storage?: Pick<Storage, "getItem" | "setItem">
@@ -360,8 +360,8 @@ export function createLivePreview(options: LivePreviewOptions): LivePreview {
       countdownFor = undefined
       return
     }
-    if (disposer === undefined || doc?.hidden === true) {
-      // Nothing running to interrupt, or nobody watching: apply now.
+    if (disposer === undefined || doc?.hidden === true || countdownMs <= 0) {
+      // Nothing running to interrupt, nobody watching, or no countdown asked for: apply now.
       clear("countdown")
       autoApplyAt = undefined
       countdownFor = undefined
