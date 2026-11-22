@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-ecs
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP AWS ECS Fargate RunTask control-plane emulator. It records task acceptance; it never starts
 containers. Wire contract follows [RunTask](https://docs.aws.amazon.com/AmazonECS/latest/APIReference/API_RunTask.html).

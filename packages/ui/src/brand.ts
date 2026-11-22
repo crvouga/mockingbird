@@ -9,7 +9,7 @@ export const MOCKINGBIRD = {
   icon: "🐦‍⬛",
   tagline: "Local emulators. Real API contracts.",
   docs: "https://mockingbird.chrisvouga.dev",
-  repo: "https://github.com/crvouga-organization/mockingbird",
+  repo: "https://github.com/crvouga/mockingbird",
 } as const
 
 /** The emoji fonts the mark is drawn with, so it is the same bird on every platform that has one. */

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-kill-bill
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful Kill Bill REST emulator for billing integration tests. It models tenant-scoped accounts, payment methods, subscriptions, bundles, invoices, payments, credits, refunds, retries, catalogs, audit metadata, a test clock, account overdue state, and secret-protected lifecycle webhooks.
 

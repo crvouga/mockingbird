@@ -11,8 +11,7 @@ import { root } from "./release/lib.ts"
 
 const servicesDir = join(root, "packages/service")
 const check = process.argv.includes("--check")
-const REPORTING =
-  "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+const REPORTING = "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
 
 type Json = Record<string, unknown>
 type Discovery = {

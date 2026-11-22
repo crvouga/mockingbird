@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-linear
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 GraphQL, OAuth, issues, teams, users, workflow states, comments, labels, projects, cycles, webhooks, agents, inspector. Runs through Mockingbird's portable Fetch runtime with SQLite persistence, namespaces, checkpoints, faults and admin controls.
 

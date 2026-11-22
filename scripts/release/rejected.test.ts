@@ -5,7 +5,7 @@ const alpha = "@crvouga/mockingbird-service-alpha"
 const beta = "@crvouga/mockingbird-service-beta"
 const names = new Set([alpha, beta])
 const report = (name: string) =>
-  `Check its Trusted Publisher (repo crvouga-organization/mockingbird, workflow ci.yml): https://www.npmjs.com/package/${name}/access`
+  `Check its Trusted Publisher (repo crvouga/mockingbird, workflow ci.yml): https://www.npmjs.com/package/${name}/access`
 
 test("only explicit npm publisher rejections select packages for refresh", () => {
   const log = [
@@ -16,6 +16,12 @@ test("only explicit npm publisher rejections select packages for refresh", () =>
   ].join("\n")
   expect([...rejectedPackages(log, names)]).toEqual([alpha])
   expect([...rejectedPackages("build failed before publishing", names)]).toEqual([])
+  expect([
+    ...rejectedPackages(report(beta).replace("repo crvouga/", "repo crvouga-organization/"), names),
+  ]).toEqual([beta])
+  expect([
+    ...rejectedPackages(report(beta).replace("repo crvouga/", "repo other/"), names),
+  ]).toEqual([])
   expect(() => rejectedPackages(report("@other/unrelated"), names)).toThrow(
     "outside the current public catalog",
   )
@@ -58,12 +64,5 @@ test("the latest failed main release supplies the bounded refresh set", async ()
   expect([...result]).toEqual([alpha, beta])
   expect(calls[0]).toContain("ci.yml")
   expect(calls[0]).toContain("main")
-  expect(calls[1]).toEqual([
-    "run",
-    "view",
-    "42",
-    "--repo",
-    "crvouga-organization/mockingbird",
-    "--log-failed",
-  ])
+  expect(calls[1]).toEqual(["run", "view", "42", "--repo", "crvouga/mockingbird", "--log-failed"])
 })

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-cognito
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful local emulator of Amazon Cognito User Pools for the AWS SDK and `amazon-cognito-identity-js`. It implements the authentication, user administration, group, federation (including the hosted UI's `/oauth2/authorize` and `/oauth2/token`), recovery, JWT, discovery, and JWKS surface the consumer app uses without contacting AWS.
 

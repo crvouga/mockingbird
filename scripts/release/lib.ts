@@ -25,7 +25,7 @@ import { join, relative } from "node:path"
 import { $ } from "bun"
 
 export const root = join(import.meta.dir, "../..")
-export const REPO = "crvouga-organization/mockingbird"
+export const REPO = "crvouga/mockingbird"
 /** npm scope/name of the published packages; independent of the GitHub owner. */
 export const NPM_PROJECT = "crvouga/mockingbird"
 export const WORKFLOW_FILE = "ci.yml"
@@ -36,12 +36,12 @@ export const INITIAL_VERSION = "0.1.0"
 export const LEGACY_PACKAGES = [
   {
     name: "@crvouga/postgres-mem",
-    repo: "crvouga-organization/postgres-mem",
+    repo: "crvouga/postgres-mem",
     replacement: "@crvouga/mockingbird-service-postgres",
   },
   {
     name: "@crvouga/sqlite-mem",
-    repo: "crvouga-organization/sqlite-mem",
+    repo: "crvouga/sqlite-mem",
     replacement: "@crvouga/mockingbird-service-sqlite",
   },
 ] as const

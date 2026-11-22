@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-kinesis
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful local emulator of Amazon Kinesis Data Streams. ESM; Node 22+ or Bun 1.2+.
 

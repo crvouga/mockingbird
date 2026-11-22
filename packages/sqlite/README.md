@@ -81,4 +81,4 @@ Types:
 - `@crvouga/mockingbird-service-sqlite`: the default in-memory SQLite engine.
 - `@crvouga/mockingbird-service`: `bootSqlite`, `Collection` and `IdSequence` on top of this port.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

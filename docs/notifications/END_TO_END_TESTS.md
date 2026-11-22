@@ -43,7 +43,7 @@ test("the sign-in code is offered above the keyboard", async ({ page }) => {
 })
 ```
 
-[`e2e/ui.e2e.ts`](https://github.com/crvouga-organization/mockingbird/blob/main/packages/notifications/e2e/ui.e2e.ts) is a complete, passing example with real Twilio, Resend and FCM emulators.
+[`e2e/ui.e2e.ts`](https://github.com/crvouga/mockingbird/blob/main/packages/notifications/e2e/ui.e2e.ts) is a complete, passing example with real Twilio, Resend and FCM emulators.
 
 ## Selectors
 

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-openai
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 A **wip**, portable, entirely local OpenAI emulator for Chat Completions, function tool loops,
 Chat SSE streams, embeddings, models, files and staged uploads. Verified with unmodified

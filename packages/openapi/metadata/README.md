@@ -91,4 +91,4 @@ Exported types: `OperationExtension`, `OperationMetadata`, `SchemaMetadata`, `Re
 - [`@crvouga/mockingbird-canonicalize`](https://www.npmjs.com/package/@crvouga/mockingbird-canonicalize) — consumes these annotations to canonicalize responses.
 - [`@crvouga/mockingbird-parity`](https://www.npmjs.com/package/@crvouga/mockingbird-parity) — differential parity runner.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

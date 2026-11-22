@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-resend
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Resend** email API for test suites. Every send lands in an **outbox**
 that tests read (`GET /__admin/outbox`, and the links in each email). `Idempotency-Key` replays
@@ -9,7 +9,7 @@ return the first send's id. Inbound emails are stored and announced with a Svix-
 attachments. With `--forward-to-inbox`, every sent email is also copied into the
 [Mailosaur emulator](../mailosaur), so one inbox holds every code and link.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/resend/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/resend/SUPPORT.md)
 - `openapi.yaml` is trimmed from Resend's published API reference to what `resend@4.8.0` and
   our backend call.
 
@@ -175,7 +175,7 @@ then the connection dies before any response bytes; the same key replays), `rece
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--webhook-url`, `--webhook-secret`, `--forward-to-inbox`); port 8794. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
 
 ## Forwarding through an injected transport
 

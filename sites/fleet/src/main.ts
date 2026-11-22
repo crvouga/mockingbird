@@ -37,7 +37,7 @@ const unexpected = (stage: string, error: unknown): never =>
       code: "unexpected_startup_error",
       what: `Startup failed while ${stage}`,
       why: error instanceof Error ? (error.stack ?? error.message) : String(error),
-      fix: "This is not a known configuration problem. Report it with this output at https://github.com/crvouga-organization/mockingbird/issues.",
+      fix: "This is not a known configuration problem. Report it with this output at https://github.com/crvouga/mockingbird/issues.",
       env: [],
     },
   ])

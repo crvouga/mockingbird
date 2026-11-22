@@ -20,7 +20,7 @@ import type { WebChallenge } from "./web-auth.ts"
 const github = (overrides: TrustConfig = {}): TrustConfig => ({
   type: "github",
   permissions: ["createPackage"],
-  claims: { repository: "crvouga-organization/mockingbird", workflow_ref: { file: "ci.yml" } },
+  claims: { repository: "crvouga/mockingbird", workflow_ref: { file: "ci.yml" } },
   ...overrides,
 })
 
@@ -35,7 +35,7 @@ describe("publisherGap", () => {
         {
           type: "github",
           file: "ci.yml",
-          repository: "crvouga-organization/mockingbird",
+          repository: "crvouga/mockingbird",
           permissions: ["createPackage"],
         },
       ]),
@@ -48,7 +48,7 @@ describe("publisherGap", () => {
         {
           type: "github",
           claims: {
-            repository: "crvouga-organization/mockingbird",
+            repository: "crvouga/mockingbird",
             workflow_ref: { file: "ci.yml" },
           },
         },
@@ -61,9 +61,8 @@ describe("publisherGap", () => {
       publisherGap(true, [
         github({
           claims: {
-            repository: "crvouga-organization/mockingbird",
-            workflow_ref:
-              "crvouga-organization/mockingbird/.github/workflows/ci.yml@refs/heads/main",
+            repository: "crvouga/mockingbird",
+            workflow_ref: "crvouga/mockingbird/.github/workflows/ci.yml@refs/heads/main",
           },
         }),
       ]),
@@ -81,7 +80,7 @@ describe("publisherGap", () => {
       publisherGap(true, [
         github({
           claims: {
-            repository: "crvouga-organization/mockingbird",
+            repository: "crvouga/mockingbird",
             workflow_ref: { file: "release.yml" },
           },
         }),
@@ -101,7 +100,7 @@ describe("publisherGap", () => {
       publisherGap(true, [
         github({
           claims: {
-            repository: "crvouga-organization/mockingbird",
+            repository: "crvouga/mockingbird",
             workflow_ref: { file: "ci.yml" },
             environment: "release",
           },
@@ -142,7 +141,7 @@ describe("trustedPublisherReport", () => {
         "",
         "trusted publisher — 4 to fix",
         "",
-        "No GitHub Actions publisher for crvouga-organization/mockingbird ci.yml. On the access page add one and allow npm publish. Organization crvouga-organization, repository mockingbird, workflow filename ci.yml, environment empty.",
+        "No GitHub Actions publisher for crvouga/mockingbird ci.yml. On the access page add one and allow npm publish. Organization crvouga, repository mockingbird, workflow filename ci.yml, environment empty.",
         accessUrl("@crvouga/mockingbird-service-fullscript"),
         "",
         "GitHub Actions publisher does not allow npm publish (stage only). On the access page, allow npm publish.",
@@ -262,30 +261,34 @@ describe("repositoryMatchesProject", () => {
   test("accepts this repo's git, https, ssh, and github shorthand forms", () => {
     expect(
       repositoryMatchesProject({
+        url: "git+https://github.com/crvouga/mockingbird.git",
+      }),
+    ).toBe(true)
+    expect(repositoryMatchesProject("https://github.com/crvouga/mockingbird")).toBe(true)
+    expect(repositoryMatchesProject("git@github.com:crvouga/mockingbird.git")).toBe(true)
+    expect(repositoryMatchesProject("git+ssh://git@github.com/crvouga/mockingbird.git")).toBe(true)
+    expect(repositoryMatchesProject("github:crvouga/mockingbird")).toBe(true)
+    expect(
+      repositoryMatchesProject("git+https://github.com/crvouga/mockingbird.git/packages/core"),
+    ).toBe(true)
+  })
+
+  test("accepts the owner the repo used to live under", () => {
+    expect(
+      repositoryMatchesProject({
         url: "git+https://github.com/crvouga-organization/mockingbird.git",
       }),
     ).toBe(true)
-    expect(repositoryMatchesProject("https://github.com/crvouga-organization/mockingbird")).toBe(
-      true,
-    )
-    expect(repositoryMatchesProject("git@github.com:crvouga-organization/mockingbird.git")).toBe(
-      true,
-    )
-    expect(
-      repositoryMatchesProject("git+ssh://git@github.com/crvouga-organization/mockingbird.git"),
-    ).toBe(true)
     expect(repositoryMatchesProject("github:crvouga-organization/mockingbird")).toBe(true)
     expect(
-      repositoryMatchesProject(
-        "git+https://github.com/crvouga-organization/mockingbird.git/packages/core",
-      ),
-    ).toBe(true)
+      repositoryMatchesProject("git+https://github.com/crvouga-organization/postgres-mem.git"),
+    ).toBe(false)
   })
 
   test("rejects another repo, including one that only shares a name prefix", () => {
     expect(
       repositoryMatchesProject({
-        url: "git+https://github.com/crvouga-organization/postgres-mem.git",
+        url: "git+https://github.com/crvouga/postgres-mem.git",
       }),
     ).toBe(false)
     expect(repositoryMatchesProject("git+https://github.com/crvouga/mockingbird-extra.git")).toBe(
@@ -298,7 +301,7 @@ describe("repositoryMatchesProject", () => {
 })
 
 describe("selectProjectPackages", () => {
-  const mockingbird = { url: "git+https://github.com/crvouga-organization/mockingbird.git" }
+  const mockingbird = { url: "git+https://github.com/crvouga/mockingbird.git" }
 
   test("keeps this repo's packages and public workspace packages, and leaves other npm projects out", () => {
     expect(
@@ -308,7 +311,7 @@ describe("selectProjectPackages", () => {
           {
             name: "@crvouga/postgres-mem",
             status: 200,
-            repository: { url: "git+https://github.com/crvouga-organization/postgres-mem.git" },
+            repository: { url: "git+https://github.com/crvouga/postgres-mem.git" },
           },
           { name: "@crvouga/result", status: 404 },
           {
@@ -352,7 +355,7 @@ describe("account package list", () => {
   })
 
   test("reads repository from the packument, then from the latest version", () => {
-    const repository = { url: "git+https://github.com/crvouga-organization/mockingbird.git" }
+    const repository = { url: "git+https://github.com/crvouga/mockingbird.git" }
     expect(packumentRepository({ repository })).toEqual(repository)
     expect(
       packumentRepository({

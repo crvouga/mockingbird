@@ -62,7 +62,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/adapters/preview"
   },
   "mockingbird": {

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-aws-secrets
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of AWS Secrets Manager and SSM Parameter Store for the official AWS SDK v3 clients. It models secret versions and stages, binary values, deterministic rotation, SecureString metadata, parameter versions, denials, decryption failures, and redacted controls without contacting AWS.
 

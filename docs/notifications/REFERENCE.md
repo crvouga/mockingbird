@@ -21,7 +21,7 @@ Every export of `@crvouga/mockingbird-notifications`, and what the harness does 
 | `createServer`, `manifestFile`, `DEFAULT_PORT` (`./server`) | Node | Serve the harness over `node:http`; `manifestFile(path)` re-reads a fleet ready file. Port 8790. |
 | `adminGateway` (`./server`) | Node | The harness's `admin` option: fronts every emulator's admin API and admin UI under `/admin/`. `createServer` passes it by default. |
 
-The package's [README](https://github.com/crvouga-organization/mockingbird/tree/main/packages/notifications#readme) is the same material in one file.
+The package's [README](https://github.com/crvouga/mockingbird/tree/main/packages/notifications#readme) is the same material in one file.
 
 ## Not covered
 

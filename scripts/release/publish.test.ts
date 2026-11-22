@@ -147,7 +147,7 @@ describe("GitHub release retries", () => {
   test("retries the 500 that aborts a seed, and backs off", () => {
     expect(
       isRetryableGitHubError(
-        "HTTP 500 (https://api.github.com/repos/crvouga-organization/mockingbird/releases)",
+        "HTTP 500 (https://api.github.com/repos/crvouga/mockingbird/releases)",
       ),
     ).toBe(true)
     expect(isRetryableGitHubError("You have exceeded a secondary rate limit")).toBe(true)

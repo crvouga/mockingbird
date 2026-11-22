@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-workos
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP WorkOS AuthKit emulator: authorization redirects, single-use codes, signed JWT sessions,
 rotating refresh tokens, user metadata and pagination. Synthetic fixtures only.

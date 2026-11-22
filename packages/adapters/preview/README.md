@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-preview
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Reusable infrastructure for static application previews: a streaming Fetch bridge over MessagePort,
 shared worker lifecycle, verified compressed assets, a Node test adapter, and Cloudflare named
@@ -679,7 +679,7 @@ on:
 permissions: { contents: read, pull-requests: write }
 jobs:
   preview:
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
     with: { name: lab, install: bun install --frozen-lockfile, build: bun run preview:build, outdir: preview-dist }
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

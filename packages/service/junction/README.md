@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-junction
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the [Junction (formerly Vital) API](https://docs.junction.com/): users
 (`/v2/user`), the lab-testing catalog, lab orders (create, cancel, simulate, results,
@@ -18,10 +18,10 @@ cross-suite interference. Serve it as a local origin with one command, or run it
 npx mockingbird-junction serve   # http://127.0.0.1:8787, recorded sandbox corpus loaded
 ```
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/junction/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/SUPPORT.md)
 - Drop-in readiness and the sandbox quirks the emulator mirrors:
-  [docs/drop-in.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/junction/docs/drop-in.md)
-- Behaviour notes: [docs/behavior.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/junction/docs/behavior.md)
+  [docs/drop-in.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/docs/drop-in.md)
+- Behaviour notes: [docs/behavior.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/docs/behavior.md)
 - **What the emulator does not model:** [below](#what-is-and-is-not-modelled). Read it before trusting a
   green suite.
 
@@ -439,7 +439,7 @@ Set `{ labAccountOmissionPolicies: { bioreference: "platform" } }` at runtime cr
 `GET` reads the effective overrides. Overrides are namespace isolated and kept across reset.
 
 Explicit ids naming another lab's account remain accepted, matching the sandbox probe in
-`corpus/lab-account-probes.json` and [#138](https://github.com/crvouga-organization/mockingbird/issues/138).
+`corpus/lab-account-probes.json` and [#138](https://github.com/crvouga/mockingbird/issues/138).
 Delegation alone does not change account selection.
 
 Requisition PDFs are synthetic and contain labelled `Account number:` evidence copied from
@@ -1109,7 +1109,7 @@ bun run parity -- --mode=empty                   # legacy empty-start differenti
 ```
 
 Webhook parity needs a public receiver; see
-[docs/webhook-parity.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/junction/docs/webhook-parity.md).
+[docs/webhook-parity.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/docs/webhook-parity.md).
 
 ## Asynchronous testkit simulation
 
@@ -1126,7 +1126,7 @@ explicitly delayed simulations and unsuccessful requests are not treated as sett
 The USSL testkit result metadata follows the observed sandbox fixture (null specimen dates
 and CLIA `05D2130115`); other laboratories retain their existing metadata behavior.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird) — agent integration guide: [README](https://github.com/crvouga-organization/mockingbird#readme) · [llms.txt](https://github.com/crvouga-organization/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
+Part of [mockingbird](https://github.com/crvouga/mockingbird) — agent integration guide: [README](https://github.com/crvouga/mockingbird#readme) · [llms.txt](https://github.com/crvouga/mockingbird/blob/main/llms.txt) · [report an issue or request a feature](https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md).
 
 ### Lab-account behavior profiles
 
@@ -1138,14 +1138,14 @@ from the public contract, **not measured production parity**. Both `expected-con
 and `sandbox-observed` return the persisted account association in POST/GET; a synthetic
 requisition uses that same stored provider account number.
 
-For [#440](https://github.com/crvouga-organization/mockingbird/issues/440), the scoped account-owned
+For [#440](https://github.com/crvouga/mockingbird/issues/440), the scoped account-owned
 billing control is a **best guess, not oracle-verified**. The reporter observed an explicit
 `client_bill` refusal for a root-selected delegated BioReference account even though its listing
 allowed that billing in AZ. They reported `400 {"detail":"Lab 13 does not support billing type patient_bill_passthrough"}`
 in the sandbox and the same error with `Lab 14` in production, including sandbox panel/add-on,
 home/walk-in and physician-present controls. These are report-derived errors; neither their
 cause nor a general vendor billing rule has been established. The repository's
-[2026-10-20 sanitized probe](https://github.com/crvouga-organization/mockingbird/actions/runs/39397939244)
+[2026-10-20 sanitized probe](https://github.com/crvouga/mockingbird/actions/runs/39397939244)
 could not find matching account/test inventory, recorded no order observations and created no
 user or orders. This evidence limit does not prevent a suite from testing the explicit fallback.
 
@@ -1244,7 +1244,7 @@ The native profile keeps its existing panel-only contract.
 
 ### Explicit NY/NJ customer-account billing (#441)
 
-The positive control for [#441](https://github.com/crvouga-organization/mockingbird/issues/441) is a
+The positive control for [#441](https://github.com/crvouga/mockingbird/issues/441) is a
 **best guess, not oracle-verified**. The reporter observed a non-delegated customer-owned
 BioReference account accepting explicit `client_bill` in NY despite advertising only
 `patient_bill_passthrough` for NY/NJ. The reported POST and independent GET both retained
@@ -1252,7 +1252,7 @@ the requested account ID and `client_bill`. The
 [public billing rules](https://docs.junction.com/lab/overview/lab-accounts#billing-types)
 require the requested billing type and patient state to be listed; they do not establish this
 account-specific exception. The repository's
-[2026-10-20 sandbox probe](https://github.com/crvouga-organization/mockingbird/actions/runs/39397939244)
+[2026-10-20 sandbox probe](https://github.com/crvouga/mockingbird/actions/runs/39397939244)
 returned `complete: false` with `matching account inventory unavailable`, no observations and
 no resources created. No vendor acceptance was verified by that run.
 

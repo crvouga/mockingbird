@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-persona
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of **Persona**'s identity-verification API for test suites: create an inquiry,
 the "reusable inquiry" list lookup, fetch one inquiry, the hosted flow page members are sent
@@ -8,7 +8,7 @@ to, and the `Persona-Signature`-signed events Persona posts back. Inquiries move
 test says so (an admin action or a click on the hosted page), so the Rx consultation's ID
 verification step (flag `rx-id-verification`) runs without a real sandbox or a real selfie.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/persona/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/persona/SUPPORT.md)
 - Persona publishes no OpenAPI document: the contract (`openapi.yaml`) is hand-authored from
   Persona's API reference (JSON:API, `Persona-Version: 2023-01-05`) and our EMR's zod schemas.
 
@@ -157,4 +157,4 @@ reusable lookup 500s; our client fails open and creates), `create_fails`, `not_f
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8815. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

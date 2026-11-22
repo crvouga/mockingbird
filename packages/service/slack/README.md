@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-slack
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of **Slack** for test suites: incoming webhooks, the Web API methods our apps
 call, and the Socket Mode control plane Bolt needs in order to boot, with an **outbox** of
@@ -9,7 +9,7 @@ everything the app "sent". A suite asserts that an alert fired
 retry paths (429 with `retry-after`, 5xx) and the terminal ones (`no_text`, `no_service`,
 `channel_not_found`) with named presets.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/slack/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/slack/SUPPORT.md)
 - Slack publishes no maintained OpenAPI for these methods: the contract (`openapi.yaml`) is
   hand-authored from Slack's documented wire shapes and our consumers.
 
@@ -160,7 +160,7 @@ maps a bot token or a webhook's `T/B/X` path to a namespace.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8808. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
 
 ## Forwarding through an injected transport
 

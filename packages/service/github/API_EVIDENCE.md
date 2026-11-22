@@ -303,7 +303,7 @@ It used26requests, closed its PR and deleted both owned refs, with no failures o
 uncertain writes. Read-only reconciliation again confirmed only unchanged main.
 Both local reports retain their actual outcomes independently.
 
-The checkout-only [oracle instructions](https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/github/oracle) document exact manifests,
+The checkout-only [oracle instructions](https://github.com/crvouga/mockingbird/tree/main/packages/service/github/oracle) document exact manifests,
 ownership receipts, explicit notifications/cleanup grants, credential handling,
 request limits and conservative uncertain-write cleanup. Compared projections do
 not establish full response-schema parity, validation precedence, multi-page live

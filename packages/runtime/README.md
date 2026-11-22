@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-runtime
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 The runtime every Mockingbird emulator service is built on: the router, the `/__admin` API and
 page, snapshots, faults, the clock, and the HTTP and OpenAPI helpers. Each

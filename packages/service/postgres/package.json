@@ -3,7 +3,7 @@
     "mockingbird-postgres": "./dist/wire/cli.js"
   },
   "bugs": {
-    "url": "https://github.com/crvouga-organization/mockingbird/issues"
+    "url": "https://github.com/crvouga/mockingbird/issues"
   },
   "description": "Pure TypeScript in-memory PostgreSQL implementation with zero WASM/native dependencies",
   "devDependencies": {
@@ -80,7 +80,7 @@
     "CHANGELOG.md",
     "DISCOVERY.md"
   ],
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/service/postgres#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/service/postgres#readme",
   "keywords": [
     "mockingbird",
     "postgres",
@@ -124,7 +124,7 @@
         "README.md public test controls",
         "COMPATIBILITY.md compatibility and divergence evidence"
       ],
-      "reporting": "https://github.com/crvouga-organization/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
+      "reporting": "https://github.com/crvouga/mockingbird/blob/main/docs/REPORTING_ISSUES.md"
     }
   },
   "module": "./dist/index.js",
@@ -135,7 +135,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/service/postgres"
   },
   "scripts": {

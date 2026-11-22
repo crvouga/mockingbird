@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-garmin-health
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP Garmin Connect Developer Program Health API emulator for the scheduled-sync flow: OAuth 2.0 with PKCE, the user id, backfill requests (once per type and window), push and ping webhooks delivered to your app, and deregistration, over synthetic data. Garmin's endpoint specification is behind the approved-developer portal, so every wire detail is the contract a real consumer sends and parses (issue #545), not vendor-verified. See [Evidence and best guesses](#evidence-and-best-guesses).
 

@@ -106,7 +106,7 @@ flowchart LR
    permissions: { contents: read, pull-requests: write }
    jobs:
      preview:
-       uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+       uses: crvouga/mockingbird/.github/workflows/preview.yml@main
        with:
          name: my-app
          build: bun scripts/build-preview.ts
@@ -281,8 +281,8 @@ output:
 ```yaml
 jobs:
   preview:
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
-    with: { name: my-app, build: bun run preview:build, outdir: preview-dist, pr-link: false }
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
+    with: { name: my-app, build: bun scripts/build-preview.ts, outdir: preview-dist, pr-link: false }
     secrets: { ... }
   link:
     needs: preview
@@ -298,12 +298,12 @@ jobs:
 only Vercel credentials:
 
 ```yaml
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
     with:
       name: my-app
       hosting: vercel
       host: preview.example.com   # optional: <name>-pr-<n>.preview.example.com; else <name>-pr-<n>.vercel.app
-      build: bun run preview:build
+      build: bun scripts/build-preview.ts
       outdir: preview-dist
     secrets:
       VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
@@ -367,7 +367,7 @@ on:
 permissions: { contents: read, pull-requests: write, deployments: write }
 jobs:
   preview:
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
     with:
       mode: named-previews
       host: preview.example.com
@@ -375,7 +375,7 @@ jobs:
         [{ "name": "app", "worker": "my-app-previews", "build": "bun run build", "outdir": "dist",
            "checks": "scripts/preview-checks.ts" },
          { "name": "storybook", "worker": "my-storybook-previews",
-           "build": "bun run build-storybook", "outdir": "storybook-static" }]
+           "build": "bunx storybook build", "outdir": "storybook-static" }]
     secrets:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-aws
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Combined S3 object storage, SQS queues, IAM identities and STS credentials. Runs through Mockingbird's portable Fetch runtime with SQLite persistence, namespaces, checkpoints, faults and admin controls.
 

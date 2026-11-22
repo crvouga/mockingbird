@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-tavily
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP scripted Tavily search and extraction. No public URLs are fetched. Contract references:
 [Search](https://docs.tavily.com/documentation/api-reference/endpoint/search),
