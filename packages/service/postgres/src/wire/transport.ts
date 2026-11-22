@@ -21,6 +21,7 @@
  */
 import { Database } from "../api/database.ts";
 import type { Snapshot } from "../api/snapshot.ts";
+import { observation, type StatementObserver } from "../runtime/statement-observer.ts";
 import { Cluster, type Session } from "./cluster.ts";
 import { Connection, type ServerFaults, type ServerLog } from "./connection.ts";
 import { Durability, type DurableOptions, type DurableStorage, openImage } from "./durable.ts";
@@ -50,6 +51,16 @@ export type WireServerOptions = {
   onLog?: (entry: ServerLog) => void;
   /** Include extended-protocol parameter values in `onLog` entries. */
   logParams?: boolean;
+  /**
+   * Called after each statement a client ran that took at least `slowStatementMs` (default `0`:
+   * every statement), with its text, duration, row count and error. Parameter values only with
+   * `includeParams`. The duration includes time the statement waited for the engine or a lock.
+   */
+  onStatement?: StatementObserver;
+  /** Threshold for `onStatement`, in milliseconds. */
+  slowStatementMs?: number;
+  /** Include bound parameter values in `onStatement` events. Off by default: they may hold personal data. */
+  includeParams?: boolean;
   /**
    * Database name clients must request in the startup packet. A different name is
    * SQLSTATE `3D000`. Unset accepts any name.
@@ -136,6 +147,7 @@ export const createWireServer = async (options: WireServerOptions = {}): Promise
     throw new Error('createWireServer: auth "scram-sha-256" needs a password');
   }
   const password = auth === "scram-sha-256" ? options.password : undefined;
+  const statementObserved = observation(options);
   // One verifier per role for this server's lifetime, like pg_authid: PBKDF2 once, HMACs per connection.
   const scramCredentials = new ScramCredentialStore();
   const seed = isSnapshot(options.database) ? options.database.open() : (options.database ?? new Database());
@@ -181,6 +193,7 @@ export const createWireServer = async (options: WireServerOptions = {}): Promise
           : {}),
         ...(options.onLog ? { onLog: options.onLog } : {}),
         ...(options.logParams ? { logParams: true } : {}),
+        ...(statementObserved ? { statementObservations: [statementObserved] } : {}),
         addresses,
       });
       connections.add(connection);
@@ -234,5 +247,6 @@ export const createWireServer = async (options: WireServerOptions = {}): Promise
 };
 
 export type { ServerFaults, ServerLog, ServerLogPhase } from "./connection.ts";
+export type { StatementEvent, StatementObserver } from "../runtime/statement-observer.ts";
 export type { ClusterImage, DurableCommit, DurableOptions, DurableStorage } from "./durable.ts";
 export type { ByteStreamPair, ClientStream, DuplexLike } from "./stream.ts";

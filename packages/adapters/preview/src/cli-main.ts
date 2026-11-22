@@ -7,6 +7,8 @@
  *     [--run-url <url>] [--summary <s>] [--message <m>] [--wrangler <cmd>]
  *   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
  *     [--compatibility-date <date>] [--run-worker-first <pattern>]… [--pr <n> --pr-url <url>]
+ *   mockingbird-preview dev --outdir <dir> --build <command> --watch <path>… [--port <n>]
+ *     [--host <name>] [--state-version <v>] [--debounce-ms <ms>]
  *
  * and, for named Previews of one assets-only Worker, deploy-preview, gate-preview, check-preview,
  * remove-preview, sweep, pr-section and deployment (./cli-previews.ts); the asset preflight
@@ -28,6 +30,7 @@ import {
   type PreviewCliDeps,
   PreviewUsageError,
 } from "./cli-previews.js"
+import { createPreviewDevServer } from "./dev-server.js"
 import { PREVIEW_ENV } from "./preview-status.js"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -49,6 +52,8 @@ const USAGE = `Usage:
     [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
     [--compatibility-date <date>] [--run-worker-first <pattern>]... [--pr <n> --pr-url <url>]
+  mockingbird-preview dev --outdir <dir> --build <command> --watch <path>... [--port <n>]
+    [--host <name>] [--state-version <v>] [--debounce-ms <ms>]
 ${PREVIEW_COMMANDS_USAGE}
 ${HOSTING_COMMANDS_USAGE}`
 
@@ -262,6 +267,58 @@ const wranglerConfig = (args: Args, io: PreviewCliIo): number => {
   return 0
 }
 
+/** Serves `--outdir`, rebuilds with `--build` on changes under `--watch`, until interrupted. */
+const dev = async (args: Args, io: PreviewCliIo, signal?: AbortSignal): Promise<number> => {
+  only(args, ["outdir", "build", "watch", "port", "host", "state-version", "debounce-ms"])
+  const watchPaths = args.get("watch") ?? []
+  if (watchPaths.length === 0) throw new UsageError("--watch is required")
+  const integer = (key: string, min: number, max: number) => {
+    const raw = optionalArg(args, key)
+    if (raw === undefined) return undefined
+    const value = Number(raw)
+    if (!Number.isInteger(value) || value < min || value > max)
+      throw new UsageError(`--${key} is an integer from ${min} to ${max}`)
+    return value
+  }
+  const port = integer("port", 0, 65_535) ?? 4173
+  const debounceMs = integer("debounce-ms", 0, 60_000)
+  const hostname = optionalArg(args, "host")
+  const stateVersion = optionalArg(args, "state-version")
+  if (stateVersion === "") throw new UsageError("--state-version needs a value")
+  const server = await createPreviewDevServer({
+    outdir: requiredArg(args, "outdir"),
+    build: requiredArg(args, "build"),
+    watch: watchPaths,
+    port,
+    ...(hostname === undefined ? {} : { hostname }),
+    ...(stateVersion === undefined ? {} : { stateVersion }),
+    ...(debounceMs === undefined ? {} : { debounceMs }),
+    log: io.stdout,
+  })
+  io.stdout(`mockingbird-preview dev: serving ${server.url}`)
+  await server.ready
+  await new Promise<void>((done) => {
+    if (signal) {
+      if (signal.aborted) done()
+      else signal.addEventListener("abort", () => done(), { once: true })
+      return
+    }
+    const signals = process as unknown as {
+      on(name: string, listener: () => void): void
+      off(name: string, listener: () => void): void
+    }
+    const stop = () => {
+      signals.off("SIGINT", stop)
+      signals.off("SIGTERM", stop)
+      done()
+    }
+    signals.on("SIGINT", stop)
+    signals.on("SIGTERM", stop)
+  })
+  await server.close()
+  return 0
+}
+
 /** Runs the CLI; resolves with the exit code. */
 export async function runPreviewCli(
   argv: readonly string[],
@@ -290,6 +347,7 @@ export async function runPreviewCli(
   try {
     if (command === "stamp") return await stamp(parseArgs(rest), io)
     if (command === "wrangler-config") return wranglerConfig(parseArgs(rest), io)
+    if (command === "dev") return await dev(parseArgs(rest), io, deps.signal)
     const named =
       command === undefined ? undefined : (PREVIEW_COMMANDS[command] ?? HOSTING_COMMANDS[command])
     // `--split` is the one flag without a value.

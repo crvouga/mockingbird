@@ -195,7 +195,10 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `esbuild` is a peer dependency), build the static preview (hashed `app-<hash>.js`, `preview.js`,
   `index.html`, `build.json`, a development `version.json`) and stamp `version.json` with the
   commit a deploy ships. See [Building the preview](#building-the-preview).
-- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`; for named Previews
+- `createPreviewDevServer({ outdir, build, watch, … })`, from the `/node` export, and
+  `mockingbird-preview dev` are the local dev loop: serve the built preview, rebuild on every
+  change, and push each build to open tabs. See [Local dev loop](#local-dev-loop).
+- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`, `dev`; for named Previews
   `deploy-preview`, `remove-preview`, `sweep`, `pr-section`, `deployment`) is what the preview
   workflow runs. See [The CLI](#the-cli).
 - `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
@@ -227,16 +230,22 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `freshnessFromLaunch(launch, current)` read, write, serve and derive the status document
   (`FRESHNESS_STATUS_PATH`, served with `FRESHNESS_HEADERS`). `documentVisibility()` is the
   default page visibility. See [Freshness](#freshness).
-- `createBackendHost({ backends, drainMs? })`, `backendControlHandler(host, { path?, importBackend? })`
-  and `backendControls(fetch, { url?, pollMs? })`: lazy, swappable in-tab backends and emulators,
+- `createBackendHost({ backends, drainMs?, strategy?, importBackend? })`,
+  `backendControlHandler(host, { path?, importBackend? })` and
+  `backendControls(fetch, { url?, pollMs? })`: lazy, swappable in-tab backends and emulators,
   their control routes, and the tab's client; `PreviewBackendDrainError` and
-  `PreviewBackendUpdateError` are their typed failures. See [System parts](#system-parts).
+  `PreviewBackendUpdateError` are their typed failures. `host.replace(id, codeOrUrl)` swaps one
+  app server, by boot function or module URL (`importPreviewBackend(url)`, the default loader,
+  imports it natively). See [System parts](#system-parts) and
+  [Replacing one app server](#replacing-one-app-server).
 - `PreviewLoadManifest`, `parsePreviewLoadManifest`, `PREVIEW_LOAD_MANIFEST`, `gzipSize`,
   `checkPartBudgets`, `formatPartSizes`, `PreviewPartBudgetError`, `partUpdatesResponse` and
   `followPartUpdates`: the load manifest (`parts.json`, what the shell reads to load each part),
   its size budgets and its update stream. `buildPreviewParts`, `buildPreviewPartSet` and
   `watchPreviewParts`, from the `/node` export (`esbuild` is a peer dependency, loaded on first
-  use), build the content-addressed parts and the load manifest and run the dev loop.
+  use), build the content-addressed parts and the load manifest and run the dev loop; with
+  `dependencies: "shared"` they put `node_modules` code into one dependency part
+  (`PREVIEW_SHARED_DEPS_PART`), see [Shared dependencies](#shared-dependencies).
   `acceptPreviewFrame()` connects an iframe app to the bridge.
 - `loadSplitPreviewFile(url, { fetch?, signal? })` loads a file the asset preflight split into
   parts (`<file>.part-NNN` next to `<file>.parts.json`, `PREVIEW_SPLIT_MANIFEST_SUFFIX`), verifying
@@ -296,7 +305,9 @@ await buildPreviewParts({
   failed boot answers 503 `preview_backend_failed` and is retried on the next request. Pass the
   host's `fetch` as the system a `createPreviewHost` boot returns. An emulator is a backend whose
   `boot` creates its runtime, so it too is created on the first request to its host.
-- **Swapping a backend.** `replace(id, boot, { drainMs })` boots the new code beside the old one.
+- **Swapping a backend.** `replace(id, boot, { drainMs })` boots the new code beside the old one
+  (`boot` may also be a module URL, and `strategy: "stop-first"` makes requests wait instead; see
+  [Replacing one app server](#replacing-one-app-server)).
   Once it is ready, new requests go to it, and requests already running on the old one (until
   their response body is read or cancelled) finish there. After `drainMs` (default 10 s) the
   remaining ones fail with `PreviewBackendDrainError` (code `preview_backend_drained`) and the old
@@ -317,6 +328,105 @@ await buildPreviewParts({
 - **Iframe apps.** Inside an iframe app, `await acceptPreviewFrame()` waits for the shell's
   connect message (only from `parent`, and from `origin` when given) and returns a `fetch` over
   the same bridge inline apps use.
+
+### Replacing one app server
+
+A browser-hosted system keeps its services (database, Redis, emulators) long-lived and treats each
+app server as a module the runtime can stop and load again. Declare each as a backend of one
+`createBackendHost`, and replace one by the URL of its new module:
+
+```ts
+import { createBackendHost, importPreviewBackend } from "@crvouga/mockingbird-preview"
+
+declare const database: (request: Request) => Promise<Response> // your in-tab database emulator
+
+const system = createBackendHost({
+  backends: {
+    db: { kind: "emulator", match: "db.internal", boot: () => ({ fetch: database }) },
+    backend: {
+      match: "api.internal",
+      boot: async (context) => (await importPreviewBackend("/parts/backend-api/v1/index.js"))(context),
+    },
+    admin: {
+      match: "admin.internal",
+      boot: async (context) => (await importPreviewBackend("/parts/backend-admin/v1/index.js"))(context),
+    },
+  },
+})
+
+// A rebuild emitted the backend's new module: only that server changes.
+await system.replace("backend", "/parts/backend-api/v2/index.js")
+```
+
+- **What a module exports.** `boot` (or a default export): the `PreviewBackendBoot` that starts
+  the server and returns its `{ fetch, dispose? }`. `importPreviewBackend(url)` loads it with the
+  native `import()`, never by evaluating fetched source, so the browser's module and
+  compiled-code caches apply. Pass `importBackend` to `createBackendHost` to load modules another
+  way; a module that exports no boot function is refused with `PreviewBackendUpdateError`.
+- **What stays up.** Every other backend (the database, the emulators, the other app servers)
+  keeps its generation, its state and its in-flight requests; nothing is exported or restored.
+- **Requests during the swap.** With the default `strategy: "side-by-side"` the new module boots
+  beside the running one, which keeps answering until the new one is ready; requests already
+  running finish on the old one (within `drainMs`). With `strategy: "stop-first"` (per host or
+  per `replace`), for a server that cannot run twice, requests to that server wait: the old one
+  drains and is disposed, the new one boots, then the waiting requests are served by it. Neither
+  fails a request because of the swap. If the new module fails to load or boot, the old code keeps
+  (or, with stop-first, goes back to) serving and `replace` rejects with
+  `PreviewBackendUpdateError`.
+- **From the tab.** When the backends run in a worker, `backendControlHandler(host, {
+  importBackend })` exposes `POST {"replace": id, "entry": url}` and `backendControls(fetch)
+  .replace(id, { entry })` calls it; the System screen's part updates (`followPartUpdates`) use
+  that path for each backend whose pin changed. The handler only imports modules when it is given
+  `importBackend` (otherwise 501), so pass one that accepts only your own part URLs.
+
+`backends.test.ts` ("#899") runs this end to end: a database emulator and two app servers loaded
+from module URLs, one replaced while a request to it is in flight and others arrive, with the
+database rows, the other server's in-memory state and its generation unchanged.
+
+### Shared dependencies
+
+`buildPreviewParts`, `buildPreviewPartSet` and `watchPreviewParts` take `dependencies:
+"shared"`. Every module a part imports from `node_modules` is then built once into the dependency
+part, `parts/shared-deps/<pin>/` (`PREVIEW_SHARED_DEPS_PART`, listed as `dependencies` in
+`parts.json` and returned with the other parts for a deploy), one ES module per imported
+dependency module plus the chunks they share. Each part imports those by relative URL:
+
+```ts
+import { watchPreviewParts } from "@crvouga/mockingbird-preview/node"
+
+const watcher = watchPreviewParts({
+  parts: [],
+  backends: { api: "servers/api/main.ts", admin: "servers/admin/main.ts" },
+  outdir: "preview-dist",
+  dependencies: "shared",
+})
+await watcher.ready
+```
+
+- **What it buys.** A part's build reads only its own sources, so editing one server rebuilds and
+  re-emits only that server's part (the dependency part keeps its pin), and the unchanged
+  dependency modules keep their URLs, so the browser reuses its cached and compiled copies on
+  every later rebuild and visit. Two servers that use one dependency share one instance of it (as
+  they would in one Node process).
+- **When the set changes.** A part that starts importing a dependency module the part does not
+  serve yet makes a new dependency part (the old modules plus the new one), and every part is
+  rebuilt to import its new pin. Dependencies no longer used are dropped on the next full build.
+- **CommonJS.** An ES module imported with `import` stays a native `import` of its URL (named
+  exports, live bindings). A CommonJS module (or anything reached with `require()`) is imported by
+  the part's banner before its own code runs and read through a registry on `globalThis`
+  (`__mockingbirdSharedDeps`), with esbuild's usual CommonJS interop; such a module therefore
+  evaluates when the part loads rather than at its first `require()`.
+- **Limits.** Only files under a `node_modules` directory are shared: workspace packages linked
+  outside it are bundled into each part as app code. A dependency resolves to one file for all
+  parts: the dependency part is built from the files the parts resolved. Files an esbuild `inject`
+  option names are still copied into each part (their own `node_modules` imports are shared), so
+  keep per-instance state out of them. Non-script imports from `node_modules` (CSS, assets) stay
+  in each part. The part's `entry` must be imported by URL (as `mountSystem` does), since its
+  imports are relative to it.
+
+`shared-deps.test.ts` covers an ES module and a CommonJS dependency shared by two servers (state
+shared, code absent from the servers' parts), the dev loop rebuilding only the edited server, and a
+new dependency moving every part to a new dependency part.
 
 ## Shared app parts
 
@@ -804,7 +914,11 @@ mockingbird-preview status --worker <name> --kind build|checks --state <state> -
   [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
 mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>] \
   [--compatibility-date <date>] [--run-worker-first <pattern>]... [--pr <n> --pr-url <url>] > wrangler.json
+mockingbird-preview dev --outdir <dir> --build <command> --watch <path>... [--port <n>] \
+  [--host <name>] [--state-version <v>] [--debounce-ms <ms>]
 ```
+
+`dev` runs until interrupted; see [Local dev loop](#local-dev-loop).
 
 `status` writes `{ "PREVIEW_BUILD" | "PREVIEW_CHECKS": "<json>" }` to a 0600 temporary file, runs
 `<wrangler> secret bulk <file> --name <worker>` (`--wrangler` defaults to `bunx wrangler@4.50.0`)
@@ -983,6 +1097,112 @@ version). A lazy chunk that fails to load (`Failed to fetch dynamically imported
 `ChunkLoadError`, …) means the tab's build was replaced: the client checks `/version.json` and
 applies the new build at once. If the first mount fails, `start()` still connects and then
 rejects, so a fixed build replaces the broken one as soon as it deploys.
+
+### Wiring it into `mountSystemHarness`
+
+When the apps are surfaces of `mountSystemHarness` (from `@crvouga/mockingbird-ui/system`) that
+keep running, the harness, not `load`, owns them. Mount the harness once, outside `load`, and let
+`load` decide what a new version means: `load(current)` is a no-op (the page that booted is
+already that version), and `load(next)` either reloads the page or swaps just the surfaces whose
+code changed with `harness.update(...)`:
+
+```ts
+import { createLivePreview, type PreviewVersion } from "@crvouga/mockingbird-preview"
+import { mountSystemHarness, type SystemSurface } from "@crvouga/mockingbird-ui/system"
+
+declare const surfaces: SystemSurface[] // your apps, each with `mount(host, signal)`
+
+const current = (await (await fetch("/version.json", { cache: "no-store" })).json()) as PreviewVersion
+const live = createLivePreview({
+  current,
+  storage: localStorage,
+  load: async (version) => {
+    // The page that booted is `current`: nothing to load, and nothing to dispose.
+    if (version.version === current.version) return () => {}
+    // A new build. Either reload: the page boots the new version.json (the tab's data survives
+    // when it lives in storage the build does not reset, see `stateVersion`) ...
+    // location.reload()
+    // ... or swap only the surfaces in place, keeping the others mounted and their state:
+    const next = (await import(new URL(version.entry, location.href).href)) as {
+      surfaces: Record<string, NonNullable<SystemSurface["mount"]>>
+    }
+    await Promise.all(
+      Object.entries(next.surfaces).map(([id, mount]) =>
+        harness.update(id, { mount, version: version.version }),
+      ),
+    )
+    return () => {}
+  },
+})
+const harness = mountSystemHarness(document.getElementById("app") as HTMLElement, surfaces, {
+  build: live,
+})
+await live.start()
+```
+
+`start()` calls `load(current)` (the no-op) and connects; each later `applyUpdate()` (the
+countdown, the toast's Update, or at once from a dev server) calls `load(next)`. The disposer
+`load` returns runs before the following `load`, so return one only for what `load` itself
+mounted; the harness's surfaces are disposed by `harness.update` (one surface) or
+`harness.destroy()`. A version whose `stateVersion` changed is never applied on its own: the
+toast offers it with `update.resetsData`.
+
+### Local dev loop
+
+`mockingbird-preview dev` (or `createPreviewDevServer` from the `/node` export) is the dev loop
+for a browser-hosted system: it serves the built preview, watches your sources, runs your build
+on every change, and pushes the new build to every open tab over the same `/__preview/live`
+stream `createLivePreview` reads. The System screen shows `connection: "live"`, and no consumer
+writes a poll loop.
+
+```sh
+mockingbird-preview dev --outdir preview-dist --build "bun run build:preview" --watch src \
+  [--watch servers]... [--port 4173] [--host 127.0.0.1] [--state-version <v>] [--debounce-ms 100]
+```
+
+```ts
+import { buildPreview } from "@crvouga/mockingbird-preview/build"
+import { createPreviewDevServer } from "@crvouga/mockingbird-preview/node"
+
+const server = await createPreviewDevServer({
+  outdir: "preview-dist",
+  // A function, a command line (run through the shell) or an argv.
+  build: () => buildPreview({ entry: "src/app.ts", outdir: "preview-dist" }),
+  watch: ["src"],
+  port: 4173,
+})
+await server.ready
+console.log(`open ${server.url}`)
+```
+
+- **Builds.** The first build runs before `ready` resolves. A change under `watch` (directories
+  are watched recursively; `node_modules`, `.git` and `outdir` never trigger one, override with
+  `ignore`) starts a build after `debounceMs` (100 ms); changes during a build collect into the
+  next one. After each successful build the server stamps `version.json` with a new
+  `dev-<session>-<n>` version and the entry `build.json` (or the built `version.json`) names.
+  A failed build is reported (`build.state: "failed"` with its message on the System screen) and
+  the last good build keeps serving. `rebuild()` builds now; `builds()` lists every build.
+- **Pushing.** `GET /__preview/live` sends a snapshot at once and on every change (building,
+  built, failed) with `dev: true`; `GET /__preview/status` answers the same snapshot. A
+  `createLivePreview` that receives `dev: true` applies each new build at once, without the
+  countdown or a click (`bootPreview` does this with no change).
+- **The tab's data.** `stateVersion` (default: what the built `version.json` names; `--state-version`
+  or a function to compute it) is the data identity apart from the code identity: while it is
+  unchanged every build applies and the tab keeps its state; when it changes the update is
+  offered (`update.resetsData`) and never applied on its own, as in a deployed preview.
+- **Serving.** Files come from `outdir` with a single-page-application fallback to `index.html`
+  for extensionless paths. Every file is revalidated (`cache-control: no-cache` and an `ETag`),
+  so a rebuilt file is never stale and an unchanged one answers 304 and keeps the browser's
+  caches; `version.json` is `no-store`. `handle(request)` adds routes in front (for example
+  `partUpdatesResponse(watcher)` for part updates, or the dev proxy).
+- **With parts.** For a system of parts, run `watchPreviewParts` (with `dependencies: "shared"`)
+  as the build-and-watch half and serve its updates with `handle`; changed backends are swapped in
+  the running worker with `replace` (see [Replacing one app server](#replacing-one-app-server))
+  instead of a new version of the whole tab.
+
+`dev-server.test.ts` drives the loop end to end against `createLivePreview`: a file change, a new
+build pushed over `/live`, applied at once with `connection: "live"`; a `stateVersion` change
+offered and not applied; failed builds; and the CLI.
 
 ## On-demand previews
 

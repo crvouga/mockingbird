@@ -12,9 +12,13 @@ import {
   fixedClock,
   type Int8Mode,
   OsEntropy,
+  notifyStatement,
+  observation,
   Prng,
   type RandomMode,
   resolveClock,
+  type StatementObservation,
+  type StatementObserver,
 } from "../runtime/index.ts";
 import type { EngineFaults, FunctionData } from "../storage/database-state.ts";
 import { DatabaseState } from "../storage/database-state.ts";
@@ -120,6 +124,8 @@ export class Database {
   readonly timeline: Timeline<Snapshot>;
   private historyBranch = "main";
   private originId = "";
+  /** @internal Statement observers ({@link observeStatements}); empty means statements are not timed. */
+  statementObservations: readonly StatementObservation[] = [];
 
   constructor(options: DatabaseOptions = {}) {
     if (isAdopted(options)) {
@@ -154,6 +160,34 @@ export class Database {
     const origin = this.timeline.commit(this.captureLive());
     this.originId = origin.id;
     this.timeline.retain(origin.id);
+    if (!isAdopted(options)) {
+      const observed = observation(options);
+      if (observed) this.statementObservations = [observed];
+    }
+  }
+
+  /**
+   * Report statements run on this database to `observer` after each one finishes (see
+   * {@link DatabaseOptions.onStatement}). Several observers may watch one database, each with its
+   * own threshold. Branches and snapshots opened from it do not inherit observers.
+   * Returns a function that stops the reports.
+   *
+   * @example
+   * ```ts
+   * const stop = db.observeStatements(({ sql, durationMs }) => console.warn(`${durationMs} ms: ${sql}`), {
+   *   slowStatementMs: 250,
+   * });
+   * ```
+   */
+  observeStatements(
+    observer: StatementObserver,
+    options: { slowStatementMs?: number; includeParams?: boolean } = {},
+  ): () => void {
+    const observed = observation({ ...options, onStatement: observer })!;
+    this.statementObservations = [...this.statementObservations, observed];
+    return () => {
+      this.statementObservations = this.statementObservations.filter((o) => o !== observed);
+    };
   }
 
   /**
@@ -420,9 +454,24 @@ export class Database {
       throw pgError("misuse", "copyFrom() requires a single COPY ... FROM STDIN statement", "XX000");
     }
     this.durabilityObserver?.assertWritable();
+    const observers = this.statementObservations;
+    const started = observers.length > 0 ? performance.now() : 0;
     try {
       const env: ExecEnv = { ctx: new EngineCtx(this.engineState), params: null, ctes: new Map(), outer: null };
-      return executeCopyFromData(env, stmt, data).rowCount;
+      const rows = executeCopyFromData(env, stmt, data).rowCount;
+      if (observers.length > 0) {
+        notifyStatement(
+          observers,
+          { sql: sql.trim(), durationMs: performance.now() - started, rows, command: "COPY" },
+          [],
+        );
+      }
+      return rows;
+    } catch (error) {
+      if (observers.length > 0) {
+        notifyStatement(observers, { sql: sql.trim(), durationMs: performance.now() - started, rows: 0, error }, []);
+      }
+      throw error;
     } finally {
       this.durabilityObserver?.changed();
     }

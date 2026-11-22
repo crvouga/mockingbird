@@ -126,6 +126,12 @@ export interface ScopeExtras {
   groupingValue?: (e: Expr) => TypedValue | undefined;
   /** grouped context: bare column refs that survive overrides are errors */
   strictGrouping?: boolean;
+  /**
+   * The expression is evaluated against an all-NULL probe row only for its type (plan-time checks,
+   * the output types of a query with no rows). An EXISTS is bool whatever it finds, so its subquery
+   * is analysed over empty relations instead of being run (#897).
+   */
+  typeProbe?: boolean;
 }
 
 export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: ScopeExtras): EvalScope {
@@ -176,6 +182,10 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
       return tv(t === UNKNOWN ? "text" : t, rel.rows[0]?.[0] ?? null);
     },
     execExistsSubquery(q) {
+      if (extras?.typeProbe) {
+        executeSelectStmt({ ...childEnv(env, scope), shapeOnly: true }, q);
+        return false;
+      }
       return subqueryExists(env, scope, q);
     },
     execColumnSubquery(q, width = 1) {
@@ -225,7 +235,8 @@ export function makeEvalScope(env: ExecEnv, scope: RowScope | null, extras?: Sco
  * outer row (and calls nothing volatile) is run once and its relation reused for every later row.
  */
 function subqueryRelation(env: ExecEnv, scope: RowScope | null, q: SelectStmt): Relation {
-  const cache = activeStatementCache(env.ctx.state, env.stmtCache);
+  // a shape-only run sees empty relations: nothing it computes may be memoized for real runs
+  const cache = env.shapeOnly ? null : activeStatementCache(env.ctx.state, env.stmtCache);
   if (!cache) return executeSelectStmt(childEnv(env, scope), q);
   const plans = plansFor(cache, env.ctes);
   const plan = plans.get(q);
@@ -242,7 +253,7 @@ function subqueryRelation(env: ExecEnv, scope: RowScope | null, q: SelectStmt): 
 
 /** EXISTS (q) for one outer row: a hash probe when q is an equality-correlated semi join, else q's rows. */
 function subqueryExists(env: ExecEnv, scope: RowScope | null, q: SelectStmt): boolean {
-  const cache = activeStatementCache(env.ctx.state, env.stmtCache);
+  const cache = env.shapeOnly ? null : activeStatementCache(env.ctx.state, env.stmtCache);
   if (cache) {
     const plans = plansFor(cache, env.ctes);
     let plan = plans.get(q);
@@ -947,7 +958,15 @@ function renameWithAliases(rel: Relation, label: string | null, colAliases: stri
   return { columns, rows: rel.rows };
 }
 
-function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, shapeOnly = false): Source {
+function materializeItem(
+  env: ExecEnv,
+  item: FromItem,
+  scope: RowScope | null,
+  shapeOnly0 = false,
+  /** the WHERE of a query whose whole FROM is this item: a join may filter its inputs by it */
+  where: Expr | null = null,
+): Source {
+  const shapeOnly = shapeOnly0 || env.shapeOnly === true;
   switch (item.type) {
     case "from_table": {
       const label = item.alias ?? item.name[item.name.length - 1]!;
@@ -1000,7 +1019,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
           }
           rel = {
             columns: view.matColumns.map((c) => ({ name: c.name, type: c.type, table: label })),
-            rows: view.matRows ?? [],
+            rows: shapeOnly ? [] : (view.matRows ?? []),
           };
         } else {
           const viewEnv: ExecEnv = {
@@ -1010,6 +1029,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
             outer: null,
             allowUnpopulatedMatviews: env.allowUnpopulatedMatviews,
             stmtCache: env.stmtCache,
+            ...(shapeOnly ? { shapeOnly: true } : {}),
           };
           rel = executeSelectStmt(viewEnv, view.query);
           rel = {
@@ -1027,7 +1047,8 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
       if (resolved) {
         const cat = statementCatalogRelation(env, resolved.schema, resolved.name);
         if (cat) {
-          return { rel: renameWithAliases(cat, label, item.colAliases, label), rangeVars: new Set([label]) };
+          const rel = shapeOnly ? { columns: cat.columns, rows: [] } : cat;
+          return { rel: renameWithAliases(rel, label, item.colAliases, label), rangeVars: new Set([label]) };
         }
       }
       throw pgError("undefined_table", `relation "${item.name.join(".")}" does not exist`, "42P01");
@@ -1041,7 +1062,7 @@ function materializeItem(env: ExecEnv, item: FromItem, scope: RowScope | null, s
     case "from_func":
       return materializeFunc(env, item, scope);
     case "from_join": {
-      return joinSource(env, item, scope);
+      return joinSource(env, item, scope, where);
     }
     case "from_json_table": {
       const rel = shapeOnly
@@ -1175,8 +1196,99 @@ function isLateralItem(item: FromItem): boolean {
   }
 }
 
-function joinSource(env: ExecEnv, join: Extract<FromItem, { type: "from_join" }>, scope: RowScope | null): Source {
-  const left = materializeItem(env, join.left, scope);
+// ---------------------------------------------------------------------------
+// predicate pushdown (#897)
+// ---------------------------------------------------------------------------
+
+/**
+ * Which of `sources` a conjunct reads, when it reads exactly one of them: every column it names
+ * resolves in that source alone, and anything else it names is an outer (correlated) column, a
+ * parameter or a constant. Null when it reads several, none, or holds anything that cannot be
+ * evaluated against one source's rows on its own (subqueries, `*`, aggregates, volatile calls).
+ */
+function soleSourceOf(env: ExecEnv, conj: Expr, sources: Source[]): number | null {
+  const refs = keyColumnRefs(conj);
+  if (!refs || refs.length === 0) return null;
+  if (mayBeVolatile(env.ctx.state, conj)) return null;
+  const probes = sources.map(
+    (s) =>
+      new RowScope(
+        s.rel.columns,
+        s.rel.columns.map(() => null),
+        null,
+        s.rangeVars,
+      ),
+  );
+  let sole: number | null = null;
+  for (const parts of refs) {
+    let hit: number | null = null;
+    for (let k = 0; k < sources.length; k++) {
+      let found: boolean;
+      try {
+        found = probes[k]!.lookup(parts) !== undefined;
+      } catch {
+        return null; // ambiguous within one source
+      }
+      if (!found) continue;
+      if (hit !== null) return null; // the same name in two sources
+      hit = k;
+    }
+    if (hit === null) {
+      // an outer column, unless it names one of these range variables (a column that is not there)
+      const qualifier = parts.length >= 2 ? parts[parts.length - 2]! : parts[0]!;
+      if (sources.some((s) => s.rangeVars.has(qualifier))) return null;
+      continue;
+    }
+    if (sole !== null && sole !== hit) return null;
+    sole = hit;
+  }
+  return sole;
+}
+
+/**
+ * Keep only the rows of `src` that pass every conjunct, which read nothing but `src` (and outer
+ * columns): a hash lookup on a memoized catalog when one is an equality, else one pass. Only a
+ * pre-filter (the caller still applies the whole predicate to the joined rows), so if a conjunct
+ * fails on a row the joined rows might never have reached, the source is left as it was and the
+ * statement raises whatever it raised before.
+ */
+function prefilterSource(env: ExecEnv, src: Source, conjs: Expr[], kind: string): Source {
+  if (conjs.length === 0 || src.rel.rows.length === 0) return src;
+  const pred = conjs.reduce((acc, c) => ({ type: "binop", op: "and", left: acc, right: c }) as Expr);
+  const { columns, rows } = src.rel;
+  try {
+    const candidates = catalogKeyCandidates(env, pred, columns, src.rangeVars, rows) ?? rows;
+    const kept = candidates.filter((row) =>
+      evalPredicate(env, new RowScope(columns, row, env.outer, src.rangeVars), pred, undefined, kind),
+    );
+    return { rel: { columns, rows: kept }, rangeVars: src.rangeVars };
+  } catch {
+    return src;
+  }
+}
+
+/**
+ * Push conjuncts that read one source down to that source before the sources are paired, so a join
+ * pairs filtered inputs instead of filtering the product. `allowed[k]` is false for the
+ * null-extended side of an outer join, whose rows must not be removed before matching.
+ */
+function pushDownConjuncts(env: ExecEnv, sources: Source[], conjs: Expr[], allowed: boolean[], kind: string): Source[] {
+  if (conjs.length === 0 || sources.some((s) => s.rel.rows.length === 0)) return sources;
+  const perSource: Expr[][] = sources.map(() => []);
+  for (const c of conjs) {
+    const k = soleSourceOf(env, c, sources);
+    if (k !== null && allowed[k]) perSource[k]!.push(c);
+  }
+  return sources.map((s, k) => prefilterSource(env, s, perSource[k]!, kind));
+}
+
+function joinSource(
+  env: ExecEnv,
+  join: Extract<FromItem, { type: "from_join" }>,
+  scope: RowScope | null,
+  where: Expr | null = null,
+): Source {
+  let left = materializeItem(env, join.left, scope);
 
   let usingCols: string[] | null = join.using;
   const kind = join.kind;
@@ -1205,8 +1317,28 @@ function joinSource(env: ExecEnv, join: Extract<FromItem, { type: "from_join" }>
     combineJoin(env, kind, left.rel, rightSrc.rel, join.on, usingCols, join.usingAlias, rangeVars);
 
   if (!rightIsLateral) {
-    const r = right ?? buildRight(null);
+    let r = right ?? buildRight(null);
     for (const rv of r.rangeVars) rangeVars.add(rv);
+    if (!usingCols?.length && !join.natural && !join.usingAlias) {
+      // ON conjuncts may filter the side whose unmatched rows are dropped; WHERE conjuncts the side
+      // whose rows are never null-extended. An inner join is both for both sides.
+      const onLeft = kind === "inner" || kind === "right";
+      const onRight = kind === "inner" || kind === "left";
+      const whereLeft = kind === "inner" || kind === "cross" || kind === "left";
+      const whereRight = kind === "inner" || kind === "cross" || kind === "right";
+      if (join.on && (onLeft || onRight)) {
+        [left, r] = pushDownConjuncts(env, [left, r], conjunctions(join.on), [onLeft, onRight], "ON") as [
+          Source,
+          Source,
+        ];
+      }
+      if (where && (whereLeft || whereRight)) {
+        [left, r] = pushDownConjuncts(env, [left, r], conjunctions(where), [whereLeft, whereRight], "WHERE") as [
+          Source,
+          Source,
+        ];
+      }
+    }
     return { rel: combine(r), rangeVars };
   }
 
@@ -1543,10 +1675,27 @@ export function buildFrom(env: ExecEnv, items: FromItem[], where: Expr | null = 
   if (items.length === 0) {
     return { rel: { columns: [], rows: [[]] }, rangeVars: new Set() };
   }
+  if (items.length === 1) return materializeItem(env, items[0]!, env.outer, false, where);
+  // a comma list without LATERAL is an inner join of every item: WHERE conjuncts that read one item
+  // filter it before it is paired with the others (#897)
+  const pushed =
+    where && !items.some(isLateralItem)
+      ? (() => {
+          const sources = items.map((item) => materializeItem(env, item, env.outer));
+          return pushDownConjuncts(
+            env,
+            sources,
+            conjunctions(where),
+            sources.map(() => true),
+            "WHERE",
+          );
+        })()
+      : null;
   let acc: Source | null = null;
-  for (const item of items) {
+  for (let index = 0; index < items.length; index++) {
+    const item = items[index]!;
     if (acc === null) {
-      acc = materializeItem(env, item, env.outer);
+      acc = pushed?.[index] ?? materializeItem(env, item, env.outer);
       continue;
     }
     const accRel: Relation = acc.rel;
@@ -1581,7 +1730,7 @@ export function buildFrom(env: ExecEnv, items: FromItem[], where: Expr | null = 
       }
       acc = { rel: { columns: cols, rows }, rangeVars: vars };
     } else {
-      const src = materializeItem(env, item, env.outer);
+      const src = pushed?.[index] ?? materializeItem(env, item, env.outer);
       const rangeVars = new Set([...accVars, ...src.rangeVars]);
       const eq = where ? extractOnEquijoinKeys(where, accRel, src.rel) : null;
       if (eq) {
@@ -2606,7 +2755,7 @@ function checkPredicateType(
     env.outer,
     rangeVars,
   );
-  checkBoolExprType(env.ctx, makeEvalScope(env, probe, extras), e, kind);
+  checkBoolExprType(env.ctx, makeEvalScope(env, probe, { ...extras, typeProbe: true }), e, kind);
 }
 
 export function executeCore(
@@ -3053,9 +3202,10 @@ export function executeCore(
     for (const agg of collector.aggs) {
       probeAggs.set(agg, computeAggregate(env, agg, [], probeScope));
     }
-    const probeExtras = {
+    const probeExtras: ScopeExtras = {
       aggMap: probeAggs,
       windowAt: () => tv(UNKNOWN, null),
+      typeProbe: true,
     };
     const probeType = (expr: Expr): TypeId => {
       if (expr.type === "cast") {

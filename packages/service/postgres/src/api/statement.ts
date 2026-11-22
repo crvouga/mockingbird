@@ -1,7 +1,9 @@
 import type { Statement as AstStatement } from "../ast/nodes.ts";
 import { pgError } from "../errors/error.ts";
 import { executeStatement } from "../executor/execute.ts";
+import { notifyStatement } from "../runtime/statement-observer.ts";
 import { withStatementTimeout } from "../runtime/statement-timeout.ts";
+import { splitStatements } from "../sql/split.ts";
 import { refusedInTransactionBlock } from "../executor/maintenance.ts";
 import { runOnCommitActions } from "../executor/on-commit.ts";
 import type { ExecEnv, ExecResult } from "../executor/relation.ts";
@@ -155,8 +157,13 @@ export class Statement {
     // current_query(): the text the client sent, for every statement of it (a host function's nested query restores it)
     const outerQuery = state.currentQuery;
     state.currentQuery = this.sql;
+    // statement observers (#898): nothing is timed unless one is registered
+    const observers = this.database.statementObservations;
+    const texts = observers.length > 0 ? this.statementTexts() : null;
     try {
-      for (const stmt of this.statements) {
+      for (let index = 0; index < this.statements.length; index++) {
+        const stmt = this.statements[index]!;
+        const started = texts ? performance.now() : 0;
         const inBlock = this.database.transactions.inTransaction;
         const refused = inBlock ? refusedInTransactionBlock(stmt) : null;
         if (refused) throw pgError("misuse", `${refused} cannot run inside a transaction block`, "25001");
@@ -169,6 +176,12 @@ export class Statement {
         // statement_timeout applies to each statement of a script separately (PostgreSQL 13+)
         try {
           last = withStatementTimeout(state, () => executeStatement(env, stmt));
+        } catch (error) {
+          if (texts) {
+            const sql = texts[index]!;
+            notifyStatement(observers, { sql, durationMs: performance.now() - started, rows: 0, error }, params);
+          }
+          throw error;
         } finally {
           // outside a transaction block the statement is its own transaction: what
           // `set_config(..., true)` set lasts until the statement ends
@@ -178,11 +191,23 @@ export class Statement {
         implicitStart = blockStatement ? undefined : (implicitStart ?? env.ctx.txNow);
         // an autocommit statement commits as it ends
         if (!this.database.transactions.inTransaction) runOnCommitActions(this.database.engineState);
+        if (texts) {
+          const sql = texts[index]!;
+          const durationMs = performance.now() - started;
+          notifyStatement(observers, { sql, durationMs, rows: last.rowCount, command: last.command }, params);
+        }
       }
     } finally {
       state.currentQuery = outerQuery;
     }
     return last!;
+  }
+
+  /** The text of each parsed statement: the script split at top-level semicolons, or all of it. */
+  private statementTexts(): string[] {
+    if (this.statements.length === 1) return [this.sql.trim()];
+    const split = splitStatements(this.sql);
+    return split.length === this.statements.length ? split : this.statements.map(() => this.sql.trim());
   }
 
   private toRows(res: ExecResult): QueryRow[] {

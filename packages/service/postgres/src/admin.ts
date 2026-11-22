@@ -1,9 +1,12 @@
 /**
  * The shared mock admin API in front of an in-memory PostgreSQL database.
  * `GET /__admin/ui` is the shell; `GET /sql/tables` and `POST /sql/query` feed the explorer.
+ * `GET /__admin/sql/slow-statements` lists the namespace's most recent slow statements ("Slow
+ * queries"), newest first, without parameter values.
  *
  * @module
  */
+import { ADMIN_KEY_HEADER, isAdminPath, NAMESPACE_HEADER, resolveAdminPrefix } from "@crvouga/mockingbird-service";
 import {
   createEngineAdmin,
   type EngineAdmin,
@@ -15,6 +18,7 @@ import {
 } from "@crvouga/mockingbird-service/admin";
 import type { BindValue } from "./api/bind.ts";
 import { Database, type DatabaseOptions, type HistoryCheckpoint } from "./api/database.ts";
+import { type SlowStatement, SlowStatementLog } from "./runtime/statement-observer.ts";
 
 export interface AdminOptions {
   /** Database for the `default` namespace. Other namespaces open a fresh engine. */
@@ -23,7 +27,41 @@ export interface AdminOptions {
   adminKey?: string;
   /** Options for namespaces opened after `default`, and for `default` when `database` is omitted. */
   databaseOptions?: DatabaseOptions;
+  /**
+   * Statements that take at least this many milliseconds are kept for
+   * `GET /__admin/sql/slow-statements`. Default 250.
+   */
+  slowStatementMs?: number;
+  /** How many slow statements each namespace keeps, newest first. Default 50. */
+  slowStatementLimit?: number;
 }
+
+/** {@link EngineAdmin} with the slow statements each namespace's database has recorded. */
+export interface PostgresAdmin extends EngineAdmin {
+  /** The most recent slow statements of `namespace` (default `default`), newest first. */
+  slowStatements(namespace?: string): SlowStatement[];
+}
+
+/** Default {@link AdminOptions.slowStatementMs}. */
+export const DEFAULT_SLOW_STATEMENT_MS = 250;
+
+const SLOW_STATEMENTS_PATH = "/sql/slow-statements";
+const NAMESPACE = /^[A-Za-z0-9_.-]{1,64}$/;
+
+const json = (status: number, body: unknown): Response =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json; charset=utf-8" } });
+
+const adminError = (status: number, message: string): Response =>
+  json(status, { error: { type: "mockingbird_admin", message } });
+
+/** Constant-time string comparison, so response timing does not reveal how much of a key matched. */
+const sameKey = (sent: string, expected: string): boolean => {
+  const a = new TextEncoder().encode(sent);
+  const b = new TextEncoder().encode(expected);
+  let diff = a.length ^ b.length;
+  for (let i = 0; i < b.length; i++) diff |= (a[i] ?? 0) ^ b[i]!;
+  return diff === 0;
+};
 
 const QUERY_CAP = 500;
 
@@ -175,16 +213,45 @@ const adapt = (db: Database): SqlEngine => ({
 });
 
 /** Admin fetch handler. SQL is only available through `/__admin`, not the wire server. */
-export function createAdmin(options: AdminOptions = {}): EngineAdmin {
+export function createAdmin(options: AdminOptions = {}): PostgresAdmin {
   const seeded = options.database;
-  return createEngineAdmin({
+  const adminPrefix = resolveAdminPrefix(options.adminPrefix);
+  const slowStatementMs = options.slowStatementMs ?? DEFAULT_SLOW_STATEMENT_MS;
+  const slow = new Map<string, SlowStatementLog>();
+  const watch = (namespace: string, db: Database): Database => {
+    const log = new SlowStatementLog(options.slowStatementLimit ?? 50);
+    slow.set(namespace, log);
+    db.observeStatements((event) => log.record(event), { slowStatementMs });
+    return db;
+  };
+  const admin = createEngineAdmin({
     name: "postgres",
     dialect: "postgres",
-    ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
+    adminPrefix,
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
     open(namespace) {
-      if (namespace === "default" && seeded) return adapt(seeded);
-      return adapt(new Database(options.databaseOptions ?? {}));
+      if (namespace === "default" && seeded) return adapt(watch(namespace, seeded));
+      return adapt(watch(namespace, new Database(options.databaseOptions ?? {})));
     },
   });
+  const slowStatements = (namespace = "default"): SlowStatement[] => slow.get(namespace)?.list() ?? [];
+  return {
+    slowStatements,
+    async fetch(request) {
+      const url = new URL(request.url);
+      if (
+        request.method !== "GET" ||
+        !isAdminPath(url.pathname, adminPrefix) ||
+        url.pathname.slice(adminPrefix.length) !== SLOW_STATEMENTS_PATH
+      ) {
+        return admin.fetch(request);
+      }
+      if (options.adminKey !== undefined && !sameKey(request.headers.get(ADMIN_KEY_HEADER) ?? "", options.adminKey)) {
+        return adminError(401, `missing or wrong ${ADMIN_KEY_HEADER}`);
+      }
+      const namespace = url.searchParams.get("namespace") ?? request.headers.get(NAMESPACE_HEADER) ?? "default";
+      if (!NAMESPACE.test(namespace)) return adminError(400, "invalid namespace");
+      return json(200, { thresholdMs: slowStatementMs, statements: slowStatements(namespace) });
+    },
+  };
 }

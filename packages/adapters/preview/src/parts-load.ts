@@ -39,6 +39,11 @@ export type PreviewLoadManifest = {
   parts: Record<string, PreviewLoadPart>
   /** Backend code the worker host imports on a backend's first request or on `replace`. */
   backends?: Record<string, { entry: string; pin: string; bytes: number }>
+  /**
+   * The shared dependency part (`dependencies: "shared"`): the `node_modules` code every part
+   * imports by URL. `entry` is its directory; `bytes` the gzip size of all its files.
+   */
+  dependencies?: { entry: string; pin: string; bytes: number }
 }
 
 const isPart = (value: unknown): value is { entry: string; pin: string; bytes: number } => {
@@ -65,6 +70,8 @@ export function parsePreviewLoadManifest(value: unknown): PreviewLoadManifest {
     if (!isPart(part)) throw new Error(`parts.json: part ${id} needs entry, pin and bytes`)
   for (const [id, part] of Object.entries(manifest.backends ?? {}))
     if (!isPart(part)) throw new Error(`parts.json: backend ${id} needs entry, pin and bytes`)
+  if (manifest.dependencies !== undefined && !isPart(manifest.dependencies))
+    throw new Error("parts.json: dependencies needs entry, pin and bytes")
   return manifest as PreviewLoadManifest
 }
 
@@ -89,6 +96,8 @@ export type PreviewPartBudgets = {
   part?: number
   /** Per-part overrides. */
   parts?: Record<string, number>
+  /** The shared dependency part (all its files). `part` does not apply to it. */
+  dependencies?: number
 }
 
 /** A part (or the shell) over its compressed-size budget; thrown by `checkPartBudgets`. */
@@ -126,6 +135,9 @@ export function formatPartSizes(
     add(id, part.bytes, budgets.parts?.[id] ?? budgets.part)
   for (const [id, part] of Object.entries(manifest.backends ?? {}))
     add(`backend:${id}`, part.bytes, budgets.parts?.[`backend:${id}`] ?? budgets.part)
+  // Shared by every part and cached across rebuilds: only an explicit budget applies.
+  if (manifest.dependencies)
+    add("(dependencies)", manifest.dependencies.bytes, budgets.dependencies)
   const widths = rows[0]?.map((_, column) =>
     Math.max(...rows.map((row) => row[column]?.length ?? 0)),
   )
@@ -160,6 +172,9 @@ export function checkPartBudgets(manifest: PreviewLoadManifest, budgets: Preview
     const budget = budgets.parts?.[name] ?? budgets.part
     if (budget !== undefined && part.bytes > budget) over.push({ name, bytes: part.bytes, budget })
   }
+  const shared = budgets.dependencies
+  if (manifest.dependencies && shared !== undefined && manifest.dependencies.bytes > shared)
+    over.push({ name: "dependencies", bytes: manifest.dependencies.bytes, budget: shared })
   if (over.length > 0) throw new PreviewPartBudgetError(over, formatPartSizes(manifest, budgets))
 }
 
