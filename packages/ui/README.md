@@ -192,6 +192,17 @@ Switching preserves mounted surfaces. Failed mounts expose retry; destroying the
 #### Lifecycle, host URLs and preferences
 
 ```ts
+import { mountSystemHarness, type SystemHarnessStorage } from "@crvouga/mockingbird-ui"
+
+declare const host: HTMLElement
+declare const stream: MediaStream
+declare function startCall(panel: HTMLElement): () => void
+declare function restartTracksIfStopped(): void
+declare const analytics: { track(event: string, id: string): void }
+declare function surfaceForPath(pathname: string): string | undefined
+declare function pathForSurface(id: string): string | undefined
+declare const shellStore: SystemHarnessStorage
+
 const harness = mountSystemHarness(host, [{
   id: "call",
   label: "Video call",

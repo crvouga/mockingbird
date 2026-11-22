@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import {
   bumpVersion,
   burntVersions,
+  consumerPeerDependencies,
   firstReleaseVersion,
   githubRetryDelayMs,
   initialPackageBlocker,
@@ -204,5 +205,33 @@ describe("publishFailureKind", () => {
 
   test("anything else is reported as a plain publish failure", () => {
     expect(publishFailureKind("npm error code ECONNRESET")).toBe("other")
+  })
+})
+
+describe("consumerPeerDependencies", () => {
+  test("installs every declared peer, optional ones included, skipping provided names", () => {
+    const peers = consumerPeerDependencies(
+      [
+        {
+          name: "@crvouga/mockingbird-ui",
+          peerDependencies: { "@heroui/react": "^3.2.7", react: ">=19.0.0" },
+        },
+        { name: "@crvouga/a", peerDependencies: { esbuild: ">=0.28.0", "@crvouga/b": "1.0.0" } },
+        { name: "@crvouga/b", peerDependencies: { esbuild: ">=0.28.0", typescript: "*" } },
+      ],
+      new Set(["@crvouga/b", "typescript"]),
+    )
+    expect(peers).toEqual({ "@heroui/react": "^3.2.7", esbuild: ">=0.28.0", react: ">=19.0.0" })
+  })
+
+  test("intersects different ranges declared for one peer", () => {
+    const peers = consumerPeerDependencies(
+      [
+        { name: "a", peerDependencies: { react: ">=18.0.0" } },
+        { name: "b", peerDependencies: { react: "^19.1.0" } },
+      ],
+      new Set(),
+    )
+    expect(peers).toEqual({ react: ">=18.0.0 ^19.1.0" })
   })
 })

@@ -83,6 +83,8 @@
     "@gravity-ui/icons": "^2.23.1",
     "@heroui/react": "^3.2.7",
     "@heroui/styles": "^3.2.7",
+    "@types/react": ">=19.0.0",
+    "@types/react-dom": ">=19.0.0",
     "react": ">=19.0.0",
     "react-dom": ">=19.0.0",
     "tailwindcss": "^4.3.5"
@@ -95,6 +97,12 @@
       "optional": true
     },
     "@heroui/styles": {
+      "optional": true
+    },
+    "@types/react": {
+      "optional": true
+    },
+    "@types/react-dom": {
       "optional": true
     },
     "react": {
