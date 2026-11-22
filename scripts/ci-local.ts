@@ -1,6 +1,7 @@
 /**
- * Local replica of .github/workflows/pr.yml (the pull-request gate).
- * Publishing happens only after that gate is green and the PR is merged.
+ * Local replica of the release checks (.github/workflows/ci.yml) and of the pull-request gate
+ * (.github/workflows/pr.yml: Commitlint and Biome). Publishing happens only after the release
+ * checks pass on main.
  *
  *   bun run check:full
  *   npm run check:full
@@ -138,7 +139,7 @@ async function commitlintJob(): Promise<void> {
 
 console.log("mockingbird check:full")
 console.log(
-  "Mirrors .github/workflows/pr.yml — the pull-request gate. Release publishes after merge.",
+  "Mirrors the pull-request gate (pr.yml) and the release checks (ci.yml) that hold the publish.",
 )
 if (process.platform !== "linux") {
   notes.push(`CI runs on ubuntu-latest; this host is ${process.platform}.`)

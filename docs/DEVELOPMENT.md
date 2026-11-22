@@ -118,18 +118,20 @@ secrets checks and accepts the same reporting flags.
 
 ## Quality gates
 
-Every merge-blocking check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates the pull-request gate end-to-end (install + commitlint + check). Passing that gate is the release decision.
+Every check is a single command you can run locally. `bun run check` runs the whole turbo graph; `bun run check:full` replicates CI end-to-end (install + commitlint + check).
 
-CI runs the same turbo graph as `bun run check`, spread over parallel runners ([`scripts/ci-plan.ts`](../scripts/ci-plan.ts) splits it and fails if the split drifts from the `check` script): a **Static** job (format, lint, boundaries, generated-file drift) and four **Shard** jobs, each running build, typecheck, test, pack and portability for a quarter of the packages. **Consumer smoke** runs beside them. A **Changes** job reads Turborepo's dependency graph ([`scripts/affected.ts`](../scripts/affected.ts)) and hands each Shard only the packages a change reaches: each changed package plus everything that depends on it, transitively, and any package whose turbo task declares the changed file as a `$TURBO_ROOT$/…` input (a test comparing against another package's file declares it, and runs when it changes). A change to one emulator runs that emulator and its dependents, never an unrelated emulator; a change to a shared package runs every dependent. A file that belongs to no package runs everything unless it is on a list of paths the shards do not read (agent docs, worktree config, other workflows), and a `bun.lock` change reaches only the workspaces whose own entry changed (everything, if an external package or the root moved). Inside the affected packages, turbo's content hashes replay whatever did not change. The required **Check** job passes when every job the change needed passed.
+A pull request is held only by **Commitlint** and **Lint** (Biome format and lint), so it merges in about a minute. Everything else is a **release check**: it runs on `main` after the merge, in the Release workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)), and holds the publish rather than the merge. A failing release check opens a GitHub issue labelled `ci-failure` (one per check; later failures comment on it, and it closes itself when the check passes again), so a red `main` is fixed forward from its issue.
 
-The GitHub Actions cache is the remote cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)); there is no turbo token or server. The CI workflow also runs on every push to `main`, so `main` holds a warm turbo cache per job and a PR's first run replays everything it did not change. Each job saves only the task hashes it used, `node_modules` is cached from `main` only, and [`cache-cleanup.yml`](../.github/workflows/cache-cleanup.yml) deletes a PR's caches when it closes and trims `main`'s weekly. Locally turbo uses the same cache directory on disk.
+The release checks run the same turbo graph as `bun run check`, spread over parallel runners ([`scripts/ci-plan.ts`](../scripts/ci-plan.ts) splits it and fails if the split drifts from the `check` script): a **Static** job (format, lint, boundaries, generated-file drift) and four **Shard** jobs, each running build, typecheck, test, pack and portability for a quarter of the packages. **Consumer smoke**, **npm names** and the **Fleet container** build run beside them. Every package is in scope on each run; turbo's content hashes replay whatever did not change. The **Release checks** job passes when all of them passed, and the publish needs it.
 
-Non-blocking checks live in [`advisory.yml`](../.github/workflows/advisory.yml): Biome findings as inline annotations, and live parity (the [Parity](../.github/workflows/parity.yml) workflow) for each **hot** service whose dependency graph the PR changes (see [Parity tiers](TESTING.md#parity-tiers)). They depend on live vendors or only restate the blocking lint, so a red advisory check informs the PR without holding its merge.
+The GitHub Actions cache is the remote cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)); there is no turbo token or server. The release checks run on every push to `main`, so `main` holds a warm turbo cache per job for previews, parity runs and the next release. Each job saves only the task hashes it used, `node_modules` is cached from `main` only, and [`cache-cleanup.yml`](../.github/workflows/cache-cleanup.yml) deletes a PR's caches when it closes and trims `main`'s weekly. Locally turbo uses the same cache directory on disk.
+
+Live parity (the [Parity](../.github/workflows/parity.yml) workflow) also runs after the merge, for each **hot** service whose dependency graph the merged change reaches (see [Parity tiers](TESTING.md#parity-tiers); [`scripts/affected.ts`](../scripts/affected.ts) reads Turborepo's graph). It depends on live vendors, so a failure opens an issue like any other release check but never holds the publish.
 
 ```bash
 bun run setup          # first time: install + build
 bun run check          # every gate below, in parallel, cached by turbo
-bun run check:full     # mirrors .github/workflows/pr.yml (the pull-request gate)
+bun run check:full     # mirrors the pull-request gate and the release checks
 ```
 
 | Gate | Command | What it enforces |
@@ -169,13 +171,16 @@ pull-request check has passed:
 | Check | What it is |
 | --- | --- |
 | Commitlint | Conventional Commits on the PR's commits, and a Conventional Commits title |
-| Check | `bun run check` plus the consumer smoke install (rolls up the Static, Shard and Consumer smoke jobs) |
+| Check | Biome format and lint over the whole repository (rolls up the Lint job) |
 
-Advisory checks ([`advisory.yml`](../.github/workflows/advisory.yml)) are not required. There is no
-required review, no required approval, and an unresolved review thread does not block the merge. A green pull request is releasable: merging it to `main` publishes. The Release
-workflow ([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)) builds (replaying main's turbo
-cache) and publishes. It does not re-run the pull-request checks. The branch must be up
-to date with `main` before merge, so those checks ran against the code that lands. Only merge
+There is no
+required review, no required approval, and an unresolved review thread does not block the merge.
+Merging to `main` starts the Release workflow
+([`.github/workflows/ci.yml`](../.github/workflows/ci.yml)): it runs the release checks (build,
+typecheck, tests, pack, portability, the consumer smoke and the rest of `bun run check`) on the
+commit that landed and publishes only if they pass. A failure there does not undo the merge; it
+opens a `ci-failure` issue to fix forward. The branch must be up
+to date with `main` before merge. Only merge
 commits are allowed, because each commit on the pull request is a release input. Head branches
 are deleted on merge. PRs use the template in `.github/pull_request_template.md`.
 

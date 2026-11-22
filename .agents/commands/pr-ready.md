@@ -168,9 +168,10 @@ bun run pr:ready checks
 ```
 
 `checks` covers **every** check on the PR. The required ones are Commitlint and Check. Check rolls
-up the other CI jobs (Static, Shard i, Consumer smoke), so a failing shard fails Check too; fix the
-shard. A check that ran outside the CI and Advisory
-workflows and is not in that list fails this command — add its name to `REQUIRED_CHECKS` in
+up the CI workflow's Lint job (Biome format and lint), so a failing Lint fails Check too; fix the
+lint. Build, tests and the rest of `bun run check` are release checks: they run on `main` after the
+merge and never appear on the PR. A check that ran outside the CI
+workflow and is not in that list fails this command — add its name to `REQUIRED_CHECKS` in
 `scripts/pr-ready.ts` and run `bun run pr:ready ruleset --apply`. A skipped check is not a
 pull-request check (Release runs only after merge). A failing check blocks this command: fix it
 like any other.
