@@ -15,6 +15,10 @@ name: Advisory
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -64,6 +68,7 @@ jobs:
     if: >-
       needs.changes.outputs.parity != ''
       && github.event.pull_request.head.repo.full_name == github.repository
+      && github.event.pull_request.draft == false
     uses: ./.github/workflows/parity.yml
     with:
       services: ${{ needs.changes.outputs.parity }}

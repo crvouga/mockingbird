@@ -92,7 +92,7 @@ flowchart LR
 That is all. The workflow generates the Worker's wrangler config (the package's Worker serving
 `outdir`), deploys `my-app-pr-<n>`, puts a **Preview** link at the top of the PR, keeps the
 preview's status live, and deletes the Worker when the PR closes. Forks get no secrets, so their
-PRs are skipped. The lab in this repo uses exactly this
+PRs are skipped. The lab in this repo uses this, minus the CI `workflow_run` trigger
 ([system-preview.yml](../.github/workflows/system-preview.yml)), with its own Worker to add the
 [dev resources](DEV_RESOURCES.md) proxy.
 
