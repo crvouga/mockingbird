@@ -6,8 +6,8 @@
 # (replaying the turbo caches pr.yml keeps warm on main; it saves none of its own)
 # and publishes. It does not re-run those checks.
 #
-# Schedule and manual dispatch only retry an interrupted publish. They are not
-# a second gate.
+# Schedule (once a day) and manual dispatch only retry an interrupted publish.
+# They are not a second gate.
 name: Release
 
 on:
@@ -15,7 +15,7 @@ on:
     branches: [main]
   workflow_dispatch:
   schedule:
-    - cron: "17 */6 * * *"
+    - cron: "17 5 * * *"
 
 concurrency:
   group: release-${{ github.ref }}

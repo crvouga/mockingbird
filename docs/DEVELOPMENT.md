@@ -122,7 +122,7 @@ Every merge-blocking check is a single command you can run locally. `bun run che
 
 CI runs the same turbo graph as `bun run check`, spread over parallel runners ([`scripts/ci-plan.ts`](../scripts/ci-plan.ts) splits it and fails if the split drifts from the `check` script): a **Static** job (format, lint, boundaries, generated-file drift) and four **Shard** jobs, each running build, typecheck, test, pack and portability for a quarter of the packages. **Consumer smoke** runs beside them. A **Changes** job reads Turborepo's dependency graph ([`scripts/affected.ts`](../scripts/affected.ts)) and hands each Shard only the packages a change reaches: each changed package plus everything that depends on it, transitively, and any package whose turbo task declares the changed file as a `$TURBO_ROOT$/…` input (a test comparing against another package's file declares it, and runs when it changes). A change to one emulator runs that emulator and its dependents, never an unrelated emulator; a change to a shared package runs every dependent. A file that belongs to no package runs everything unless it is on a list of paths the shards do not read (agent docs, worktree config, other workflows), and a `bun.lock` change reaches only the workspaces whose own entry changed (everything, if an external package or the root moved). Inside the affected packages, turbo's content hashes replay whatever did not change. The required **Check** job passes when every job the change needed passed.
 
-The GitHub Actions cache is the remote cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)); there is no turbo token or server. The CI workflow also runs on every push to `main`, so `main` holds a warm turbo cache per job and a PR's first run replays everything it did not change. Each job saves only the task hashes it used, `node_modules` is cached from `main` only, and [`cache-cleanup.yml`](../.github/workflows/cache-cleanup.yml) deletes a PR's caches when it closes and trims `main`'s daily. Locally turbo uses the same cache directory on disk.
+The GitHub Actions cache is the remote cache ([`.github/actions/setup`](../.github/actions/setup/action.yml)); there is no turbo token or server. The CI workflow also runs on every push to `main`, so `main` holds a warm turbo cache per job and a PR's first run replays everything it did not change. Each job saves only the task hashes it used, `node_modules` is cached from `main` only, and [`cache-cleanup.yml`](../.github/workflows/cache-cleanup.yml) deletes a PR's caches when it closes and trims `main`'s weekly. Locally turbo uses the same cache directory on disk.
 
 Non-blocking checks live in [`advisory.yml`](../.github/workflows/advisory.yml): Biome findings as inline annotations, and live parity (the [Parity](../.github/workflows/parity.yml) workflow) for each **hot** service whose dependency graph the PR changes (see [Parity tiers](TESTING.md#parity-tiers)). They depend on live vendors or only restate the blocking lint, so a red advisory check informs the PR without holding its merge.
 
@@ -189,14 +189,10 @@ bun run pr:ready ruleset                         # verify the `Protect main` rul
 bun run pr:ready ruleset --apply
 ```
 
-### Failure issues
+### Failure notifications
 
-When an important workflow fails on `main` (CI, Release, Publish image, Verify, Parity, Cache
-cleanup), [`ci-alerts.yml`](../.github/workflows/ci-alerts.yml) opens a
-`[ci-failure] <workflow> is failing on main` issue labelled `ci-failure`, with the failed jobs and
-their error annotations ([`scripts/ci-alert.ts`](../scripts/ci-alert.ts)). Each later failure of that
-workflow comments on the same issue, and its next successful run closes it. Pull-request runs never
-open one. A new workflow that guards or ships `main` belongs in that workflow's `workflows:` list.
+There is no failure-issue workflow: GitHub already emails a workflow's failures on `main` to whoever
+triggered the run, and an extra `workflow_run` workflow after every run doubled the Actions volume.
 
 ### Agent commands
 

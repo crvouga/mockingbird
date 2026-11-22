@@ -2,7 +2,7 @@
 # used entries, which used to be main's warm turbo caches).
 #
 #   PR closed  Delete every cache the PR's runs saved. Only that PR could read them.
-#   Daily      Keep the newest 3 entries per key prefix on main (turbo scope or deps) and delete
+#   Weekly     Keep the newest 3 entries per key prefix on main (turbo scope or deps) and delete
 #              the rest. Restores only ever pick the newest, so older ones are dead weight.
 #
 # pull_request_target so fork PRs get a token that can delete; it checks out no PR code.
@@ -11,9 +11,14 @@ name: Cache cleanup
 on:
   pull_request_target:
     types: [closed]
+  # Weekly, Sundays 04:41 UTC.
   schedule:
-    - cron: "41 4 * * *"
+    - cron: "41 4 * * 0"
   workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   actions: write
