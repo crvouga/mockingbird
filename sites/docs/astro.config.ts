@@ -27,11 +27,14 @@ export default defineConfig({
       directives: [...PAGE_CSP_DIRECTIVES],
       // Shiki highlights with style="" attributes, which cannot be hashed. server/headers.ts also
       // swaps the <style> hashes for 'unsafe-inline', since live examples add styles at runtime.
+      // No `style-src` resource is listed, so Astro keeps its default, 'self'.
       styleDirective: {
-        resources: ["'self'", { resource: "'unsafe-inline'", kind: "attribute" }],
+        resources: [{ resource: "'unsafe-inline'", kind: "attribute" }],
       },
     },
   },
+  // integrations/catalog/markdown.ts renders every document and highlights it itself.
+  markdown: { syntaxHighlight: false },
   redirects: {
     "/docs/infrastructure-mocks": "/docs/infrastructure-emulators",
     "/docs/infrastructure-mocks.md": "/docs/infrastructure-emulators.md",
@@ -65,7 +68,8 @@ export default defineConfig({
     // HeroUI and the Mockingbird theme); stylesheets that do not import Tailwind pass through.
     plugins: [tailwindcss()],
     optimizeDeps: {
-      // The app is lazy-loaded; discover its nested dependencies before the first launch.
+      // The app is lazy-loaded; discover its nested dependencies before the first launch. Vite
+      // resolves each one from the package named before the `>`, which takes no subpath.
       include: [
         "react",
         "react-dom/client",
@@ -74,7 +78,7 @@ export default defineConfig({
         "hono/cookie",
         "hono/http-exception",
         "oauth4webapi",
-      ].map((dependency) => `@crvouga/mockingbird-example-medical-testing/browser > ${dependency}`),
+      ].map((dependency) => `@crvouga/mockingbird-example-medical-testing > ${dependency}`),
     },
     // Each in-browser emulator is its own lazily loaded chunk; the largest carry a recorded corpus.
     build: { chunkSizeWarningLimit: 20_000 },

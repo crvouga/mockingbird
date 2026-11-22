@@ -1,4 +1,5 @@
 import type { StorybookConfig } from "@storybook/html-vite"
+import type { InlineConfig } from "vite"
 import { REPO_ROOT, sourceEntries } from "./workspace.js"
 
 /**
@@ -12,7 +13,7 @@ const config: StorybookConfig = {
   // `STORIES=../stories/emulators/stripe/**/*.stories.ts` builds a slice of the catalog.
   stories: process.env.STORIES
     ? process.env.STORIES.split(/,(?![^{]*\})/)
-    : ["../stories/**/*.mdx", "../stories/**/*.stories.ts"],
+    : ["../stories/**/*.stories.ts"],
   core: { disableTelemetry: true, disableWhatsNewNotifications: true },
   refs: (_config, { configType }) =>
     configType === "DEVELOPMENT"
@@ -32,6 +33,7 @@ const config: StorybookConfig = {
           notifications: { title: "Notifications harness", url: "./notifications" },
         },
   viteFinal: (vite) => {
+    quietBuild(vite)
     const entries = sourceEntries()
     vite.resolve ??= {}
     vite.resolve.alias = [
@@ -45,6 +47,22 @@ const config: StorybookConfig = {
     vite.server.fs = { ...vite.server.fs, allow: [REPO_ROOT] }
     return vite
   },
+}
+
+/** kB. An emulator chunk can carry a recorded corpus; the docs site allows the same. */
+const CHUNK_LIMIT = 20_000
+
+/**
+ * HeroUI marks every component file `"use client"`, which means nothing in a browser bundle;
+ * Rolldown says so once per file.
+ */
+function quietBuild(vite: InlineConfig): void {
+  vite.build ??= {}
+  vite.build.chunkSizeWarningLimit = CHUNK_LIMIT
+  vite.build.rolldownOptions ??= {}
+  vite.build.rolldownOptions.onwarn = (warning, warn) => {
+    if (warning.code !== "MODULE_LEVEL_DIRECTIVE") warn(warning)
+  }
 }
 
 export default config

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto"
 import { gunzipSync, gzipSync } from "node:zlib"
 import { ownedTransport } from "@crvouga/mockingbird-service"
 import { HttpError } from "./errors.js"
-import { LOADERS } from "./generated/catalog.js"
+import { LOADERS } from "./generated/loaders.js"
 import type { ObjectStore } from "./objects.js"
 import type { Telemetry } from "./telemetry.js"
 
