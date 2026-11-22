@@ -91,15 +91,45 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `PREVIEW_PARTS_MANIFEST` publish each app of a preview once under `parts/<app>/<pin>/` and
   share it across previews, so a pull request rebuilds and uploads only the apps it changed. See
   [Shared app parts](#shared-app-parts).
-- `createCloudflarePreviews({ accountId, workerName, token, fetch })` returns `deploy`, `list` and
-  `remove`. `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
-  callback. It checks current facts before upload and immediately before deployment, sends only
-  missing assets, preserves optional `_headers` text and uses content identity to avoid repeating
-  an already identical deployment. It resolves to
-  `{ action: "remove" | "skip" }`, `{ action: "unchanged", preview }` or
-  `{ action: "deployed", preview, deploymentId }` (`CloudflarePreviewDeployResult`), so callers
-  can narrow on the literal action. `list` follows pages and throws on API failures; `remove`
-  treats HTTP 404 as success. No production Worker deployment is changed.
+- `createCloudflarePreviews({ accountId, workerName, token, fetch, uploadConcurrency? })` returns
+  `deploy`, `get`, `list`, `remove`, `subdomain` and `servePreviews`. No production Worker
+  deployment is changed.
+  - `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
+    callback. It checks current facts before upload and immediately before deployment, sends only
+    missing assets, preserves optional `_headers` text and uses content identity to avoid
+    repeating an already identical deployment. It resolves to `{ action: "remove" | "skip" }`,
+    `{ action: "unchanged", preview }` or `{ action: "deployed", preview, deploymentId }`
+    (`CloudflarePreviewDeployResult`), so callers can narrow on the literal action. The Preview
+    lookup (get or create, then its latest deployment) runs beside the asset upload. Buckets upload `uploadConcurrency` at a time
+    (default 3, wrangler's). A session JWT whose payload has `wrangler_single_asset_uploads: true`
+    switches to one raw request per asset (`POST /workers/assets/upload/<hash>`, the asset's type
+    as `Content-Type`), `edge_kv_upload_concurrency` (default 50) at a time unless
+    `uploadConcurrency` is set. The completion JWT is whichever upload response carries one. Every
+    multipart body is written by hand, so `_headers` goes as exactly `text/plain` and each asset
+    part with exactly its `contentType`, on Bun and Node alike.
+  - `get(name)` is one named Preview, `null` on HTTP 404; any other failure rejects.
+  - `list()` follows `result_info.cursor` when the response carries one, and otherwise
+    `page`/`per_page` with `result_info.total_pages`. A 404 from the Previews endpoint resolves to
+    `[]` only when the parent Worker (`GET /workers/workers/:worker`) is 404 too; otherwise it
+    rejects. An item without `updated_on` uses `created_on`. Other API failures reject.
+  - `remove(name)` treats HTTP 404 as success.
+  - `subdomain()` is the account's workers.dev subdomain (`GET /workers/subdomain`, without
+    `.workers.dev`); it rejects on any failure.
+  - `servePreviews(null)` turns on Preview URLs for the parent Worker without deploying it: it
+    reads `GET /workers/scripts/:worker/subdomain` and, only when `previews_enabled` is off, posts
+    `{ enabled: <unchanged>, previews_enabled: true }`. `servePreviews(host)` puts
+    `{ override_scope, override_existing_origin, override_existing_dns_record: true, origins: [{ hostname: host, previews_enabled: true }] }`
+    to `/workers/scripts/:worker/domains/records`. Like `wrangler deploy`'s own call,
+    `override_scope` makes `host` the Worker's whole set of custom domains: a Worker with other
+    custom domains loses them. Both send `Cloudflare-Workers-Script-Api-Date: 2025-08-01`. It
+    resolves to `{ changed }`.
+- `previewOrigin({ previewName, workerName, subdomain })` is
+  `https://<previewName>-<workerName>.<subdomain>.workers.dev`, and throws when that first label
+  exceeds 63 characters (Cloudflare would truncate it). `customPreviewOrigin({ previewName, host })`
+  is `https://<previewName>.<host>`. `isPreviewOriginOf({ origin, previewName, workerName?, subdomain?, host? })`
+  accepts only an exact https origin (no port, credentials or path) of that Preview on the
+  account's workers.dev or on `host`; without `workerName`, any Worker on that subdomain counts.
+  Use it before trusting a URL read from an editable PR description.
 - `assertAssetsOnlyConfig(config)` refuses a wrangler config that declares anything but static
   files (a `main`, a binding, a non-empty `vars`, `assets.binding`, `assets.run_worker_first`, or
   any key outside the static-file allowlist), naming every offending key, and returns the
@@ -329,6 +359,17 @@ rules remain the caller's responsibility. Per-PR deployment jobs must be seriali
 the final head re-read narrows, but cannot eliminate, races without a provider compare-and-swap.
 A retry after an ambiguous create response should re-read the named preview before retrying.
 No live cloud credentials were used for the package's acceptance tests.
+
+These parts are a **best guess, not verified against a live account**, taken from wrangler
+4.151.3's source: per-asset uploads behind `wrangler_single_asset_uploads` and their default
+concurrency, 3 concurrent buckets, the Preview URL and custom-domain settings calls with their API
+date header, and `GET /workers/subdomain`. These parts follow the issues that asked for them and
+are not in wrangler at all: `list()` following `result_info.cursor` (wrangler does not list
+Previews; the page fallback is kept), the `created_on` fallback, the 404 parent-Worker check, and
+the `<preview>-<worker>.<subdomain>.workers.dev` and `<preview>.<host>` origin shapes.
+Asset hashes stay `sha256(bytes ∥ 0 ∥ contentType)`. wrangler's are BLAKE3 of the base64 bytes
+plus the extension, which WebCrypto cannot compute. So a Preview reuses its own earlier uploads,
+but not the uploads of a `wrangler deploy` of the parent Worker.
 
 Cloudflare protocol references:
 [official Preview API implementation](https://github.com/cloudflare/workers-sdk/blob/main/packages/deploy-helpers/src/preview/api.ts),

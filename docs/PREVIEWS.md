@@ -11,6 +11,7 @@ no GitHub token.
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
 - [Inputs](#inputs)
+- [Named Previews from your own script](#named-previews-from-your-own-script)
 - [Named Previews of one assets-only Worker](#named-previews-of-one-assets-only-worker)
 - [System previews: one registry, content-addressed parts, per-app updates](#system-previews-one-registry-content-addressed-parts-per-app-updates)
 - [What a preview does not do](#what-a-preview-does-not-do)
@@ -122,6 +123,17 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
          WORKER_SECRETS: |
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
+
+## Named Previews from your own script
+
+To deploy without the reusable workflow, use Cloudflare's named Worker Previews from a CI script
+with `createCloudflarePreviews` (see the
+[package README](../packages/adapters/preview/README.md#api)). You can know a Preview's URL before
+you build: `previewOrigin({ previewName, workerName, subdomain: await previews.subdomain() })`,
+or `customPreviewOrigin({ previewName, host })` on a custom domain. Run
+`servePreviews(null)` (or `servePreviews(host)`) once so the parent Worker serves its Previews;
+without it a deploy succeeds and its URL answers 404. `get(name)` confirms a removed Preview is
+gone, and `list()` is `[]` before the parent Worker's first deploy.
 
 ## Named Previews of one assets-only Worker
 
