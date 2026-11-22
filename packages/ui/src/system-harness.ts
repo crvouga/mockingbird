@@ -3,16 +3,21 @@
 import type { SystemBuild } from "./system-build-status.js"
 import { SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
 import {
+  createPartRuntime,
+  defineSystem,
+  type PreviewApp,
   type PreviewLoadManifestLike,
   type PreviewPartLoader,
   type PreviewSystem,
+  type PreviewSystemDefinition,
   type PreviewSystemRuntime,
+  type PreviewSystemSurface,
   planPartUpdate,
-  systemSurfaces,
 } from "./system-registry.js"
 import {
+  excludedWithDefaults,
   initialExcluded,
-  readOrder,
+  readSavedOrder,
   reconcileOrder,
   SWITCHER_BAR_HEIGHT,
   setRotation,
@@ -31,6 +36,7 @@ import type {
   HarnessController,
   HarnessSnapshot,
   PanelStatus,
+  SystemApp,
   SystemBackends,
   SystemHealth,
   SystemNotice,
@@ -217,6 +223,28 @@ export type SystemHarness = {
    * the remount settles; a failed remount shows Retry in that surface only.
    */
   update(id: string, next?: Partial<Pick<SystemSurface, "mount" | "version">>): Promise<void>
+  /**
+   * Declares the surfaces the running harness has now, in switcher order: call it with the whole
+   * list (an empty one too) whenever the topology changes. Surfaces are matched by `id`:
+   *
+   * - one still listed keeps its panel, its mount and its state, and takes the new descriptor's
+   *   label, description, icon, route, backends, health and hooks, even from a freshly allocated
+   *   object. Its code is not replaced: a new `mount` runs the next time it mounts, and `update()`
+   *   still swaps it (what `update()` set stays in force);
+   * - a new one gets a panel, a place in the switcher and on System, and its route; it mounts on
+   *   its first open. One that `show()` or the address asked for before it existed opens now;
+   * - one no longer listed is disposed exactly once and its panel removed. A mount still pending
+   *   is aborted and its late result disposed, also when the same id has been added again since.
+   *
+   * When the surface shown is removed, the harness shows `initial` if it is still there, else the
+   * first surface in the switcher, else System, and replaces the address with URL sync on. The
+   * switcher's preferences (order, the ones switched off or on) hold across changes, including
+   * for a surface removed and added back.
+   *
+   * Throws on a duplicate or reserved id or two surfaces with one route, before changing
+   * anything: the preview stays as it was.
+   */
+  setSurfaces(surfaces: readonly SystemSurface[]): void
   /** Shows a notice over the apps until dismissed or replaced; `undefined` clears it. */
   notify(notice: SystemNotice | undefined): void
   destroy(): void
@@ -259,19 +287,9 @@ export function mountSystemHarness(
   surfaces: readonly SystemSurface[],
   options: SystemHarnessOptions = {},
 ): SystemHarness {
-  const ids = new Set(["system"])
-  const routes = new Map<string, string>()
-  for (const surface of surfaces) {
-    if (!surface.id || ids.has(surface.id))
-      throw new Error(`Duplicate or reserved surface: ${surface.id}`)
-    ids.add(surface.id)
-    if (surface.route !== undefined) {
-      const owner = routes.get(surface.route)
-      if (owner !== undefined)
-        throw new Error(`Surfaces ${owner} and ${surface.id} both own the route ${surface.route}`)
-      routes.set(surface.route, surface.id)
-    }
-  }
+  validateSurfaces(surfaces)
+  /** The surfaces now, as last declared (at mount, or by `setSurfaces`). */
+  let specs: readonly SystemSurface[] = [...surfaces]
   validateSections(options.sections ?? [])
   const systemShortcut = options.systemShortcut ?? DEFAULT_SYSTEM_SHORTCUT
   // A shortcut that cannot be parsed fails here, not on the first key press.
@@ -287,12 +305,13 @@ export function mountSystemHarness(
   const evictAfter = options.evictHiddenAfterMs
   if (evictAfter !== undefined && !(evictAfter >= 0))
     throw new Error(`evictHiddenAfterMs must be a number of milliseconds, not ${evictAfter}`)
-  const defaultOff = [
+  const defaultOffOf = (list: readonly SystemSurface[]) => [
     ...new Set([
-      ...surfaces.filter((s) => s.defaultEnabled === false).map((s) => s.id),
+      ...list.filter((s) => s.defaultEnabled === false).map((s) => s.id),
       ...(options.defaultExcluded ?? []).filter((id) => id !== "system"),
     ]),
   ]
+  let defaultOff = defaultOffOf(specs)
   const doc = host.ownerDocument
   const win = doc.defaultView ?? window
   // Light DOM, styled inline: nothing here adds a stylesheet to the host page.
@@ -302,14 +321,19 @@ export function mountSystemHarness(
   shell.style.cssText =
     "position:relative;display:flex;flex-direction:column;height:100%;min-height:240px;isolation:isolate;background:Canvas;color:CanvasText"
   // The switcher bar: a thin strip across the top, in the layout, so it never covers a surface.
-  const barHeight = surfaces.length > 0 ? SWITCHER_BAR_HEIGHT : 0
+  // Shown only while there are surfaces to switch between; `setSurfaces` can change that.
+  let barHeight = 0
   const bar = doc.createElement("div")
   bar.className = "msh-bar"
-  bar.style.cssText = `flex:none;height:${barHeight}px;position:relative;z-index:1001`
-  bar.hidden = barHeight === 0
   const chrome = doc.createElement("div")
   chrome.className = "msh-chrome"
-  chrome.style.cssText = `position:absolute;inset:${barHeight}px 0 0 0;pointer-events:none;z-index:1000`
+  const layoutBar = () => {
+    barHeight = specs.length > 0 ? SWITCHER_BAR_HEIGHT : 0
+    bar.style.cssText = `flex:none;height:${barHeight}px;position:relative;z-index:1001`
+    bar.hidden = barHeight === 0
+    chrome.style.cssText = `position:absolute;inset:${barHeight}px 0 0 0;pointer-events:none;z-index:1000`
+  }
+  layoutBar()
   shell.append(bar, chrome)
   host.append(shell)
   // What a full-height page inside a panel fills (`AppShell`): the panel, not the viewport.
@@ -323,9 +347,13 @@ export function mountSystemHarness(
   const storage = (): SystemHarnessStorage => options.storage ?? win.localStorage
   const rotation = initialExcluded(storage, defaultOff)
   const listeners = new Set<() => void>()
+  /** The order a person chose (saved, or set this session), ids no longer declared included. */
+  let preferredOrder: readonly unknown[] = readSavedOrder(storage)
+  const orderOf = (list: readonly SystemSurface[]) =>
+    reconcileOrder(preferredOrder, ["system", ...list.map((surface) => surface.id)])
   let snapshot: HarnessSnapshot = {
     current: "",
-    order: readOrder(storage, ["system", ...surfaces.map((surface) => surface.id)]),
+    order: orderOf(specs),
     excluded: new Set(rotation.excluded),
     statuses: [],
     versions: {},
@@ -359,21 +387,21 @@ export function mountSystemHarness(
     visible?: boolean
     /** Pending eviction while hidden. */
     evictTimer?: number | undefined
+    /** `setSurfaces` dropped it: it never mounts again. */
+    removed?: boolean
   }
-  const all: SystemSurface[] = [
-    {
-      ...SYSTEM_APP,
-      mount(content) {
-        content.dataset.systemScreen = ""
-        patch({ systemHost: content })
-        return () => {
-          if (snapshot.systemHost === content) patch({ systemHost: undefined })
-        }
-      },
+  const systemSpec: SystemSurface = {
+    ...SYSTEM_APP,
+    mount(content) {
+      content.dataset.systemScreen = ""
+      patch({ systemHost: content })
+      return () => {
+        if (snapshot.systemHost === content) patch({ systemHost: undefined })
+      }
     },
-    ...surfaces,
-  ]
-  const entries: Entry[] = all.map((spec) => {
+  }
+  // A panel is appended once and never moved: moving an iframe app's panel would reload it.
+  const createEntry = (spec: SystemSurface): Entry => {
     const panel = doc.createElement("section")
     panel.className = "msh-panel"
     panel.dataset.surface = spec.id
@@ -382,16 +410,15 @@ export function mountSystemHarness(
     // Positioned, so absolutely placed descendants scroll and clip with the panel.
     panel.style.cssText = "position:relative;flex:1 1 0;min-height:0;overflow:auto;outline:none"
     setHidden(panel, true)
+    panel.inert = true
     shell.insertBefore(panel, chrome)
     return { spec, panel, abort: new AbortController() }
-  })
+  }
+  let entries: Entry[] = [systemSpec, ...specs].map(createEntry)
   /** The version a surface runs now: what `update()` set, else its own (which may be a getter). */
   const versionOf = (entry: Entry) => entry.version ?? entry.spec.version
-
-  const view: HarnessController = {
-    shell,
-    bar,
-    apps: all.map(({ id, label, description, icon, backends, health }) => ({
+  const appsOf = (list: readonly SystemSurface[]): SystemApp[] =>
+    [systemSpec, ...list].map(({ id, label, description, icon, backends, health }) => ({
       id,
       label,
       description,
@@ -402,8 +429,18 @@ export function mountSystemHarness(
         const entry = entries.find((candidate) => candidate.spec.id === id)
         return entry ? versionOf(entry) : undefined
       },
-    })),
-    switcher: surfaces.length > 0,
+    }))
+  let apps = appsOf(specs)
+
+  const view: HarnessController = {
+    shell,
+    bar,
+    get apps() {
+      return apps
+    },
+    get switcher() {
+      return specs.length > 0
+    },
     get: () => snapshot,
     subscribe(listener) {
       listeners.add(listener)
@@ -423,6 +460,7 @@ export function mountSystemHarness(
     },
     setOrder(order) {
       const next = reconcileOrder(order, snapshot.order)
+      preferredOrder = next
       writeOrder(storage, next)
       patch({ order: next })
     },
@@ -453,6 +491,7 @@ export function mountSystemHarness(
 
   function load(entry: Entry): Promise<void> {
     if (entry.pending) return entry.pending
+    if (entry.removed) return Promise.resolve()
     const { id, label } = entry.spec
     const version = versionOf(entry)
     if (version === undefined) delete entry.panel.dataset.version
@@ -475,7 +514,7 @@ export function mountSystemHarness(
     const signal = entry.abort.signal
     entry.pending = Promise.resolve()
       .then(() => {
-        if (destroyed) return
+        if (destroyed || signal.aborted) return
         return (entry.mount ?? entry.spec.mount)(content, signal)
       })
       .then((dispose) => {
@@ -592,10 +631,21 @@ export function mountSystemHarness(
     return copy.pathname + copy.search + copy.hash
   }
 
-  async function show(id: string, fromHistory = false): Promise<void> {
+  /** A surface asked for before it was declared: `setSurfaces` opens it when it arrives. */
+  let wanted: string | undefined
+  /** `how`: a switch pushes an address, a fallback replaces it, back/forward leaves it. */
+  async function show(id: string, how: "push" | "replace" | "history" = "push"): Promise<void> {
     if (destroyed) return
-    const entry = entries.find((e) => e.spec.id === id) ?? entries[0]
+    const known = entries.find((e) => e.spec.id === id)
+    wanted = known ? undefined : id
+    const entry = known ?? entries[0]
     if (!entry) return
+    const fromHistory = how === "history"
+    const go = (url: URL) => {
+      if (url.href === win.location.href) return
+      if (how === "replace") win.history.replaceState(win.history.state, "", url)
+      else win.history.pushState(null, "", url)
+    }
     const previous = entries.find((candidate) => candidate.spec.id === snapshot.current)
     const first = snapshot.current === ""
     for (const candidate of entries) {
@@ -616,10 +666,7 @@ export function mountSystemHarness(
     scheduleEviction()
     if (hostUrl && !fromHistory && hostUrl.read(win.location) !== entry.spec.id) {
       const next = hostUrl.write(entry.spec.id, win.location)
-      if (next !== undefined) {
-        const url = new URL(next, win.location.href)
-        if (url.href !== win.location.href) win.history.pushState(null, "", url)
-      }
+      if (next !== undefined) go(new URL(next, win.location.href))
     } else if (options.syncUrl && !fromHistory) {
       let url = new URL(win.location.href)
       const route = entry.spec.route
@@ -628,22 +675,30 @@ export function mountSystemHarness(
         previous &&
         previous !== entry &&
         was !== undefined &&
-        matchRoute(surfaces, url.pathname) === previous.spec.id
+        matchRoute(specs, url.pathname) === previous.spec.id
       )
         lastPath.set(previous.spec.id, withoutSurface(url))
       // The System section belongs to System's own URL.
       if (entry.spec.id !== "system") url.searchParams.delete(SYSTEM_SECTION_PARAM)
       if (route === undefined) url.searchParams.set("surface", entry.spec.id)
-      else if (previous === entry) url.searchParams.delete("surface")
+      else if (previous === entry && matchRoute(specs, url.pathname) === entry.spec.id)
+        url.searchParams.delete("surface")
       else {
-        const saved = lastPath.get(entry.spec.id)
+        const path = lastPath.get(entry.spec.id)
+        const saved =
+          path && matchRoute(specs, new URL(path, url).pathname) === entry.spec.id
+            ? path
+            : undefined
+        // A fallback's address belonged to the surface that left, so it is not kept.
         const here =
-          !url.searchParams.has("surface") && matchRoute(surfaces, url.pathname) === entry.spec.id
+          how !== "replace" &&
+          !url.searchParams.has("surface") &&
+          matchRoute(specs, url.pathname) === entry.spec.id
             ? withoutSurface(url)
             : undefined
         url = new URL(saved ?? here ?? route, url)
       }
-      if (url.href !== win.location.href) win.history.pushState(null, "", url)
+      go(url)
     }
     if (!first && previous !== entry)
       try {
@@ -654,18 +709,90 @@ export function mountSystemHarness(
     await load(entry)
   }
 
+  function setSurfaces(next: readonly SystemSurface[]): void {
+    if (destroyed) return
+    const list = [...next]
+    // Throws before anything changes, so a rejected list leaves the preview as it was.
+    validateSurfaces(list)
+    const kept = new Map(entries.map((entry) => [entry.spec.id, entry]))
+    const listed = new Set(["system", ...list.map((surface) => surface.id)])
+    const oldRoute = kept.get(snapshot.current)?.spec.route
+    const gone = entries.filter(({ spec }) => !listed.has(spec.id))
+    const focused = doc.activeElement
+    let refocus = false
+    for (const entry of gone) {
+      if (entry.panel.contains(focused)) refocus = true
+      entry.removed = true
+      if (entry.evictTimer !== undefined) win.clearTimeout(entry.evictTimer)
+      entry.evictTimer = undefined
+      // Aborts a pending mount (its late result is disposed by `load`) and disposes a settled one.
+      unmount(entry)
+      entry.panel.remove()
+      lastPath.delete(entry.spec.id)
+    }
+    entries = [
+      entries[0] as Entry,
+      ...list.map((spec) => {
+        const entry = kept.get(spec.id)
+        if (!entry) return createEntry(spec)
+        entry.spec = spec
+        entry.panel.setAttribute("aria-label", spec.label)
+        return entry
+      }),
+    ]
+    specs = list
+    apps = appsOf(specs)
+    layoutBar()
+    fit()
+    // As a reload would find them: an off-by-default surface is out until someone switches it on.
+    defaultOff = defaultOffOf(specs)
+    rotation.excluded = excludedWithDefaults(rotation, defaultOff)
+    patch({
+      order: orderOf(specs),
+      excluded: new Set(rotation.excluded),
+      statuses: snapshot.statuses.filter((status) => listed.has(status.id)),
+      versions: Object.fromEntries(
+        Object.entries(snapshot.versions).filter(([id]) => listed.has(id)),
+      ),
+    })
+    const target =
+      wanted !== undefined && listed.has(wanted)
+        ? wanted
+        : listed.has(snapshot.current)
+          ? undefined
+          : options.initial !== undefined && listed.has(options.initial)
+            ? options.initial
+            : (snapshot.order.find((id) => id !== "system" && !snapshot.excluded.has(id)) ??
+              "system")
+    if (target === undefined) {
+      const current = kept.get(snapshot.current)?.spec
+      if (
+        options.syncUrl &&
+        !hostUrl &&
+        current &&
+        (oldRoute !== current.route ||
+          (current.route !== undefined && matchRoute(specs, win.location.pathname) !== current.id))
+      )
+        void show(current.id, "replace")
+      return
+    }
+    // The panels and the address change now; the surface's own mount settles later.
+    void show(target, "replace")
+    if (refocus) entries.find((entry) => entry.spec.id === snapshot.current)?.panel.focus()
+  }
+
   const fromUrl = () => {
     if (hostUrl) return hostUrl.read(win.location) ?? options.initial ?? "system"
     const url = new URL(win.location.href)
     return (
       url.searchParams.get("surface") ??
-      matchRoute(surfaces, url.pathname) ??
+      matchRoute(specs, url.pathname) ??
       options.initial ??
       "system"
     )
   }
   const pop = () => {
-    void show(fromUrl(), true)
+    void show(fromUrl(), "history")
   }
   const onVisibility = () => {
     for (const entry of entries) syncVisible(entry)
@@ -678,6 +805,7 @@ export function mountSystemHarness(
     show: (id) => show(id),
     active: () => snapshot.current,
     update,
+    setSurfaces,
     notify,
     destroy() {
       if (destroyed) return
@@ -700,6 +828,23 @@ export function mountSystemHarness(
       resize?.disconnect()
       shell.remove()
     },
+  }
+}
+
+/** Throws on a missing, duplicate or reserved id, or two surfaces declaring one route. */
+function validateSurfaces(surfaces: readonly SystemSurface[]): void {
+  const ids = new Set(["system"])
+  const routes = new Map<string, string>()
+  for (const surface of surfaces) {
+    if (!surface?.id || ids.has(surface.id))
+      throw new Error(`Duplicate or reserved surface: ${surface?.id}`)
+    ids.add(surface.id)
+    if (surface.route !== undefined) {
+      const owner = routes.get(surface.route)
+      if (owner !== undefined)
+        throw new Error(`Surfaces ${owner} and ${surface.id} both own the route ${surface.route}`)
+      routes.set(surface.route, surface.id)
+    }
   }
 }
 
@@ -749,6 +894,21 @@ export type SystemPreview = SystemHarness & {
    * Reload button. A backend that fails to boot leaves the old one serving and shows Retry.
    */
   applyManifest(next: PreviewLoadManifestLike): Promise<PreviewPartUpdateResult>
+  /** The registry the preview runs now: the one mounted, or the last one `setApps` took. */
+  system(): PreviewSystem
+  /**
+   * Declares the apps the running preview has now, in switcher order: the registry's own
+   * `setSurfaces`. Call it with the whole list (a plain array, an empty one too, or a definition
+   * with its `backends`) whenever the topology changes. Apps are matched by `id`: one still
+   * listed keeps its mount and state, a new one loads its part on its first open, and one no
+   * longer listed is disposed. The switcher, the System screen's Apps and Backends lists, the
+   * routes and the part loader all follow.
+   *
+   * A plain array declares the backends its apps name, keeping the label and kind of the ones
+   * already declared. Throws a `PreviewRegistryError`, as `defineSystem` does, before changing
+   * anything. On a preview, use this in place of `setSurfaces`.
+   */
+  setApps(next: readonly PreviewApp[] | PreviewSystemDefinition): void
 }
 
 /**
@@ -758,50 +918,80 @@ export type SystemPreview = SystemHarness & {
  */
 export function mountSystem(
   host: HTMLElement,
-  system: PreviewSystem,
+  initial: PreviewSystem,
   options: MountSystemOptions = {},
 ): SystemPreview {
   let manifest = options.manifest
+  let system = initial
   const win = host.ownerDocument.defaultView ?? window
-  const { surfaces, loader } = systemSurfaces(system, {
-    ...options,
-    manifest: () => manifest,
-  })
+  const parts = createPartRuntime(() => system, { ...options, manifest: () => manifest })
+  const { loader } = parts
+  const idle =
+    options.idle ??
+    ((run: () => void) => {
+      const request = (
+        win as unknown as {
+          requestIdleCallback?: (run: () => void, options?: { timeout: number }) => void
+        }
+      ).requestIdleCallback
+      if (request) request.call(win, run, { timeout: 5_000 })
+      else win.setTimeout(run, 1)
+    })
   let prefetching = false
   const schedulePrefetch = () => {
     if (prefetching) return
     prefetching = true
-    const idle =
-      options.idle ??
-      ((run: () => void) => {
-        const request = (
-          win as unknown as {
-            requestIdleCallback?: (run: () => void, options?: { timeout: number }) => void
-          }
-        ).requestIdleCallback
-        if (request) request.call(win, run, { timeout: 5_000 })
-        else win.setTimeout(run, 1)
-      })
     idle(() => void loader.prefetch())
   }
-  const wrapped: SystemSurface[] = surfaces.map((surface) =>
-    Object.defineProperty(
-      {
-        ...surface,
-        mount: async (panel: HTMLElement, signal: AbortSignal) => {
-          const dispose = await surface.mount(panel, signal)
-          schedulePrefetch()
-          return dispose
+  const wrap = (surfaces: readonly PreviewSystemSurface[]): SystemSurface[] =>
+    surfaces.map((surface) =>
+      Object.defineProperty(
+        {
+          ...surface,
+          mount: async (panel: HTMLElement, signal: AbortSignal) => {
+            const dispose = await surface.mount(panel, signal)
+            schedulePrefetch()
+            return dispose
+          },
         },
-      },
-      "version",
-      { enumerable: true, get: () => surface.version },
-    ),
-  )
+        "version",
+        { enumerable: true, get: () => surface.version },
+      ),
+    )
+  const backendListeners = new Set<() => void>()
   const backends: SystemBackends = options.backends ?? {
     list: () => system.backends.map((backend) => ({ ...backend })),
+    subscribe(listener) {
+      backendListeners.add(listener)
+      return () => backendListeners.delete(listener)
+    },
   }
-  const harness = mountSystemHarness(host, wrapped, { ...options, backends })
+  const harness = mountSystemHarness(host, wrap(parts.surfaces(system)), { ...options, backends })
+  const setApps = (next: readonly PreviewApp[] | PreviewSystemDefinition): void => {
+    const previous = system
+    const definition: PreviewSystemDefinition =
+      "apps" in next
+        ? next
+        : {
+            apps: next,
+            backends: [...new Set(next.flatMap((app) => app?.backends ?? []))].map(
+              (id) => previous.backends.find((backend) => backend.id === id) ?? { id },
+            ),
+          }
+    // Throws before anything changes, and so does the harness.
+    const defined = defineSystem(definition)
+    system = defined
+    try {
+      harness.setSurfaces(wrap(parts.surfaces(defined)))
+    } catch (error) {
+      system = previous
+      throw error
+    }
+    parts.forget(previous.apps.filter((app) => !defined.app(app.id)).map((app) => app.id))
+    for (const listener of backendListeners) listener()
+    // A new app's `prefetch` part loads at idle priority too, once the first app has opened.
+    if (prefetching) idle(() => void loader.prefetch())
+  }
   const reload = options.reload ?? (() => win.location.reload())
   const applyManifest = async (next: PreviewLoadManifestLike): Promise<PreviewPartUpdateResult> => {
     if (!manifest) {
@@ -845,5 +1035,12 @@ export function mountSystem(
     await Promise.all(plan.apps.map((id) => harness.update(id)))
     return { status: "updated", apps: plan.apps, backends: plan.backends }
   }
-  return { ...harness, loader, manifest: () => manifest, applyManifest }
+  return {
+    ...harness,
+    loader,
+    manifest: () => manifest,
+    applyManifest,
+    system: () => system,
+    setApps,
+  }
 }

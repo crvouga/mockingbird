@@ -78,7 +78,9 @@ export const scopeEmbeddedCss = (
     }
     cursor = brace + 1
   }
-  const sized = out.replaceAll("100svh", "100%").replaceAll("100vh", "100%")
+  // Viewport heights (`min-h-screen`, `min-h-dvh`) measure the browser window, not the popup:
+  // a full window of empty space would scroll under a short card.
+  const sized = out.replace(/\b100[sdl]?vh\b/g, "100%")
   // `.page` is the query container. Its inline size is the host's width, not
   // the min-content of a wide layout, so the rewritten queries stack inside a popup.
   return `${scopeSelector}{display:block;box-sizing:border-box;width:100%;max-width:100%;min-width:0}${scopeSelector}>.page{box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:100%;container-type:inline-size}${sized}`
