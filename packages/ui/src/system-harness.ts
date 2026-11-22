@@ -18,6 +18,12 @@ import {
   writeOrder,
 } from "./system-rotation.js"
 import { matchRoute } from "./system-routes.js"
+import {
+  DEFAULT_SYSTEM_SHORTCUT,
+  parseShortcut,
+  SYSTEM_SECTION_PARAM,
+  validateSections,
+} from "./system-shortcut.js"
 import type {
   HarnessController,
   HarnessSnapshot,
@@ -25,7 +31,9 @@ import type {
   SystemBackends,
   SystemHealth,
   SystemNotice,
+  SystemSection,
   SystemServices,
+  SystemSnapshot,
 } from "./system-types.js"
 
 export type { SystemBuild, SystemBuildState } from "./system-build-status.js"
@@ -53,6 +61,11 @@ export {
   systemSurfaces,
 } from "./system-registry.js"
 export { INCLUDED_KEY, ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
+export {
+  DEFAULT_SYSTEM_SHORTCUT,
+  SYSTEM_SECTION_IDS,
+  SYSTEM_SECTION_PARAM,
+} from "./system-shortcut.js"
 export type {
   SystemBackend,
   SystemBackendState,
@@ -60,9 +73,13 @@ export type {
   SystemDevStatus,
   SystemHealth,
   SystemNotice,
+  SystemSection,
   SystemService,
+  SystemServiceCall,
   SystemServiceMode,
   SystemServices,
+  SystemServiceTest,
+  SystemSnapshot,
 } from "./system-types.js"
 
 /** Product code supplies lazy surfaces; the shell knows nothing about their services. */
@@ -104,6 +121,18 @@ export type SystemHarnessOptions = {
   build?: SystemBuild
   /** The in-tab backends and emulators and their state, for the System screen's Backends list. */
   backends?: SystemBackends
+  /**
+   * The consumer's own System sections (feature flags, start-up timings), after the built-in
+   * ones and each deep-linkable as `?system=<id>` with `syncUrl`, instead of another surface.
+   */
+  sections?: readonly SystemSection[]
+  /** Save, load and reset of the whole in-tab state: adds a Data card to System. */
+  snapshot?: SystemSnapshot
+  /**
+   * The keyboard shortcut that opens System from anywhere (default `DEFAULT_SYSTEM_SHORTCUT`,
+   * "Alt+Shift+S"); `false` turns it off. A long-press or right-click on the pill opens it too.
+   */
+  systemShortcut?: string | false
 }
 export type SystemHarness = {
   show(id: string): Promise<void>
@@ -164,6 +193,10 @@ export function mountSystemHarness(
       routes.set(surface.route, surface.id)
     }
   }
+  validateSections(options.sections ?? [])
+  const systemShortcut = options.systemShortcut ?? DEFAULT_SYSTEM_SHORTCUT
+  // A shortcut that cannot be parsed fails here, not on the first key press.
+  if (systemShortcut !== false) parseShortcut(systemShortcut)
   const defaultOff = surfaces.filter((s) => s.defaultEnabled === false).map((s) => s.id)
   const doc = host.ownerDocument
   const win = doc.defaultView ?? window
@@ -284,6 +317,10 @@ export function mountSystemHarness(
     docsUrl: options.docsUrl,
     build: options.build,
     backends: options.backends,
+    sections: options.sections,
+    snapshot: options.snapshot,
+    systemShortcut,
+    syncUrl: options.syncUrl,
   }
 
   // The React view loads on its own, beside the first mount; `show()` settles once it has drawn.
@@ -418,6 +455,8 @@ export function mountSystemHarness(
         matchRoute(surfaces, url.pathname) === previous.spec.id
       )
         lastPath.set(previous.spec.id, withoutSurface(url))
+      // The System section belongs to System's own URL.
+      if (entry.spec.id !== "system") url.searchParams.delete(SYSTEM_SECTION_PARAM)
       if (route === undefined) url.searchParams.set("surface", entry.spec.id)
       else if (previous === entry) url.searchParams.delete("surface")
       else {

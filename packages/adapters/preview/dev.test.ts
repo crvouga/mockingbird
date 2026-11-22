@@ -376,3 +376,57 @@ describe("controls()", () => {
     expect((await controls.list()).services[0]?.mode).toBe("dev")
   })
 })
+
+describe("live updates, last call and Test (#871)", () => {
+  test("a switch in one tab reaches every tab's subscribers within a second", async () => {
+    const storage = memory()
+    const here = rig(ENV, storage)
+    const there = rig(ENV, storage)
+    const mine = fakeEmulator("resend")
+    const theirs = fakeEmulator("resend")
+    const a = here.dev.controls([mine.spec])
+    const b = there.dev.controls([theirs.spec])
+    let heardHere = 0
+    const heardThere = Promise.withResolvers<void>()
+    const stopHere = a.subscribe(() => heardHere++)
+    const stopThere = b.subscribe(() => heardThere.resolve())
+    await a.setMode("resend", "dev")
+    expect(heardHere).toBe(1)
+    // The browser fires `storage` in every other tab of the origin when the modes key changes.
+    globalThis.dispatchEvent(Object.assign(new Event("storage"), { key: DEV_STORAGE_KEYS.modes }))
+    const started = Date.now()
+    await heardThere.promise
+    expect(Date.now() - started).toBeLessThan(1000)
+    // The other tab applied the mode to its own emulator, so its list (and its pill) agree.
+    expect(theirs.mode).toBe("forward")
+    expect((await b.list()).services[0]?.mode).toBe("dev")
+    stopHere()
+    stopThere()
+  })
+
+  test("list reports the last call each service sent through the proxy", async () => {
+    const { dev } = rig()
+    const controls = dev.controls([fakeEmulator("resend").spec])
+    expect((await controls.list()).services[0]?.lastCall).toBeUndefined()
+    const upstream = dev.upstream("resend")
+    await upstream.fetch(new Request(`${upstream.baseUrl}/emails`))
+    const call = (await controls.list()).services[0]?.lastCall
+    expect(call?.ok).toBe(true)
+    expect(call?.status).toBe(200)
+    expect(Number.isNaN(Date.parse(call?.at ?? ""))).toBe(false)
+  })
+
+  test("Test probes the service through the proxy, or says why it cannot", async () => {
+    const { dev, vendor } = rig({ ...ENV, STRIPE_SECRET_KEY: "sk_live_live-key-fixture" })
+    const controls = dev.controls([fakeEmulator("resend").spec, fakeEmulator("stripe").spec])
+    const ok = await controls.test("resend")
+    expect(ok.ok).toBe(true)
+    expect(ok.message).toContain("HTTP 200")
+    expect(vendor).toHaveLength(1)
+    const blocked = await controls.test("stripe")
+    expect(blocked).toEqual({ ok: false, message: "STRIPE_SECRET_KEY is a production credential" })
+    expect(vendor).toHaveLength(1)
+    const none = createDevResources({ storage: memory() }).controls([fakeEmulator("resend").spec])
+    expect(await none.test("resend")).toEqual({ ok: false, message: DEV_MESSAGES.none })
+  })
+})

@@ -8,13 +8,14 @@
  * page or of the surfaces' own content. (Shadow roots would isolate further, but React Aria's
  * press handling, behind every HeroUI button and switch, does not work across a shadow boundary.)
  */
-import { ArrowLeft, ArrowRight } from "@gravity-ui/icons"
+import { ArrowLeft, ArrowRight, TriangleExclamation } from "@gravity-ui/icons"
 import { Button, buttonVariants, Card, Separator, Spinner } from "@heroui/react"
 import {
   type ReactNode,
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   useSyncExternalStore,
@@ -37,6 +38,8 @@ import { SYSTEM_ICONS } from "./system-icons.js"
 import { IconMark } from "./system-mark.js"
 import { stepRotation } from "./system-rotation.js"
 import { SystemScreen } from "./system-screen.js"
+import { notEmulated, type ServicesStore, trackServices } from "./system-services-store.js"
+import { matchesShortcut, parseShortcut } from "./system-shortcut.js"
 import type { HarnessController, HarnessSnapshot, SystemApp } from "./system-types.js"
 import { applyStoredTheme, THEME_STORAGE_KEY } from "./theme-preference.js"
 
@@ -177,15 +180,36 @@ function Portal({
   )
 }
 
+/** A section the System screen should bring into view, numbered so the same one can repeat. */
+export type SectionRequest = { id: string; count: number }
+
 function Harness({ controller }: { controller: HarnessController }) {
   const snapshot = useSnapshot(controller)
   const theme = useHostTheme(controller.shell.ownerDocument)
+  const store = useMemo(
+    () => (controller.services ? trackServices(controller.services) : undefined),
+    [controller.services],
+  )
+  const [request, setRequest] = useState<SectionRequest>()
+  const openSystem = useCallback(
+    (section?: string) => {
+      if (section) setRequest((previous) => ({ id: section, count: (previous?.count ?? 0) + 1 }))
+      controller.show("system")
+    },
+    [controller],
+  )
   const apps = snapshot.order
     .map((id) => controller.apps.find((app) => app.id === id))
     .filter((app): app is SystemApp => app !== undefined)
   return (
     <>
-      <Chrome controller={controller} snapshot={snapshot} theme={theme} />
+      <Chrome
+        controller={controller}
+        snapshot={snapshot}
+        theme={theme}
+        store={store}
+        openSystem={openSystem}
+      />
       {snapshot.statuses.map((status) => (
         <Portal key={status.id} host={status.host} theme={theme}>
           {status.state === "loading" ? (
@@ -210,10 +234,14 @@ function Harness({ controller }: { controller: HarnessController }) {
               open={controller.show}
               setInRotation={controller.setInRotation}
               setOrder={controller.setOrder}
-              services={controller.services}
+              services={store?.services}
               docsUrl={controller.docsUrl}
               build={controller.build}
               backends={controller.backends}
+              sections={controller.sections}
+              snapshot={controller.snapshot}
+              syncUrl={controller.syncUrl}
+              request={request}
             />
           </div>
         </Portal>
@@ -227,7 +255,9 @@ function Harness({ controller }: { controller: HarnessController }) {
 type Dock = { edge: "left" | "right" | "top" | "bottom"; at: number }
 const DOCK_KEY = "mockingbird.system-switcher.dock"
 const MARGIN = 8
-type Tip = "previous" | "next" | "dot"
+type Tip = "previous" | "next" | "dot" | "dev"
+/** How long a press on the pill opens System, unless it moves first (then it is a drag). */
+export const LONG_PRESS_MS = 500
 
 const readDock = (win: Window): Dock => {
   try {
@@ -255,14 +285,33 @@ const writeDock = (win: Window, value: Dock) => {
 
 const ARROW = `${buttonVariants({ variant: "ghost", size: "sm", isIconOnly: true })} rounded-full`
 
+/** The services not emulated, kept current: the pill's dev badge. */
+function useNotEmulated(store: ServicesStore | undefined) {
+  const subscribe = useCallback(
+    (listener: () => void) => store?.watch(listener) ?? (() => {}),
+    [store],
+  )
+  useEffect(() => {
+    void store?.refresh().catch(() => {
+      /* The System screen shows why the services could not be listed. */
+    })
+  }, [store])
+  const latest = useStore(subscribe, () => store?.latest())
+  return notEmulated(latest)
+}
+
 function Chrome({
   controller,
   snapshot,
   theme,
+  store,
+  openSystem,
 }: {
   controller: HarnessController
   snapshot: HarnessSnapshot
   theme: MockingbirdTheme
+  store: ServicesStore | undefined
+  openSystem(section?: string): void
 }) {
   const { shell, build } = controller
   const win = shell.ownerDocument.defaultView ?? window
@@ -272,8 +321,13 @@ function Chrome({
   const placeToast = useRef<() => void>(() => {})
   const [tip, setTip] = useState<Tip>()
   const [dragging, setDragging] = useState(false)
-  /** True from a drag's first move until just after its release, so its click does not act. */
+  /**
+   * True from a drag's first move (or a long-press opening System) until just after the
+   * release, so the click it ends with does not act.
+   */
   const dragged = useRef(false)
+  const openRef = useRef(() => openSystem())
+  openRef.current = () => openSystem()
 
   const appOf = (id: string) =>
     controller.apps.find((app) => app.id === id) ?? (controller.apps[0] as SystemApp)
@@ -330,40 +384,77 @@ function Chrome({
       settle()
     }
     let drag: { x: number; y: number; left: number; top: number } | undefined
+    /** The pill has moved under this press (it is a drag, not a long-press). */
+    let moving = false
+    // A press held still for LONG_PRESS_MS opens System; moving first makes it a drag instead.
+    let pressTimer: number | undefined
+    const cancelPress = () => {
+      if (pressTimer !== undefined) win.clearTimeout(pressTimer)
+      pressTimer = undefined
+    }
     const down = (event: globalThis.PointerEvent) => {
       if (event.button !== 0) return
       dragged.current = false
+      moving = false
       switcher.style.transition = "none"
       drag = { x: event.clientX, y: event.clientY, left: x, top: y }
+      cancelPress()
+      pressTimer = win.setTimeout(() => {
+        pressTimer = undefined
+        if (!drag || moving) return
+        // Swallow the click this press ends with, as a drag's is.
+        dragged.current = true
+        setTip(undefined)
+        openRef.current()
+      }, LONG_PRESS_MS)
     }
     const moved = (event: globalThis.PointerEvent) => {
       if (!drag) return
       const dx = event.clientX - drag.x
       const dy = event.clientY - drag.y
-      if (!dragged.current && Math.hypot(dx, dy) > 5) {
+      if (!moving && Math.hypot(dx, dy) > 5) {
+        cancelPress()
+        moving = true
         dragged.current = true
         setTip(undefined)
         setDragging(true)
         // Capture only once it is a drag, so a plain press still clicks the arrow under it.
-        switcher.setPointerCapture(event.pointerId)
+        try {
+          switcher.setPointerCapture(event.pointerId)
+        } catch {
+          /* A synthetic pointer has nothing to capture; its moves still reach the pill. */
+        }
       }
-      if (!dragged.current) return
+      if (!moving) return
       x = drag.left + dx
       y = drag.top + dy
       position()
     }
     const release = () => {
+      cancelPress()
       if (!drag) return
       drag = undefined
       setDragging(false)
+      if (moving) snap()
       if (dragged.current) {
-        snap()
         // The click that ends a drag arrives after pointerup; let it through on the next task.
         win.setTimeout(() => {
           dragged.current = false
         })
       }
     }
+    // A right-click, the context-menu key or Shift+F10 on the pill (and a touch long-press,
+    // where the browser fires it) opens System instead of the browser's menu.
+    const menu = (event: MouseEvent) => {
+      event.preventDefault()
+      cancelPress()
+      if (moving) return
+      // A touch held down: swallow the click its release may send, as after a long-press.
+      if (drag) dragged.current = true
+      setTip(undefined)
+      openRef.current()
+    }
+    switcher.addEventListener("contextmenu", menu)
     switcher.addEventListener("pointerdown", down)
     switcher.addEventListener("pointermove", moved)
     switcher.addEventListener("pointerup", release)
@@ -378,6 +469,8 @@ function Chrome({
     settle()
     return () => {
       resize.disconnect()
+      cancelPress()
+      switcher.removeEventListener("contextmenu", menu)
       switcher.removeEventListener("pointerdown", down)
       switcher.removeEventListener("pointermove", moved)
       switcher.removeEventListener("pointerup", release)
@@ -386,8 +479,34 @@ function Chrome({
     }
   }, [])
 
+  // The keyboard shortcut that opens System from anywhere in the page.
+  useEffect(() => {
+    const text = controller.systemShortcut
+    if (text === false || text === undefined) return
+    const shortcut = parseShortcut(text)
+    const doc = shell.ownerDocument
+    const press = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || !matchesShortcut(event, shortcut)) return
+      event.preventDefault()
+      openRef.current()
+    }
+    doc.addEventListener("keydown", press)
+    return () => doc.removeEventListener("keydown", press)
+  }, [controller.systemShortcut, shell])
+
+  const dev = useNotEmulated(store)
+  const devText =
+    dev.length === 0
+      ? undefined
+      : dev.length === 1
+        ? `${dev[0]?.label} is not emulated: it uses its dev resource`
+        : `${dev.length} services are not emulated: ${dev.map((service) => service.label).join(", ")}`
+  const shortcutText = controller.systemShortcut ? `, or press ${controller.systemShortcut}` : ""
+  const description = `${devText ? `${devText}. ` : ""}Long-press or right-click to open System${shortcutText}.`
+
   // Tooltips: hover with a mouse, or keyboard focus. Native listeners, so a synthetic
-  // `pointerenter` reaches them as a real one does. The buttons are fixed per harness.
+  // `pointerenter` reaches them as a real one does. Bound again when the dev badge comes or goes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the buttons change only with the badge.
   useEffect(() => {
     const cleanups: (() => void)[] = []
     for (const [name, button] of buttons.current) {
@@ -412,7 +531,7 @@ function Chrome({
     return () => {
       for (const cleanup of cleanups) cleanup()
     }
-  }, [])
+  }, [devText !== undefined])
 
   const register = (name: Tip) => (node: HTMLButtonElement | null) => {
     if (node) buttons.current.set(name, node)
@@ -422,7 +541,13 @@ function Chrome({
   const destination = tip === "previous" ? neighbour(-1) : tip === "next" ? neighbour(1) : undefined
   const dotStatus = useDotStatus(build)
   const tipText =
-    tip === "dot" ? dotStatus?.text : tip ? label(tip === "previous" ? -1 : 1) : undefined
+    tip === "dot"
+      ? dotStatus?.text
+      : tip === "dev"
+        ? devText
+        : tip
+          ? label(tip === "previous" ? -1 : 1)
+          : undefined
 
   // Above the pill, centered on the button, kept inside the shell.
   // biome-ignore lint/correctness/useExhaustiveDependencies: placed whenever its text changes.
@@ -451,13 +576,17 @@ function Chrome({
       <div
         ref={pill}
         role="group"
-        aria-label="Switch apps"
+        aria-label={devText ? "Switch apps · not all services emulated" : "Switch apps"}
+        aria-description={description}
         data-testid="system-switcher"
+        data-dev={devText ? "" : undefined}
         hidden={!controller.switcher}
         onKeyDown={(event) => {
           if (event.key === "Escape") setTip(undefined)
         }}
-        className={`pointer-events-auto absolute flex touch-none items-center gap-0.5 rounded-full border border-border bg-overlay p-1 text-foreground shadow-overlay select-none ${
+        className={`pointer-events-auto absolute flex touch-none items-center gap-0.5 rounded-full border bg-overlay [-webkit-touch-callout:none] ${
+          devText ? "border-warning" : "border-border"
+        } p-1 text-foreground shadow-overlay select-none ${
           dragging ? "cursor-grabbing [&_button]:cursor-grabbing" : "cursor-grab"
         }`}
       >
@@ -493,6 +622,21 @@ function Chrome({
             }}
           />
         ) : null}
+        {devText ? (
+          // A shape as well as a color: a triangle on the pill's other corner, without resizing it.
+          <button
+            ref={register("dev")}
+            type="button"
+            data-testid="system-dev-badge"
+            aria-label={`${devText}. Open System's services`}
+            onClick={() => {
+              if (!dragged.current) openSystem("services")
+            }}
+            className="absolute -top-1.5 -left-1.5 flex size-5 cursor-pointer items-center justify-center rounded-md bg-warning p-0 text-warning-foreground ring-2 ring-overlay outline-offset-2 focus-visible:outline-2 focus-visible:outline-focus"
+          >
+            <TriangleExclamation aria-hidden="true" className="size-3" />
+          </button>
+        ) : null}
       </div>
       <Notice notice={snapshot.notice} dismiss={controller.dismissNotice} />
       {build ? (
@@ -511,7 +655,9 @@ function Chrome({
         hidden={!tip}
         className="tooltip pointer-events-none absolute flex items-center gap-2 whitespace-nowrap text-foreground"
       >
-        {tip === "dot" && dotStatus ? (
+        {tip === "dev" ? (
+          <TriangleExclamation aria-hidden="true" className="size-3.5 text-warning" />
+        ) : tip === "dot" && dotStatus ? (
           <span aria-hidden="true" className={`size-2 rounded-full ${TONE_FILL[dotStatus.tone]}`} />
         ) : destination ? (
           <IconMark

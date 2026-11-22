@@ -43,6 +43,8 @@ export type SystemServiceLike = {
   mode: SystemServiceModeLike
   /** Why dev cannot be chosen; undefined when it can. */
   unavailable?: string
+  /** The last request this tab sent the dev resource through the proxy. */
+  lastCall?: { at: string; ok: boolean; status?: number }
 }
 
 /** Structurally identical to `SystemDevStatus` in `@crvouga/mockingbird-ui`. */
@@ -58,7 +60,18 @@ export type SystemDevStatusLike = {
 export type SystemServicesLike = {
   list(): Promise<{ dev: SystemDevStatusLike; services: readonly SystemServiceLike[] }>
   setMode(id: string, mode: SystemServiceModeLike): Promise<void>
+  /**
+   * Calls `listener` when a mode changes here or in another tab of this origin (a `storage`
+   * event on the modes key, which this tab then applies to its own emulators).
+   */
+  subscribe?(listener: () => void): () => void
+  /** Sends `GET <proxy>/<id>/` through the dev proxy and says whether the dev resource answered. */
+  test?(id: string): Promise<{ ok: boolean; message?: string }>
 }
+
+/** What `controls()` returns: a `SystemServicesLike` with live updates and Test. */
+export type DevControls = SystemServicesLike &
+  Required<Pick<SystemServicesLike, "subscribe" | "test">>
 
 export type DevUpstream = {
   baseUrl: string
@@ -70,7 +83,7 @@ export type DevResources = {
   /** For createRuntime({ upstream }): baseUrl `${proxy}/${id}`, fetch goes to the proxy as-is, rewriteAuth drops authorization and cookies. */
   upstream(id: string): DevUpstream
   /** The SystemServices provider the UI harness takes. */
-  controls(services: readonly DevServiceSpec[]): SystemServicesLike
+  controls(services: readonly DevServiceSpec[]): DevControls
 }
 
 export type DevStorage = Pick<Storage, "getItem" | "setItem" | "removeItem">
@@ -216,6 +229,8 @@ export const createDevResources = (options: DevResourcesOptions = {}): DevResour
     storage.setItem(DEV_STORAGE_KEYS.modes, JSON.stringify(modes))
   }
 
+  /** The last call each service sent through the proxy from this tab. */
+  const lastCalls = new Map<string, NonNullable<SystemServiceLike["lastCall"]>>()
   const upstream = (id: string): DevUpstream => ({
     baseUrl: `${endpoint ?? NO_PROXY_BASE}/${encodeURIComponent(id)}`,
     fetch: async (request) => {
@@ -224,7 +239,18 @@ export const createDevResources = (options: DevResourcesOptions = {}): DevResour
           { error: { code: "dev_unavailable", message: DEV_MESSAGES.none } },
           { status: 503 },
         )
-      return send(request)
+      try {
+        const response = await send(request)
+        lastCalls.set(id, {
+          at: new Date().toISOString(),
+          ok: response.ok,
+          status: response.status,
+        })
+        return response
+      } catch (error) {
+        lastCalls.set(id, { at: new Date().toISOString(), ok: false })
+        throw error
+      }
     },
     rewriteAuth: (request) => {
       const out = new Request(request)
@@ -270,7 +296,7 @@ export const createDevResources = (options: DevResourcesOptions = {}): DevResour
     return undefined
   }
 
-  const controls = (services: readonly DevServiceSpec[]): SystemServicesLike => {
+  const controls = (services: readonly DevServiceSpec[]): DevControls => {
     const specs = new Map(services.map((spec) => [spec.id, spec]))
     let restored = false
 
@@ -293,7 +319,80 @@ export const createDevResources = (options: DevResourcesOptions = {}): DevResour
       )
     }
 
+    const listeners = new Set<() => void>()
+    const emit = () => {
+      for (const listener of [...listeners]) listener()
+    }
+    /** Another tab changed the stored modes: make this tab's emulators match, then tell the UI. */
+    const follow = async () => {
+      const stored = storedModes()
+      const state = await readManifest()
+      await Promise.all(
+        services.map(async (spec) => {
+          const wanted: DevMode = stored[spec.id] === "dev" ? "dev" : "emulated"
+          if (wanted === "dev" && reason(spec, state) !== undefined) return
+          if ((await readMode(spec)) === wanted) return
+          await apply(spec, wanted).catch(() => {})
+        }),
+      )
+      emit()
+    }
+    let detach: (() => void) | undefined
+    const attach = () => {
+      const target = globalThis as {
+        addEventListener?: (
+          type: string,
+          listener: (event: { key?: string | null }) => void,
+        ) => void
+        removeEventListener?: (
+          type: string,
+          listener: (event: { key?: string | null }) => void,
+        ) => void
+      }
+      if (!target.addEventListener) return undefined
+      const onStorage = (event: { key?: string | null }) => {
+        if (event.key === DEV_STORAGE_KEYS.modes || event.key === null) void follow()
+      }
+      target.addEventListener("storage", onStorage)
+      return () => target.removeEventListener?.("storage", onStorage)
+    }
+
     return {
+      subscribe: (listener) => {
+        listeners.add(listener)
+        if (listeners.size === 1) detach = attach()
+        return () => {
+          listeners.delete(listener)
+          if (listeners.size === 0) {
+            detach?.()
+            detach = undefined
+          }
+        }
+      },
+      test: async (id) => {
+        const spec = find(id)
+        const why = reason(spec, await readManifest())
+        if (why !== undefined || !endpoint) return { ok: false, message: why ?? DEV_MESSAGES.none }
+        let response: Response
+        try {
+          response = await send(new Request(`${endpoint}/${encodeURIComponent(id)}/`))
+        } catch (error) {
+          return {
+            ok: false,
+            message: `The dev proxy did not answer: ${error instanceof Error ? error.message : String(error)}`,
+          }
+        }
+        const status = response.status
+        if (status === 401 || status === 403 || status >= 500)
+          return {
+            ok: false,
+            message: await errorMessage(response, `${spec.label} answered HTTP ${status}`),
+          }
+        return {
+          ok: true,
+          message: `${spec.label} answered through the dev proxy (HTTP ${status})`,
+        }
+      },
       list: async () => {
         const state = await readManifest()
         if (!restored) {
@@ -310,12 +409,14 @@ export const createDevResources = (options: DevResourcesOptions = {}): DevResour
         const rows = await Promise.all(
           services.map(async (spec): Promise<SystemServiceLike> => {
             const unavailable = reason(spec, state)
+            const lastCall = lastCalls.get(spec.id)
             return {
               id: spec.id,
               label: spec.label,
               ...(spec.category !== undefined ? { category: spec.category } : {}),
               mode: await readMode(spec),
               ...(unavailable !== undefined ? { unavailable } : {}),
+              ...(lastCall ? { lastCall: { ...lastCall } } : {}),
             }
           }),
         )
@@ -329,6 +430,7 @@ export const createDevResources = (options: DevResourcesOptions = {}): DevResour
         } else if (mode !== "emulated") throw new Error(`Unknown mode ${String(mode)}`)
         await apply(spec, mode)
         storeMode(id, mode)
+        emit()
       },
     }
   }

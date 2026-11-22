@@ -13,7 +13,15 @@ export type SystemService = {
   mode: SystemServiceMode
   /** Why dev cannot be chosen (for example, the proxy blocked it); undefined when it can. */
   unavailable?: string
+  /** The last request this service answered (or the dev resource did): when, and how it went. */
+  lastCall?: SystemServiceCall
 }
+
+/** One request a service answered: an ISO time, whether it succeeded, and its HTTP status. */
+export type SystemServiceCall = { at: string; ok: boolean; status?: number }
+
+/** What a service's Test button reports. */
+export type SystemServiceTest = { ok: boolean; message?: string }
 
 /**
  * Whether this preview can reach the dev proxy, in one sentence. The proxy runs on the app's own
@@ -31,6 +39,39 @@ export type SystemDevStatus = {
 export type SystemServices = {
   list(): Promise<{ dev: SystemDevStatus; services: readonly SystemService[] }>
   setMode(id: string, mode: SystemServiceMode): Promise<void>
+  /**
+   * Calls `listener` whenever a mode, an availability or a status changes outside the System
+   * screen (another tab, a test harness, the proxy refusing a service); returns the unsubscribe.
+   * The screen lists again and the switcher's dev badge follows.
+   */
+  subscribe?(listener: () => void): () => void
+  /** Probes one service through the dev proxy; adds a Test button to each row. */
+  test?(id: string): Promise<SystemServiceTest>
+}
+
+/**
+ * One more section of the System screen, after the built-in ones: a consumer's own operator
+ * screen (feature flags, start-up timings). Deep-linkable as `?system=<id>` with `syncUrl`.
+ */
+export type SystemSection = {
+  /** Unique, URL-safe, and not one of the built-in ids (`SYSTEM_SECTION_IDS`). */
+  id: string
+  label: string
+  icon?: SystemIcon
+  /** Draws into `host` once, when the System screen first draws; returns the disposer. */
+  mount(host: HTMLElement, signal: AbortSignal): (() => void) | Promise<() => void>
+}
+
+/** Save, load and reset of the whole in-tab state: the System screen's Data card. */
+export type SystemSnapshot = {
+  /** The state as a file; the screen downloads it. */
+  save(): Promise<Blob>
+  /** Replaces the state with a saved file. Rejects with a message the screen shows inline. */
+  load(file: File): Promise<void>
+  /** Back to the seeded state. */
+  reset(): Promise<void>
+  /** The downloaded file's name. Default `mockingbird-state-<time>.json`. */
+  fileName?(): string
 }
 
 /** Where an in-tab backend or emulator is: lazy ones stay `not started` until first called. */
@@ -122,4 +163,12 @@ export type HarnessController = {
   build?: SystemBuild | undefined
   /** The in-tab backends and emulators, for the System screen's Backends list. */
   backends?: SystemBackends | undefined
+  /** The consumer's own System sections, after the built-in ones. */
+  sections?: readonly SystemSection[] | undefined
+  /** Save, load and reset, for the System screen's Data card. */
+  snapshot?: SystemSnapshot | undefined
+  /** The keyboard shortcut that opens System ("Alt+Shift+S"), or false for none. */
+  systemShortcut?: string | false | undefined
+  /** Whether `?system=<section>` is read and written (the harness's `syncUrl`). */
+  syncUrl?: boolean | undefined
 }
