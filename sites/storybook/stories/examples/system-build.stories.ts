@@ -519,12 +519,43 @@ export const Applying: StoryObj = {
   render: live("applying"),
   play: async ({ canvasElement }) => {
     const preview = await card(canvasElement)
+    // Said only once the update has taken a moment (`APPLYING_TOAST_DELAY_MS`).
+    await waitFor(() => expect(toast(canvasElement)).toBeVisible())
     await expect(toast(canvasElement)).toHaveTextContent("Updating…")
     await expect(within(toast(canvasElement)).queryByRole("button")).toBeNull()
     await expect(preview.getByRole("button", { name: "Updating…" })).toBeDisabled()
     await expect(
       within(preview.getByTestId("system-preview-state")).getByText("Updating"),
     ).toBeVisible()
+  },
+}
+
+/**
+ * A dev server's update: applied the moment it is built and done within a moment. Nothing pops
+ * up; the dot is the only thing that moves, and the tab ends on the new version.
+ */
+export const InstantUpdate: StoryObj = {
+  render: live("live", { delay: 150 }),
+  play: async ({ canvasElement }) => {
+    await card(canvasElement)
+    const note = toast(canvasElement)
+    let shown = false
+    const watch = new MutationObserver(() => {
+      shown ||= !note.hidden
+    })
+    watch.observe(note, { attributes: true, attributeFilter: ["hidden"] })
+    const state = control().build.get()
+    control().set({
+      latest: { version: NEXT, at: new Date().toISOString() },
+      // As `createLivePreview({ countdownMs: 0 })` reports it: available and applying at once.
+      update: { ...state.update, available: true, applying: true },
+    })
+    await control().build.applyUpdate()
+    watch.disconnect()
+    await expect(shown).toBe(false)
+    await expect(note).not.toBeVisible()
+    await expect(value(canvasElement, "tab")).toHaveTextContent("b81e07c")
+    await expect(dot(canvasElement)).toHaveAttribute("data-tone", "ok")
   },
 }
 

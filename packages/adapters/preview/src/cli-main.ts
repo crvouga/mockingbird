@@ -1,6 +1,8 @@
 /**
- * `mockingbird-preview`: the commands a preview workflow runs.
+ * `mockingbird-preview`: the dev loop, and the commands a preview workflow runs.
  *
+ *   mockingbird-preview dev --entry <file> [--port <n>] [--host <name>] [--title <t>]
+ *     [--host-id <id>] [--base <path>]
  *   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
  *     [--state-version <v>]
  *   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
@@ -46,6 +48,8 @@ export type PreviewCliIo = {
 }
 
 const USAGE = `Usage:
+  mockingbird-preview dev --entry <file> [--port <n>] [--host <name>] [--title <text>]
+    [--host-id <id>] [--base <path>]
   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
     [--state-version <v>]
   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
@@ -267,8 +271,64 @@ const wranglerConfig = (args: Args, io: PreviewCliIo): number => {
   return 0
 }
 
-/** Serves `--outdir`, rebuilds with `--build` on changes under `--watch`, until interrupted. */
+/** Resolves when the process is interrupted, or when `signal` aborts. */
+const interrupted = (signal?: AbortSignal) =>
+  new Promise<void>((done) => {
+    if (signal) {
+      if (signal.aborted) done()
+      else signal.addEventListener("abort", () => done(), { once: true })
+      return
+    }
+    const signals = process as unknown as {
+      on(name: string, listener: () => void): void
+      off(name: string, listener: () => void): void
+    }
+    const stop = () => {
+      signals.off("SIGINT", stop)
+      signals.off("SIGTERM", stop)
+      done()
+    }
+    signals.on("SIGINT", stop)
+    signals.on("SIGTERM", stop)
+  })
+
+/**
+ * `dev --entry`: builds the preview itself (esbuild, in memory, incrementally) and serves it
+ * until interrupted. A project whose build needs esbuild options (plugins, defines) calls
+ * `devPreview` from a script of its own instead.
+ */
+const devEntry = async (args: Args, io: PreviewCliIo, signal?: AbortSignal): Promise<number> => {
+  only(args, ["entry", "port", "host", "title", "host-id", "base"])
+  const entry = requiredArg(args, "entry")
+  const port = optionalArg(args, "port")
+  if (port !== undefined && !(Number.isInteger(Number(port)) && Number(port) >= 0))
+    throw new UsageError("--port is a port number")
+  const hostname = optionalArg(args, "host")
+  const title = optionalArg(args, "title")
+  const hostId = optionalArg(args, "host-id")
+  const base = optionalArg(args, "base")
+  // Loaded here: esbuild is an optional peer dependency the other commands never need.
+  const { devPreview } = await import("./dev-preview.js")
+  const preview = await devPreview({
+    entry,
+    ...(port === undefined ? {} : { port: Number(port) }),
+    ...(hostname === undefined ? {} : { hostname }),
+    ...(title === undefined ? {} : { title }),
+    ...(hostId === undefined ? {} : { hostId }),
+    ...(base === undefined ? {} : { base }),
+    log: io.stdout,
+  })
+  await interrupted(signal)
+  await preview.close()
+  return 0
+}
+
+/**
+ * With `--entry`, the built-in esbuild loop (`devEntry`). Otherwise serves `--outdir` and rebuilds
+ * with `--build` on changes under `--watch`, until interrupted.
+ */
 const dev = async (args: Args, io: PreviewCliIo, signal?: AbortSignal): Promise<number> => {
+  if (args.has("entry")) return devEntry(args, io, signal)
   only(args, ["outdir", "build", "watch", "port", "host", "state-version", "debounce-ms"])
   const watchPaths = args.get("watch") ?? []
   if (watchPaths.length === 0) throw new UsageError("--watch is required")
@@ -297,24 +357,7 @@ const dev = async (args: Args, io: PreviewCliIo, signal?: AbortSignal): Promise<
   })
   io.stdout(`mockingbird-preview dev: serving ${server.url}`)
   await server.ready
-  await new Promise<void>((done) => {
-    if (signal) {
-      if (signal.aborted) done()
-      else signal.addEventListener("abort", () => done(), { once: true })
-      return
-    }
-    const signals = process as unknown as {
-      on(name: string, listener: () => void): void
-      off(name: string, listener: () => void): void
-    }
-    const stop = () => {
-      signals.off("SIGINT", stop)
-      signals.off("SIGTERM", stop)
-      done()
-    }
-    signals.on("SIGINT", stop)
-    signals.on("SIGTERM", stop)
-  })
+  await interrupted(signal)
   await server.close()
   return 0
 }

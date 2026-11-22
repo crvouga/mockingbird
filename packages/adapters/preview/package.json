@@ -44,6 +44,14 @@
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
     },
+    "./dev-boot": {
+      "types": "./dist/dev-boot.d.ts",
+      "default": "./dist/dev-boot.js"
+    },
+    "./dev-preview": {
+      "types": "./dist/dev-preview.d.ts",
+      "default": "./dist/dev-preview.js"
+    },
     "./on-demand": {
       "types": "./dist/on-demand.d.ts",
       "default": "./dist/on-demand.js"
@@ -76,6 +84,8 @@
       "worker-entry": "portable",
       "boot": "portable",
       "build": "node",
+      "dev-boot": "portable",
+      "dev-preview": "node",
       "cli": "node",
       "on-demand": "portable",
       "freshness": "portable"

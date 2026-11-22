@@ -10,6 +10,7 @@ no GitHub token.
 
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
+- [Develop in the preview](#develop-in-the-preview)
 - [Inputs](#inputs)
 - [What a pull request can reach](#what-a-pull-request-can-reach)
 - [Only build what changed](#only-build-what-changed)
@@ -122,6 +123,48 @@ preview's status live, and deletes the Worker when the PR closes. Forks get no s
 PRs are skipped. The lab in this repo uses this, minus the CI `workflow_run` trigger
 ([system-preview.yml](../.github/workflows/system-preview.yml)), with its own Worker to add the
 [dev resources](DEV_RESOURCES.md) proxy.
+
+## Develop in the preview
+
+The preview is also where you work. `mockingbird-preview dev` serves the same preview from memory
+and rebuilds it when you save; open tabs take the new version in place, with no reload and no
+countdown:
+
+```sh
+bunx mockingbird-preview dev --entry src/preview-app.ts   # http://127.0.0.1:4173
+```
+
+A project whose build needs esbuild options (plugins, defines, the browser runtime) calls
+`devPreview` with the options it gives `buildPreview`:
+
+```ts
+// scripts/dev-preview.ts
+import { devPreview } from "@crvouga/mockingbird-preview/dev-preview"
+await devPreview({ entry: "src/preview-app.ts", title: "My app preview" })
+```
+
+- **One process.** The app, its backends and its emulators all run in the tab, so there is no API
+  server, database or emulator to start, wait for or restart.
+- **Save to screen without a reload.** One esbuild context rebuilds only what changed and pushes
+  the new version over `/__preview/live`, the stream a deployed preview uses; the boot loader
+  disposes the running app and imports the new one into the same page. A chunk that did not change
+  keeps its URL and stays cached. A save that changes no output is not an update.
+- **Errors where you are looking.** A build that fails keeps the last good version running and
+  shows the compiler's message in a card in the page (and in the terminal); the card goes with the
+  next good build. Before any build has succeeded, the page shows the message and loads the app
+  as soon as one does.
+- **The same switches.** With `mountSystemHarness`, the dot spins while a build runs and turns red
+  when one fails, and System's Auto-update switch holds a tab on its version.
+- **Other devices.** `--host 0.0.0.0` (or `hostname`) serves your network, gzipped. A port that is
+  taken is stepped over unless `strictPort`.
+- **More routes.** `fetch(request)` answers on the same origin before the files do: mount your
+  [dev resources](DEV_RESOURCES.md) proxy at `/__dev` and the dev server behaves like the deployed
+  Worker.
+
+The lab in this repo runs this way: `bun run preview:ui` (see `scripts/preview-ui.ts`). On its 22 MB
+unminified bundle a save reaches the screen in under a second; most of that is the app starting
+again, and a smaller app is proportionally quicker. Source maps are off by default
+(`sourcemap: true` roughly doubles a large app's rebuild).
 
 ## Inputs
 

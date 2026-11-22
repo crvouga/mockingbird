@@ -1,14 +1,15 @@
 /**
  * Builds a static live preview: the app as one hashed entry per version, the stable boot loader
  * (`preview.js`, see `./boot`), `index.html`, `build.json` and a development `version.json`. A
- * deploy then stamps `version.json` with the commit it ships (`stampPreviewVersion`).
+ * deploy then stamps `version.json` with the commit it ships (`stampPreviewVersion`). While you
+ * work, `devPreview` (`./dev-preview`) serves the same preview from memory and rebuilds on save.
  *
  * Bun / Node only (esbuild and the file system). esbuild is a peer dependency.
  */
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
-import { basename, dirname, join, resolve } from "node:path"
+import { dirname, join, relative, resolve, sep } from "node:path"
 import { fileURLToPath } from "node:url"
-import { type BuildOptions, build } from "esbuild"
+import { type BuildOptions, build, type Metafile } from "esbuild"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const extension = import.meta.url.endsWith(".ts") ? ".ts" : ".js"
@@ -72,8 +73,22 @@ const escapeHtml = (value: string): string =>
 const writeJson = (path: string, value: unknown) =>
   writeFile(path, `${JSON.stringify(value)}\n`, "utf8")
 
-/** Builds the static preview into `outdir` and returns the app's hashed entry (`./app-<hash>.js`). */
-export async function buildPreview(options: BuildPreviewOptions): Promise<{ entry: string }> {
+/** What `buildPreview` and `devPreview` both make: the app build, the boot loader and the page. */
+export type PreviewBuildPlan = {
+  workingDir: string
+  entryPath: string
+  base: string
+  /** The app's esbuild options, without where and how the output is written. */
+  app: BuildOptions
+  /** The boot loader's esbuild options, without where the output is written. */
+  loader(boot?: { live?: Record<string, unknown>; dev?: boolean }): BuildOptions
+  html: string
+  /** The app's hashed entry (`./app-<hash>.js`) among a build's outputs. */
+  entryOf(metafile: Metafile, outdir: string): string
+}
+
+/** Validates the options and plans the build. */
+export function planPreviewBuild(options: Omit<BuildPreviewOptions, "outdir">): PreviewBuildPlan {
   const hostId = options.hostId ?? "preview"
   if (!/^[A-Za-z][\w-]*$/.test(hostId)) throw new Error(`Invalid hostId ${hostId}`)
   const title = options.title ?? "Preview"
@@ -81,58 +96,75 @@ export async function buildPreview(options: BuildPreviewOptions): Promise<{ entr
   if (!/^\/(?:[\w.~-]+\/)*$/.test(base)) throw new Error(`Invalid base ${base}`)
   const extra = (options.esbuild ?? {}) as BuildOptions
   const workingDir = extra.absWorkingDir ?? process.cwd()
-  const outdir = resolve(workingDir, options.outdir)
   const entryPath = resolve(workingDir, options.entry)
+  return {
+    workingDir,
+    entryPath,
+    base,
+    // One hashed entry per version, so a new version's entry never collides with the one an open
+    // tab is running, and the boot loader can import it into the same page.
+    app: {
+      bundle: true,
+      platform: "browser",
+      target: "es2022",
+      minify: true,
+      ...extra,
+      absWorkingDir: workingDir,
+      format: "esm",
+      entryPoints: { app: entryPath },
+      splitting: true,
+      metafile: true,
+      entryNames: "[name]-[hash]",
+      chunkNames: "[name]-[hash]",
+      assetNames: "[name]-[hash]",
+    },
+    // A stable name, loaded by index.html, never swapped.
+    loader: (boot = {}) => ({
+      bundle: true,
+      format: "esm",
+      platform: "browser",
+      target: "es2022",
+      minify: true,
+      absWorkingDir: workingDir,
+      stdin: {
+        // `baseUrl` is the loader's own directory, the deployment root, never the page's address:
+        // at a deep link the page is `/settings/profile` but version.json is still `/version.json`.
+        contents: boot.dev
+          ? `import { bootDevPreview } from ${literal(join(here, `dev-boot${extension}`))}\nbootDevPreview({ host: ${literal(`#${hostId}`)}, baseUrl: new URL("./", import.meta.url).href, live: ${literal(boot.live ?? {})} })\n`
+          : `import { bootPreview } from ${literal(join(here, `boot${extension}`))}\nbootPreview({ host: ${literal(`#${hostId}`)}, baseUrl: new URL("./", import.meta.url).href }).catch(() => {})\n`,
+        resolveDir: here,
+        sourcefile: "preview-boot.js",
+        loader: "js",
+      },
+    }),
+    html: `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${escapeHtml(title)}</title>
+<style>html,body,#${hostId}{height:100%;margin:0}body{font-family:system-ui}</style>
+</head><body><main id="${hostId}" aria-label="${escapeHtml(title)}"></main><script type="module" src="${base}preview.js"></script></body></html>
+`,
+    entryOf(metafile, outdir) {
+      const output = Object.entries(metafile.outputs).find(
+        ([path, out]) =>
+          path.endsWith(".js") &&
+          out.entryPoint !== undefined &&
+          resolve(workingDir, out.entryPoint) === entryPath,
+      )?.[0]
+      if (output === undefined) throw new Error("The app build produced no entry")
+      return `./${relative(outdir, resolve(workingDir, output)).split(sep).join("/")}`
+    },
+  }
+}
+
+/** Builds the static preview into `outdir` and returns the app's hashed entry (`./app-<hash>.js`). */
+export async function buildPreview(options: BuildPreviewOptions): Promise<{ entry: string }> {
+  const plan = planPreviewBuild(options)
+  const outdir = resolve(plan.workingDir, options.outdir)
   await rm(outdir, { recursive: true, force: true })
   await mkdir(outdir, { recursive: true })
-
-  // The app: one hashed entry per version, so a new deploy's entry never collides with the one an
-  // open tab is running, and the boot loader can import it into the same page.
-  const app = await build({
-    bundle: true,
-    platform: "browser",
-    target: "es2022",
-    minify: true,
-    ...extra,
-    absWorkingDir: workingDir,
-    format: "esm",
-    entryPoints: { app: entryPath },
-    outdir,
-    splitting: true,
-    metafile: true,
-    write: true,
-    entryNames: "[name]-[hash]",
-    chunkNames: "[name]-[hash]",
-    assetNames: "[name]-[hash]",
-  })
-  const output = Object.entries(app.metafile.outputs).find(
-    ([path, out]) =>
-      path.endsWith(".js") &&
-      out.entryPoint !== undefined &&
-      resolve(workingDir, out.entryPoint) === entryPath,
-  )?.[0]
-  if (output === undefined) throw new Error("The app build produced no entry")
-  const entry = `./${basename(output)}`
-
-  // The boot loader: a stable name, loaded by index.html, never swapped.
-  await build({
-    bundle: true,
-    format: "esm",
-    platform: "browser",
-    target: "es2022",
-    minify: true,
-    absWorkingDir: workingDir,
-    stdin: {
-      // `baseUrl` is the loader's own directory, the deployment root, never the page's address:
-      // at a deep link the page is `/settings/profile` but version.json is still `/version.json`.
-      contents: `import { bootPreview } from ${literal(join(here, `boot${extension}`))}\nbootPreview({ host: ${literal(`#${hostId}`)}, baseUrl: new URL("./", import.meta.url).href }).catch(() => {})\n`,
-      resolveDir: here,
-      sourcefile: "preview-boot.js",
-      loader: "js",
-    },
-    outfile: join(outdir, "preview.js"),
-  })
-
+  const app = await build({ ...plan.app, outdir, write: true, metafile: true })
+  const entry = plan.entryOf(app.metafile, outdir)
+  await build({ ...plan.loader(), outfile: join(outdir, "preview.js") })
   await writeJson(join(outdir, "build.json"), { entry })
   // Deploys overwrite this with the commit they ship (stampPreviewVersion).
   await writeJson(join(outdir, "version.json"), {
@@ -140,16 +172,7 @@ export async function buildPreview(options: BuildPreviewOptions): Promise<{ entr
     builtAt: new Date().toISOString(),
     entry,
   })
-  await writeFile(
-    join(outdir, "index.html"),
-    `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${escapeHtml(title)}</title>
-<style>html,body,#${hostId}{height:100%;margin:0}body{font-family:system-ui}</style>
-</head><body><main id="${hostId}" aria-label="${escapeHtml(title)}"></main><script type="module" src="${base}preview.js"></script></body></html>
-`,
-    "utf8",
-  )
+  await writeFile(join(outdir, "index.html"), plan.html, "utf8")
   return { entry }
 }
 

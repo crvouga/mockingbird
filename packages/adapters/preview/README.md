@@ -195,15 +195,23 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `esbuild` is a peer dependency), build the static preview (hashed `app-<hash>.js`, `preview.js`,
   `index.html`, `build.json`, a development `version.json`) and stamp `version.json` with the
   commit a deploy ships. See [Building the preview](#building-the-preview).
+- `devPreview({ entry, port?, strictPort?, hostname?, minify?, sourcemap?, debounceMs?, countdownMs?, fetch?, log?, title?, hostId?, base?, esbuild? })`,
+  from the `/dev-preview` export (Bun / Node; `esbuild` is a peer dependency), is the dev loop for a preview
+  `buildPreview` builds: it builds the entry itself, incrementally and in memory, serves the preview `buildPreview` would build from memory, rebuilds on save and pushes each
+  version to open tabs. It resolves with `{ url, port, version(), builds(), subscribe(listener),
+  rebuild(), fetch(request), tabs(), close() }` once it is listening and the first build is over.
+  `bootDevPreview` and `showDevBuildError`, from `/dev-boot`, are the boot loader it serves. See
+  [The esbuild dev server](#the-esbuild-dev-server).
 - `createPreviewDevServer({ outdir, build, watch, … })`, from the `/node` export, and
-  `mockingbird-preview dev` are the local dev loop: serve the built preview, rebuild on every
+  `mockingbird-preview dev` are the local dev loop for any build: serve the built preview, run your build command on every
   change, and push each build to open tabs. See [Local dev loop](#local-dev-loop).
 - The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`, `dev`; for named Previews
   `deploy-preview`, `remove-preview`, `sweep`, `pr-section`, `deployment`) is what the preview
   workflow runs. See [The CLI](#the-cli).
 - `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
   browser side: it mounts `current`, follows the status stream (or polls it), and swaps in each newly deployed
-  build without reloading the page. Its result is structurally the UI package's `SystemBuild`
+  build without reloading the page. `countdownMs: 0` applies a new version the moment it is live, with
+  no countdown (what the dev server's loader asks for). Its result is structurally the UI package's `SystemBuild`
   (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
   `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
   `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
@@ -904,6 +912,44 @@ starts or stops naming one), the update resets that data: `createLivePreview` re
 `update.resetsData: true` and never applies it on its own (no countdown, not in a hidden tab, not
 after a lazy chunk fails to load); `applyUpdate()` still does when the person asks. The UI
 package's toast and Preview card say so, and the card offers Save first.
+
+### The esbuild dev server
+
+`devPreview` is the quickest loop when the preview is one `buildPreview` entry: it keeps an esbuild
+context, so a save reparses only what changed, and nothing is written to disk. When the preview
+is made by a build of your own (several steps, another bundler), use the
+[local dev loop](#local-dev-loop), which runs that build on every change.
+
+```ts
+import { devPreview } from "@crvouga/mockingbird-preview/dev-preview"
+
+const preview = await devPreview({ entry: "src/preview-app.ts", title: "My app preview" })
+console.log(preview.url) // http://127.0.0.1:4173/
+```
+
+or, with no esbuild options to pass, `mockingbird-preview dev --entry src/preview-app.ts
+[--port <n>] [--host <name>] [--title <text>] [--host-id <id>] [--base <path>]`.
+
+- **What it serves.** `index.html` at every path without a file extension (a deep link boots), the
+  dev boot loader at `preview.js`, `version.json` and `build.json` for the last good build, the
+  build's hashed files (`cache-control: immutable`; a missing file is a 404, never the page), and
+  `/__preview/status` and `/__preview/live` with the build as a deployed preview's status has it:
+  `building`, then `deployed` with the new version, or `failed` with the compiler's message. The
+  stream pushes each change as it happens.
+- **A version is its entry's hash.** A rebuild whose output is the same announces nothing. Files
+  of the last three builds stay served, so a tab a build or two behind still loads its lazy chunks.
+- **What is watched.** The directories of the files esbuild read, outside `node_modules`. While a
+  build is failing, any file in them starts another, since the fix may be a file not read yet.
+  Changes within `debounceMs` (default 20) make one build; builds never overlap.
+- **In the tab.** The loader boots with `countdownMs` (default 0), so a new version replaces the
+  running one at once: the app's disposer runs and the new entry's `start` mounts into the same
+  host. A failing build shows its message in a card (`#mockingbird-preview-dev-error`, in a shadow
+  root) until the next good one. With no good build yet, the page is the message, and it reloads
+  when a build succeeds.
+- **`fetch(request)`** is asked first for every request but `/__preview/*`; answer `undefined` to
+  pass. Use it for a dev proxy or an API on the same origin.
+- **Other devices.** With a `hostname` other than loopback, compressible files over 1 KiB are
+  gzipped for clients that are not this machine.
 
 ### The CLI
 

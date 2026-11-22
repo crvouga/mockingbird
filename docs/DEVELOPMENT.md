@@ -51,6 +51,17 @@ A new page, screen or state gets a story in the same change; `bun run check:stor
 `bun run check`) fails on a UI file no story catalogues. The catalog is published with the docs
 site at [`/storybook/`](https://mockingbird.chrisvouga.dev/storybook/).
 
+To see a change in the whole running system instead of one story, run the lab's preview:
+
+```sh
+bun run preview:ui               # the System harness, the lab, the emulators and notifications
+```
+
+It serves the preview from memory, rebuilds when a file under `packages/examples/medical-testing`
+is saved, and swaps the new version into every open tab without a reload
+([Develop in the preview](PREVIEWS.md#develop-in-the-preview)). Workspace packages are read from
+their `dist`; `--packages` rebuilds them as their source changes.
+
 ## Infrastructure health
 
 `bun run health` checks deployed infrastructure and release readiness in one report. This is

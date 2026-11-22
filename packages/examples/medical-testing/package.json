@@ -26,7 +26,8 @@
     "lint": "biome check .",
     "test": "bun test",
     "build": "bun ../../../scripts/bundle-service.ts",
-    "preview:build": "bun scripts/build-preview.ts"
+    "preview:build": "bun scripts/build-preview.ts",
+    "preview:dev": "bun scripts/dev-preview.ts"
   },
   "dependencies": {
     "@crvouga/mockingbird-adapter-browser": "workspace:*",

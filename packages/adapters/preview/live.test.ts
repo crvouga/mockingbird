@@ -547,6 +547,23 @@ describe("createLivePreview", () => {
     h.live.close()
   })
 
+  test("countdownMs 0 applies a new version at once, with no countdown, unless auto-update is off", async () => {
+    const h = harness({ countdownMs: 0 })
+    await h.live.start()
+    const seen: (string | undefined)[] = []
+    h.live.subscribe((state) => seen.push(state.update.autoApplyAt))
+    h.served.version = V2
+    await h.clock.advance(60_000)
+    expect(h.live.get().current.version).toBe(V2.version)
+    expect(seen.every((at) => at === undefined)).toBe(true)
+    h.live.setAutoUpdate(false)
+    h.served.version = V3
+    await h.clock.advance(60_000)
+    expect(h.live.get().current.version).toBe(V2.version)
+    expect(h.live.get().update.available).toBe(true)
+    h.live.close()
+  })
+
   test("applies immediately while the document is hidden", async () => {
     const h = harness()
     await h.live.start()
