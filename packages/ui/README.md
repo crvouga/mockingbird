@@ -319,6 +319,11 @@ mountSystemHarness(host, surfaces, {
 A section that only lists facts (the feature flags a build runs with, grouped by app, with why some are off) needs no drawing code: pass a `SystemFactsSection` in `sections`, beside mount-based ones, with `load()` in place of `mount`. `load()` runs once, when System first draws, and answers groups of rows: `{ group, rows: { label, value, tone?, note? }[] }[]`. The screen draws one card per group, with a filter box (`Filter <label>`) that keeps the rows matching every word typed, in a row's label, value or note or in its group's name, and a count of the rows matched. `tone: "on"` and `"off"` draw the value as a chip, `"muted"` as faint text; `note` sits under the row. A rejected `load()` shows its error with Retry in that section only. Its id follows the same rules as any section's, and it deep-links the same way.
 
 ```ts
+import { mountSystemHarness, type SystemSurface } from "@crvouga/mockingbird-ui"
+
+declare const host: HTMLElement
+declare const surfaces: SystemSurface[]
+
 mountSystemHarness(host, surfaces, {
   sections: [{
     id: "flags",
