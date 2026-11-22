@@ -244,6 +244,34 @@ export async function packedManifest(tarball: string): Promise<Manifest> {
   return JSON.parse(read.stdout.toString()) as Manifest
 }
 
+/**
+ * The peer dependencies a consumer installs to use every entry point of these packages.
+ *
+ * A peer marked optional in `peerDependenciesMeta` is still required by the entry points
+ * that import it (e.g. a `./react` subpath needs `react`), so a project importing every
+ * entry point installs optional peers too. Names in `provided` (the packages themselves, or
+ * anything the consumer already pins) are left alone. When two packages declare different
+ * ranges for one peer, the ranges are joined with a space: npm reads that as their
+ * intersection, so the install fails loudly if no version satisfies both.
+ */
+export function consumerPeerDependencies(
+  manifests: Manifest[],
+  provided: ReadonlySet<string>,
+): Record<string, string> {
+  const ranges = new Map<string, string[]>()
+  for (const manifest of manifests) {
+    for (const [dep, range] of Object.entries(manifest.peerDependencies ?? {})) {
+      if (provided.has(dep)) continue
+      const seen = ranges.get(dep) ?? []
+      if (!seen.includes(range)) seen.push(range)
+      ranges.set(dep, seen)
+    }
+  }
+  return Object.fromEntries(
+    [...ranges].sort(([a], [b]) => a.localeCompare(b)).map(([dep, list]) => [dep, list.join(" ")]),
+  )
+}
+
 // ── Git ────────────────────────────────────────────────────────────
 
 export const tagName = (name: string, version: string): string => `${name}@${version}`
