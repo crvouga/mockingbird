@@ -8,7 +8,7 @@
  * page or of the surfaces' own content. (Shadow roots would isolate further, but React Aria's
  * press handling, behind every HeroUI button and switch, does not work across a shadow boundary.)
  */
-import { ArrowLeft, ArrowRight, TriangleExclamation } from "@gravity-ui/icons"
+import { ArrowLeft, ArrowRight, Sliders, TriangleExclamation } from "@gravity-ui/icons"
 import { Button, Card, Spinner } from "@heroui/react"
 import {
   type ReactNode,
@@ -252,11 +252,14 @@ function Harness({ controller }: { controller: HarnessController }) {
 
 // ---- The switcher bar: a thin strip across the top with arrows through the rotation.
 
-type Tip = "previous" | "next" | "dot" | "dev"
+type Tip = "previous" | "next" | "dot" | "dev" | "system"
 
-/** A control in the bar: small enough for a 28px strip, with a visible focus ring. */
+/**
+ * A control in the bar: an icon and no words, faint until hovered or focused, so the strip stays
+ * out of the way of the app under it.
+ */
 const BAR_BUTTON =
-  "inline-flex h-6 shrink-0 cursor-pointer items-center justify-center gap-1 rounded-md px-1.5 text-xs text-muted outline-offset-1 hover:bg-default hover:text-foreground focus-visible:outline-2 focus-visible:outline-focus"
+  "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded p-0 text-muted opacity-60 outline-offset-1 hover:bg-default hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus"
 
 /** The services not emulated, kept current: the bar's dev badge. */
 function useNotEmulated(store: ServicesStore | undefined) {
@@ -368,9 +371,11 @@ function Chrome({
       ? dotStatus?.text
       : tip === "dev"
         ? devText
-        : tip
-          ? label(tip === "previous" ? -1 : 1)
-          : undefined
+        : tip === "system"
+          ? "System"
+          : tip
+            ? label(tip === "previous" ? -1 : 1)
+            : undefined
 
   // Just below the bar, centered on the button, kept inside the shell.
   // biome-ignore lint/correctness/useExhaustiveDependencies: placed whenever its text changes.
@@ -400,8 +405,8 @@ function Chrome({
             onKeyDown={(event) => {
               if (event.key === "Escape") setTip(undefined)
             }}
-            className={`flex items-center gap-0.5 border-b bg-background px-1.5 text-xs text-foreground select-none ${
-              devText ? "border-warning" : "border-separator"
+            className={`flex items-center gap-0.5 border-b bg-background px-1.5 text-foreground select-none ${
+              devText ? "border-warning" : "border-transparent"
             }`}
             style={{ height: SWITCHER_BAR_HEIGHT }}
           >
@@ -412,7 +417,7 @@ function Chrome({
                   key={name}
                   ref={register(name)}
                   type="button"
-                  className={`${BAR_BUTTON} w-6 px-0`}
+                  className={BAR_BUTTON}
                   aria-label={step < 0 ? "Previous app" : "Next app"}
                   aria-description={label(step)}
                   data-tip={label(step)}
@@ -420,32 +425,29 @@ function Chrome({
                   onClick={() => controller.show(neighbour(step).id)}
                 >
                   {step < 0 ? (
-                    <ArrowLeft className="size-3.5" aria-hidden="true" />
+                    <ArrowLeft className="size-3" aria-hidden="true" />
                   ) : (
-                    <ArrowRight className="size-3.5" aria-hidden="true" />
+                    <ArrowRight className="size-3" aria-hidden="true" />
                   )}
                 </button>
               )
             })}
-            <span
-              data-testid="system-switcher-current"
-              className="min-w-0 truncate px-1.5 font-medium text-foreground"
-            >
+            {/* No words in the bar: the shown surface's name is for assistive technology only. */}
+            <span data-testid="system-switcher-current" className="sr-only" aria-live="polite">
               {current?.label}
             </span>
             <span className="ml-auto flex shrink-0 items-center gap-0.5">
               {devText ? (
-                // A shape as well as a color: a triangle, with how many services are not emulated.
+                // A shape as well as a color: a triangle while any service is not emulated.
                 <button
                   ref={register("dev")}
                   type="button"
                   data-testid="system-dev-badge"
                   aria-label={`${devText}. Open System's services`}
                   onClick={() => openSystem("services")}
-                  className={`${BAR_BUTTON} text-warning`}
+                  className={`${BAR_BUTTON} text-warning opacity-100`}
                 >
-                  <TriangleExclamation aria-hidden="true" className="size-3.5" />
-                  <span className="tabular-nums">{dev.length}</span>
+                  <TriangleExclamation aria-hidden="true" className="size-3" />
                 </button>
               ) : null}
               {build ? (
@@ -456,13 +458,15 @@ function Chrome({
                 />
               ) : null}
               <button
+                ref={register("system")}
                 type="button"
+                aria-label="System"
                 data-testid="system-switcher-system"
                 aria-current={snapshot.current === "system" ? "page" : undefined}
                 onClick={() => openSystem()}
-                className={`${BAR_BUTTON} aria-[current=page]:text-foreground`}
+                className={`${BAR_BUTTON} aria-[current=page]:text-foreground aria-[current=page]:opacity-100`}
               >
-                System
+                <Sliders aria-hidden="true" className="size-3" />
               </button>
             </span>
           </div>
@@ -486,6 +490,8 @@ function Chrome({
               aria-hidden="true"
               className={`size-2 rounded-full ${TONE_FILL[dotStatus.tone]}`}
             />
+          ) : tip === "system" ? (
+            <IconMark icon={SYSTEM_ICONS.system} label="System" size="sm" />
           ) : destination ? (
             <IconMark
               icon={
@@ -567,16 +573,13 @@ function BuildDot({
     >
       <span
         aria-hidden="true"
-        className={`absolute inset-1.5 rounded-full transition-transform group-hover:scale-125 ${
+        // Up to date is the quiet state: a small, faint dot. The others ask for attention.
+        className={`absolute rounded-full transition group-hover:scale-125 group-hover:opacity-100 group-focus-visible:opacity-100 ${
+          status.tone === "ok" ? "inset-[7px] opacity-60" : "inset-1.5"
+        } ${
           status.tone === "offline" ? "border-2 border-muted bg-background" : TONE_FILL[status.tone]
         }`}
       />
-      {status.tone === "ok" && live ? (
-        <span
-          aria-hidden="true"
-          className="absolute inset-1.5 rounded-full bg-success opacity-60 motion-safe:animate-ping"
-        />
-      ) : null}
       {DOT_RING[status.tone] ? <span aria-hidden="true" className={DOT_RING[status.tone]} /> : null}
     </button>
   )

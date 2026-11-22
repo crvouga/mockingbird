@@ -130,7 +130,7 @@ export function writeOrder(storage: () => Store, order: readonly string[]): void
 }
 
 /** The height of the switcher bar across the top of the shell, in CSS pixels. */
-export const SWITCHER_BAR_HEIGHT = 28
+export const SWITCHER_BAR_HEIGHT = 24
 
 /**
  * @deprecated The switcher is a fixed bar across the top now and keeps no position; nothing

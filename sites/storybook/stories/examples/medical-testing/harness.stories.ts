@@ -133,7 +133,12 @@ export const Switcher: StoryObj = {
       expect(rect.top).toBe(box.top)
       expect(rect.left).toBe(box.left)
       expect(rect.width).toBe(box.width)
-      expect(rect.height).toBe(28)
+      expect(rect.height).toBe(24)
+      // Icons only: the bar's one piece of text is for assistive technology, clipped from view.
+      const words = [...bar.querySelectorAll("*")].filter((node) =>
+        [...node.childNodes].some((child) => child.nodeType === 3 && child.textContent?.trim()),
+      )
+      expect(words.map((node) => node.className)).toEqual(["sr-only"])
       // In the layout, not over it: the shown surface starts where the bar ends.
       const panel = shell.querySelector<HTMLElement>("section[data-surface]:not([hidden])")
       expect(panel?.getBoundingClientRect().top).toBe(rect.bottom)
