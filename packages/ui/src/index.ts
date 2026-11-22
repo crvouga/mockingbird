@@ -61,6 +61,7 @@ export {
   type PreviewSystemSurface,
   planPartUpdate,
   ROTATION_KEY,
+  SWITCHER_BAR_HEIGHT,
   SYSTEM_SECTION_IDS,
   SYSTEM_SECTION_PARAM,
   type SystemBackend,

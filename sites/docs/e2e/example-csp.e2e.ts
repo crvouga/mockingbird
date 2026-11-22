@@ -82,7 +82,7 @@ afterAll(async () => {
 /**
  * The example is a System harness (packages/ui/src/system-harness.ts): one surface shown at a
  * time (Lab workspace, Emulators, Notifications, and System itself), each drawn into its own
- * `section[data-surface]`, and a switcher pill whose arrows step through them.
+ * `section[data-surface]`, and a switcher bar whose arrows step through them.
  */
 const panel = (id: string) => page.locator(`section[data-surface="${id}"]`)
 

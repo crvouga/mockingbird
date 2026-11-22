@@ -58,7 +58,11 @@ export function AppShell({
 }: AppShellProps) {
   const width = WIDTH
   return (
-    <div className="flex min-h-dvh flex-col bg-background text-foreground" data-mockingbird-shell>
+    <div
+      // The panel's height inside the System harness (which sets the variable), else the viewport's.
+      className="flex min-h-[var(--mb-app-height,100dvh)] flex-col bg-background text-foreground"
+      data-mockingbird-shell
+    >
       <header className="sticky top-0 z-40 border-b border-separator bg-background/90 backdrop-blur">
         <div
           className={`${width} flex flex-wrap items-center gap-x-6 gap-y-0 px-4 sm:px-6 min-h-14`}

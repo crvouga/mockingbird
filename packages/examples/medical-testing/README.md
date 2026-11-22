@@ -67,10 +67,10 @@ An open preview always knows where CI is and updates itself; no reload is ever n
   which is never swapped. It runs the app version `version.json` names (`app-<hash>.js`, built
   from `src/app.ts` by `scripts/build-preview.ts`, stamped with the PR head at deploy). When a
   newer version deploys, it unmounts the running app and imports the new one into the same page:
-  the switcher order, the pill's position and each service's mode carry over; the demonstration
+  the switcher order and each service's mode carry over; the demonstration
   world starts fresh. Updates apply after a short countdown (**Update now** / **Not now**), or at
   once in a background tab; turn auto-update off on the System screen.
-- **Freshness everywhere.** A dot on the switcher pill shows live / building / update ready /
+- **Freshness everywhere.** A dot on the switcher bar shows live / building / update ready /
   failed / offline, and the System screen's **Preview** card shows the version this tab runs and
   its age, the latest deploy, the build and checks with links to their runs, and the connection.
 
@@ -78,10 +78,10 @@ An open preview always knows where CI is and updates itself; no reload is ever n
 
 **System** (press **←** from the app) is the preview's control panel:
 
-- **Apps**: every surface in the order the arrow pill goes through them, each with its icon.
+- **Apps**: every surface in the order the switcher's arrows go through them, each with its icon.
   Drag a row by its grip (or use the arrow keys on it) to reorder, and click a row to take it
-  out of the switcher or put it back. Open still reaches any of them. The order, those choices
-  and the pill's position are kept in the browser.
+  out of the switcher or put it back. Open still reaches any of them. The order and those choices
+  are kept in the browser.
 - **Dev proxy**: whether the dev proxy on this origin is reachable, and that it only uses
   allow-listed non-production credentials.
 - **Services**: every third-party service the app talks to (`src/composition/services.ts`), each
@@ -217,8 +217,7 @@ the resend cooldown and preferences.
 ## Run it
 
 **In the browser, no server:** visit `/examples/medical-testing` and click "Launch the app",
-or open the standalone static preview. The arrows on the switcher pill (middle left until you
-drag it to another edge, where it stays) step through System, Lab workspace, Emulators and
+or open the standalone static preview. The arrows on the thin bar across the top step through System, Lab workspace, Emulators and
 Notifications; hover one to see where it goes. These surfaces share the same running database and emulators.
 The emulator inspector includes SQL queries, state, clock, faults, journal and routes.
 

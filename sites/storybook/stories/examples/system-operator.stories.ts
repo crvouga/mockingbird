@@ -15,8 +15,8 @@ import { ORDER_KEY, ROTATION_KEY } from "../../../../packages/ui/src/system-rota
 /**
  * The System screen as an operator console: a consumer's own sections and the Data card (save,
  * load and reset of the whole tab), the switcher's dev badge with live service updates across
- * tabs and each service's last call and Test, and the pill's long-press, right-click and
- * keyboard shortcut to System.
+ * tabs and each service's last call and Test, and the bar's System button and keyboard
+ * shortcut to System.
  */
 export default {
   title: "Examples/System harness/Operator console",
@@ -389,7 +389,7 @@ function tabServices(options: { lastCall?: boolean } = {}) {
 }
 
 /**
- * Two tabs of one preview side by side. Switching Stripe to Dev in the left tab marks the pill
+ * Two tabs of one preview side by side. Switching Stripe to Dev in the left tab marks the bar
  * in the right one within a second: a triangle badge on its corner and a label that says so.
  */
 export const DevBadgeAcrossTabs: StoryObj = {
@@ -515,29 +515,14 @@ export const ServiceStatus: StoryObj = {
   },
 }
 
-// ---- #872: long-press, right-click and the keyboard shortcut.
+// ---- #872: the bar's System button and the keyboard shortcut.
 
-const point = (target: Element, type: string, x: number, y: number, pointerType = "touch") =>
-  target.dispatchEvent(
-    new PointerEvent(type, {
-      bubbles: true,
-      cancelable: true,
-      button: 0,
-      pointerId: 11,
-      pointerType,
-      clientX: x,
-      clientY: y,
-    }),
-  )
 const shortcut = (init: KeyboardEventInit) =>
   document.body.dispatchEvent(
     new KeyboardEvent("keydown", { bubbles: true, cancelable: true, ...init }),
   )
 
-/**
- * From any surface, one long-press, one right-click or Alt+Shift+S shows System; a drag of the
- * pill never does, however long it is held.
- */
+/** From any surface, the bar's System button or Alt+Shift+S shows System. */
 export const OpenSystemFromPill: StoryObj = {
   render: () => {
     stopAll()
@@ -549,41 +534,25 @@ export const OpenSystemFromPill: StoryObj = {
   },
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
-    const pill = await page.findByRole("group", { name: "Switch apps" }, { timeout: 3000 })
-    await expect(pill).toHaveAccessibleDescription(
-      "Long-press or right-click to open System, or press Alt+Shift+S.",
-    )
+    const bar = await page.findByRole("group", { name: "Switch apps" }, { timeout: 3000 })
+    await expect(bar).toHaveAccessibleDescription("Press Alt+Shift+S to open System.")
     const next = page.getByRole("button", { name: "Next app" })
-    const at = () => {
-      const rect = next.getBoundingClientRect()
-      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }
-    }
+    const system = page.getByTestId("system-switcher-system")
 
-    // Long-press on an arrow: System opens, and the click that ends the press does not step on.
+    // The System button, from an app.
     await expect(visible(canvasElement)).toBe("app")
-    let { x, y } = at()
-    point(next, "pointerdown", x, y)
-    await new Promise((resolve) => setTimeout(resolve, 650))
-    point(next, "pointerup", x, y)
-    next.click()
+    await expect(system).not.toHaveAttribute("aria-current")
+    await userEvent.click(system)
     await expect(visible(canvasElement)).toBe("system")
-    await new Promise((resolve) => setTimeout(resolve, 20))
+    await expect(system).toHaveAttribute("aria-current", "page")
 
-    // A short press is still a plain arrow press.
+    // The arrows still step through the rotation.
     await userEvent.click(next)
     await expect(visible(canvasElement)).toBe("app")
-
-    // Right-click (or the context-menu key) opens System instead of the browser's menu.
     await userEvent.click(next)
     await expect(visible(canvasElement)).toBe("notifications")
-    const menu = new MouseEvent("contextmenu", { bubbles: true, cancelable: true, button: 2 })
-    next.dispatchEvent(menu)
-    await expect(menu.defaultPrevented).toBe(true)
-    await expect(visible(canvasElement)).toBe("system")
 
     // The shortcut, from anywhere in the page, from any surface.
-    await userEvent.click(next)
-    await expect(visible(canvasElement)).toBe("app")
     shortcut({ key: "S", code: "KeyS", altKey: true, shiftKey: true })
     await waitFor(() => expect(visible(canvasElement)).toBe("system"))
     await userEvent.click(next)
@@ -591,17 +560,6 @@ export const OpenSystemFromPill: StoryObj = {
     // Option+Shift+S on a Mac reports another character; the key's code still matches.
     shortcut({ key: "Í", code: "KeyS", altKey: true, shiftKey: true })
     await waitFor(() => expect(visible(canvasElement)).toBe("system"))
-
-    // A drag held still for longer than a long-press never opens System.
-    await userEvent.click(next)
-    await expect(visible(canvasElement)).toBe("app")
-    ;({ x, y } = at())
-    point(next, "pointerdown", x, y)
-    for (let step = 1; step <= 6; step++) point(next, "pointermove", x + step * 10, y + step * 6)
-    await new Promise((resolve) => setTimeout(resolve, 700))
-    point(next, "pointerup", x + 60, y + 36)
-    next.click()
-    await expect(visible(canvasElement)).toBe("app")
   },
 }
 
@@ -627,12 +585,10 @@ export const CustomShortcut: StoryObj = {
     if (!custom || !off) throw new Error("no harnesses")
     await expect(
       await within(custom).findByRole("group", { name: "Switch apps" }, { timeout: 3000 }),
-    ).toHaveAccessibleDescription(
-      "Long-press or right-click to open System, or press Ctrl+Shift+K.",
-    )
+    ).toHaveAccessibleDescription("Press Ctrl+Shift+K to open System.")
     await expect(
       await within(off).findByRole("group", { name: "Switch apps" }),
-    ).toHaveAccessibleDescription("Long-press or right-click to open System.")
+    ).not.toHaveAttribute("aria-description")
     shortcut({ key: "S", code: "KeyS", altKey: true, shiftKey: true })
     await new Promise((resolve) => setTimeout(resolve, 50))
     await expect(visible(custom)).toBe("app")

@@ -146,9 +146,11 @@ export type HarnessSnapshot = {
 /** The harness as its React view (`system-view.tsx`) sees it. */
 export type HarnessController = {
   shell: HTMLElement
+  /** The strip across the top of the shell that the switcher bar draws in. */
+  bar: HTMLElement
   /** Every surface, System included, in the order given. */
   apps: readonly SystemApp[]
-  /** Whether the switcher pill shows (there is at least one surface besides System). */
+  /** Whether the switcher bar shows (there is at least one surface besides System). */
   switcher: boolean
   get(): HarnessSnapshot
   subscribe(listener: () => void): () => void
@@ -158,7 +160,7 @@ export type HarnessController = {
   setOrder(ids: readonly string[]): void
   /** Clears the notice over the apps. */
   dismissNotice(): void
-  /** Where the switcher's preferences live (the pill's position among them). */
+  /** Where the switcher's preferences live (its rotation and order). */
   storage(): Pick<Storage, "getItem" | "setItem">
   services?: SystemServices | undefined
   docsUrl?: string | undefined

@@ -14,6 +14,7 @@ import {
   initialExcluded,
   readOrder,
   reconcileOrder,
+  SWITCHER_BAR_HEIGHT,
   setRotation,
   writeOrder,
 } from "./system-rotation.js"
@@ -60,7 +61,13 @@ export {
   planPartUpdate,
   systemSurfaces,
 } from "./system-registry.js"
-export { DOCK_KEY, INCLUDED_KEY, ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
+export {
+  DOCK_KEY,
+  INCLUDED_KEY,
+  ORDER_KEY,
+  ROTATION_KEY,
+  SWITCHER_BAR_HEIGHT,
+} from "./system-rotation.js"
 export {
   DEFAULT_SYSTEM_SHORTCUT,
   SYSTEM_SECTION_IDS,
@@ -158,12 +165,12 @@ export type SystemHarnessOptions = {
   snapshot?: SystemSnapshot
   /**
    * The keyboard shortcut that opens System from anywhere (default `DEFAULT_SYSTEM_SHORTCUT`,
-   * "Alt+Shift+S"); `false` turns it off. A long-press or right-click on the pill opens it too.
+   * "Alt+Shift+S"); `false` turns it off. The bar's System button opens it too.
    */
   systemShortcut?: string | false
   /**
    * Called after the shown surface changes, with its id ("system" for System): by `show()`, the
-   * pill's arrows, a System row's Open, or back/forward. Called once per change, synchronously,
+   * bar's arrows, a System row's Open, or back/forward. Called once per change, synchronously,
    * after the address bar is written and before the surface's mount resolves. Not called for the
    * surface shown when the harness mounts (read `active()`), nor when the shown one is shown again.
    */
@@ -179,8 +186,8 @@ export type SystemHarnessOptions = {
    */
   evictHiddenAfterMs?: number
   /**
-   * Where the switcher's preferences live: the surfaces left out of it, their order, and the
-   * pill's position (`ROTATION_KEY`, `INCLUDED_KEY`, `ORDER_KEY`, `DOCK_KEY`). Default
+   * Where the switcher's preferences live: the surfaces left out of it and the order they go
+   * in (`ROTATION_KEY`, `INCLUDED_KEY`, `ORDER_KEY`). Default
    * `localStorage`, which same-origin apps may clear on sign-out; pass a store they never touch.
    */
   storage?: SystemHarnessStorage
@@ -223,14 +230,13 @@ const SYSTEM_APP: Required<
  * The reserved System surface is always reachable. URL state is opt-in for embedded hosts.
  *
  * The surfaces draw into panels (`section[data-surface]`) inside `host`, styled by the host
- * page. The harness's own UI (the switcher pill, its tooltip and update toast, the notice over
+ * page. The harness's own UI (the switcher bar, its tooltip and update toast, the notice over
  * the apps, each panel's loading and error state, and the System screen) is React and HeroUI
  * with Mockingbird's stylesheet scoped to it, so it restyles nothing else on the page. The view
  * loads lazily (`system-view.tsx`), so importing this module costs no React.
  *
- * The switcher pill docks to the middle of the left edge until dragged; the edge and the
- * position along it are kept (DOCK_KEY), so it returns there after a reload or resize.
- * The System screen's "In switcher" toggles choose which surfaces the arrows cycle through, and
+ * The switcher is a thin bar across the top of the shell (`SWITCHER_BAR_HEIGHT`), part of the
+ * layout, so the surfaces sit below it and it never covers them. The System screen's "In switcher" toggles choose which surfaces the arrows cycle through, and
  * dragging its rows sets the order they go in (kept under ROTATION_KEY, INCLUDED_KEY and
  * ORDER_KEY); `show(id)`, the URL and each row's Open still reach every surface. These live in
  * `options.storage`, default localStorage.
@@ -276,12 +282,24 @@ export function mountSystemHarness(
   shell.className = "msh"
   shell.dataset.testid = "system-harness"
   shell.style.cssText =
-    "position:relative;height:100%;min-height:240px;isolation:isolate;background:Canvas;color:CanvasText"
+    "position:relative;display:flex;flex-direction:column;height:100%;min-height:240px;isolation:isolate;background:Canvas;color:CanvasText"
+  // The switcher bar: a thin strip across the top, in the layout, so it never covers a surface.
+  const barHeight = surfaces.length > 0 ? SWITCHER_BAR_HEIGHT : 0
+  const bar = doc.createElement("div")
+  bar.className = "msh-bar"
+  bar.style.cssText = `flex:none;height:${barHeight}px;position:relative;z-index:1001`
+  bar.hidden = barHeight === 0
   const chrome = doc.createElement("div")
   chrome.className = "msh-chrome"
-  chrome.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:1000"
-  shell.append(chrome)
+  chrome.style.cssText = `position:absolute;inset:${barHeight}px 0 0 0;pointer-events:none;z-index:1000`
+  shell.append(bar, chrome)
   host.append(shell)
+  // What a full-height page inside a panel fills (`AppShell`): the panel, not the viewport.
+  const fit = () =>
+    shell.style.setProperty("--mb-app-height", `${Math.max(0, shell.clientHeight - barHeight)}px`)
+  const resize = typeof win.ResizeObserver === "function" ? new win.ResizeObserver(fit) : undefined
+  resize?.observe(shell)
+  fit()
 
   let destroyed = false
   const storage = (): SystemHarnessStorage => options.storage ?? win.localStorage
@@ -344,7 +362,7 @@ export function mountSystemHarness(
     panel.setAttribute("aria-label", spec.label)
     panel.tabIndex = -1
     // Positioned, so absolutely placed descendants scroll and clip with the panel.
-    panel.style.cssText = "position:relative;height:100%;overflow:auto;outline:none"
+    panel.style.cssText = "position:relative;flex:1 1 0;min-height:0;overflow:auto;outline:none"
     setHidden(panel, true)
     shell.insertBefore(panel, chrome)
     return { spec, panel, abort: new AbortController() }
@@ -354,6 +372,7 @@ export function mountSystemHarness(
 
   const view: HarnessController = {
     shell,
+    bar,
     apps: all.map(({ id, label, description, icon, backends, health }) => ({
       id,
       label,
@@ -659,6 +678,7 @@ export function mountSystemHarness(
           /* Other surfaces must still be disposed. */
         }
       }
+      resize?.disconnect()
       shell.remove()
     },
   }
