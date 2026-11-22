@@ -609,6 +609,22 @@ the spec's `unsupported`, no proxy configured, proxy unreachable or refusing the
 (`cross_origin`), provider secrets missing, the provider's `blocked` reason. Chosen modes persist per viewer; because emulator state resets on reload, the
 first `list()` re-applies stored Dev choices that are still available.
 
+`controls()` also has the System screen's live updates and per-service status:
+
+- `subscribe(listener)` fires after each `setMode` in this tab and when another tab of the same
+  origin changes the stored modes (the browser's `storage` event on `mockingbird.dev.modes`).
+  This tab first applies the stored modes to its own emulators, so the switcher's dev badge
+  turns on in every open tab within a second of the switch. A custom `storage` that is not
+  `localStorage` gets no `storage` events; only this tab's own switches fire then. The proxy's
+  availability is read on each `list()`, not pushed.
+- Each listed service carries `lastCall` (`{ at, ok, status }`) for the last request this tab sent
+  through the proxy for it (none while it is emulated).
+- `test(id)` sends `GET <proxy>/<id>/` through the proxy. It reports `ok: false` with the reason
+  when the service cannot use its dev resource, when the proxy does not answer, or when the
+  vendor answers 401, 403 or 5xx; any other status (a 404 from a vendor's root path included)
+  counts as reachable. This rule is our best guess at "the dev resource works", not something
+  a vendor documents.
+
 ## Live previews
 
 A PR preview that knows what CI is doing to it and moves itself to every new deploy, with no hard

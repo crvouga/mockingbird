@@ -237,6 +237,36 @@ declare const livePreview: SystemBuild // e.g. createLivePreview(...) from @crvo
 mountSystemHarness(host, surfaces, { build: livePreview })
 ```
 
+### Your own System sections and the Data card
+
+Operator screens of your own (the feature flags the build runs with, each backend's start-up steps) belong on System. Don't add them as another surface. Pass them as `sections`. They draw after the built-in sections (Preview, Apps, Backends, Services, Data), in the order given. Each `mount(host, signal)` runs once, when System first draws, and returns its disposer (a promise of one also works). A mount that throws shows its error with Retry in that section only. The content sits inside the harness's scoped stylesheet, so it inherits Mockingbird's base styles. Section ids must be unique, made of letters, digits, `-` and `_`, and not one of `SYSTEM_SECTION_IDS`; `mountSystemHarness` throws otherwise.
+
+Pass `snapshot` (`save()`, `load(file)`, `reset()`, optional `fileName()`) for a Data card. Save downloads the `Blob` (default name `mockingbird-state-<time>.json`). Load (after picking a file) and Reset both ask for confirmation first, inline. A promise that rejects shows its message in the card, such as "This file was saved by another build". The same `snapshot.save` also backs the Preview card's Save before an update that resets the preview's data.
+
+With `sections` or `snapshot`, System shows a section nav. Each link is a deep link, `?system=<id>` (`SYSTEM_SECTION_PARAM`), built-in ids included. With `syncUrl`, choosing a section writes it to the URL with `replaceState`. A load or reload at that URL (`?surface=system&system=flags`) opens System with that section current (`aria-current="location"` on its link, `data-current` on `[data-system-section]`) and scrolled into view. Leaving System removes the parameter.
+
+```ts
+mountSystemHarness(host, surfaces, {
+  syncUrl: true,
+  sections: [{ id: "flags", label: "Flags", mount(el) { el.textContent = "new-results-view: on"; return () => el.replaceChildren() } }],
+  snapshot: { save: exportState, load: importState, reset: resetState },
+})
+```
+
+### Services that are not emulated, live
+
+While any service's `mode` is not `emulated`, the switcher pill gets a triangle badge on its top-left corner. The badge is a shape, not only a color, and the pill also gets a `border-warning` edge and `data-dev`. The pill's accessible name becomes "Switch apps · not all services emulated", and its description names the services. The badge (`data-testid="system-dev-badge"`) is a button that opens System at its Services section. The pill learns the modes from the same `services` the screen uses. It lists them once on mount, after every switch made on System, and whenever the host's `subscribe` fires.
+
+`SystemServices` takes three optional additions:
+
+- `subscribe(listener)`: call it when a mode or an availability changes outside the screen, such as in another tab, from a test harness, or when the proxy starts refusing a service. System lists again, and the pill follows. `controls()` from `@crvouga/mockingbird-preview` fires it on its own switches and, through the `storage` event, on another tab's. Every open tab of one preview is marked within a second.
+- `lastCall` on a `SystemService` (`{ at, ok, status? }`): each row shows "Last call 42 s ago · HTTP 200" with an OK or Failed chip (`data-testid="system-service-last-call"`, `data-ok`).
+- `test(id)`: each row gets a Test button that shows the result (`{ ok, message? }`) under the row (`system-service-test-result`, `data-ok`). A rejection counts as a failed test.
+
+### Opening System from anywhere
+
+A long-press on the pill (500 ms) opens System. Moving more than 5 px first makes the press a drag, and a drag never opens System, however long it is held. A right-click, the context-menu key or Shift+F10 on the pill also opens System instead of the browser's menu. The click that ends a long-press does not also step the arrows. A keyboard shortcut opens System from anywhere in the page: `systemShortcut` (default `DEFAULT_SYSTEM_SHORTCUT`, "Alt+Shift+S"). Write it as modifiers then a key, joined with `+`. The modifiers are Alt/Option, Ctrl/Control, Meta/Cmd and Shift. Letters and digits also match on the physical key, so Option+Shift+S works on a Mac. Pass `false` to turn the shortcut off. A shortcut that cannot be parsed throws at mount. The pill's accessible description says all of this: "Long-press or right-click to open System, or press Alt+Shift+S."
+
 ## App registry
 
 Declare each app once with `defineSystem` and mount the registry with `mountSystem`. The switcher order, the System screen's Apps and Backends lists, the routes and the build's part list (`system.parts()`, which `buildPreviewParts` in `@crvouga/mockingbird-preview/node` turns into `parts.json`) all come from that one declaration, so adding an app is one more entry.
@@ -332,6 +362,9 @@ Inject `fetch`, `now` and `timers` to drive it in tests; `launcherView(input, no
 - `PREVIEW_FRAME_CONNECT`: the type of the message an iframe app receives with its bridge port.
 - `SystemHarness.update`, `SystemHarness.notify`, `SystemNotice`: swap one surface's code in place; show a notice over the apps.
 - `SystemBackends`, `SystemBackend`: the in-tab backends and emulators for the System screen's Backends list.
+- `SystemSection`, `SystemSnapshot`, `SYSTEM_SECTION_IDS`, `SYSTEM_SECTION_PARAM`: the consumer's own System sections, the Data card's save, load and reset, the built-in section ids, and the `?system=` deep-link parameter.
+- `SystemServiceCall`, `SystemServiceTest`: a service's `lastCall` and what its `test` reports.
+- `DEFAULT_SYSTEM_SHORTCUT`: the keyboard shortcut that opens System unless `systemShortcut` says otherwise.
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.
