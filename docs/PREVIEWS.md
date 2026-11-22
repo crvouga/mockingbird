@@ -11,8 +11,11 @@ no GitHub token.
 - [How it works](#how-it-works)
 - [Use it in your project](#use-it-in-your-project)
 - [Inputs](#inputs)
+- [Named Previews from your own script](#named-previews-from-your-own-script)
 - [Named Previews of one assets-only Worker](#named-previews-of-one-assets-only-worker)
 - [System previews: one registry, content-addressed parts, per-app updates](#system-previews-one-registry-content-addressed-parts-per-app-updates)
+- [Build on demand](#build-on-demand)
+- [Freshness for long-lived tabs](#freshness-for-long-lived-tabs)
 - [What a preview does not do](#what-a-preview-does-not-do)
 
 ## How it works
@@ -43,7 +46,17 @@ flowchart LR
   `version.json`, stamped with the PR head at deploy, names your app's hashed entry. When a newer
   one is live, the loader unmounts the running app and imports the new one into the same page,
   after a short countdown (**Update now** / **Not now**), or at once in a background tab. A lazy
-  chunk that a deploy removed also triggers the update.
+  chunk that a deploy removed also triggers the update. `index.html` loads the loader by absolute
+  path (`/preview.js`, or `buildPreview({ base })` under a sub-path) and the loader reads
+  `version.json` and each entry from its own directory, so a reload or shared link at any route
+  (`/settings/profile`) boots; the live poller reads that same `version.json`.
+- **Updates that reset data wait for you.** A preview that keeps its backends' state in the tab
+  (a database in IndexedDB, say) stamps the shape of that data with
+  `mockingbird-preview stamp --state-version <v>`. When a newer build's `stateVersion` differs (or
+  one starts or stops naming one), the toast says "New version abc1234 resets this preview's
+  data" and never applies it on its own, not even in a background tab or after a broken lazy
+  chunk; the Preview card says the same and, with the System screen's snapshot, offers **Save**
+  before **Update now**.
 - **Freshness everywhere**, when your app uses `mountSystemHarness` from `@crvouga/mockingbird-ui`
   with the `build` the boot loader passes: a status dot on the switcher, an update toast, and a
   Preview card on the System screen (this tab's version and age, the latest deploy, build and
@@ -122,6 +135,17 @@ the preview Worker (for example [dev resources](DEV_RESOURCES.md) credentials):
          WORKER_SECRETS: |
            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
 ```
+
+## Named Previews from your own script
+
+To deploy without the reusable workflow, use Cloudflare's named Worker Previews from a CI script
+with `createCloudflarePreviews` (see the
+[package README](../packages/adapters/preview/README.md#api)). You can know a Preview's URL before
+you build: `previewOrigin({ previewName, workerName, subdomain: await previews.subdomain() })`,
+or `customPreviewOrigin({ previewName, host })` on a custom domain. Run
+`servePreviews(null)` (or `servePreviews(host)`) once so the parent Worker serves its Previews;
+without it a deploy succeeds and its URL answers 404. `get(name)` confirms a removed Preview is
+gone, and `list()` is `[]` before the parent Worker's first deploy.
 
 ## Named Previews of one assets-only Worker
 
@@ -252,6 +276,56 @@ See the [UI package README](../packages/ui/README.md#app-registry), and the prev
 README's [System parts](../packages/adapters/preview/README.md#system-parts) and
 [Shared app parts](../packages/adapters/preview/README.md#shared-app-parts) for the API, the host
 interface, garbage collection, integrity checks and the Cloudflare flow.
+
+## Build on demand
+
+Building every push pays for previews nobody opens. Instead, link each PR to a **launcher page**
+that builds the preview when someone opens it:
+
+```mermaid
+flowchart LR
+  Tab["Launcher page<br/>/pr/&lt;n&gt;"] -- "GET / POST ?pr=n<br/>(every ~5 s)" --> Relay["Build relay<br/>(edge function)"]
+  Relay -- "PR facts, runs, steps;<br/>workflow_dispatch on the PR's branch" --> GH["GitHub Actions"]
+  GH -- "build, write preview-source.json,<br/>deploy" --> Preview["Preview &lt;name&gt;-pr-&lt;n&gt;"]
+  Relay -- "preview-source.json<br/>(which commit is live)" --> Preview
+  Tab -- "location.replace" --> Preview
+```
+
+1. **The relay.** `createBuildRelay()` from `@crvouga/mockingbird-preview/on-demand`, with the
+   GitHub Actions provider and a token that may read pull requests and actions and dispatch the
+   workflow, served from any Fetch runtime. It answers a `PreviewLaunch` (`idle`, `queued`,
+   `building`, `publishing`, `live`, `failed`, `unsupported`, `closed` or `unavailable`) for the
+   PR's current head commit, starts at most one build per commit, gives up after three failed
+   attempts, refuses new builds over a repository-wide cap of eight, and never returns the token,
+   the PR title, the branch or a provider error.
+2. **The workflow** takes a `workflow_dispatch` input named `pull_request`, builds the PR's branch
+   and writes `preview-source.json` (`createPreviewSourceFile`) next to the index, so the relay can
+   tell which commit is live. A branch created before the input existed answers `unsupported`:
+   merging the base branch fixes it. Give it `concurrency: preview-${{ inputs.pull_request }}`.
+3. **The launcher page.** `mountPreviewLauncher` from `@crvouga/mockingbird-ui/launcher`, served
+   by your static host at `/pr/<n>`: it starts the build, shows the steps, elapsed time and a
+   progress estimate, offers the previous live version meanwhile, and opens the preview when it
+   is ready.
+
+Only open, same-repository PRs are built, and only on their own branch, so PR code never writes
+the base branch's caches. The full state table is in the
+[preview package README](../packages/adapters/preview/README.md#on-demand-previews).
+
+## Freshness for long-lived tabs
+
+A tab open for hours should know when the code it runs was replaced. Each build carries an
+identity (`{ commit, builtAt, parts }`, a content pin per app) and publishes a small status
+document next to the deployment (`createFreshnessStatusFile`, served `no-store` with open CORS)
+saying which build is current and what is happening to the next one. On the page,
+`watchFreshness()` polls it every 30 s while visible (never while hidden, at once on focus) and
+answers `current`, `newer-live` (naming the apps whose part changed), `newer-building`,
+`newer-failed` or `unknown`. `mountFreshnessIndicator` and `freshnessBuild` from
+`@crvouga/mockingbird-ui` show it as a quiet dot on the switcher and a line with **Update now**,
+**What changed** and **Keep this version**. When only one app's part changed, Update now hands
+your app that one app to swap; otherwise it reloads the shell. Keeping emulator and database state
+across that reload is up to your app's snapshot support. A build identity may also carry
+`stateVersion` (`createBuildIdentity({ …, stateVersion })`): a newer build with a different one is
+marked `resetsData` and `freshnessBuild` never applies it on its own, even with `auto`.
 
 ## Your own lifecycle
 

@@ -220,6 +220,17 @@ describe("mockingbird-preview stamp", () => {
     })
   })
 
+  test("--state-version stamps stateVersion (#873)", async () => {
+    const outdir = join(root, "dist-state")
+    mkdirSync(outdir, { recursive: true })
+    writeFileSync(join(outdir, "build.json"), JSON.stringify({ entry: "./app-1.js" }))
+    const { io: sink } = io()
+    const argv = ["stamp", "--outdir", outdir, "--version", "abc", "--state-version", "schema-3"]
+    expect(await runPreviewCli(argv, sink)).toBe(0)
+    const version = JSON.parse(readFileSync(join(outdir, "version.json"), "utf8"))
+    expect(version.stateVersion).toBe("schema-3")
+  })
+
   test("usage errors exit 1", async () => {
     for (const argv of [
       ["stamp", "--outdir", root],

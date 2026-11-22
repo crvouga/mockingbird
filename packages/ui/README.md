@@ -187,7 +187,35 @@ await harness.show("example")
 harness.destroy()
 ```
 
-Switching preserves mounted surfaces. Failed mounts expose retry; destroying the shell aborts pending mounts and disposes both current and late-resolving surfaces. Surface IDs must be unique and cannot be `system`. URL synchronization is opt-in through `syncUrl`.
+Switching preserves mounted surfaces. Failed mounts expose retry; destroying the shell aborts pending mounts and disposes both current and late-resolving surfaces. Surface IDs must be unique and cannot be `system`. URL synchronization is opt-in through `syncUrl` (or `url`, below).
+
+#### Lifecycle, host URLs and preferences
+
+```ts
+const harness = mountSystemHarness(host, [{
+  id: "call",
+  label: "Video call",
+  mount: (panel) => startCall(panel),        // returns its disposer
+  onHide: () => stream.getTracks().forEach((track) => track.stop()),
+  onShow: () => restartTracksIfStopped(),
+}], {
+  evictHiddenAfterMs: 5 * 60_000,             // unmount surfaces hidden for five minutes
+  onShow: (id) => analytics.track("surface", id),
+  url: {                                      // each surface owns one of the host's paths
+    read: (location) => surfaceForPath(location.pathname),
+    write: (id) => pathForSurface(id),
+  },
+  storage: shellStore,                        // a store the apps never clear on sign-out
+  defaultExcluded: ["partner"],
+})
+```
+
+- **`onShow()` / `onHide()` on a surface** follow whether it is visible: a switch to or away from it, and its browser tab going to the background or coming back (`visibilitychange`). They alternate, starting with `onShow` right after its mount resolves (on every mount, so a surface shown, hidden and shown again before its mount resolves gets one `onShow`). A disposed surface (by `update()`, eviction or `destroy()`) gets no `onHide`; its disposer releases everything. Use them to pause polling or release a microphone or WebRTC room while hidden.
+- **`evictHiddenAfterMs`** unmounts a surface hidden that long: its signal aborts, its disposer runs and its panel empties. Showing it again mounts it afresh, with the usual Retry if that fails. Showing it before the time is up cancels the eviction. System is never evicted. Default: never.
+- **`onShow(id)` in the options** tells the host the shown surface changed (`"system"` for System), whether by `show()`, the pill's arrows, a System row's Open or back/forward. It is called once per change, synchronously, after the address bar is written and **before** the surface's mount resolves. It is not called for the surface shown when the harness mounts (read `active()`), nor when the shown surface is shown again.
+- **`url: { read, write }`** maps surfaces to the host's own URLs instead of `syncUrl`'s `?surface=` and `route`s, and turns URL sync on. `read(location)` names the surface an address opens (`undefined` means `initial`); it runs on mount and on back/forward. After a switch, when `read` says the current address opens another surface, `write(id, location)` returns the new address (absolute or relative), which is pushed onto history; `undefined` leaves the address bar. A deep link into a surface (`/care-hub/patients/7`) is therefore left as it is.
+- **`storage`** is where the switcher's preferences live: `ROTATION_KEY`, `INCLUDED_KEY`, `ORDER_KEY` and the pill's position (`DOCK_KEY`). It defaults to `localStorage`, which a same-origin app may clear on sign-out, resetting the shell; pass any `{ getItem, setItem }` (a cookie, a namespaced store the apps never clear) and nothing is written to `localStorage`. (The theme the System screen's switch picks is Mockingbird's origin-wide `mb:theme` and stays in `localStorage`.)
+- **`defaultExcluded`** leaves surfaces out of the switcher until a person switches them on, as a surface's `defaultEnabled: false` does; use it instead of seeding `ROTATION_KEY`. A missing or cleared store means these defaults, not everything on.
 
 Each surface mounts into its own panel, `section[data-surface="<id>"]` (the one shown is the one without `hidden`), and its content there is styled by the host page alone. The shell's own UI (the switcher pill, its tooltip and update toast, each panel's loading and error state, and the System screen) loads lazily on mount, so importing the module costs no React; `show()` settles once that UI has drawn. It uses Mockingbird's stylesheet scoped to its own containers (`.msh-ui`, every selector wrapped in `:where(.msh-ui)`, added to the document once as `<style id="mockingbird-system-ui">`), so Preflight and HeroUI's classes restyle nothing else on the page; only the stylesheet's `@keyframes` and `@property` registrations are global. It follows a light or dark theme pinned on `<html>` (`class` or `data-theme`, as the System screen's theme switch sets it), else the system's. The test hooks: `data-testid` `system-switcher` (with `system-switcher-previous` and `-next`), `system-build-dot`, `system-update-toast`, `system-preview` (its rows `[data-row]`), `system-dev-proxy`, `system-services-summary`, the service rows `[data-service]` (`data-mode`, `data-pending`), and the app rows `ol.msh-apps > li[data-app]`.
 
@@ -195,7 +223,7 @@ Application entrypoints, seeds, routing and credentials belong to the consumer. 
 
 The root export also provides `CSS_RESET` and `scopeReset`. Bundlers may import `@crvouga/mockingbird-ui/reset.css` as a stylesheet.
 
-The built-in System screen is an `AppShell` (with `ThemeSwitch`) and a `PageHeader`, and lists every surface, System included, in the order the switcher's arrows go through them. Each row (a HeroUI `Card`) shows the surface's `icon` and optional `description`, an Open button, and a HeroUI `Switch` for whether the arrows stop there; clicking anywhere on the row flips it. Drag a row by its grip, or focus the grip and use the arrow keys, Home and End, to reorder. The order persists under `ORDER_KEY`, the ids left out under `ROTATION_KEY`, and the pill's position too, all in `localStorage`, so a reload keeps them. An `icon` is inline SVG (`{ svg }`, trusted markup from your code), an image (`{ src }`), or a site's favicon (`{ favicon: url }`, trying `/favicon.ico` then `/apple-touch-icon.png`). Anything that fails to load falls back to the label's first letter, and no third-party icon service is asked. `SYSTEM_ICONS` has Mockingbird's own icons for `system`, `emulators` and `notifications`. Pass `services` (a `SystemServices`, such as `createDevResources(...).controls(...)` from `@crvouga/mockingbird-preview`) to list each emulated service with an Emulated | Dev switch (a HeroUI `ToggleButtonGroup`; pressing either half, or an arrow key, flips it), which sends its requests to a real non-production resource (a vendor's test mode or sandbox, a dev instance) through the dev proxy, plus a read-only Dev proxy status card (the proxy runs on the app's own origin and adds non-production credentials server-side, so the browser never sees one); services the proxy blocks show the host's reason and cannot be switched. Pass `docsUrl` for a "How dev resources work" link.
+The built-in System screen is an `AppShell` (with `ThemeSwitch`) and a `PageHeader`, and lists every surface, System included, in the order the switcher's arrows go through them. Each row (a HeroUI `Card`) shows the surface's `icon` and optional `description`, an Open button, and a HeroUI `Switch` for whether the arrows stop there; clicking anywhere on the row flips it. Drag a row by its grip, or focus the grip and use the arrow keys, Home and End, to reorder. The order persists under `ORDER_KEY`, the ids left out under `ROTATION_KEY`, and the pill's position under `DOCK_KEY`, all in `localStorage` (or the `storage` option), so a reload keeps them. An `icon` is inline SVG (`{ svg }`, trusted markup from your code), an image (`{ src }`), or a site's favicon (`{ favicon: url }`, trying `/favicon.ico` then `/apple-touch-icon.png`). Anything that fails to load falls back to the label's first letter, and no third-party icon service is asked. `SYSTEM_ICONS` has Mockingbird's own icons for `system`, `emulators` and `notifications`. Pass `services` (a `SystemServices`, such as `createDevResources(...).controls(...)` from `@crvouga/mockingbird-preview`) to list each emulated service with an Emulated | Dev switch (a HeroUI `ToggleButtonGroup`; pressing either half, or an arrow key, flips it), which sends its requests to a real non-production resource (a vendor's test mode or sandbox, a dev instance) through the dev proxy, plus a read-only Dev proxy status card (the proxy runs on the app's own origin and adds non-production credentials server-side, so the browser never sees one); services the proxy blocks show the host's reason and cannot be switched. Pass `docsUrl` for a "How dev resources work" link.
 
 Pass `build` (a `SystemBuild`, such as `createLivePreview(...)` from `@crvouga/mockingbird-preview`) on a live PR preview. The switcher pill gets a status dot in its corner, without changing its size: green when this tab is up to date (with a pulsing ring while the status socket is live), amber and spinning while a newer commit builds, blue when an update is ready, red when a build or update failed, grey when offline. The dot is a button labelled "Preview status: …"; hovering or focusing it shows the status, and clicking it opens System. While an update is available, a toast beside the pill (never over it) says "New version abc1234 ready · updating in 8s" with Update now and Not now, then "Updating…", or the error with Retry. The System screen gains a Preview card above Apps: this tab's version and age, the latest deployed version, the build and the CI checks with links to their runs, the connection, an Auto-update switch and Update now. Relative times tick in place (every second under a minute, then every 15 s), each a `<time>` with the absolute time as its title. Without `build`, none of this renders. Animations stop when the person prefers reduced motion.
 
@@ -208,6 +236,36 @@ declare const livePreview: SystemBuild // e.g. createLivePreview(...) from @crvo
 
 mountSystemHarness(host, surfaces, { build: livePreview })
 ```
+
+### Your own System sections and the Data card
+
+Operator screens of your own (the feature flags the build runs with, each backend's start-up steps) belong on System. Don't add them as another surface. Pass them as `sections`. They draw after the built-in sections (Preview, Apps, Backends, Services, Data), in the order given. Each `mount(host, signal)` runs once, when System first draws, and returns its disposer (a promise of one also works). A mount that throws shows its error with Retry in that section only. The content sits inside the harness's scoped stylesheet, so it inherits Mockingbird's base styles. Section ids must be unique, made of letters, digits, `-` and `_`, and not one of `SYSTEM_SECTION_IDS`; `mountSystemHarness` throws otherwise.
+
+Pass `snapshot` (`save()`, `load(file)`, `reset()`, optional `fileName()`) for a Data card. Save downloads the `Blob` (default name `mockingbird-state-<time>.json`). Load (after picking a file) and Reset both ask for confirmation first, inline. A promise that rejects shows its message in the card, such as "This file was saved by another build". The same `snapshot.save` also backs the Preview card's Save before an update that resets the preview's data.
+
+With `sections` or `snapshot`, System shows a section nav. Each link is a deep link, `?system=<id>` (`SYSTEM_SECTION_PARAM`), built-in ids included. With `syncUrl`, choosing a section writes it to the URL with `replaceState`. A load or reload at that URL (`?surface=system&system=flags`) opens System with that section current (`aria-current="location"` on its link, `data-current` on `[data-system-section]`) and scrolled into view. Leaving System removes the parameter.
+
+```ts
+mountSystemHarness(host, surfaces, {
+  syncUrl: true,
+  sections: [{ id: "flags", label: "Flags", mount(el) { el.textContent = "new-results-view: on"; return () => el.replaceChildren() } }],
+  snapshot: { save: exportState, load: importState, reset: resetState },
+})
+```
+
+### Services that are not emulated, live
+
+While any service's `mode` is not `emulated`, the switcher pill gets a triangle badge on its top-left corner. The badge is a shape, not only a color, and the pill also gets a `border-warning` edge and `data-dev`. The pill's accessible name becomes "Switch apps · not all services emulated", and its description names the services. The badge (`data-testid="system-dev-badge"`) is a button that opens System at its Services section. The pill learns the modes from the same `services` the screen uses. It lists them once on mount, after every switch made on System, and whenever the host's `subscribe` fires.
+
+`SystemServices` takes three optional additions:
+
+- `subscribe(listener)`: call it when a mode or an availability changes outside the screen, such as in another tab, from a test harness, or when the proxy starts refusing a service. System lists again, and the pill follows. `controls()` from `@crvouga/mockingbird-preview` fires it on its own switches and, through the `storage` event, on another tab's. Every open tab of one preview is marked within a second.
+- `lastCall` on a `SystemService` (`{ at, ok, status? }`): each row shows "Last call 42 s ago · HTTP 200" with an OK or Failed chip (`data-testid="system-service-last-call"`, `data-ok`).
+- `test(id)`: each row gets a Test button that shows the result (`{ ok, message? }`) under the row (`system-service-test-result`, `data-ok`). A rejection counts as a failed test.
+
+### Opening System from anywhere
+
+A long-press on the pill (500 ms) opens System. Moving more than 5 px first makes the press a drag, and a drag never opens System, however long it is held. A right-click, the context-menu key or Shift+F10 on the pill also opens System instead of the browser's menu. The click that ends a long-press does not also step the arrows. A keyboard shortcut opens System from anywhere in the page: `systemShortcut` (default `DEFAULT_SYSTEM_SHORTCUT`, "Alt+Shift+S"). Write it as modifiers then a key, joined with `+`. The modifiers are Alt/Option, Ctrl/Control, Meta/Cmd and Shift. Letters and digits also match on the physical key, so Option+Shift+S works on a Mac. Pass `false` to turn the shortcut off. A shortcut that cannot be parsed throws at mount. The pill's accessible description says all of this: "Long-press or right-click to open System, or press Alt+Shift+S."
 
 ## App registry
 
@@ -240,21 +298,75 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 
 `mountSystemHarness` keeps working with plain `SystemSurface`s; the registry's fields (`defaultEnabled`, `route`, `backends`, `version`, `health`) are optional there too, and `harness.update(id, next?)` and `harness.notify(notice)` are available on any harness.
 
+## Launcher page
+
+`@crvouga/mockingbird-ui/launcher` is the page a pull request links to before anything is built. It polls an on-demand build relay (`GET <relay>?pr=<n>` answers a `PreviewLaunch`; `@crvouga/mockingbird-preview`'s `createBuildRelay()` is one), starts the build of the head commit with `POST <relay>?pr=<n>`, shows it live and opens the preview when it is ready, with no refresh. It is dependency-free and needs no worker, backends or emulators.
+
+- **Starting**: an `idle` state sends exactly one start request per head commit, across rerenders, a second mount (React StrictMode) and repeated polls; a failed start (network error, HTTP 429 or any non-2xx) is forgotten so the next poll retries.
+- **Building**: a Queued → Building → Publishing → Ready stepper, the CI steps with friendly labels ("Run actions/checkout@v4" reads "Getting the code"; unknown names lose a leading "Run "), elapsed time ticking every second from the run's start, a progress bar from `estimateSeconds` that stops at 95% until the preview is live (indeterminate without an estimate), and a link to the build log. When an older commit is live it offers "Open the current version (abc1234)".
+- **Ready**: shows Ready for 800 ms, then calls `onLive(url)` (default `location.replace(url)`). With `stay` it shows an Open preview link instead and keeps watching: a newer head commit is built while the live one stays on offer.
+- **Failed**: the reason, Try again (a start request) and the log. `unsupported`, `closed` and `unavailable` show the relay's message and never retry by themselves.
+- **Polling**: every 5 s while a build runs, 15 s while idle or failed, 30 s while ready and staying, never for terminal states. It pauses while the tab is hidden and refetches when it is shown or focused.
+- **Reconnecting**: HTTP 503, a network error, or a body that is not a `PreviewLaunch` for this pull request (a proxy's HTML fallback, another PR) shows a calm "Reconnecting…" and retries every 5 s.
+- **Accessibility**: the headline sits in an `aria-live="polite"` region, every action is a real link or button, reduced motion stops the animations, light and dark follow the system, and the layout fits a phone without sideways scrolling. Only the pull request number and short commit SHAs are shown; fields the launcher does not know are dropped.
+
+A static page served at `/pr/<number>` (the prefix is configurable; `/pr/0`, leading zeros and trailing segments are rejected):
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- PREVIEW_LAUNCHER_HEAD, verbatim: the colour scheme and background, so nothing flashes -->
+    <meta name="color-scheme" content="light dark"><style>html{color-scheme:light dark;background:#f4f5f7;color:#14181f}body{margin:0;min-height:100vh}@media (prefers-color-scheme:dark){html{background:#0e1116;color:#e7eaf0}}</style>
+    <script type="module" src="./launcher.js"></script>
+  </head>
+  <body></body>
+</html>
+```
+
+```ts
+// launcher.js
+import { startPreviewLauncher } from "@crvouga/mockingbird-ui/launcher"
+
+startPreviewLauncher({ relay: "/api/preview-launch", prefix: "/pr/" })
+```
+
+Or mount it into your own page:
+
+```ts
+import { mountPreviewLauncher } from "@crvouga/mockingbird-ui/launcher"
+
+declare const host: HTMLElement
+const launcher = mountPreviewLauncher(host, { pullRequest: 42, relay: "/api/preview-launch", stay: true })
+launcher.refresh() // fetch now
+launcher.destroy()
+```
+
+Inject `fetch`, `now` and `timers` to drive it in tests; `launcherView(input, now, { stay })` is the pure view model it paints, and `createLauncherController()` the polling and start logic without a DOM.
+
 ## API
 
 - `@crvouga/mockingbird-ui/react`, `/react/server`, `/react/client`, `/document`, `/styles`, `/styles.css`, `/theme.css`, `/tokens.css`: the design system, above.
 - `MOCKINGBIRD`: the project's name, mark, tagline and URLs.
 - `mountSystemHarness`: mounts lazy application surfaces and manages switching and teardown.
-- `SystemSurface`, `SystemHarness`, `SystemHarnessOptions`: TypeScript lifecycle contracts.
+- `SystemSurface`, `SystemHarness`, `SystemHarnessOptions`: TypeScript lifecycle contracts (`onShow`/`onHide`, `evictHiddenAfterMs`, the host's `onShow(id)`, `url`, `storage`, `defaultExcluded`).
+- `SystemHarnessUrl`, `SystemHarnessStorage`: the `url` mapping and the preferences store.
 - `SystemServices`, `SystemService`, `SystemServiceMode`, `SystemDevStatus`: what the System screen lists and switches.
-- `SystemBuild`, `SystemBuildState`: a live preview's build, checks, connection and pending update, and the actions on it (`applyUpdate`, `postpone`, `setAutoUpdate`), for the switcher's status dot, the update toast and System's Preview card.
+- `SystemBuild`, `SystemBuildState`: a live preview's build, checks, connection and pending update, and the actions on it (`applyUpdate`, `postpone`, `setAutoUpdate`), for the switcher's status dot, the update toast and System's Preview card. `update.resetsData: true` marks an update that resets the preview's in-tab data (its `stateVersion` differs): the toast says "New version abc1234 resets this preview's data" without a countdown (`data-resets-data="true"`), and the Preview card says it too (`data-testid="system-preview-resets-data"`) with **Save** before **Update now** when the System screen has a snapshot to save (`{ save(): Promise<Blob> }`, downloaded as `preview-data-<sha>`). Such an update applies only when the person presses Update now.
 - `SystemIcon`, `SYSTEM_ICONS`: a surface's icon, and Mockingbird's icons for the surfaces it provides.
-- `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`: the localStorage keys of the surfaces left out of the switcher, of its order, and of the off-by-default surfaces switched on.
+- `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`, `DOCK_KEY`: the storage keys of the surfaces left out of the switcher, of its order, of the off-by-default surfaces switched on, and of the pill's position.
 - `defineSystem`, `mountSystem`, `PreviewApp`, `PreviewSystem`, `PreviewRegistryError`: the app registry and the shell it mounts.
 - `systemSurfaces`, `planPartUpdate`, `PreviewLoadManifestLike`: the registry as surfaces with their part loader, and what a newer load manifest takes to apply.
 - `PREVIEW_FRAME_CONNECT`: the type of the message an iframe app receives with its bridge port.
 - `SystemHarness.update`, `SystemHarness.notify`, `SystemNotice`: swap one surface's code in place; show a notice over the apps.
 - `SystemBackends`, `SystemBackend`: the in-tab backends and emulators for the System screen's Backends list.
+- `SystemSection`, `SystemSnapshot`, `SYSTEM_SECTION_IDS`, `SYSTEM_SECTION_PARAM`: the consumer's own System sections, the Data card's save, load and reset, the built-in section ids, and the `?system=` deep-link parameter.
+- `SystemServiceCall`, `SystemServiceTest`: a service's `lastCall` and what its `test` reports.
+- `DEFAULT_SYSTEM_SHORTCUT`: the keyboard shortcut that opens System unless `systemShortcut` says otherwise.
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.
+- `@crvouga/mockingbird-ui/launcher`: `mountPreviewLauncher`, `startPreviewLauncher`, `matchLauncherPath`, `launcherView`, `parseLaunch`, `createLauncherController`, `PREVIEW_LAUNCHER_HEAD`, `PREVIEW_LAUNCHER_CSS` and the `PreviewLaunch` type (also exported from the root).
+- `@crvouga/mockingbird-ui/freshness` (also exported from the root): `mountFreshnessIndicator(host, { freshness, onUpdate?, compareUrl?, now? })` draws a quiet dot and one line saying whether a newer build is building, live or failed, with **Update now** (one app's part, or a reload), **What changed** (the commit range) and **Keep this version**. `freshnessBuild({ freshness, onUpdate?, pr?, auto? })` turns the same signal into a `SystemBuild` for `mountSystemHarness(…, { build })`: the switcher's dot, the update toast and System's Preview card. `freshnessView(value, now, kept?)` is the pure view model and `FRESHNESS_CSS` its stylesheet. A `FreshnessIdentity` may carry `stateVersion`; a newer live build with a different one is `resetsData` on the `SystemBuild`, says "Updating resets this preview's data." in the indicator, and is never applied on its own, even with `auto`. `freshness` is `watchFreshness()` from `@crvouga/mockingbird-preview/freshness` (structurally a `FreshnessFeed` of `FreshnessValue`s). The default update is `location.reload()`, which keeps no in-memory state: pass `onUpdate` to swap one app's code in place or to restore a snapshot.

@@ -18,6 +18,12 @@ import {
   writeOrder,
 } from "./system-rotation.js"
 import { matchRoute } from "./system-routes.js"
+import {
+  DEFAULT_SYSTEM_SHORTCUT,
+  parseShortcut,
+  SYSTEM_SECTION_PARAM,
+  validateSections,
+} from "./system-shortcut.js"
 import type {
   HarnessController,
   HarnessSnapshot,
@@ -25,7 +31,9 @@ import type {
   SystemBackends,
   SystemHealth,
   SystemNotice,
+  SystemSection,
   SystemServices,
+  SystemSnapshot,
 } from "./system-types.js"
 
 export type { SystemBuild, SystemBuildState } from "./system-build-status.js"
@@ -52,7 +60,12 @@ export {
   planPartUpdate,
   systemSurfaces,
 } from "./system-registry.js"
-export { INCLUDED_KEY, ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
+export { DOCK_KEY, INCLUDED_KEY, ORDER_KEY, ROTATION_KEY } from "./system-rotation.js"
+export {
+  DEFAULT_SYSTEM_SHORTCUT,
+  SYSTEM_SECTION_IDS,
+  SYSTEM_SECTION_PARAM,
+} from "./system-shortcut.js"
 export type {
   SystemBackend,
   SystemBackendState,
@@ -60,9 +73,13 @@ export type {
   SystemDevStatus,
   SystemHealth,
   SystemNotice,
+  SystemSection,
   SystemService,
+  SystemServiceCall,
   SystemServiceMode,
   SystemServices,
+  SystemServiceTest,
+  SystemSnapshot,
 } from "./system-types.js"
 
 /** Product code supplies lazy surfaces; the shell knows nothing about their services. */
@@ -87,7 +104,35 @@ export type SystemSurface = {
   version?: string
   /** A cheap probe the System screen shows on its row. */
   health?: (signal: AbortSignal) => Promise<SystemHealth> | SystemHealth
+  /**
+   * Called each time the surface becomes visible: shown by a switch, or its browser tab coming
+   * back to the foreground. Only once it is mounted (the first call follows its mount), and
+   * alternating with `onHide`, so a surface can restart what `onHide` paused (polling, media).
+   */
+  onShow?(): void
+  /**
+   * Called each time a shown surface stops being visible: a switch away, or its browser tab
+   * going to the background. Not called when it is disposed (by `update()`, eviction or
+   * `destroy()`); its disposer releases everything then.
+   */
+  onHide?(): void
 }
+
+/** Maps surfaces to the host's own addresses, in place of `syncUrl`'s `?surface=` and routes. */
+export type SystemHarnessUrl = {
+  /** The surface an address opens ("system" for System); `undefined` means `initial`. */
+  read(location: Location): string | undefined
+  /**
+   * The address (absolute, or relative to the current one) for a surface just shown, asked only
+   * when `read` says the current address opens another surface (so a deep link into a surface
+   * stays as it is); pushed onto history when it differs. `undefined` leaves the address bar.
+   */
+  write(id: string, location: Location): string | undefined
+}
+
+/** Where the harness keeps the switcher's preferences. */
+export type SystemHarnessStorage = Pick<Storage, "getItem" | "setItem">
+
 export type SystemHarnessOptions = {
   /** The surface shown first (default "system"); with `syncUrl`, the URL's `?surface=` wins. */
   initial?: string
@@ -104,6 +149,46 @@ export type SystemHarnessOptions = {
   build?: SystemBuild
   /** The in-tab backends and emulators and their state, for the System screen's Backends list. */
   backends?: SystemBackends
+  /**
+   * The consumer's own System sections (feature flags, start-up timings), after the built-in
+   * ones and each deep-linkable as `?system=<id>` with `syncUrl`, instead of another surface.
+   */
+  sections?: readonly SystemSection[]
+  /** Save, load and reset of the whole in-tab state: adds a Data card to System. */
+  snapshot?: SystemSnapshot
+  /**
+   * The keyboard shortcut that opens System from anywhere (default `DEFAULT_SYSTEM_SHORTCUT`,
+   * "Alt+Shift+S"); `false` turns it off. A long-press or right-click on the pill opens it too.
+   */
+  systemShortcut?: string | false
+  /**
+   * Called after the shown surface changes, with its id ("system" for System): by `show()`, the
+   * pill's arrows, a System row's Open, or back/forward. Called once per change, synchronously,
+   * after the address bar is written and before the surface's mount resolves. Not called for the
+   * surface shown when the harness mounts (read `active()`), nor when the shown one is shown again.
+   */
+  onShow?(id: string): void
+  /**
+   * Maps surfaces to the host's own URLs (`read` on load and back/forward, `write` on each
+   * switch). Turns URL sync on and replaces `syncUrl`'s `?surface=` and `route` handling.
+   */
+  url?: SystemHarnessUrl
+  /**
+   * Unmounts a surface hidden this long (its disposer runs, its signal aborts); it mounts again
+   * when shown, with the usual Retry on failure. System is never evicted. Default: never.
+   */
+  evictHiddenAfterMs?: number
+  /**
+   * Where the switcher's preferences live: the surfaces left out of it, their order, and the
+   * pill's position (`ROTATION_KEY`, `INCLUDED_KEY`, `ORDER_KEY`, `DOCK_KEY`). Default
+   * `localStorage`, which same-origin apps may clear on sign-out; pass a store they never touch.
+   */
+  storage?: SystemHarnessStorage
+  /**
+   * Surfaces left out of the switcher until a person switches them on, as `defaultEnabled:
+   * false` does. A missing or cleared store means these defaults, not everything on.
+   */
+  defaultExcluded?: readonly string[]
 }
 export type SystemHarness = {
   show(id: string): Promise<void>
@@ -121,7 +206,10 @@ export type SystemHarness = {
 }
 
 const SYSTEM_APP: Required<
-  Omit<SystemSurface, "mount" | "defaultEnabled" | "route" | "backends" | "version" | "health">
+  Omit<
+    SystemSurface,
+    "mount" | "defaultEnabled" | "route" | "backends" | "version" | "health" | "onShow" | "onHide"
+  >
 > = {
   id: "system",
   label: "System",
@@ -141,10 +229,14 @@ const SYSTEM_APP: Required<
  * loads lazily (`system-view.tsx`), so importing this module costs no React.
  *
  * The switcher pill docks to the middle of the left edge until dragged; the edge and the
- * position along it are kept in localStorage, so it returns there after a reload or resize.
+ * position along it are kept (DOCK_KEY), so it returns there after a reload or resize.
  * The System screen's "In switcher" toggles choose which surfaces the arrows cycle through, and
- * dragging its rows sets the order they go in (kept in localStorage under ROTATION_KEY,
- * INCLUDED_KEY and ORDER_KEY); `show(id)`, the URL and each row's Open still reach every surface.
+ * dragging its rows sets the order they go in (kept under ROTATION_KEY, INCLUDED_KEY and
+ * ORDER_KEY); `show(id)`, the URL and each row's Open still reach every surface. These live in
+ * `options.storage`, default localStorage.
+ *
+ * A surface's `onShow` and `onHide` follow whether it is visible (shown, in a foreground tab);
+ * with `evictHiddenAfterMs`, one hidden that long is unmounted and mounts again when shown.
  */
 export function mountSystemHarness(
   host: HTMLElement,
@@ -164,7 +256,19 @@ export function mountSystemHarness(
       routes.set(surface.route, surface.id)
     }
   }
-  const defaultOff = surfaces.filter((s) => s.defaultEnabled === false).map((s) => s.id)
+  validateSections(options.sections ?? [])
+  const systemShortcut = options.systemShortcut ?? DEFAULT_SYSTEM_SHORTCUT
+  // A shortcut that cannot be parsed fails here, not on the first key press.
+  if (systemShortcut !== false) parseShortcut(systemShortcut)
+  const evictAfter = options.evictHiddenAfterMs
+  if (evictAfter !== undefined && !(evictAfter >= 0))
+    throw new Error(`evictHiddenAfterMs must be a number of milliseconds, not ${evictAfter}`)
+  const defaultOff = [
+    ...new Set([
+      ...surfaces.filter((s) => s.defaultEnabled === false).map((s) => s.id),
+      ...(options.defaultExcluded ?? []).filter((id) => id !== "system"),
+    ]),
+  ]
   const doc = host.ownerDocument
   const win = doc.defaultView ?? window
   // Light DOM, styled inline: nothing here adds a stylesheet to the host page.
@@ -180,7 +284,7 @@ export function mountSystemHarness(
   host.append(shell)
 
   let destroyed = false
-  const storage = () => win.localStorage
+  const storage = (): SystemHarnessStorage => options.storage ?? win.localStorage
   const rotation = initialExcluded(storage, defaultOff)
   const listeners = new Set<() => void>()
   let snapshot: HarnessSnapshot = {
@@ -213,6 +317,12 @@ export function mountSystemHarness(
     pending?: Promise<void> | undefined
     dispose?: (() => void) | undefined
     updating?: Promise<void> | undefined
+    /** Its mount resolved, and it has not been disposed since. */
+    ready?: boolean
+    /** `onShow` was the last of `onShow`/`onHide` called. */
+    visible?: boolean
+    /** Pending eviction while hidden. */
+    evictTimer?: number | undefined
   }
   const all: SystemSurface[] = [
     {
@@ -280,10 +390,15 @@ export function mountSystemHarness(
       patch({ order: next })
     },
     dismissNotice: () => notify(undefined),
+    storage,
     services: options.services,
     docsUrl: options.docsUrl,
     build: options.build,
     backends: options.backends,
+    sections: options.sections,
+    snapshot: options.snapshot,
+    systemShortcut,
+    syncUrl: options.syncUrl,
   }
 
   // The React view loads on its own, beside the first mount; `show()` settles once it has drawn.
@@ -332,7 +447,9 @@ export function mountSystemHarness(
           return
         }
         entry.dispose = dispose
+        entry.ready = true
         setStatus(id)
+        syncVisible(entry)
       })
       .catch((error: unknown) => {
         if (destroyed || signal.aborted) return
@@ -361,20 +478,66 @@ export function mountSystemHarness(
       // Not opened yet: the new code mounts on first open.
       if (!entry.pending) return
       await entry.pending
-      if (destroyed) return
-      entry.abort.abort()
-      entry.abort = new AbortController()
-      try {
-        entry.dispose?.()
-      } catch {
-        /* The old code failing to tear down must not keep the new code out. */
-      }
-      entry.dispose = undefined
-      entry.pending = undefined
+      // Evicted meanwhile: the new code mounts when it is next shown.
+      if (destroyed || !entry.pending) return
+      unmount(entry)
       await load(entry)
     }
     entry.updating = (entry.updating ?? Promise.resolve()).then(run, run)
     return entry.updating
+  }
+
+  /** Disposes a surface's mount (without `onHide`), so its next `load()` mounts it afresh. */
+  function unmount(entry: Entry) {
+    entry.abort.abort()
+    entry.abort = new AbortController()
+    entry.ready = false
+    entry.visible = false
+    try {
+      entry.dispose?.()
+    } catch {
+      /* The old mount failing to tear down must not keep the next one out. */
+    }
+    entry.dispose = undefined
+    entry.pending = undefined
+  }
+
+  /** Calls `onShow` or `onHide` when whether the surface is visible changed. */
+  function syncVisible(entry: Entry) {
+    const visible =
+      !destroyed &&
+      entry.ready === true &&
+      snapshot.current === entry.spec.id &&
+      doc.visibilityState !== "hidden"
+    if (visible === (entry.visible === true)) return
+    entry.visible = visible
+    try {
+      if (visible) entry.spec.onShow?.()
+      else entry.spec.onHide?.()
+    } catch (error) {
+      console.error(`mockingbird: ${entry.spec.id}'s ${visible ? "onShow" : "onHide"} threw`, error)
+    }
+  }
+
+  /** Starts or cancels each surface's eviction timer after a switch. */
+  function scheduleEviction() {
+    if (evictAfter === undefined || evictAfter === Number.POSITIVE_INFINITY) return
+    for (const entry of entries) {
+      const hidden = entry.spec.id !== snapshot.current
+      if (!hidden || entry.spec.id === "system" || !entry.pending) {
+        if (entry.evictTimer !== undefined) win.clearTimeout(entry.evictTimer)
+        entry.evictTimer = undefined
+      } else if (entry.evictTimer === undefined) {
+        entry.evictTimer = win.setTimeout(() => {
+          entry.evictTimer = undefined
+          if (destroyed || entry.spec.id === snapshot.current || !entry.pending) return
+          unmount(entry)
+          entry.panel.replaceChildren()
+          entry.panel.removeAttribute("aria-busy")
+          setStatus(entry.spec.id)
+        }, evictAfter)
+      }
+    }
   }
 
   function notify(next: SystemNotice | undefined) {
@@ -382,6 +545,7 @@ export function mountSystemHarness(
     patch({ notice: next })
   }
 
+  const hostUrl = options.url
   /** The last path each routed surface was at when someone switched away from it. */
   const lastPath = new Map<string, string>()
   const withoutSurface = (url: URL) => {
@@ -395,6 +559,7 @@ export function mountSystemHarness(
     const entry = entries.find((e) => e.spec.id === id) ?? entries[0]
     if (!entry) return
     const previous = entries.find((candidate) => candidate.spec.id === snapshot.current)
+    const first = snapshot.current === ""
     for (const candidate of entries) {
       setHidden(candidate.panel, candidate !== entry)
       candidate.panel.inert = candidate !== entry
@@ -407,7 +572,17 @@ export function mountSystemHarness(
       entry.panel.focus()
     }
     patch({ current: entry.spec.id })
-    if (options.syncUrl && !fromHistory) {
+    // Hide what was shown before showing what is shown now.
+    for (const candidate of entries) if (candidate !== entry) syncVisible(candidate)
+    syncVisible(entry)
+    scheduleEviction()
+    if (hostUrl && !fromHistory && hostUrl.read(win.location) !== entry.spec.id) {
+      const next = hostUrl.write(entry.spec.id, win.location)
+      if (next !== undefined) {
+        const url = new URL(next, win.location.href)
+        if (url.href !== win.location.href) win.history.pushState(null, "", url)
+      }
+    } else if (options.syncUrl && !fromHistory) {
       let url = new URL(win.location.href)
       const route = entry.spec.route
       const was = previous?.spec.route
@@ -418,6 +593,8 @@ export function mountSystemHarness(
         matchRoute(surfaces, url.pathname) === previous.spec.id
       )
         lastPath.set(previous.spec.id, withoutSurface(url))
+      // The System section belongs to System's own URL.
+      if (entry.spec.id !== "system") url.searchParams.delete(SYSTEM_SECTION_PARAM)
       if (route === undefined) url.searchParams.set("surface", entry.spec.id)
       else if (previous === entry) url.searchParams.delete("surface")
       else {
@@ -430,10 +607,17 @@ export function mountSystemHarness(
       }
       if (url.href !== win.location.href) win.history.pushState(null, "", url)
     }
+    if (!first && previous !== entry)
+      try {
+        options.onShow?.(entry.spec.id)
+      } catch (error) {
+        console.error("mockingbird: the host's onShow threw", error)
+      }
     await load(entry)
   }
 
   const fromUrl = () => {
+    if (hostUrl) return hostUrl.read(win.location) ?? options.initial ?? "system"
     const url = new URL(win.location.href)
     return (
       url.searchParams.get("surface") ??
@@ -445,8 +629,13 @@ export function mountSystemHarness(
   const pop = () => {
     void show(fromUrl(), true)
   }
-  if (options.syncUrl) win.addEventListener("popstate", pop)
-  void show(options.syncUrl ? fromUrl() : (options.initial ?? "system"))
+  const onVisibility = () => {
+    for (const entry of entries) syncVisible(entry)
+  }
+  const syncing = options.syncUrl === true || hostUrl !== undefined
+  if (syncing) win.addEventListener("popstate", pop)
+  doc.addEventListener("visibilitychange", onVisibility)
+  void show(syncing ? fromUrl() : (options.initial ?? "system"))
   return {
     show: (id) => show(id),
     active: () => snapshot.current,
@@ -455,8 +644,12 @@ export function mountSystemHarness(
     destroy() {
       if (destroyed) return
       destroyed = true
-      for (const entry of entries) entry.abort.abort()
+      for (const entry of entries) {
+        entry.abort.abort()
+        if (entry.evictTimer !== undefined) win.clearTimeout(entry.evictTimer)
+      }
       win.removeEventListener("popstate", pop)
+      doc.removeEventListener("visibilitychange", onVisibility)
       rendered?.dispose()
       listeners.clear()
       for (const entry of entries) {
