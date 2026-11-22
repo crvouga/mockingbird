@@ -8,7 +8,7 @@ bun run test:sqlite-compat
 
 See [COMPATIBILITY-AUDIT.md](COMPATIBILITY-AUDIT.md) for the latest evidence-based audit report.
 
-Reference oracle: **SQLite 3.51.0** (`bun:sqlite`; platform Bun builds may report **3.53.0**, **3.53.2**, or **3.54.0** — see 𝔇 `oracle-platform-sqlite-version`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Divergences: [`compat/divergences.json`](compat/divergences.json). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
+Reference oracle: **SQLite 3.51.0** (`bun:sqlite`; platform Bun builds may report **3.53.0**, **3.53.2**, **3.53.4**, or **3.54.0** — see 𝔇 `oracle-platform-sqlite-version`). Inventory: `bun run inventory`. Construct catalog: `bun run scenarios` → [`compat/scenarios.ts`](compat/scenarios.ts). Divergences: [`compat/divergences.json`](compat/divergences.json). Requirements matrix: `bun run requirements` → `compat/requirements.json` + `compat/coverage.json`.
 
 ## Proof surface (Phase 1)
 
