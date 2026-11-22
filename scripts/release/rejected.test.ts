@@ -16,6 +16,12 @@ test("only explicit npm publisher rejections select packages for refresh", () =>
   ].join("\n")
   expect([...rejectedPackages(log, names)]).toEqual([alpha])
   expect([...rejectedPackages("build failed before publishing", names)]).toEqual([])
+  expect([
+    ...rejectedPackages(report(beta).replace("repo crvouga/", "repo crvouga-organization/"), names),
+  ]).toEqual([beta])
+  expect([
+    ...rejectedPackages(report(beta).replace("repo crvouga/", "repo other/"), names),
+  ]).toEqual([])
   expect(() => rejectedPackages(report("@other/unrelated"), names)).toThrow(
     "outside the current public catalog",
   )

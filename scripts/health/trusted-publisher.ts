@@ -69,7 +69,8 @@ export function registryPackagePath(name: string): string {
 /**
  * `github.com/crvouga/mockingbird` or `github:crvouga/mockingbird`, including
  * `.git` and a trailing path. A longer repo name such as `mockingbird-extra`
- * does not match.
+ * does not match. The repo also lived under `crvouga-organization`, and versions
+ * published from there keep that URL, so both owners match.
  */
 const PROJECT_REPOSITORY =
   /(?:^|[/:@])(?:github\.com[:/]|github:)(?:crvouga|crvouga-organization)\/mockingbird(?:\.git)?(?=$|[/#?])/

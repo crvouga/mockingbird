@@ -273,6 +273,18 @@ describe("repositoryMatchesProject", () => {
     ).toBe(true)
   })
 
+  test("accepts the owner the repo used to live under", () => {
+    expect(
+      repositoryMatchesProject({
+        url: "git+https://github.com/crvouga-organization/mockingbird.git",
+      }),
+    ).toBe(true)
+    expect(repositoryMatchesProject("github:crvouga-organization/mockingbird")).toBe(true)
+    expect(
+      repositoryMatchesProject("git+https://github.com/crvouga-organization/postgres-mem.git"),
+    ).toBe(false)
+  })
+
   test("rejects another repo, including one that only shares a name prefix", () => {
     expect(
       repositoryMatchesProject({
