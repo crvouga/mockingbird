@@ -13,9 +13,9 @@ export default {
     layout: "fullscreen",
     sources: [
       ...SHELL,
-      "packages/examples/medical-testing/src/client/pages/Checkout.ts",
-      "packages/examples/medical-testing/src/client/components/CheckoutModal.ts",
-      "packages/examples/medical-testing/src/client/components/useEscapeKey.ts",
+      "packages/examples/medical-testing/src/client/pages/Checkout.tsx",
+      "packages/examples/medical-testing/src/client/components/CheckoutModal.tsx",
+      "packages/examples/medical-testing/src/client/components/HostedPageModal.tsx",
       "packages/examples/medical-testing/src/client/hostedPages.ts",
       "packages/examples/medical-testing/src/client/pasteHtml.ts",
       "packages/examples/medical-testing/src/adapters/payments/stripeMockPayments.ts",
@@ -27,11 +27,11 @@ export default {
 /** Pick two tests, agree, and continue to the hosted payment page. */
 const toPayment = async (canvas: HTMLElement): Promise<Person> => {
   const page = person(canvas)
-  await page.click(".cove-test-card:nth-child(1) button[aria-pressed]")
-  await page.click(".cove-test-card:nth-child(3) button[aria-pressed]")
-  await page.click(".cove-cart .cove-checkbox input")
-  await page.click(".cove-cart .cove-btn-primary")
-  await page.find('.hosted-page [data-testid="stripe-mock-pay"]')
+  await page.click('[data-testid="test-row"]:nth-child(1) [data-testid="add-test"]')
+  await page.click('[data-testid="test-row"]:nth-child(3) [data-testid="add-test"]')
+  await page.click('[data-testid="order-consent"]')
+  await page.click('[data-testid="checkout-continue"]')
+  await page.find('[data-testid="hosted-page"] [data-testid="stripe-mock-pay"]')
   return page
 }
 
@@ -79,7 +79,7 @@ export const Paid: StoryObj = {
     const page = await toPayment(canvasElement)
     await payWith(page, "4242424242424242")
     await page.find(
-      ".cove-notice",
+      '[data-testid="app-notice"]',
       "Payment successful. We emailed your receipt to ada@example.test.",
     )
   },

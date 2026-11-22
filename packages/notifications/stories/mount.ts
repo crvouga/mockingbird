@@ -1,4 +1,5 @@
-import { type AppOptions, createApp } from "../src/ui/app.js"
+import { createApp } from "../src/ui/mount.js"
+import type { AppOptions } from "../src/ui/types.js"
 
 /** Render the harness UI from fixtures into a fresh element, as Storybook's HTML renderer expects. */
 export const mount = (options: AppOptions): HTMLElement => {

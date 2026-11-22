@@ -11,7 +11,10 @@ import { flex, type Session } from "./flex.js"
  */
 export default {
   title: "Emulators/Flex/Checkout",
-  parameters: { layout: "fullscreen", sources: ["packages/service/flex/src/hosted.ts"] },
+  parameters: {
+    layout: "fullscreen",
+    sources: ["packages/service/flex/src/ui/server.tsx", "packages/service/flex/src/hosted.ts"],
+  },
 } satisfies Meta
 
 type Flex = ReturnType<typeof flex>
@@ -76,6 +79,21 @@ export const WithoutCancelLink: StoryObj = checkout(async (f) => {
 export const OnAPhone: StoryObj = {
   ...checkout(payment),
   globals: { viewport: { value: "phone", isRotated: false } },
+}
+
+/**
+ * Dark, as a visitor who chose it with Mockingbird's theme switch sees it: the page applies the
+ * remembered choice (`mb:theme`) to its root before first paint.
+ */
+export const DarkAppearance: StoryObj = {
+  ...checkout(payment),
+  play: async ({ canvasElement }) => {
+    const page = await hands(canvasElement)
+    const root = page.doc.documentElement
+    root.classList.add("dark")
+    root.dataset.theme = "dark"
+    expect(page.doc.defaultView?.getComputedStyle(root).colorScheme).toContain("dark")
+  },
 }
 
 /** Every field filled in, before Pay. */
@@ -168,6 +186,12 @@ export const LetterOfMedicalNecessity: StoryObj = checkout(
       next_action_type: "collect_letter_of_medical_necessity",
     }),
 )
+
+/** The letter-of-medical-necessity step on a phone. */
+export const LetterOnAPhone: StoryObj = {
+  ...LetterOfMedicalNecessity,
+  globals: { viewport: { value: "phone", isRotated: false } },
+}
 
 /** The questionnaire submitted: the payment settles and the browser leaves for `success_url`. */
 export const LetterSubmitted: StoryObj = {

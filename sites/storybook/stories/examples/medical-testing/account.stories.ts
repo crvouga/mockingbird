@@ -24,8 +24,8 @@ export default {
     layout: "fullscreen",
     sources: [
       ...SHELL,
-      "packages/examples/medical-testing/src/client/pages/Account.ts",
-      "packages/examples/medical-testing/src/client/components/InboxHint.ts",
+      "packages/examples/medical-testing/src/client/pages/Account.tsx",
+      "packages/examples/medical-testing/src/client/components/InboxHint.tsx",
     ],
   },
 } satisfies Meta
@@ -56,16 +56,16 @@ export const Clinician: StoryObj = account({ as: CLINICIAN })
 
 /** The name changed and saved. */
 export const ProfileSaved: StoryObj = account({ as: PATIENT }, async (page) => {
-  await page.type(".cove-card form .cove-input[required]", " King")
-  await page.click(".cove-card form button.cove-btn-primary", "Save changes")
-  await page.find('.cove-alert-success[role="status"]', "Your changes have been saved.")
+  await page.type('[data-testid="profile-name"]', " King")
+  await page.click('[data-testid="profile-save"]', "Save changes")
+  await page.find('[data-testid="profile-saved"]', "Your changes have been saved.")
 })
 
 /** Email updates switched off; the switch saves on its own. */
 export const EmailUpdatesOff: StoryObj = account({ as: PATIENT }, async (page) => {
   await page.click('[data-testid="notify-email"]')
   for (let attempt = 0; attempt < 100; attempt += 1) {
-    const toggle = await page.find<HTMLInputElement>('[data-testid="notify-email"]')
+    const toggle = await page.find<HTMLInputElement>('[data-testid="notify-email"] input')
     if (!toggle.disabled && !toggle.checked) return
     await new Promise((resolve) => setTimeout(resolve, 30))
   }
@@ -140,7 +140,7 @@ export const StaffAlertSent: StoryObj = account({ as: CLINICIAN }, async (page) 
 
 /** Signing out: back to the sign-in page. */
 export const SignedOut: StoryObj = account({ as: PATIENT }, async (page) => {
-  await page.click(".cove-card button.cove-btn-ghost", "Sign out")
+  await page.click('[data-testid="sign-out"]', "Sign out")
   await page.find('[data-testid="sign-in-email"]')
 })
 

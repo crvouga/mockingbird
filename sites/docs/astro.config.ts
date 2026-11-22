@@ -1,5 +1,7 @@
 import { fileURLToPath } from "node:url"
 import node from "@astrojs/node"
+import react from "@astrojs/react"
+import tailwindcss from "@tailwindcss/vite"
 import { defineConfig } from "astro/config"
 import { catalog } from "./integrations/catalog/index.ts"
 import { deployment } from "./integrations/deployment.ts"
@@ -54,15 +56,20 @@ export default defineConfig({
     },
     catalog({ repoRoot, docsRoot }),
     storybook(repoRoot),
+    // React islands render the shared Mockingbird components (@crvouga/mockingbird-ui/react).
+    react(),
   ],
   ...(pinDocsPort ? { server: { port: reservedDocsPort, host: "127.0.0.1" } } : {}),
   vite: {
+    // Compiles stylesheets that `@import "@crvouga/mockingbird-ui/theme.css"` (Tailwind CSS v4,
+    // HeroUI and the Mockingbird theme); stylesheets that do not import Tailwind pass through.
+    plugins: [tailwindcss()],
     optimizeDeps: {
       // The app is lazy-loaded; discover its nested dependencies before the first launch.
       include: [
-        "preact",
-        "preact/hooks",
-        "htm/preact",
+        "react",
+        "react-dom/client",
+        "@heroui/react",
         "hono",
         "hono/cookie",
         "hono/http-exception",

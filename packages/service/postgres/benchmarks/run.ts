@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { memFactory } from "./compare/mem.ts";
-import { renderHtmlReport } from "./harness/html-report.ts";
+import { renderHtmlReport } from "./harness/html-report.tsx";
 import { toJson } from "./harness/report.ts";
 import { engineAllowed, printReport, runSuite } from "./harness/run-suite.ts";
 import type { NamedFactory, SuiteTier } from "./harness/types.ts";

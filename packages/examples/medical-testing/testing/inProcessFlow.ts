@@ -1,5 +1,5 @@
 /**
- * Drives the app the way its Preact client does, through `client/api.ts` and
+ * Drives the app the way its React client does, through `client/api.ts` and
  * whatever `Fetcher` the test installed (usually `createInProcessFetcher`).
  * Shared by the in-process tests.
  */
@@ -22,28 +22,38 @@ const decodeEntities = (value: string): string =>
     .replace(/&gt;/g, ">")
     .replace(/&amp;/g, "&")
 
+/** A tag's attributes, whatever order the page's renderer wrote them in. */
+const attributes = (tag: string): Record<string, string> => {
+  const out: Record<string, string> = {}
+  for (const [, name, value] of tag.matchAll(/\s([\w:-]+)="([^"]*)"/g))
+    out[(name as string).toLowerCase()] = decodeEntities(value as string)
+  return out
+}
+
 /** A form with no `action` attribute (the hosted checkout page's form) submits to its own URL — see the caller. */
-const extractForms = (html: string): ParsedForm[] => {
+export const extractForms = (html: string): ParsedForm[] => {
   const forms: ParsedForm[] = []
-  for (const match of html.matchAll(
-    /<form\s+method="([^"]+)"(?:\s+action="([^"]*)")?[^>]*>([\s\S]*?)<\/form>/gi,
-  )) {
-    const [, method, action, inner] = match
-    if (!method || inner === undefined) continue
+  for (const match of html.matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)) {
+    const form = attributes(match[1] ?? "")
+    const inner = match[2] ?? ""
+    if (!form.method) continue
     const fields: Record<string, string> = {}
-    for (const field of inner.matchAll(/<input[^>]*\bname="([^"]+)"[^>]*\bvalue="([^"]*)"/gi))
-      fields[field[1] as string] = decodeEntities(field[2] as string)
     const submitters: { name: string; value: string }[] = []
-    for (const btn of inner.matchAll(/<button[^>]*\bname="([^"]+)"[^>]*\bvalue="([^"]+)"/gi))
-      submitters.push({ name: btn[1] as string, value: decodeEntities(btn[2] as string) })
-    forms.push({ method, action: action ?? "", fields, submitters })
+    for (const [tag, kind] of inner.matchAll(/<(input|button)\b[^>]*>/gi)) {
+      const field = attributes(tag)
+      if (!field.name || field.value === undefined) continue
+      if (kind?.toLowerCase() === "button" || field.type === "submit")
+        submitters.push({ name: field.name, value: field.value })
+      else fields[field.name] = field.value
+    }
+    forms.push({ method: form.method, action: form.action ?? "", fields, submitters })
   }
   return forms
 }
 
 /**
  * Drives the real Google login through `client/api.ts`'s
- * `api.oauthStart`/`api.oauthStep` — the exact calls the Preact `OAuthModal`
+ * `api.oauthStart`/`api.oauthStep` — the exact calls the React `OAuthModal`
  * component makes — so this proves the whole in-process OAuth wiring works
  * through the same `Fetcher` seam `composition/browser.ts`'s `mount()`
  * installs.

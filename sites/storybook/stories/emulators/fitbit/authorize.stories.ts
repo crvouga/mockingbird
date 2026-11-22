@@ -1,5 +1,7 @@
 import { createRuntime } from "@crvouga/mockingbird-service-fitbit"
 import type { Meta, StoryObj } from "@storybook/html-vite"
+import { expect } from "storybook/test"
+import { hands } from "../../../src/interact.js"
 import { page } from "../../../src/story.js"
 
 /**
@@ -9,7 +11,10 @@ import { page } from "../../../src/story.js"
  */
 export default {
   title: "Emulators/Fitbit/Authorize",
-  parameters: { layout: "fullscreen", sources: ["packages/service/fitbit/src/index.ts"] },
+  parameters: {
+    layout: "fullscreen",
+    sources: ["packages/service/fitbit/src/ui/server.tsx", "packages/service/fitbit/src/index.ts"],
+  },
 } satisfies Meta
 
 const ORIGIN = "https://www.fitbit.com"
@@ -52,3 +57,23 @@ export const RedirectNotAUrl: StoryObj = authorize({
   client_id: "open_client",
   redirect_uri: "callback",
 })
+
+export const OnAPhone: StoryObj = {
+  ...RedirectMismatch,
+  globals: { viewport: { value: "phone", isRotated: false } },
+}
+
+/**
+ * Dark, as a visitor who chose it with Mockingbird's theme switch sees it: the page applies the
+ * remembered choice (`mb:theme`) to its root before first paint.
+ */
+export const DarkAppearance: StoryObj = {
+  ...RedirectMismatch,
+  play: async ({ canvasElement }) => {
+    const page = await hands(canvasElement)
+    const root = page.doc.documentElement
+    root.classList.add("dark")
+    root.dataset.theme = "dark"
+    expect(page.doc.defaultView?.getComputedStyle(root).colorScheme).toContain("dark")
+  },
+}

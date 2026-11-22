@@ -4,12 +4,13 @@ import type { Context } from "../../core/index.js";
 import type { RouteContext, Store, AuthUser, AppEnv } from "../../core/index.js";
 import {
   unauthorized,
-  escapeHtml,
-  escapeAttr,
-  renderCardPage,
   renderErrorPage,
-  renderSettingsPage,
-  renderUserButton,
+  renderProviderPage,
+  renderSignInPage,
+  table,
+  type Block,
+  type LinkItem,
+  type NavItem,
   matchesRedirectUri,
   constantTimeSecretEqual,
   parseCookies,
@@ -93,7 +94,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
 
   // ---------- OAuth authorize page ----------
 
-  app.get("/login/oauth/authorize", (c) => {
+  app.get("/login/oauth/authorize", async (c) => {
     const client_id = c.req.query("client_id") ?? "";
     const redirect_uri = c.req.query("redirect_uri") ?? "";
     const scope = c.req.query("scope") ?? "";
@@ -104,8 +105,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     if (oauthAppsConfigured) {
       const oauthApp = gh.oauthApps.findOneBy("client_id", client_id);
       if (!oauthApp) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
@@ -113,8 +113,7 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
         console.warn(
           `[OAuth] redirect_uri mismatch: got "${redirect_uri}", registered: ${JSON.stringify(oauthApp.redirect_uris)}`,
         );
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -128,14 +127,14 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     const users = [...gh.users.all()].sort((a, b) => a.login.localeCompare(b.login));
 
     const subtitleText = oauthAppForSubtitle
-      ? `Authorize <strong>${escapeHtml(oauthAppForSubtitle.name)}</strong> to access your account.`
+      ? ["Authorize ", { strong: oauthAppForSubtitle.name }, " to access your account."]
       : "Choose a seeded user to authorize this application.";
 
     const userButtons = users
       .map((u) => {
         const brief = formatUser(u, baseUrl);
         const full = formatUserFull(u, baseUrl);
-        return renderUserButton({
+        return ({
           letter: (brief.login[0] ?? "?").toUpperCase(),
           login: full.login,
           name: full.name ?? undefined,
@@ -149,12 +148,10 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
             client_id,
           },
         });
-      })
-      .join("\n");
+      });
 
-    const body = users.length === 0 ? '<p class="empty">No users in the emulator store.</p>' : userButtons;
 
-    return c.html(renderCardPage("Sign in to GitHub", subtitleText, body, SERVICE_LABEL));
+    return c.html(await renderSignInPage("Sign in to GitHub", subtitleText, userButtons, SERVICE_LABEL));
   });
 
   // ---------- OAuth callback (user selection) ----------
@@ -376,59 +373,52 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
     return SCOPE_LABELS[scope] ?? scope;
   }
 
-  const sidebarHtml = `
-    <a href="/settings/applications" class="active">Authorized Apps</a>`;
+  const SETTINGS_NAV: NavItem[] = [{ label: "Authorized apps", href: "/settings/applications", current: true }];
 
-  app.get("/settings/applications", (c) => {
+  app.get("/settings/applications", async (c) => {
     const sessionUser = resolveSessionUser(c);
     if (!sessionUser) {
-      return c.html(
-        renderErrorPage("Unauthorized", "You must be authenticated to view this page.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Unauthorized", "You must be authenticated to view this page.", SERVICE_LABEL),
         401,
       );
     }
 
     const grants = gh.oauthGrants.findBy("user_id", sessionUser.id);
+    const items: LinkItem[] = grants.map((grant) => {
+      const oauthApp = gh.oauthApps.findOneBy("client_id", grant.client_id);
+      const name = oauthApp?.name ?? grant.client_id;
+      return {
+        href: `/settings/connections/applications/${grant.client_id}`,
+        title: name,
+        description: grant.scopes.length > 0 ? grant.scopes.join(", ") : "No scopes",
+        letter: (name[0] ?? "?").toUpperCase(),
+      };
+    });
 
-    let bodyHtml: string;
-    if (grants.length === 0) {
-      bodyHtml = `
-        <div class="section-heading">Authorized OAuth Apps</div>
-        <div class="s-card">
-          <p class="empty">No authorized applications. Apps you authorize will appear here.</p>
-        </div>`;
-    } else {
-      const appLinks = grants
-        .map((grant) => {
-          const oauthApp = gh.oauthApps.findOneBy("client_id", grant.client_id);
-          const name = oauthApp?.name ?? grant.client_id;
-          const letter = escapeHtml((name[0] ?? "?").toUpperCase());
-          const scopeText = grant.scopes.length > 0 ? grant.scopes.join(", ") : "No scopes";
-          return `<a href="/settings/connections/applications/${escapeAttr(grant.client_id)}" class="app-link">
-          <div class="s-icon">${letter}</div>
-          <div>
-            <div class="app-link-name">${escapeHtml(name)}</div>
-            <div class="app-link-scopes">${escapeHtml(scopeText)}</div>
-          </div>
-        </a>`;
-        })
-        .join("\n");
-
-      bodyHtml = `
-        <div class="section-heading">Authorized OAuth Apps</div>
-        <div class="s-card">${appLinks}</div>`;
-    }
-
-    return c.html(renderSettingsPage("Authorized OAuth Apps", sidebarHtml, bodyHtml, SERVICE_LABEL));
+    return c.html(
+      await renderProviderPage({
+        layout: "app",
+        service: SERVICE_LABEL,
+        title: "Authorized OAuth Apps",
+        description: "Applications you have granted access to your account.",
+        nav: SETTINGS_NAV,
+        blocks: [
+          {
+            type: "links",
+            items,
+            empty: "No authorized applications. Apps you authorize will appear here.",
+          },
+        ],
+      }),
+    );
   });
 
   // ---------- Settings: app detail ----------
 
-  app.get("/settings/connections/applications/:client_id", (c) => {
+  app.get("/settings/connections/applications/:client_id", async (c) => {
     const sessionUser = resolveSessionUser(c);
     if (!sessionUser) {
-      return c.html(
-        renderErrorPage("Unauthorized", "You must be authenticated to view this page.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Unauthorized", "You must be authenticated to view this page.", SERVICE_LABEL),
         401,
       );
     }
@@ -437,79 +427,74 @@ export function oauthRoutes({ app, store, baseUrl, tokenMap }: RouteContext): vo
 
     const grant = gh.oauthGrants.all().find((g) => g.user_id === sessionUser.id && g.client_id === clientId);
     if (!grant) {
-      return c.html(renderErrorPage("Not Found", "No authorization found for this application.", SERVICE_LABEL), 404);
+      return c.html(await renderErrorPage("Not Found", "No authorization found for this application.", SERVICE_LABEL), 404);
     }
 
     const oauthApp = gh.oauthApps.findOneBy("client_id", clientId);
     const appName = oauthApp?.name ?? clientId;
-    const appLetter = escapeHtml((appName[0] ?? "?").toUpperCase());
     const lastUsed = new Date(grant.updated_at).toLocaleDateString("en-US", {
       year: "numeric",
       month: "long",
       day: "numeric",
     });
 
-    const permRows = grant.scopes
-      .map((s) => `<li><span class="check">&#10003;</span> ${escapeHtml(scopeLabel(s))}</li>`)
-      .join("\n");
+    const orgs = Object.entries(grant.org_access);
+    const blocks: Block[] = [
+      {
+        type: "section",
+        title: "Permissions",
+        action: {
+          type: "form",
+          action: `/settings/connections/applications/${clientId}/revoke`,
+          label: "Revoke access",
+          variant: "danger",
+        },
+        blocks: [
+          {
+            type: "checklist",
+            items: grant.scopes.map(scopeLabel),
+            empty: "No specific permissions granted.",
+          },
+        ],
+      },
+    ];
+    if (orgs.length > 0) {
+      blocks.push({
+        type: "section",
+        title: "Organization access",
+        description: "Applications act on your behalf. Organizations control which apps may access their private data.",
+        blocks: [
+          table(
+            ["Organization", "Access"],
+            orgs.map(([org, status]) => [
+              org,
+              { chip: status, status: status === "granted" ? "ok" : status === "denied" ? "error" : "neutral" },
+            ]),
+            "No organizations.",
+            "Organization access",
+          ),
+        ],
+      });
+    }
 
-    const orgRows = Object.entries(grant.org_access)
-      .map(([org, status]) => {
-        const letter = escapeHtml((org[0] ?? "?").toUpperCase());
-        const badgeClass =
-          status === "granted" ? "badge-granted" : status === "denied" ? "badge-denied" : "badge-requested";
-        const icon = status === "granted" ? "&#10003;" : status === "denied" ? "&#10007;" : "&#8943;";
-        return `<div class="org-row">
-        <div class="org-icon">${letter}</div>
-        <span class="org-name">${escapeHtml(org)}</span>
-        <span class="badge ${badgeClass}">${icon}</span>
-      </div>`;
-      })
-      .join("\n");
-
-    const bodyHtml = `
-      <div class="s-card">
-        <div class="s-card-header">
-          <div class="s-icon">${appLetter}</div>
-          <div>
-            <div class="s-title">${escapeHtml(appName)}</div>
-            <div class="s-subtitle">Last used: ${escapeHtml(lastUsed)}</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="s-card">
-        <div class="section-heading">
-          <span>Permissions</span>
-          <form method="post" action="/settings/connections/applications/${escapeAttr(clientId)}/revoke" style="display:inline">
-            <button type="submit" class="btn-revoke">Revoke access</button>
-          </form>
-        </div>
-        <ul class="perm-list">
-          ${permRows || '<li style="color:#1a8c00">No specific permissions granted.</li>'}
-        </ul>
-      </div>
-
-      ${
-        orgRows
-          ? `<div class="s-card">
-        <div class="section-heading">Organization access</div>
-        ${orgRows}
-        <p class="info-text">Applications act on your behalf. Organizations control which apps may access their private data.</p>
-      </div>`
-          : ""
-      }`;
-
-    return c.html(renderSettingsPage(appName, sidebarHtml, bodyHtml, SERVICE_LABEL));
+    return c.html(
+      await renderProviderPage({
+        layout: "app",
+        service: SERVICE_LABEL,
+        title: appName,
+        description: `Last used ${lastUsed}`,
+        nav: SETTINGS_NAV,
+        blocks,
+      }),
+    );
   });
 
   // ---------- Settings: revoke ----------
 
-  app.post("/settings/connections/applications/:client_id/revoke", (c) => {
+  app.post("/settings/connections/applications/:client_id/revoke", async (c) => {
     const sessionUser = resolveSessionUser(c);
     if (!sessionUser) {
-      return c.html(
-        renderErrorPage("Unauthorized", "You must be authenticated to perform this action.", SERVICE_LABEL),
+      return c.html(await renderErrorPage("Unauthorized", "You must be authenticated to perform this action.", SERVICE_LABEL),
         401,
       );
     }

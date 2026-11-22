@@ -25,8 +25,8 @@ export default {
     layout: "fullscreen",
     sources: [
       ...SHELL,
-      "packages/examples/medical-testing/src/client/pages/Orders.ts",
-      "packages/examples/medical-testing/src/client/components/Tabs.ts",
+      "packages/examples/medical-testing/src/client/pages/Orders.tsx",
+      "packages/examples/medical-testing/src/client/components/OrdersTable.tsx",
     ],
   },
 } satisfies Meta
@@ -39,15 +39,15 @@ const orders = (
   ...cove({ route: "orders", ...setup }, extra),
   play: async ({ canvasElement }) => {
     const page = person(canvasElement)
-    await page.find(".cove-order-list, .cove-empty")
+    await page.find('[data-testid="order-row"], [data-testid="orders-empty"]')
     await play?.(page)
   },
 })
 
 /** Open the order whose card mentions `text`. */
 const openOrder = (text: string) => async (page: Person) => {
-  await page.click(".cove-order-card", text)
-  await page.find(".cove-progress")
+  await page.click('[data-testid="order-row"]', text)
+  await page.find('[data-testid="order-progress"]')
 }
 
 /** A patient's orders, newest first. */
@@ -67,8 +67,8 @@ export const Results: StoryObj = orders({ as: PATIENT, route: "results" })
 
 /** A search that matches nothing. */
 export const NoMatchingOrders: StoryObj = orders({ as: PATIENT }, async (page) => {
-  await page.type('.cove-toolbar input[type="search"]', "zinc")
-  await page.find(".cove-empty", "No matching orders")
+  await page.type('[data-testid="orders-search"]', "zinc")
+  await page.find('[data-testid="orders-empty"]', "No matching orders")
 })
 
 /** A first sign-in: nothing ordered yet. */
@@ -76,14 +76,14 @@ export const NoOrdersYet: StoryObj = orders({ as: NEWCOMER })
 
 /** A report: biomarkers against their ranges and the prior sample, with the clinician's review. */
 export const Report: StoryObj = orders({ as: PATIENT }, async (page) => {
-  await page.click(".cove-order-card:last-child")
-  await page.find(".cove-results-table")
+  await page.click('[data-testid="order-row"]:last-child')
+  await page.find('[data-testid="results-table"]')
 })
 
 /** A report still waiting for its review. */
 export const ReportAwaitingReview: StoryObj = orders({ as: PATIENT }, async (page) => {
-  await page.click(".cove-order-card:first-child")
-  await page.find(".cove-results-table")
+  await page.click('[data-testid="order-row"]:first-child')
+  await page.find('[data-testid="results-table"]')
 })
 
 /** An unpaid order: its tests are saved, and checkout can be resumed. */
@@ -110,24 +110,24 @@ export const AtTheLab: StoryObj = orders(
 
 /** The timeline tab: every step from payment to review. */
 export const Timeline: StoryObj = orders({ as: PATIENT }, async (page) => {
-  await page.click(".cove-order-card:last-child")
-  await page.click("#order-tab-timeline")
-  await page.find(".cove-event-list")
+  await page.click('[data-testid="order-row"]:last-child')
+  await page.click('[role="tab"]', "Timeline")
+  await page.find('[data-testid="timeline"]')
 })
 
 /** The files tab: the results spreadsheet, receipt and order record, and the order summary. */
 export const Files: StoryObj = orders({ as: PATIENT }, async (page) => {
-  await page.click(".cove-order-card:last-child")
-  await page.click("#order-tab-files")
-  await page.find(".cove-file-row")
+  await page.click('[data-testid="order-row"]:last-child')
+  await page.click('[role="tab"]', "Files")
+  await page.find('[data-testid="file-row"]')
 })
 
 /** A file downloaded: the confirmation. */
 export const Downloaded: StoryObj = orders({ as: PATIENT }, async (page) => {
-  await page.click(".cove-order-card:last-child")
-  await page.click("#order-tab-files")
-  await page.click(".cove-file-row button", "Download")
-  await page.find('.cove-alert-success[role="status"]', "Your file is ready.")
+  await page.click('[data-testid="order-row"]:last-child')
+  await page.click('[role="tab"]', "Files")
+  await page.click('[data-testid="file-row"] button', "Download")
+  await page.find('[data-testid="order-success"]', "Your file is ready.")
 })
 
 /** A clinician: every patient's orders. */
@@ -135,18 +135,21 @@ export const AllPatients: StoryObj = orders({ as: CLINICIAN })
 
 /** A clinician on a report awaiting review: the review form. */
 export const ReviewForm: StoryObj = orders({ as: CLINICIAN }, async (page) => {
-  await page.click(".cove-order-card:first-child")
-  await page.find("textarea.cove-input")
+  await page.click('[data-testid="order-row"]:first-child')
+  await page.find('[data-testid="review-note"]')
 })
 
 /** The review written and saved: it joins the report and the timeline. */
 export const ReviewSaved: StoryObj = orders({ as: CLINICIAN }, async (page) => {
-  await page.click(".cove-order-card:first-child")
-  await page.type("textarea.cove-input", "Values reviewed. Repeat the lipid panel in three months.")
-  await page.click("form button.cove-btn-primary", "Complete review")
-  expect(
-    (await page.find('.cove-alert-success[role="status"]', "Review saved")).textContent,
-  ).toContain("timeline")
+  await page.click('[data-testid="order-row"]:first-child')
+  await page.type(
+    '[data-testid="review-note"]',
+    "Values reviewed. Repeat the lipid panel in three months.",
+  )
+  await page.click('[data-testid="review-submit"]', "Complete review")
+  expect((await page.find('[data-testid="order-success"]', "Review saved")).textContent).toContain(
+    "timeline",
+  )
 })
 
 export const OnAPhone: StoryObj = orders({ as: PATIENT }, undefined, { globals: phone })

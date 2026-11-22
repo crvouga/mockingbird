@@ -10,6 +10,8 @@ A pull request whose checks passed is releasable. Merging it to `main` is the re
 
 Versions live in tags, so `package.json` keeps `0.0.0-development` and nothing is committed back to `main` (same model as semantic-release). Every step is idempotent — re-running a failed release job finishes it.
 
+npm can take minutes to list a version it accepted, so a shard publishes its packages back to back and waits for npm to serve each one in the background before tagging it; a dependent still waits for every pin it needs. A version npm accepted earlier but no tag records (a run cut off between publish and tag) is tagged by the next run. A version that was published and then removed from npm can never be published again: the plan skips it and releases the next patch, so it never needs a human.
+
 The plan artifact records the commit, versions, and notes before any job pushes tags. Every shard uses that same snapshot rather than recalculating versions as other jobs finish. Packages another release depends on publish first, in dependency order; leaf shards have no dependencies on each other. A failed prerequisite does not stop independent packages: shards verify every dependency pin on npm before publishing. A failed shard does not cancel the others, and reconciliation runs even after a publish failure or when there are no new versions.
 
 OIDC cannot create a package that does not exist on npm yet. A maintainer runs `bun run release:seed` once with an interactive npm login; it first-publishes missing packages from `origin/main`, attaches `ci.yml` as each package's Trusted Publisher (`npm trust github`), and reconciles deprecations. The seed spaces bulk trust changes at npm's recommended interval and fails with the exact packages it could not configure; rerunning resumes safely. CI never receives or falls back to a long-lived npm token. Until the seed runs, a never-published package fails the release (as do its dependents), while every independent package still releases. See [docs/SECRETS.md](SECRETS.md).
@@ -29,7 +31,7 @@ bun run health -- trusted-publisher --interactive # inspect settings requiring n
 bun run secrets:doctor                 # npm / Trusted Publishing / live parity status
 ```
 
-For existing packages rejected with `ENEEDAUTH`, use
+Only an npm auth failure (`ENEEDAUTH`, 401, 403, 404) is reported as a Trusted Publisher rejection. For existing packages rejected with `ENEEDAUTH`, use
 `bun run release:seed -- --trust-only --refresh-rejected`. It reads the latest completed
 failed Release on `main` and recreates matching publisher settings for the packages that
 run explicitly rejected, even when their saved fields already look correct. Other publisher

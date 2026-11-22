@@ -3,6 +3,10 @@ import { type PullRequestFacts, selectPreviewAction } from "./lifecycle.js"
 
 export type PreviewAssetFile = { path: string; bytes: Uint8Array; contentType: string }
 export type CloudflarePreview = { id: string; name: string; updatedAt: string; urls: string[] }
+export type CloudflarePreviewDeployResult =
+  | { action: "remove" | "skip" }
+  | { action: "unchanged"; preview: CloudflarePreview }
+  | { action: "deployed"; preview: CloudflarePreview; deploymentId: string }
 type Json = Record<string, unknown>
 const object = (value: unknown): Json => {
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -124,7 +128,7 @@ export function createCloudflarePreviews(options: {
     compatibilityDate?: string
     htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none"
     notFoundHandling?: "none" | "404-page" | "single-page-application"
-  }) => {
+  }): Promise<CloudflarePreviewDeployResult> => {
     const name = identifier(input.name)
     const current = async () => selectPreviewAction(await input.currentPullRequest(), input.commit)
     const initial = await current()

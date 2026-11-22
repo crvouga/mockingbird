@@ -1,3 +1,4 @@
+export { MOCKINGBIRD } from "./brand.js"
 export {
   FRESHNESS_CSS,
   type FreshnessBuildOptions,

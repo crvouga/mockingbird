@@ -964,7 +964,7 @@ describe("AWS plugin - Inspector", () => {
     const res = await app.request(`${base}/_inspector`);
     expect(res.status).toBe(200);
     const html = await res.text();
-    expect(html).toContain("AWS Emulator");
+    expect(html).toContain("Mockingbird"); // The shared page header: "Mockingbird / AWS".
     expect(html).toContain("Inspector");
     expect(html).toContain("emulate-default");
   });

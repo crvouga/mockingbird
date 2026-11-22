@@ -62,13 +62,13 @@ export class WearablesAPI implements FetchAPI {
               queryString(c.query.redirect_uri),
             ),
           ),
-        PairUser: (c) => {
+        PairUser: async (c) => {
           const user = this.user(c.params.user_id)
           const redirect = this.redirectUrl(queryString(c.query.redirect_url))
           const providers = this.state.providers
             .list({ where: (p) => p.is_enabled && p.has_cloud_api })
             .map((row) => row.value)
-          return html(pairingPage(providers, user.id, redirect ?? "", this.browserPrefix))
+          return html(await pairingPage(providers, user.id, redirect ?? "", this.browserPrefix))
         },
         PairProvider: (c) =>
           new Response(null, {
@@ -82,25 +82,25 @@ export class WearablesAPI implements FetchAPI {
               ).authorization_url,
             },
           }),
-        ConsentPage: (c) => {
+        ConsentPage: async (c) => {
           const authorization = this.authorization(c.params.state)
           const action = new URL(c.request.url)
           action.pathname = `${this.browserPrefix}${action.pathname}`
-          return html(consentPage(this.provider(authorization.provider).name, action.href))
+          return html(await consentPage(this.provider(authorization.provider).name, action.href))
         },
-        DecideConsent: (c) => {
+        DecideConsent: async (c) => {
           const authorization = this.authorization(c.params.state)
           const form = c.body.kind === "form" ? (c.body.value as Record<string, unknown>) : {}
           if (form.decision !== "allow" && form.decision !== "deny")
             return jsonRes(422, { detail: "Expected allow or deny" })
           this.state.authorizations.update(authorization.id, { ...authorization, used: true })
-          if (form.decision === "deny") return html(completionPage(false))
+          if (form.decision === "deny") return html(await completionPage(false))
           const provider = this.provider(authorization.provider)
           if (!provider.is_enabled) return jsonRes(409, { detail: "Provider is disabled" })
           this.seedConnection(authorization.userId, authorization.provider)
           return authorization.redirectUrl
             ? new Response(null, { status: 303, headers: { location: authorization.redirectUrl } })
-            : html(completionPage(true))
+            : html(await completionPage(true))
         },
         ListProviders: (c) =>
           jsonRes(

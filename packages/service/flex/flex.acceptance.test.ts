@@ -732,7 +732,9 @@ describe("S4.6 hosted page", () => {
     )
     const paid = await payOnHostedPage((r) => h.runtime.fetch(r), result.redirectUrl, DECLINE)
     expect(paid.response.status).toBe(402)
-    expect(paid.body).toMatch(/<div role="alert"[^>]*>Your card was declined\.<\/div>/)
+    expect(paid.body).toMatch(
+      /role="alert"[^>]*data-testid="flex-mock-error"[\s\S]*?>Your card was declined\.</,
+    )
     await h.settle()
     expect(h.receiver.received.map((r) => r.eventType)).toEqual([
       "checkout.session.async_payment_failed",

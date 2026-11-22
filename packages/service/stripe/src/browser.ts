@@ -1,5 +1,4 @@
 import type { OperationContext, OperationHandler } from "@crvouga/mockingbird-service"
-import { CSS_RESET } from "@crvouga/mockingbird-ui"
 import { afterIntentSucceeded } from "./billing.js"
 import { portalChange, runPortalAction } from "./billing-portal.js"
 import {
@@ -27,11 +26,12 @@ const html = (status: number, body: string) =>
     headers: { "content-type": "text/html; charset=utf-8" },
   })
 
-const missing = (message: string) =>
-  html(
-    404,
-    `<head><meta charset="utf-8"><title>Not found</title><style>${CSS_RESET}body{padding:24px}</style></head><body><p>${message}</p></body>`,
-  )
+/** The emulator's "not found" page (React, prebuilt in `#ui/server`, loaded only when served). */
+const missing = async (message: string) =>
+  new Response((await import("#ui/server")).notFoundPage(message), {
+    status: 404,
+    headers: { "content-type": "text/html; charset=utf-8" },
+  })
 
 const notFound = () => missing("Unknown Checkout Session.")
 

@@ -338,6 +338,49 @@ export async function npmVersions(name: string): Promise<string[] | { error: str
   return Array.isArray(parsed) ? parsed : [parsed]
 }
 
+/**
+ * Versions npm will never accept again: published once, then unpublished or removed by npm.
+ * They stay in the packument's `time` map but not in `versions`, and every publish of one fails
+ * with E400 "Cannot publish over previously published version". `[]` if the package is new.
+ */
+export async function npmBurntVersions(name: string): Promise<string[] | { error: string }> {
+  const result = await $`npm view ${name} time versions --json --prefer-online`
+    .cwd(root)
+    .quiet()
+    .nothrow()
+  const out = result.stdout.toString().trim()
+  if (result.exitCode !== 0) {
+    if (/E404|404 Not Found/.test(out + result.stderr.toString())) return []
+    return { error: result.stderr.toString().trim() || `npm view exited ${result.exitCode}` }
+  }
+  if (!out) return []
+  const parsed = JSON.parse(out) as { time?: Record<string, string>; versions?: string | string[] }
+  return burntVersions(parsed.time ?? {}, [parsed.versions ?? []].flat())
+}
+
+export function burntVersions(time: Record<string, string>, live: string[]): string[] {
+  const listed = new Set(live)
+  return Object.keys(time).filter(
+    (v) => v !== "created" && v !== "modified" && v !== "unpublished" && !listed.has(v),
+  )
+}
+
+/** The planned version, or the next patch npm can still accept. */
+export function skipBurnt(version: string, burnt: ReadonlySet<string>): string {
+  let next = version
+  while (burnt.has(next)) next = bumpVersion(next, "patch")
+  return next
+}
+
+/** Why `npm publish` failed, from its output. Only an auth failure points at the Trusted Publisher. */
+export function publishFailureKind(output: string): "version-taken" | "auth" | "other" {
+  if (/cannot publish over (?:the )?previously published version|EPUBLISHCONFLICT/i.test(output)) {
+    return "version-taken"
+  }
+  if (/ENEEDAUTH|E401|E403|E404|\b40[134]\b|OIDC|trusted publish/i.test(output)) return "auth"
+  return "other"
+}
+
 /** npm can accept a publish before registry readers can resolve the version. */
 export async function waitForNpmVersion(
   name: string,
@@ -538,6 +581,25 @@ export async function computePlan(): Promise<Plan> {
       changed = true
     }
   }
+
+  // A version npm burnt (published, then removed) can never be published again; without this
+  // every later run plans it again and fails with E400 forever.
+  const queue = [...releases.values()]
+  const worker = async () => {
+    for (let r = queue.shift(); r; r = queue.shift()) {
+      let burnt = await npmBurntVersions(r.pkg.name)
+      if (!Array.isArray(burnt)) burnt = await npmBurntVersions(r.pkg.name)
+      if (!Array.isArray(burnt)) throw new Error(`npm view ${r.pkg.name}: ${burnt.error}`)
+      const version = skipBurnt(r.version, new Set(burnt))
+      if (version !== r.version) {
+        console.warn(
+          `::warning::${r.pkg.name}@${r.version} was published and removed on npm before; releasing ${version} instead`,
+        )
+        r.version = version
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: 8 }, worker))
 
   for (const r of releases.values()) versions.set(r.pkg.name, r.version)
   const ordered = topoSort(publicPkgs).filter((p) => releases.has(p.name))

@@ -3,10 +3,8 @@ import { Buffer } from "buffer";
 import { randomBytes } from "../../core/crypto.js";
 import type { RouteContext } from "../../core/index.js";
 import {
-  escapeHtml,
-  renderCardPage,
   renderErrorPage,
-  renderUserButton,
+  renderSignInPage,
   matchesRedirectUri,
   constantTimeSecretEqual,
   bodyStr,
@@ -46,7 +44,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
   const ss = () => getSlackStore(store);
 
   // Authorization page - renders the consent UI
-  app.get("/oauth/v2/authorize", (c) => {
+  app.get("/oauth/v2/authorize", async (c) => {
     const client_id = c.req.query("client_id") ?? "";
     const redirect_uri = c.req.query("redirect_uri") ?? "";
     const scope = c.req.query("scope") ?? "";
@@ -58,14 +56,12 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     if (appsConfigured) {
       const oauthApp = ss().oauthApps.findOneBy("client_id", client_id);
       if (!oauthApp) {
-        return c.html(
-          renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
+        return c.html(await renderErrorPage("Application not found", `The client_id '${client_id}' is not registered.`, SERVICE_LABEL),
           400,
         );
       }
       if (redirect_uri && !matchesRedirectUri(redirect_uri, oauthApp.redirect_uris)) {
-        return c.html(
-          renderErrorPage(
+        return c.html(await renderErrorPage(
             "Redirect URI mismatch",
             "The redirect_uri is not registered for this application.",
             SERVICE_LABEL,
@@ -77,7 +73,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
     }
 
     const subtitleText = appName
-      ? `Authorize <strong>${escapeHtml(appName)}</strong> to access your Slack workspace.`
+      ? ["Authorize ", { strong: appName }, " to access your Slack workspace."]
       : "Choose a user to authorize.";
 
     const users = ss()
@@ -85,7 +81,7 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
       .filter((u) => !u.deleted && !u.is_bot);
     const userButtons = users
       .map((user) => {
-        return renderUserButton({
+        return ({
           letter: (user.name[0] ?? "?").toUpperCase(),
           login: user.name,
           name: user.real_name,
@@ -100,12 +96,10 @@ export function oauthRoutes({ app, store, tokenMap }: RouteContext): void {
             client_id,
           },
         });
-      })
-      .join("\n");
+      });
 
-    const body = users.length === 0 ? '<p class="empty">No users in the emulator store.</p>' : userButtons;
 
-    return c.html(renderCardPage("Sign in to Slack", subtitleText, body, SERVICE_LABEL));
+    return c.html(await renderSignInPage("Sign in to Slack", subtitleText, userButtons, SERVICE_LABEL));
   });
 
   // Authorization callback
