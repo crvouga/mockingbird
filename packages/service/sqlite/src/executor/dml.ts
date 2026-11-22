@@ -52,9 +52,8 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualInsert(stmt, env);
   }
-  const totalBefore = env.state.totalChanges;
   const view = writableView(stmt.table, "INSERT", env);
-  if (view) return executeViewInsert(stmt, view, env, totalBefore);
+  if (view) return executeViewInsert(stmt, view, env);
   const fast = env.forceFullInsert ? null : tryFastInsert(stmt, env);
   if (fast) return fast;
   let table = env.state.getWritableTableForDml(stmt.table);
@@ -68,6 +67,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
   const sourceRows = evaluateInsertSource(stmt, env);
   const returningRows: SqlValue[][] = [];
   let changes = 0;
+  let cascaded = 0;
   let last = env.state.lastInsertRowid;
   const suppliedIndexes = table.columns.map((column) =>
     columnNames.findIndex((name) => name.toLowerCase() === (column.nameLower ?? column.name.toLowerCase())),
@@ -201,7 +201,8 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
           if (stmt.upsert.action.where && isTruthySql(evalExpr(stmt.upsert.action.where, ctx)) !== true) continue;
           const updates = evaluateSet(stmt.upsert.action.set, table, ctx);
           const updated = updateOne(table, row, updates, env);
-          changes += 1 + updated.cascaded;
+          changes++;
+          cascaded += updated.cascaded;
           if (stmt.returning.length)
             returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, stmt.table, env), env));
           continue;
@@ -259,7 +260,7 @@ function executeInsertCore(stmt: InsertStmt, env: ExecutionEnv): ResultSet {
     undoStatement();
     throw error;
   }
-  const reportedChanges = finalizeDmlChanges(totalBefore, changes, env, last);
+  const reportedChanges = finalizeDmlChanges(changes, cascaded, env, last);
   if (stmt.returning.length === 0) return emptyResult(reportedChanges, last);
   return valuesToResult(returningNames(stmt.returning, table), returningRows, reportedChanges, last);
 }
@@ -383,9 +384,8 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualUpdate(stmt, env);
   }
-  const totalBefore = env.state.totalChanges;
   const view = writableView(stmt.table, "UPDATE", env);
-  if (view) return executeViewUpdate(stmt, view, env, totalBefore);
+  if (view) return executeViewUpdate(stmt, view, env);
   // Scan for candidates before any statement savepoint. getWritableTable must run *after*
   // freeze/clone so all row mutations share one live writable table (not re-clone from frozen).
   const scanTable = env.state.getTable(stmt.table);
@@ -425,6 +425,7 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
     let table = env.state.getWritableTableForDml(stmt.table);
     const returningRows: SqlValue[][] = [];
     let changes = 0;
+    let cascaded = 0;
     for (const { row, scope } of candidates) {
       const ctx = env.createEvalContext(scope);
       const updates = evaluateSet(stmt.set, table, ctx);
@@ -448,7 +449,8 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
         const updated = updateOne(table, row, updates, env);
         table = env.state.getWritableTableForDml(stmt.table);
         fireUpdateTriggers("AFTER", table, row, table.namedValues(updated.row), updatedColumns, env);
-        changes += 1 + updated.cascaded;
+        changes++;
+        cascaded += updated.cascaded;
         if (stmt.returning.length)
           returningRows.push(projectReturning(stmt.returning, scopeFor(table, updated.row, alias, env), env));
       } catch (error) {
@@ -462,7 +464,7 @@ function executeUpdateCore(stmt: UpdateStmt, env: ExecutionEnv): ResultSet {
         throw error;
       }
     }
-    const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
+    const reportedChanges = finalizeDmlChanges(changes, cascaded, env);
     return valuesToResult(
       returningNames(stmt.returning, table),
       returningRows,
@@ -490,9 +492,8 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
   if (env.state.isVirtualTable(stmt.table)) {
     return executeVirtualDelete(stmt, env);
   }
-  const totalBefore = env.state.totalChanges;
   const view = writableView(stmt.table, "DELETE", env);
-  if (view) return executeViewDelete(stmt, view, env, totalBefore);
+  if (view) return executeViewDelete(stmt, view, env);
   // Select targets before any statement savepoint; get writable only inside applyDeletes.
   const scanTable = env.state.getTable(stmt.table);
   const selectedSource =
@@ -512,6 +513,7 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
     let table = env.state.getWritableTableForDml(stmt.table);
     const returningRows: SqlValue[][] = [];
     let changes = 0;
+    let cascaded = 0;
     for (const row of selected) {
       try {
         if (fireDeleteTriggers("BEFORE", table, row, env) === "ignore") continue;
@@ -519,7 +521,7 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
           returningRows.push(
             projectReturning(stmt.returning, scopeFor(table, row, stmt.alias ?? stmt.table, env), env),
           );
-        changes += applyReferentialDelete(table, row, env);
+        cascaded += applyReferentialDelete(table, row, env);
         table = env.state.getWritableTableForDml(stmt.table);
         removeOne(table, row, env);
         table = env.state.getWritableTableForDml(stmt.table);
@@ -536,7 +538,7 @@ function executeDeleteCore(stmt: DeleteStmt, env: ExecutionEnv): ResultSet {
         throw error;
       }
     }
-    const reportedChanges = finalizeDmlChanges(totalBefore, changes, env);
+    const reportedChanges = finalizeDmlChanges(changes, cascaded, env);
     return valuesToResult(
       returningNames(stmt.returning, table),
       returningRows,
@@ -648,7 +650,7 @@ function writableView(name: string, event: "INSERT" | "UPDATE" | "DELETE", env: 
   };
 }
 
-function executeViewInsert(stmt: InsertStmt, target: WritableView, env: ExecutionEnv, totalBefore: number): ResultSet {
+function executeViewInsert(stmt: InsertStmt, target: WritableView, env: ExecutionEnv): ResultSet {
   const columnNames = stmt.columns ?? target.table.columns.map((column) => column.name);
   for (const name of columnNames) columnOf(target.table, name);
   const suppliedIndexes = target.table.columns.map((column) =>
@@ -665,11 +667,11 @@ function executeViewInsert(stmt: InsertStmt, target: WritableView, env: Executio
     });
     fireInsertTriggers("INSTEAD", target.table, values, null, env);
   }
-  const changes = finalizeDmlChanges(totalBefore, 0, env);
+  const changes = finalizeDmlChanges(0, 0, env);
   return emptyResult(changes, env.state.lastInsertRowid);
 }
 
-function executeViewUpdate(stmt: UpdateStmt, target: WritableView, env: ExecutionEnv, totalBefore: number): ResultSet {
+function executeViewUpdate(stmt: UpdateStmt, target: WritableView, env: ExecutionEnv): ResultSet {
   const alias = stmt.alias ?? target.name;
   const scopes = scanView(target, alias, env);
   const updatedColumns = new Set(
@@ -683,17 +685,17 @@ function executeViewUpdate(stmt: UpdateStmt, target: WritableView, env: Executio
     const newValues = mergedValues(target.table, oldRow, updates);
     fireUpdateTriggers("INSTEAD", target.table, oldRow, newValues, updatedColumns, env);
   }
-  const changes = finalizeDmlChanges(totalBefore, 0, env);
+  const changes = finalizeDmlChanges(0, 0, env);
   return emptyResult(changes, env.state.lastInsertRowid);
 }
 
-function executeViewDelete(stmt: DeleteStmt, target: WritableView, env: ExecutionEnv, totalBefore: number): ResultSet {
+function executeViewDelete(stmt: DeleteStmt, target: WritableView, env: ExecutionEnv): ResultSet {
   const alias = stmt.alias ?? target.name;
   for (const scope of scanView(target, alias, env)) {
     if (stmt.where && isTruthySql(evalExpr(stmt.where, env.createEvalContext(scope))) !== true) continue;
     fireDeleteTriggers("INSTEAD", target.table, viewRow(target.table, scope), env);
   }
-  const changes = finalizeDmlChanges(totalBefore, 0, env);
+  const changes = finalizeDmlChanges(0, 0, env);
   return emptyResult(changes, env.state.lastInsertRowid);
 }
 
@@ -714,12 +716,14 @@ function viewRow(table: Table, scope: ScopeRow): Row {
   return { rowid: scope.rowid ?? 0, values };
 }
 
-function finalizeDmlChanges(totalBefore: number, directChanges: number, env: ExecutionEnv, last?: Rowid): number {
-  const triggerChanges = env.state.totalChanges - totalBefore;
+/**
+ * `changes()` counts only the rows the statement itself wrote. Rows written by its triggers and
+ * foreign key actions count toward `total_changes()` alone, as in SQLite.
+ */
+function finalizeDmlChanges(directChanges: number, cascaded: number, env: ExecutionEnv, last?: Rowid): number {
   env.state.recordChange(directChanges, last);
-  const reportedChanges = triggerChanges + directChanges;
-  env.state.changes = reportedChanges;
-  return reportedChanges;
+  env.state.totalChanges += cascaded;
+  return directChanges;
 }
 
 function mergedValues(table: Table, row: Row, updates: Map<string, SqlValue>): Map<string, SqlValue> {

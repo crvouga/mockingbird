@@ -68,8 +68,10 @@ class RealSqliteStatement implements ContractStatement {
   run(...params: SqlValue[]): QueryResult {
     try {
       const result = params.length > 0 ? this.stmt.run(...(params as never[])) : this.stmt.run();
-      this.adapter.recordRun(result.changes, result.lastInsertRowid);
-      return this.adapter.okWrite(result.changes, result.lastInsertRowid);
+      return this.adapter.okWrite(
+        this.adapter.recordRun(result.changes, result.lastInsertRowid),
+        result.lastInsertRowid,
+      );
     } catch (error) {
       return this.adapter.mapStep(error);
     }
@@ -118,9 +120,20 @@ export class RealSqliteAdapter implements ContractDb {
     this.db.exec("PRAGMA foreign_keys = ON");
   }
 
-  recordRun(changes: number, lastInsertRowid: number | bigint): void {
-    this.lastChanges = changes;
+  /**
+   * Records a write and returns the rows the statement itself changed. Bun before 1.4.4 reported
+   * the `total_changes()` delta, which also counts trigger and foreign key writes; SQLite's own
+   * `changes()` does not, and newer Bun agrees with it.
+   */
+  recordRun(reported: number, lastInsertRowid: number | bigint): number {
+    this.lastChanges = reported === 0 ? 0 : Math.min(reported, this.readChanges());
     this.lastInsertRowid = lastInsertRowid;
+    return this.lastChanges;
+  }
+
+  private readChanges(): number {
+    const row = this.db.query("SELECT changes() AS c").get() as { c: number } | null;
+    return row?.c ?? 0;
   }
 
   okWrite(changes: number, lastInsertRowid: number | bigint): QueryResult {
