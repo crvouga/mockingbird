@@ -14,8 +14,9 @@
  *   2. make sure you are logged in to npm (runs `npm login` if not)
  *   3. check out origin/main in a kept worktree. A rerun reuses that install and build,
  *      and a checkout that is already origin/main and already built donates its dist.
- *   4. `release:publish --local` there, using this checkout's scripts/release (so a local
- *      fix applies before it is on main): publish, trust, tag, GitHub Releases, deprecate
+ *   4. `release:publish --local` there, using this checkout's scripts/release when it contains
+ *      origin/main (so a local fix applies before it is on main): publish, trust, tag, GitHub
+ *      Releases, deprecate
  *
  * The seed is slow enough to walk away from, so whenever it waits on you (`npm login`, or an
  * npm 2FA approval for a publish or trust change) it rings the terminal bell and posts a desktop
@@ -44,11 +45,11 @@ import {
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
-import { join } from "node:path"
+import { dirname, join } from "node:path"
 import { chdir } from "node:process"
 import { $ } from "bun"
 import { alertIfWaiting } from "./attention.ts"
-import { root } from "./lib.ts"
+import { log, root } from "./lib.ts"
 import { seedCachePath } from "./seed-path.ts"
 
 /**
@@ -101,6 +102,49 @@ function distReady(dir: string): boolean {
   if (existsSync(join(fleet, "package.json")) && !existsSync(join(fleet, "dist/index.js")))
     return false
   return saw > 0
+}
+
+/** Public workspace packages in `dir`: the only builds a release needs. */
+function publicPackageNames(dir: string): string[] {
+  const { workspaces } = JSON.parse(readFileSync(join(dir, "package.json"), "utf8")) as {
+    workspaces: string[]
+  }
+  const names: string[] = []
+  for (const pattern of workspaces) {
+    for (const rel of new Bun.Glob(`${pattern}/package.json`).scanSync({ cwd: dir })) {
+      const manifest = JSON.parse(readFileSync(join(dir, rel), "utf8")) as {
+        name?: string
+        private?: boolean
+        publishConfig?: { access?: string }
+      }
+      if (manifest.name && manifest.private !== true && manifest.publishConfig?.access === "public")
+        names.push(manifest.name)
+    }
+  }
+  return names.sort()
+}
+
+/**
+ * Build only what gets published (turbo adds their build dependencies), not the docs site,
+ * Storybook and examples that `bun run build` also builds. The turbo cache is the primary
+ * checkout's, so outputs it already built for the same inputs are restored, not rebuilt.
+ */
+async function buildPublished(dir: string, turboCache: string) {
+  const filters = publicPackageNames(dir).map((name) => `--filter=${name}`)
+  log(`release:seed: building ${filters.length} published package(s) in ${dir}`)
+  await run(
+    [
+      "bunx",
+      "turbo",
+      "run",
+      "build",
+      ...filters,
+      `--cache-dir=${turboCache}`,
+      "--output-logs=errors-only",
+    ],
+    dir,
+    env,
+  )
 }
 
 /** Copy a tree, cloning files when the volume supports it. Symlinks stay symlinks. */
@@ -177,6 +221,8 @@ try {
       .text()
       .trim()
     const cache = seedCachePath(commonGitDir)
+    // Shared with the primary checkout (turbo's local cache is content-addressed).
+    const turboCache = join(dirname(commonGitDir), ".turbo/cache")
     const stampPath = `${cache}.sha`
     await $`git fetch origin main --tags`.cwd(root).quiet()
     const sha = (await $`git rev-parse origin/main`.cwd(root).quiet()).text().trim()
@@ -187,12 +233,22 @@ try {
     } else {
       await $`git reset --hard ${sha}`.cwd(cache).quiet()
     }
-    // This checkout's publisher, not origin/main's, so the retry fix runs before it is merged.
-    for (const name of readdirSync(join(root, "scripts/release"))) {
-      cpSync(join(root, "scripts/release", name), join(cache, "scripts/release", name), {
-        recursive: true,
-        force: true,
-      })
+    // This checkout's publisher, not origin/main's, so a local fix runs before it is merged —
+    // but only when this checkout contains origin/main. A branch behind main would overlay a
+    // stale scripts/release onto main's other scripts (scripts/health, …) and break imports.
+    const containsMain =
+      (await $`git merge-base --is-ancestor ${sha} HEAD`.cwd(root).quiet().nothrow()).exitCode === 0
+    if (containsMain) {
+      for (const name of readdirSync(join(root, "scripts/release"))) {
+        cpSync(join(root, "scripts/release", name), join(cache, "scripts/release", name), {
+          recursive: true,
+          force: true,
+        })
+      }
+    } else {
+      console.log(
+        "release:seed: this checkout is behind origin/main; using origin/main's scripts/release",
+      )
     }
 
     const reused =
@@ -201,14 +257,14 @@ try {
       existsSync(join(cache, "node_modules")) &&
       distReady(cache)
     if (reused) {
-      console.log(`release:seed: reusing build of origin/main ${sha.slice(0, 7)}`)
+      log(`release:seed: reusing build of origin/main ${sha.slice(0, 7)}`)
     } else if (head === sha && distReady(root)) {
       console.log("release:seed: reusing this checkout's build of origin/main")
       const copiedModules = await copyTree(join(root, "node_modules"), join(cache, "node_modules"))
       if (!copiedModules) {
         console.log("release:seed: could not copy node_modules; installing and building instead")
         await run(["bun", "install", "--frozen-lockfile"], cache, env)
-        await run(["bun", "run", "build"], cache, env)
+        await buildPublished(cache, turboCache)
       } else {
         const service = join(root, "packages/service")
         for (const entry of readdirSync(service, { withFileTypes: true })) {
@@ -228,13 +284,14 @@ try {
         throw new Error("release:seed: could not copy neutral fleet dist")
       writeFileSync(stampPath, sha)
     } else {
-      console.log(`release:seed: installing and building origin/main ${sha.slice(0, 7)}`)
+      log(`release:seed: installing and building origin/main ${sha.slice(0, 7)}`)
       await run(["bun", "install", "--frozen-lockfile"], cache, env)
-      await run(["bun", "run", "build"], cache, env)
+      await buildPublished(cache, turboCache)
       writeFileSync(stampPath, sha)
     }
 
     // 4. Publish, trust, tag, release, deprecate.
+    log("release:seed: publishing from origin/main checkout")
     await run(["bun", "scripts/release/publish.ts", dryRun ? "--dry-run" : "--local"], cache, env)
   }
 } catch (error) {
