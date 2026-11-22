@@ -105,6 +105,8 @@ wire server) runs until the statement returns. One slow statement therefore look
 process. To find it, register a statement observer and log what crosses a threshold:
 
 ```ts
+import { Database } from "@crvouga/mockingbird-service-postgres"
+
 const db = new Database({
   // called after each statement that took at least slowStatementMs (0, the default, reports all)
   onStatement: ({ sql, durationMs, rows, error }) =>
@@ -112,7 +114,7 @@ const db = new Database({
   slowStatementMs: 250,
 });
 // or later, with its own threshold; returns a function that stops it
-const stop = db.observeStatements((event) => report(event), { slowStatementMs: 1000 });
+const stop = db.observeStatements((event) => console.log(event.sql), { slowStatementMs: 1000 });
 ```
 
 Each event carries `{ sql, durationMs, rows, command?, error? }`; a multi-statement `exec()` script is
