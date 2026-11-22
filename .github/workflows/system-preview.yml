@@ -4,24 +4,27 @@ name: System preview
 # (.github/workflows/preview.yml, docs/PREVIEWS.md). It needs only CLOUDFLARE_API_TOKEN and
 # CLOUDFLARE_ACCOUNT_ID; the dev resource credentials below are optional.
 
+# No `workflow_run` of CI any more: relaying CI status into the preview ran this workflow twice per
+# CI run. The preview still deploys per push and is deleted on close.
 on:
   pull_request:
-    types: [opened, synchronize, reopened, closed]
-  # The PR's checks show live in its preview.
-  workflow_run:
-    workflows: [CI]
-    types: [requested, completed]
+    types: [opened, synchronize, reopened, ready_for_review, closed]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
 
 permissions:
   contents: read
   pull-requests: write
 
 concurrency:
-  group: system-preview-${{ github.event.pull_request.number || github.event.workflow_run.head_branch }}-${{ github.event_name }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   preview:
+    # Drafts get no preview; closing always runs so a deployed Worker is deleted.
+    if: github.event.action == 'closed' || github.event.pull_request.draft == false
     uses: ./.github/workflows/preview.yml
     with:
       name: mockingbird-lab

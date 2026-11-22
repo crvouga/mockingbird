@@ -72,3 +72,42 @@ export function installPreviewWorkerHost(
     await host.dispose()
   }
 }
+
+/**
+ * Inside an iframe app (`mount: "iframe"` in `@crvouga/mockingbird-ui`'s registry): waits for the
+ * shell's connect message and returns a Fetch client on the same bridge inline apps use, so the
+ * app reaches the same backends without sharing the shell's globals. Only messages from `parent`
+ * (and, when given, from `origin`) are accepted.
+ */
+export function acceptPreviewFrame(
+  options: { scope?: WorkerScope; parent?: unknown; origin?: string; timeoutMs?: number } = {},
+): Promise<{
+  fetch: ReturnType<typeof createPreviewClient>["fetch"]
+  app: string
+  path?: string
+  dispose(): void
+}> {
+  const scope = options.scope ?? (globalThis as unknown as WorkerScope)
+  const parent = options.parent ?? (globalThis as { parent?: unknown }).parent
+  return new Promise((resolve) => {
+    const receive = (event: MessageEvent) => {
+      if (event.data?.type !== "mockingbird-preview-connect") return
+      if (parent !== undefined && event.source !== null && event.source !== parent) return
+      if (options.origin !== undefined && event.origin !== options.origin) return
+      const port = event.ports[0]
+      if (!port) return
+      scope.removeEventListener("message", receive)
+      const client = createPreviewClient(
+        port,
+        options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs },
+      )
+      resolve({
+        fetch: client.fetch,
+        app: String(event.data.app ?? ""),
+        ...(typeof event.data.path === "string" ? { path: event.data.path } : {}),
+        dispose: () => client.dispose(),
+      })
+    }
+    scope.addEventListener("message", receive)
+  })
+}
