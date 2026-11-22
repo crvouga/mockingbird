@@ -7,6 +7,7 @@
  * that shows a notification carries its id, channel, service, recipient, sender and status as
  * `data-*` attributes. Every gesture (swipe, long press) also has a click or key equivalent.
  */
+
 import {
   EmptyState,
   JsonView,
@@ -59,6 +60,7 @@ import {
   tokenLabel,
 } from "./format.js"
 import { attachGestures, zoomOf } from "./gestures.js"
+import { attachOpenLink } from "./open-link.js"
 import { ROOT_CLASS } from "./skins.js"
 import type { Store } from "./store.js"
 import { type ChannelTab, TAB_LABELS, tabsFor } from "./tabs.js"
@@ -781,7 +783,13 @@ export function NotificationsApp({ store, heading = true }: NotificationsAppProp
   // Gestures and the devices' own controls: one set of delegated listeners on the root.
   useEffect(() => {
     if (!root.current) return
-    return attachGestures(root.current, store)
+    const detach = [
+      attachGestures(root.current, store),
+      attachOpenLink(root.current, store.options.openLink),
+    ]
+    return () => {
+      for (const each of detach) each()
+    }
   }, [store])
 
   // Follow the host element, not the window: embedded in a side panel the harness is narrow on a

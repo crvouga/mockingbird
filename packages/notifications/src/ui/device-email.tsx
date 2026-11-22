@@ -4,12 +4,14 @@
  * rendered HTML, headers and attachments. A device skin: a generic mail client's look
  * (`skins.ts`), no vendor marks and no HeroUI inside.
  */
+
 import type { Notification } from "../model.js"
 import { TEST_IDS } from "../testids.js"
 import { Glyph, useAttrs, useStore } from "./context.js"
 import { richText } from "./device-sms.js"
 import { colorFor, initials, mailDate, mailLongDate, serviceLabel } from "./format.js"
 import { icons } from "./icons.js"
+import { attachOpenLink } from "./open-link.js"
 
 /** The message's HTML as its own document, so its styles stay inside the frame. */
 const mailHtml = (n: Notification): string =>
@@ -158,6 +160,8 @@ function Reader({ open, items, me }: { open: Notification; items: Notification[]
             onLoad={(event) => {
               const frame = event.currentTarget
               const doc = frame.contentDocument
+              // A fresh document each load, so the listener goes with the old one.
+              if (doc) attachOpenLink(doc, store.options.openLink)
               if (doc)
                 frame.style.height = `${Math.max(120, doc.documentElement.scrollHeight + 8)}px`
             }}

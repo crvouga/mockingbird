@@ -17,6 +17,8 @@ export default {
       "packages/examples/medical-testing/src/composition/emulatorsPanel.ts",
       "packages/examples/medical-testing/src/composition/build.ts",
       "packages/examples/medical-testing/src/client/inbox.ts",
+      "packages/examples/medical-testing/src/client/signInLink.ts",
+      "packages/notifications/src/ui/open-link.ts",
     ],
   },
 } satisfies Meta
@@ -82,6 +84,34 @@ export const Notifications: StoryObj = workspace(async (page) => {
   await page.click('[data-testid="sign-in-email-submit"]')
   await page.click('[data-testid="open-inbox"]')
   await page.find('section[data-surface="notifications"]:not([hidden])')
+})
+
+/**
+ * The link in the sign-in email points at this page, not at a made-up address, and a click on it
+ * signs in here: the app comes back to the front, signed in, in the tab that sent the email.
+ */
+export const SignInFromTheEmail: StoryObj = workspace(async (page) => {
+  await page.type('[data-testid="sign-in-email"]', "ada@example.test")
+  await page.click('[data-testid="sign-in-email-submit"]')
+  await page.click('[data-testid="open-inbox"]')
+  await page.find('section[data-surface="notifications"]:not([hidden])')
+  const row = await page.find('[data-action="mail-open"]', "sign-in code")
+  row.click()
+  const frame = await page.find<HTMLIFrameElement>('iframe[name="email-body"]')
+  let link: HTMLAnchorElement | null | undefined
+  for (let attempt = 0; attempt < 100 && !link; attempt += 1) {
+    link = frame.contentDocument?.querySelector<HTMLAnchorElement>('a[href*="sign-in="]')
+    if (!link) await new Promise((resolve) => setTimeout(resolve, 30))
+  }
+  if (!link) throw new Error("The email has no sign-in link")
+  const url = new URL(link.href)
+  if (url.origin !== window.location.origin || url.pathname !== window.location.pathname)
+    throw new Error(`The sign-in link points away from this page: ${link.href}`)
+  if (url.searchParams.get("surface") !== "app") throw new Error("The link does not open the app")
+  link.click()
+  await page.find('section[data-surface="app"]:not([hidden])')
+  await page.gone('[data-testid="sign-in-email"]')
+  await page.gone('[data-testid="sign-in-code"]')
 })
 
 export const OnAPhone: StoryObj = workspace(undefined, { globals: phone })

@@ -58,6 +58,8 @@ export const buildDemo = async (
      * one can be switched from its emulator to that resource at runtime (`PUT /__admin/upstream`).
      */
     upstream?: (service: string) => UpstreamOptions | undefined
+    /** The page the emailed sign-in link opens, when the app runs in a browser tab. */
+    signInPage?: string
   } = {},
 ): Promise<Demo> => {
   const upstream = options.upstream ?? (() => undefined)
@@ -94,6 +96,7 @@ export const buildDemo = async (
       identity: identity.client,
       notifier: notifier.client,
       phoneVerifier: notifier.phoneVerifier,
+      signInPage: options.signInPage,
     },
     assets,
   )

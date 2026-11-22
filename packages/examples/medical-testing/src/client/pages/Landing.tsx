@@ -16,6 +16,7 @@ import { InboxHint } from "../components/InboxHint.js"
 import { OAuthModal } from "../components/OAuthModal.js"
 import { message, signInLinkToken } from "../format.js"
 import { PRODUCT } from "../product.js"
+import { onSignInLink } from "../signInLink.js"
 
 export { signInLinkToken } from "../format.js"
 
@@ -78,6 +79,22 @@ export const Landing = ({ onSignedIn }: { onSignedIn: (user: User) => void }) =>
       setBusy(false)
     }
   }
+  // A click on the emailed link, followed in this page (see `signInLink.ts`).
+  useEffect(
+    () =>
+      onSignInLink(async (token) => {
+        setBusy(true)
+        setError(null)
+        try {
+          onSignedIn((await api.emailLink(token)).user)
+        } catch (error) {
+          setError(message(error))
+        } finally {
+          setBusy(false)
+        }
+      }),
+    [],
+  )
   const startOver = () => {
     setSentTo(null)
     setCode("")

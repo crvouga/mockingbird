@@ -3,6 +3,7 @@ import { MOCKINGBIRD_CSS } from "@crvouga/mockingbird-ui/styles"
 import { setFetcher } from "../client/api.js"
 import { setInboxOpener } from "../client/inbox.js"
 import { mountApp } from "../client/main.js"
+import { followSignInLink } from "../client/signInLink.js"
 import { buildDemo } from "./build.js"
 import { createLabDevResources, DEV_DOCS_URL } from "./dev.js"
 import { createInProcessFetcher } from "./inProcessFetcher.js"
@@ -30,7 +31,16 @@ export const mount = async (
   } = {},
 ): Promise<() => void> => {
   const dev = createLabDevResources(options.devProxyUrl)
-  const demo = await buildDemo(NO_CLIENT_ASSETS, dev.upstream ? { upstream: dev.upstream } : {})
+  // The emailed sign-in link points at this page, showing the app. A click on it in Notifications
+  // is followed here, in the tab that issued it; pasted into the sign-in screen it works too.
+  const signInPage = new URL(window.location.href)
+  signInPage.search = ""
+  signInPage.hash = ""
+  signInPage.searchParams.set("surface", "app")
+  const demo = await buildDemo(NO_CLIENT_ASSETS, {
+    signInPage: signInPage.href,
+    ...(dev.upstream ? { upstream: dev.upstream } : {}),
+  })
   setFetcher(createInProcessFetcher(demo.app))
 
   // The design system's stylesheet, once per document: the app is React and HeroUI, drawn with
@@ -89,6 +99,11 @@ export const mount = async (
                   harness: demo.notifications,
                   title: "Notifications",
                   shell: true,
+                  openLink: (url) => {
+                    if (!followSignInLink(url, signInPage.href)) return false
+                    void dashboard.show("app")
+                    return true
+                  },
                 })
                 return () => notifications?.destroy()
               },

@@ -196,8 +196,10 @@ Notifications app (or `/notifications/` on the standalone server).
   code and a link, stored only as salted hashes. Both expire after 10 minutes, work once, and are
   replaced by a newer email. Five wrong guesses burn the code, and a new one can be requested
   every 30 seconds. The three demo accounts sign in by their addresses; any other address creates
-  a patient account. Embedded in the docs site the link has nowhere to point, so the code field
-  also accepts the pasted link; on the standalone server the link works when clicked.
+  a patient account. On the standalone server the link points at the server and works when clicked. In a browser tab
+  (the docs site, a preview) it points at the page the app is shown on, and a click on it in
+  Notifications signs in right there, in the tab that sent it; the code field also accepts the
+  pasted link.
 - **Phone verification** (`src/app/http/routes/account.ts`). Twilio Verify sends and checks the
   code; the number is saved only after an approved check, and order texts go to it by SMS or
   WhatsApp, whichever the member chose.

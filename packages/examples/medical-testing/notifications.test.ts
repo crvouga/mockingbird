@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { NotificationClient } from "@crvouga/mockingbird-notifications"
+import { signInLink } from "./src/app/http/routes/emailAuth.js"
 import { orderRef } from "./src/app/notifications/patientNotifications.js"
 import { ApiError, api, setFetcher } from "./src/client/api.js"
 import { buildDemo, type Demo } from "./src/composition/build.js"
@@ -526,6 +527,17 @@ describe("the standalone server", () => {
       const app = await serve(new Request("http://localhost:4300/api/auth/me"))
       expect(app.status).toBe(200)
     }))
+
+  test("in a browser tab, the sign-in link points at the page the app is shown on", () => {
+    const start = "http://localhost/api/auth/email/start"
+    expect(signInLink(start, "https://preview.example.test/lab/?surface=app", "abc.def")).toBe(
+      "https://preview.example.test/lab/?surface=app&sign-in=abc.def",
+    )
+    expect(signInLink("http://localhost:4300/api/auth/email/start", undefined, "abc.def")).toBe(
+      "http://localhost:4300/?sign-in=abc.def",
+    )
+    expect(signInLink(start, undefined, "abc.def")).toBe("https://cove.internal/?sign-in=abc.def")
+  })
 
   test("emails a sign-in link that points back at the server", () =>
     withDemo(async (demo) => {

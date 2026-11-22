@@ -13,6 +13,11 @@ export type AppDeps = {
   identity: IdentityProvider
   notifier: Notifier
   phoneVerifier: PhoneVerifier
+  /**
+   * The page a sign-in link opens, when the app does not answer at an address of its own (it
+   * runs inside a browser tab). The link is this URL with the token added.
+   */
+  signInPage?: string | undefined
 }
 
 export type AppEnv = {
