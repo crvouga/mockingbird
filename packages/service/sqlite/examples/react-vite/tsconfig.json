@@ -16,7 +16,16 @@
     "noFallthroughCasesInSwitch": true,
     "forceConsistentCasingInFileNames": true,
     "paths": {
-      "@crvouga/mockingbird-service-sqlite": ["../../src/index.ts"]
+      "@crvouga/mockingbird-service-sqlite": ["../../src/index.ts"],
+      "@crvouga/mockingbird-ui/react/client": ["../../../../ui/src/react/client.tsx"],
+      "@crvouga/mockingbird-ui/react": ["../../../../ui/src/react/index.ts"],
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
+      "react-dom": ["./node_modules/@types/react-dom"],
+      "react-dom/*": ["./node_modules/@types/react-dom/*"],
+      "@heroui/react": ["./node_modules/@heroui/react"],
+      "@heroui/styles": ["./node_modules/@heroui/styles"],
+      "@gravity-ui/icons": ["./node_modules/@gravity-ui/icons"]
     }
   },
   "include": ["src"]

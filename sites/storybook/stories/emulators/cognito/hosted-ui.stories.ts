@@ -15,7 +15,11 @@ export default {
   title: "Emulators/Cognito/Hosted UI",
   parameters: {
     layout: "fullscreen",
-    sources: ["packages/service/cognito/src/hosted-ui.ts", "packages/service/cognito/src/index.ts"],
+    sources: [
+      "packages/service/cognito/src/ui/server.tsx",
+      "packages/service/cognito/src/hosted-ui.ts",
+      "packages/service/cognito/src/index.ts",
+    ],
   },
 } satisfies Meta
 
@@ -49,6 +53,20 @@ export const OnAPhone: StoryObj = {
   ...pool(),
   globals: { viewport: { value: "phone", isRotated: false } },
 }
+
+/**
+ * Dark, as a visitor who chose it with Mockingbird's theme switch sees it: the page applies the
+ * remembered choice (`mb:theme`) to its root before first paint.
+ */
+const darkAppearance = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const page = await hands(canvasElement)
+  const root = page.doc.documentElement
+  root.classList.add("dark")
+  root.dataset.theme = "dark"
+  expect(page.doc.defaultView?.getComputedStyle(root).colorScheme).toContain("dark")
+}
+
+export const DarkAppearance: StoryObj = { ...pool(), play: darkAppearance }
 
 /** Picking an account: back to the app's callback with a code and the app's state. */
 export const SignedIn: StoryObj = {
@@ -144,3 +162,10 @@ export const ErrorPage: StoryObj = page(() => ({
   emulator: cognito().emulator,
   url: `${ORIGIN}/error?error=invalid_request&error_description=Something+went+wrong`,
 }))
+
+export const ErrorPageDark: StoryObj = { ...ErrorPage, play: darkAppearance }
+
+export const ErrorPageOnAPhone: StoryObj = {
+  ...ErrorPage,
+  globals: { viewport: { value: "phone", isRotated: false } },
+}

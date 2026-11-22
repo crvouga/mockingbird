@@ -3,7 +3,7 @@
  * full-stack app examples) opens in the same modal surface: a native modal
  * `<dialog>` in the top layer, with the example mounted inside a window that
  * is its own containing block (`contain: layout paint` on
- * `.example-modal-body` in global.css).
+ * the window's body, src/ui/examples/example-view.tsx).
  *
  * That containment is what makes modal stacking work without any coordination
  * with the example: an example's own `position: fixed` overlays (the example app's OAuth
@@ -39,7 +39,9 @@ export function defineExampleLauncher(
       if (!dialog || dialog.open) return
       this.opener = document.activeElement instanceof HTMLElement ? document.activeElement : null
       dialog.showModal()
+      // The page behind the window stops scrolling while it is open.
       document.documentElement.classList.add("example-modal-open")
+      document.documentElement.style.overflow = "hidden"
       void this.launch()
     }
 
@@ -55,8 +57,10 @@ export function defineExampleLauncher(
     /** Runs however the dialog closed: button, Escape, or `close()` from elsewhere. */
     private readonly closed = () => {
       this.unmount()
-      if (!document.querySelector("dialog[data-example-modal][open]"))
+      if (!document.querySelector("dialog[data-example-modal][open]")) {
         document.documentElement.classList.remove("example-modal-open")
+        document.documentElement.style.overflow = ""
+      }
       this.opener?.focus()
       this.opener = null
     }

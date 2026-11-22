@@ -1,6 +1,24 @@
 /** One branded layout for every email the app sends, with a plain-text twin. */
 export const BRAND = "Cove"
-const BRAND_COLOR = "#5b4fe0"
+
+/**
+ * The Mockingbird theme's light tokens (`packages/ui/src/tokens.css`), as literal colors: email
+ * clients run no stylesheet and no `light-dark()`, so the layout is tables with inline styles,
+ * in the same palette, radius and font stack as the app.
+ */
+const T = {
+  background: "#f6f8fa",
+  surface: "#ffffff",
+  surfaceSecondary: "#f6f8fa",
+  foreground: "#1f2328",
+  muted: "#59636e",
+  border: "#d8dee4",
+  accent: "#2563eb",
+  accentForeground: "#ffffff",
+  radius: "6px",
+  font: "ui-sans-serif,system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif",
+  mono: "ui-monospace,'SF Mono',Menlo,Consolas,monospace",
+} as const
 
 export const money = (cents: number): string => `$${(cents / 100).toFixed(2)}`
 
@@ -44,18 +62,18 @@ const paragraphs = (lines: string[]): string =>
   lines
     .map(
       (line) =>
-        `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:#1f1f24">${escapeHtml(line)}</p>`,
+        `<p style="margin:0 0 14px;font-size:15px;line-height:1.55;color:${T.foreground}">${escapeHtml(line)}</p>`,
     )
     .join("")
 
-const cell = "padding:10px 0;border-bottom:1px solid #ececf0;font-size:14px;color:#1f1f24"
+const cell = `padding:10px 0;border-bottom:1px solid ${T.border};font-size:14px;color:${T.foreground}`
 
 export const emailHtml = (input: EmailContent): string => {
   const preheader = input.preheader
     ? `<div style="display:none;max-height:0;overflow:hidden;opacity:0">${escapeHtml(input.preheader)}</div>`
     : ""
   const code = input.code
-    ? `<p style="margin:6px 0 20px;padding:16px 12px;background:#f4f3fe;border:1px solid #dedbfb;border-radius:10px;text-align:center;font-family:ui-monospace,'SF Mono',Menlo,Consolas,monospace;font-size:30px;font-weight:700;letter-spacing:8px;color:#111114">${escapeHtml(input.code)}</p>`
+    ? `<p style="margin:6px 0 20px;padding:16px 12px;background:${T.surfaceSecondary};border:1px solid ${T.border};border-radius:${T.radius};text-align:center;font-family:${T.mono};font-size:30px;font-weight:700;letter-spacing:8px;color:${T.foreground}">${escapeHtml(input.code)}</p>`
     : ""
   const table = input.table
     ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:6px 0 20px">${input.table.rows
@@ -65,22 +83,19 @@ export const emailHtml = (input: EmailContent): string => {
         )
         .join("")}${
         input.table.total
-          ? `<tr><td style="padding:12px 0 0;font-size:15px;font-weight:700;color:#1f1f24">${escapeHtml(input.table.total[0])}</td><td align="right" style="padding:12px 0 0;font-size:15px;font-weight:700;color:#1f1f24">${escapeHtml(input.table.total[1])}</td></tr>`
+          ? `<tr><td style="padding:12px 0 0;font-size:15px;font-weight:700;color:${T.foreground}">${escapeHtml(input.table.total[0])}</td><td align="right" style="padding:12px 0 0;font-size:15px;font-weight:700;color:${T.foreground}">${escapeHtml(input.table.total[1])}</td></tr>`
           : ""
       }</table>`
     : ""
   const facts = input.facts?.length
-    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 20px;background:#fafafc;border:1px solid #ececf0;border-radius:10px">${input.facts
+    ? `<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin:0 0 20px;background:${T.surfaceSecondary};border:1px solid ${T.border};border-radius:${T.radius}">${input.facts
         .map(
           ([label, value]) =>
-            `<tr><td style="padding:9px 14px;font-size:13px;color:#6b6b76">${escapeHtml(label)}</td><td align="right" style="padding:9px 14px;font-size:13px;font-weight:600;color:#1f1f24">${escapeHtml(value)}</td></tr>`,
+            `<tr><td style="padding:9px 14px;font-size:13px;color:${T.muted}">${escapeHtml(label)}</td><td align="right" style="padding:9px 14px;font-size:13px;font-weight:600;color:${T.foreground}">${escapeHtml(value)}</td></tr>`,
         )
         .join("")}</table>`
     : ""
-  const button =
-    "display:inline-block;background:" +
-    BRAND_COLOR +
-    ";color:#ffffff;border-radius:8px;padding:11px 18px;font-size:14px;font-weight:600;text-decoration:none"
+  const button = `display:inline-block;background:${T.accent};color:${T.accentForeground};border-radius:${T.radius};padding:10px 16px;font-size:14px;font-weight:600;text-decoration:none`
   const cta = input.cta
     ? `<p style="margin:4px 0 22px">${
         input.cta.url
@@ -88,7 +103,7 @@ export const emailHtml = (input: EmailContent): string => {
           : `<span style="${button}">${escapeHtml(input.cta.label)}</span>`
       }</p>`
     : ""
-  return `<!doctype html><html><body style="margin:0;padding:0;background:#f4f4f7;font-family:-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif">${preheader}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f7;padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #e7e7ec"><tr><td style="background:${BRAND_COLOR};padding:18px 28px;color:#ffffff;font-size:18px;font-weight:700;letter-spacing:.2px">${BRAND} <span style="font-weight:400;opacity:.85">Lab testing</span></td></tr><tr><td style="padding:28px"><h1 style="margin:0 0 16px;font-size:21px;line-height:1.3;color:#111114">${escapeHtml(input.heading)}</h1>${paragraphs(input.intro)}${code}${table}${facts}${cta}${paragraphs(input.outro ?? [])}</td></tr><tr><td style="padding:16px 28px;background:#fafafc;border-top:1px solid #ececf0;font-size:12px;line-height:1.5;color:#6b6b76">${FOOTERS[input.reason]} ${DISCLAIMER}</td></tr></table></td></tr></table></body></html>`
+  return `<!doctype html><html><body style="margin:0;padding:0;background:${T.background};font-family:${T.font}">${preheader}<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:${T.background};padding:28px 12px"><tr><td align="center"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;background:${T.surface};border-radius:${T.radius};overflow:hidden;border:1px solid ${T.border}"><tr><td style="padding:16px 28px;border-bottom:1px solid ${T.border};color:${T.foreground};font-size:16px;font-weight:600">${BRAND} <span style="font-weight:500;color:${T.muted}">Lab testing</span></td></tr><tr><td style="padding:28px"><h1 style="margin:0 0 16px;font-size:20px;line-height:1.3;font-weight:600;color:${T.foreground}">${escapeHtml(input.heading)}</h1>${paragraphs(input.intro)}${code}${table}${facts}${cta}${paragraphs(input.outro ?? [])}</td></tr><tr><td style="padding:16px 28px;background:${T.surfaceSecondary};border-top:1px solid ${T.border};font-size:12px;line-height:1.5;color:${T.muted}">${FOOTERS[input.reason]} ${DISCLAIMER}</td></tr></table></td></tr></table></body></html>`
 }
 
 /** The same content as plain text, for clients that do not draw HTML. */

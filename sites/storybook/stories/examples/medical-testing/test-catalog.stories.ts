@@ -7,7 +7,7 @@ export default {
   title: "Examples/Medical testing/Test catalog",
   parameters: {
     layout: "fullscreen",
-    sources: [...SHELL, "packages/examples/medical-testing/src/client/pages/Shop.ts"],
+    sources: [...SHELL, "packages/examples/medical-testing/src/client/pages/Shop.tsx"],
   },
 } satisfies Meta
 
@@ -18,7 +18,7 @@ const catalog = (
   ...cove({ as: PATIENT, route: "shop" }, extra),
   play: async ({ canvasElement }) => {
     const page = person(canvasElement)
-    await page.find(".cove-test-card")
+    await page.find('[data-testid="test-row"]')
     await play?.(page)
   },
 })
@@ -28,22 +28,24 @@ export const Catalog: StoryObj = catalog()
 
 /** One category picked. */
 export const Category: StoryObj = catalog(async (page) => {
-  await page.click(".cove-categories button", "Hormones")
-  await page.gone(".cove-test-card", "Lipid Panel")
+  await page.click('[data-testid="category"]', "Hormones")
+  await page.gone('[data-testid="test-row"]', "Lipid Panel")
 })
 
 /** A search that matches nothing. */
 export const NoResults: StoryObj = catalog(async (page) => {
-  await page.type('.cove-search input[type="search"]', "zinc")
-  await page.find(".cove-empty", "No tests found")
+  await page.type('[data-testid="catalog-search"]', "zinc")
+  await page.find('[data-testid="catalog-empty"]', "No tests found")
 })
 
 /** Two tests in the order, the total, and the consent that unlocks checkout. */
 export const OrderReady: StoryObj = catalog(async (page) => {
-  await page.click(".cove-test-card:nth-child(1) button[aria-pressed]")
-  await page.click(".cove-test-card:nth-child(3) button[aria-pressed]")
-  await page.click(".cove-cart .cove-checkbox input")
-  expect((await page.find<HTMLButtonElement>(".cove-cart .cove-btn-primary")).disabled).toBe(false)
+  await page.click('[data-testid="test-row"]:nth-child(1) [data-testid="add-test"]')
+  await page.click('[data-testid="test-row"]:nth-child(3) [data-testid="add-test"]')
+  await page.click('[data-testid="order-consent"]')
+  expect((await page.find<HTMLButtonElement>('[data-testid="checkout-continue"]')).disabled).toBe(
+    false,
+  )
 })
 
 /** Checkout could not start: the error, and a retry. */
@@ -60,10 +62,10 @@ export const CheckoutFailed: StoryObj = {
   }),
   play: async ({ canvasElement }) => {
     const page = person(canvasElement)
-    await page.click(".cove-test-card:nth-child(1) button[aria-pressed]")
-    await page.click(".cove-cart .cove-checkbox input")
-    await page.click(".cove-cart .cove-btn-primary")
-    await page.find('.cove-alert-error[role="alert"]', "Retry checkout")
+    await page.click('[data-testid="test-row"]:nth-child(1) [data-testid="add-test"]')
+    await page.click('[data-testid="order-consent"]')
+    await page.click('[data-testid="checkout-continue"]')
+    await page.find('[data-testid="checkout-error"]', "Retry checkout")
   },
 }
 

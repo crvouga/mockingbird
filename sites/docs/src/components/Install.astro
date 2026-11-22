@@ -1,7 +1,7 @@
 ---
 import { highlightSource } from "../../integrations/catalog/markdown.ts"
 import { installCommand, PACKAGE_MANAGERS } from "../lib/format.ts"
-import Icon from "./Icon.astro"
+import { Install } from "../ui/install.tsx"
 
 interface Props {
   pkg: string
@@ -16,26 +16,4 @@ const commands = await Promise.all(
 )
 ---
 
-<div class="pm">
-  <div class="pm-tabs" role="tablist" aria-label="Package manager">
-    {
-      PACKAGE_MANAGERS.map((pm, i) => (
-        <button type="button" role="tab" data-pm={pm} aria-selected={i === 0 ? "true" : "false"} tabindex={i === 0 ? 0 : -1}>
-          {pm}
-        </button>
-      ))
-    }
-  </div>
-  {
-    commands.map(({ pm, command, html }, i) => (
-      <div class="cmd" role="tabpanel" data-pm-panel={pm} hidden={i !== 0}>
-        <span class="prompt">$</span>
-        <Fragment set:html={html} />
-        <button type="button" class="copy" data-copy={command} aria-label="Copy">
-          <Icon name="copy" />
-          <Icon name="check" />
-        </button>
-      </div>
-    ))
-  }
-</div>
+<Install client:visible commands={commands} />

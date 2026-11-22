@@ -28,7 +28,8 @@ export default {
       "packages/ui/src/system-harness.ts",
       "packages/ui/src/system-registry.ts",
       "packages/ui/src/system-routes.ts",
-      "packages/ui/src/system-screen.ts",
+      "packages/ui/src/system-view.tsx",
+      "packages/ui/src/system-screen.tsx",
     ],
   },
 } satisfies Meta
@@ -183,6 +184,12 @@ const renderSystem =
     return host
   }
 
+/** The member app is up, and the harness's React view (loaded lazily) has drawn the switcher. */
+const shellReady = async (page: ReturnType<typeof within>) => {
+  await waitFor(() => expect(page.getByTestId("version-member")).toHaveTextContent("Code aaa111"))
+  await page.findByTestId("system-switcher", {}, { timeout: 3000 })
+}
+
 const current = (fx: Fixture | undefined): Fixture => {
   if (!fx) throw new Error("No fixture")
   return fx
@@ -194,7 +201,7 @@ export const Registry: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     const fx = current(fixture)
-    await waitFor(() => expect(page.getByTestId("version-member")).toHaveTextContent("Code aaa111"))
+    await shellReady(page)
     // A cold open fetched only the member part and booted only what it calls.
     await expect(fx.fetched).toEqual(["/parts/member-aaa.js"])
     await expect(fx.booted).toEqual(["api", "stripe"])
@@ -229,7 +236,7 @@ export const Registry: StoryObj = {
 
     // Switching the partner portal on adds it to the rotation and persists in this browser.
     const toggle = page.getByRole("switch", { name: "Partner portal in switcher" })
-    await expect(toggle).toHaveAttribute("aria-checked", "false")
+    await expect(toggle).not.toBeChecked()
     await userEvent.click(toggle)
     await expect(localStorage.getItem(INCLUDED_KEY)).toBe('["partner"]')
     await userEvent.click(page.getByRole("button", { name: "Previous app" }))
@@ -322,7 +329,7 @@ export const UpdateInPlace: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     const fx = current(fixture)
-    await waitFor(() => expect(page.getByTestId("version-member")).toHaveTextContent("aaa111"))
+    await shellReady(page)
     await fx.system.show("clinician")
     await waitFor(() => expect(page.getByTestId("version-clinician")).toHaveTextContent("bbb222"))
     await fx.system.show("member")
@@ -357,7 +364,7 @@ export const ReloadRequired: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     const fx = current(fixture)
-    await waitFor(() => expect(page.getByTestId("version-member")).toHaveTextContent("aaa111"))
+    await shellReady(page)
     const result = await fx.system.applyManifest({ ...MANIFEST, runtime: "rt-2" })
     await expect(result.status).toBe("reload-required")
     const notice = page.getByTestId("system-notice")
@@ -376,7 +383,7 @@ export const BackendUpdateFailed: StoryObj = {
   play: async ({ canvasElement }) => {
     const page = within(canvasElement)
     const fx = current(fixture)
-    await waitFor(() => expect(page.getByTestId("version-member")).toHaveTextContent("aaa111"))
+    await shellReady(page)
     const next = {
       ...MANIFEST,
       parts: { ...MANIFEST.parts, partner: fx.system.manifest()?.parts.partner as never },

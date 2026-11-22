@@ -91,12 +91,15 @@ the tab); a harness you serve yourself takes `admin: adminGateway()` from `./ser
 
 ## The UI
 
-`/` shows four devices side by side. Each has a recipient picker (phone number, push token,
+`/` shows four devices side by side, in the same Mockingbird UI as the admin and Fleet Cloud
+(React and HeroUI, light or dark): a header with the **Live** status and the **Devices** and
+**Timeline** switch, then the filter, the **Namespace** select, **Follow new**, **Sound** and a
+status chip per emulator. Each device has a recipient picker (phone number, push token,
 mailbox, chat channel) that follows the newest arrival unless **Follow new** is off. The **Timeline** tab lists
 everything in one table; double-click any message, or click a timeline row, to inspect the
 normalized record and the emulator's raw one. Read state is kept per browser.
 
-The **channel tabs** under the top bar (`All | Text | Push | Email | Chat`) pick one device or all of them. A tab whose device is not on screen counts what arrived there. When the harness has less than 800px to itself (a phone, a side panel, a narrow embed) there is no room for two devices, so it shows one at a time and the tabs switch between them; this follows the width of the element the UI is mounted on, not the window. Every device has the same header above it, so the frames always line up along the top.
+The **channel tabs** under the header (`All | Text | Push | Email | Chat`) pick one device or all of them. A tab whose device is not on screen counts what arrived there. When the harness has less than 800px to itself (a phone, a side panel, a narrow embed) there is no room for two devices, so it shows one at a time and the tabs switch between them; this follows the width of the element the UI is mounted on, not the window. Every device has the same header above it, so the frames always line up along the top.
 
 Links open one device for a screenshot, for example in a Playwright test:
 
@@ -127,7 +130,7 @@ The devices behave like the real apps, in a generic style with no vendor marks:
 Every gesture also works with a click or the keyboard. Dismissing, archiving or deleting only hides
 the message in this browser; the harness keeps every record, and a reload brings it back.
 
-**Sound** (off by default; the top bar's speaker toggles it, and `?sound=1` turns it on): new
+**Sound** (off by default; the **Sound** toggle turns it on, and so does `?sound=1`): new
 arrivals play a synthesized chime in each platform's style, and phones vibrate where the browser
 allows. **Motion:** arrivals, swipes, stacks and screen changes are animated. A viewer's
 reduced-motion setting turns animation off, and so does the `motion: "reduce"` option.
@@ -185,7 +188,7 @@ test("the sign-in code is offered above the keyboard", async ({ page }) => {
 
 | Device | Main test ids | State attributes |
 | --- | --- | --- |
-| Top bar | `namespace`, `search`, `view-devices`, `view-timeline`, `follow`, `sound-toggle`, `connection`, `source`, `notice`, `toast`, `toast-undo` | `source`: `data-name`, `data-service`, `data-ok`, `data-count`. `connection`: `data-state`. |
+| Header and filters | `namespace`, `search`, `view-devices`, `view-timeline`, `follow`, `sound-toggle`, `connection`, `source`, `notice`, `toast`, `toast-undo` | `source`: `data-name`, `data-service`, `data-ok`, `data-count`. `connection`: `data-state`. |
 | Channel tabs | `channel-tabs`, `channel-tab`, `channel-tab-unread` | Root: `data-layout` (`grid` or `tabs`), `data-tab` (`all`, `sms`, `push`, `email`, `chat`). `channel-tab`: `data-value`, `aria-selected`, `data-unread`. |
 | Messages | `sms-device`, `sms-recipient`, `sms-thread` (`-name`, `-preview`, `-time`, `-unread`), `sms-conversation`, `sms-back`, `sms-bubble`, `sms-code`, `sms-menu`, `sms-menu-tapback`, `sms-tapback`, `sms-empty` | `sms-device`: `data-screen` (`threads` or `conversation`), `data-recipient`, `data-thread`. `sms-thread`: `data-pinned`, `data-muted`. |
 | Push | `push-device`, `push-recipient`, `push-skin`, `push-group`, `push-group-more`, `push-notification` (`-title`, `-body`, `-app`, `-time`, `-image`, `-data`, `-meta`), `push-clear`, `push-options`, `push-preview`, `push-settings`, `push-clear-all`, `push-empty` | `push-device`: `data-skin` (`ios` or `android`), `data-platform`. `push-notification`: `data-expanded`, `data-app`, `data-stacked`. |
@@ -224,15 +227,17 @@ await ui.ready
 ui.destroy()
 ```
 
-Its styles are scoped to the UI's root (`.mb-notifications`) and added once to the document, or to
-the shadow root that holds `panel`. Options: `harness`, or `fetch` and `baseUrl` for a harness on
+The UI is React and HeroUI inside, prebuilt into this package, so your app needs neither. It adds
+Mockingbird's stylesheet (`@crvouga/mockingbird-ui/styles`) and the device skins (`STYLES`, scoped to
+`.mb-notifications`) once to the document, or to the shadow root that holds `panel`; pass
+`injectStyles: false` to serve them yourself. Options: `harness`, or `fetch` and `baseUrl` for a harness on
 another origin; `channels` (which devices to show); `layout` (`auto`, `tabs` or `grid`) and `tabs` (show the
-channel tabs); `chrome` (show the top bar); `scale` (draw the devices smaller, `0.5` to `1`); `sound`; `motion`
+channel tabs); `chrome` (show the header and filters); `scale` (draw the devices smaller, `0.5` to `1`); `sound`; `motion`
 (`auto`, `full` or `reduce`); `onArrive`; and `syncUrl`, which reads and writes `?view=`-style
 links on the page. The [lab ordering example](https://github.com/crvouga-organization/mockingbird/tree/main/packages/examples/medical-testing)
 mounts it as its Notifications tab.
 
-`mountDashboard` puts a tab bar over that UI and an emulators panel you draw:
+`mountDashboard` puts the Mockingbird shell and tabs over that UI and an emulators panel you draw:
 
 ```ts
 import { createNotificationHarness } from "@crvouga/mockingbird-notifications"
@@ -256,10 +261,10 @@ dashboard.show("notifications")
 
 Tabs are your own `tabs` (`{ id, label, mount }`), then Emulators, then Notifications. A tab is
 drawn the first time it is shown and stays mounted; the Notifications tab counts what arrives while
-another is open. Other options: `initialTab`, `onTabChange`, `theme` (`dark`, `light`, `auto`) and
-`injectStyles`. The handle has `show(id)`, `active()`, `tabs()`, `aside`, `notifications` and
-`destroy()`. Give the element a height. The shell is plain DOM with no inline script, so it runs
-under a strict Content-Security-Policy.
+another is open. Other options: `initialTab`, `onTabChange`, `theme` (`auto`, the default, follows
+the viewer; `light` or `dark` pins one) and `injectStyles`. The handle has `show(id)`, `active()`,
+`tabs()`, `aside`, `notifications` and `destroy()`. Give the element a height. It adds no inline
+script, so it runs under a strict Content-Security-Policy.
 
 ## Usage
 
@@ -355,8 +360,8 @@ forwards to Mailosaur (`--forward-to-inbox`), the Mailosaur copy is hidden so th
 | `CHANNELS` | value | Every channel, in device order: `sms`, `push`, `email`, `chat`. |
 | `TEST_IDS`, `selectors` | values | Every `data-testid` the UI renders, and CSS selector builders for browser tests. Also exported from `./ui`. |
 | `mountNotifications` (`./ui`) | function | `(element, {harness, …})` → `{ready, show, setNamespace, setSound, render, destroy}`. Mounts the UI on an element. |
-| `mountDashboard` (`./ui`) | function | `(element, {emulators, notifications, tabs, …})` → `{show, active, tabs, aside, notifications, destroy}`. A tab bar over an emulators panel and the notifications UI. Also `DASHBOARD_STYLES` and `DASHBOARD_ROOT_CLASS`. |
-| `createApp`, `STYLES`, `ROOT_CLASS` (`./ui`) | browser | The UI without the style injection and embedded defaults, its scoped stylesheet, and its root class. |
+| `mountDashboard` (`./ui`) | function | `(element, {emulators, notifications, tabs, …})` → `{show, active, tabs, aside, notifications, destroy}`. The Mockingbird shell and tabs over an emulators panel and the notifications UI. Also `DASHBOARD_STYLES` and `DASHBOARD_ROOT_CLASS`. |
+| `createApp`, `STYLES`, `ROOT_CLASS` (`./ui`) | browser | The UI without the style injection and embedded defaults, the device skins' scoped stylesheet (pair it with `MOCKINGBIRD_CSS`), and its root class. |
 | `createServer`, `manifestFile`, `DEFAULT_PORT` (`./server`) | Node | Serve the harness over `node:http`; `manifestFile(path)` re-reads a fleet ready file. Port 8790. |
 | `adminGateway` (`./server`) | Node | The harness's `admin` option: fronts every emulator's admin API and admin UI under `/admin/`. `createServer` passes it by default. |
 

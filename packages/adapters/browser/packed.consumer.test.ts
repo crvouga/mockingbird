@@ -13,7 +13,7 @@ const run = (args: string[], cwd: string) => {
   return result.stdout.toString().trim()
 }
 
-test("external packed preview packages bundle and run without workspace source paths", async () => {
+test("external packed preview packages typecheck, bundle and run without workspace source paths", async () => {
   const dir = mkdtempSync(join(tmpdir(), "mockingbird-preview-consumer-"))
   try {
     const dependencies: Record<string, string> = {}
@@ -28,13 +28,25 @@ test("external packed preview packages bundle and run without workspace source p
       const manifest = JSON.parse(readFileSync(join(cwd, "package.json"), "utf8"))
       dependencies[manifest.name] = `file:${packed.split("\n").at(-1)}`
     }
+    for (const name of Object.keys(dependencies)) {
+      const tarball = dependencies[name]?.slice("file:".length) ?? ""
+      const manifest = JSON.parse(run(["tar", "-xOzf", tarball, "package/package.json"], dir))
+      expect(manifest.private).toBeUndefined()
+      expect(manifest.publishConfig?.access).toBe("public")
+      expect(JSON.stringify(manifest)).not.toContain("workspace:")
+    }
     writeFileSync(
       join(dir, "package.json"),
       JSON.stringify({
         name: "external-preview-consumer",
         private: true,
         type: "module",
-        dependencies: { ...dependencies, esbuild: "0.28.2" },
+        dependencies: {
+          ...dependencies,
+          esbuild: "0.28.2",
+          typescript: "5.9.3",
+          "@types/node": "22.20.1",
+        },
       }),
     )
     run(["bun", "install", "--ignore-scripts"], dir)
@@ -111,6 +123,37 @@ test("external packed preview packages bundle and run without workspace source p
     `,
     )
     run(["node", "build.mjs"], dir)
+    writeFileSync(
+      join(dir, "consumer.ts"),
+      `
+      import { installBrowserRuntime, UnsupportedRuntimeError } from "@crvouga/mockingbird-adapter-browser"
+      import { browserRuntimeBuildOptions } from "@crvouga/mockingbird-adapter-browser/build"
+      import { mountSystemHarness, type SystemHarness, type SystemSurface } from "@crvouga/mockingbird-ui/system"
+      import { CSS_RESET } from "@crvouga/mockingbird-ui"
+      const dispose: () => void = installBrowserRuntime()
+      const options = browserRuntimeBuildOptions()
+      const surface: SystemSurface = { id: "app", label: "App", mount(host) { host.textContent = CSS_RESET; return () => {} } }
+      const harness: SystemHarness = mountSystemHarness(document.body, [surface])
+      export { dispose, harness, options, UnsupportedRuntimeError }
+    `,
+    )
+    writeFileSync(
+      join(dir, "tsconfig.json"),
+      JSON.stringify({
+        compilerOptions: {
+          target: "ES2022",
+          module: "NodeNext",
+          moduleResolution: "NodeNext",
+          lib: ["ES2022", "DOM", "DOM.Iterable"],
+          types: ["node"],
+          strict: true,
+          skipLibCheck: false,
+          noEmit: true,
+        },
+        files: ["consumer.ts"],
+      }),
+    )
+    run(["node", "node_modules/typescript/bin/tsc", "-p", "tsconfig.json"], dir)
     expect(readFileSync(join(dir, "bundle.css"), "utf8")).toContain("box-sizing")
     const browser = await chromium.launch()
     try {

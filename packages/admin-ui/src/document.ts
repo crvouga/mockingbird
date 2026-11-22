@@ -2,7 +2,7 @@ import { ADMIN_BROWSER_BUNDLE } from "./bundle.js"
 import type { AdminConfig, MembersConfig } from "./model.js"
 
 /*
- * The only module that holds the prebuilt browser client (about 1.3 MB of JavaScript as a
+ * The only module that holds the prebuilt browser client (about 1.5 MB of JavaScript as a
  * string). A service runtime loads it with a dynamic `import()` the first time an admin page is
  * requested, so an app that never serves `/__admin/ui` never parses it, and a bundler that
  * splits code keeps it out of the main chunk. Import it statically only where the page is

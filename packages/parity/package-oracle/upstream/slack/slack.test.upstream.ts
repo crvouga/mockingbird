@@ -2492,7 +2492,7 @@ describe("Slack plugin - OAuth flow", () => {
     const html = await res.text();
     expect(html).toContain("Sign in to Slack");
     expect(html).toContain("Test App");
-    expect(html).toContain("Slack Emulator");
+    expect(html).toContain("Mockingbird"); // The shared page header: "Mockingbird / Slack".
   });
 
   it("rejects unknown client_id", async () => {
@@ -4592,7 +4592,7 @@ describe("Slack plugin - Message Inspector", () => {
     expect(html).toContain("Message Inspector");
     expect(html).toContain("general");
     expect(html).toContain("random");
-    expect(html).toContain("Slack Emulator");
+    expect(html).toContain("Mockingbird"); // The shared page header: "Mockingbird / Slack".
   });
 
   it("shows posted messages in the inspector", async () => {
@@ -4729,7 +4729,8 @@ describe("Slack plugin - Message Inspector", () => {
     expect(res.status).toBe(200);
     const html = await res.text();
     expect(html).toContain("Inspector rich block");
-    expect(html).toContain('badge badge-granted">rich');
+    // The "rich" status chip (Mockingbird's StatusChip, in place of the competitor's badge class).
+    expect(html).toMatch(/data-status="ok"[^>]*>(?:<[^>]*>)*rich</);
   });
 
   it("switches channels via query param", async () => {

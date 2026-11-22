@@ -7,7 +7,7 @@ import { payWithHostedCheckout, signInWithGoogle, waitUntil } from "./testing/in
 /**
  * Exercises the exact wiring `composition/browser.ts`'s `mount()` uses
  * (Hono's `app.request()` plus the in-memory session header) through
- * `client/api.ts`'s public `api.*` surface — the same surface the Preact
+ * `client/api.ts`'s public `api.*` surface — the same surface the React
  * pages call — to prove a browser mount round-trips its session correctly
  * with no socket and no real network call anywhere.
  */

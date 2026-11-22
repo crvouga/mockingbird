@@ -1,39 +1,32 @@
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { CSS_RESET } from "@crvouga/mockingbird-ui"
+import { renderDocument } from "@crvouga/mockingbird-ui/document"
+import { MOCKINGBIRD_CSS } from "@crvouga/mockingbird-ui/styles"
 import type { ClientAssets } from "../app/http/app.js"
-import { STYLES } from "../client/theme.js"
 
 const here = dirname(fileURLToPath(import.meta.url))
 const clientDir = join(here, "..", "client")
 
-const HTML = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Lab ordering workspace</title>
-    <style>
-      ${CSS_RESET}
-      :root { color-scheme: light dark; }
-      html, body { margin: 0; padding: 0; height: 100%; background: light-dark(#fafafa, #111113); }
-      ${STYLES}
-    </style>
-  </head>
-  <body>
-    <div id="app" class="cove-app"></div>
-    <script type="module" src="/client.js"></script>
-  </body>
-</html>
-`
+/**
+ * The standalone server's one page: the shared document (head, favicon, the visitor's theme
+ * choice) with the design system's stylesheet inlined, an empty `#app`, and the client bundle.
+ */
+const HTML = renderDocument({
+  title: "Lab ordering workspace",
+  css: MOCKINGBIRD_CSS,
+  rootId: "app",
+  rememberTheme: true,
+  head: '<script type="module" src="/client.js"></script>',
+})
 
-/** Bundles the Preact/htm SPA in-process with Bun's bundler — no separate dev server. */
+/** Bundles the React client in-process with Bun's bundler — no separate dev server. */
 export const buildClientAssets = async (): Promise<ClientAssets> => {
   const result = await Bun.build({
-    entrypoints: [join(clientDir, "main.ts")],
+    entrypoints: [join(clientDir, "main.tsx")],
     target: "browser",
     format: "esm",
     minify: false,
+    define: { "process.env.NODE_ENV": JSON.stringify("production") },
   })
   if (!result.success) {
     for (const log of result.logs) console.error(log)
