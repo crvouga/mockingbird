@@ -42,7 +42,7 @@ own Storybooks, which the catalog composes. Change UI there: open the story, edi
 the story re-renders (packages are read from `src/`).
 
 ```sh
-bun run storybook                            # http://localhost:6008, everything composed
+bun run storybook                            # http://localhost:6008 (or a free port, printed), everything composed
 bun run --cwd sites/storybook verify         # every story renders and plays without an error
 bun run check:storybook                      # every UI source file is in some story
 ```

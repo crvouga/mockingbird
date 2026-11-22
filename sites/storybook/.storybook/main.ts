@@ -17,8 +17,15 @@ const config: StorybookConfig = {
   refs: (_config, { configType }) =>
     configType === "DEVELOPMENT"
       ? {
-          fleet: { title: "Fleet Cloud dashboard", url: "http://localhost:6006" },
-          notifications: { title: "Notifications harness", url: "http://localhost:6007" },
+          // `scripts/dev.ts` says where it started them; the ports move when the usual are taken.
+          fleet: {
+            title: "Fleet Cloud dashboard",
+            url: process.env.STORYBOOK_FLEET_URL ?? "http://localhost:6006",
+          },
+          notifications: {
+            title: "Notifications harness",
+            url: process.env.STORYBOOK_NOTIFICATIONS_URL ?? "http://localhost:6007",
+          },
         }
       : {
           fleet: { title: "Fleet Cloud dashboard", url: "./fleet" },
