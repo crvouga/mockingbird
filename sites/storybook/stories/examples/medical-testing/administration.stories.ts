@@ -10,7 +10,7 @@ export default {
   title: "Examples/Medical testing/Administration",
   parameters: {
     layout: "fullscreen",
-    sources: [...SHELL, "packages/examples/medical-testing/src/client/pages/Admin.ts"],
+    sources: [...SHELL, "packages/examples/medical-testing/src/client/pages/Admin.tsx"],
   },
 } satisfies Meta
 
@@ -18,7 +18,7 @@ const members = (extra: Parameters<typeof cove>[1] = {}): StoryObj => ({
   ...cove({ as: ADMIN, route: "admin" }, extra),
   play: async ({ canvasElement }) => {
     await person(canvasElement).find(
-      ".cove-page table, .cove-page [role='table'], .cove-page [role='grid']",
+      "[data-testid='members'] table, [data-testid='members'] [role='table'], [data-testid='members'] [role='grid']",
     )
   },
 })

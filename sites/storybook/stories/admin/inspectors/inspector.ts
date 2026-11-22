@@ -1,7 +1,7 @@
 /**
  * The inspectors some emulators serve beside their API (AWS at `/_inspector`; Linear, Slack and
  * Twilio at `/`; Resend's inbox at `/inbox`): server-rendered pages drawn with the shared provider
- * UI (`packages/http/provider/src/vendor/core/ui.ts`). Each story starts the emulator, calls the
+ * UI (`packages/http/provider/src/vendor/core/ui.ts`, `src/ui/page.tsx`). Each story starts the emulator, calls the
  * vendor's API the way an app would, and opens the page; its tab links go back to the emulator.
  */
 import type { StoryObj } from "@storybook/html-vite"
@@ -13,6 +13,7 @@ import { type Emulator, page } from "../../../src/story.js"
 /** The shared files every inspector page is drawn and served with. */
 export const SHARED_SOURCES = [
   "packages/http/provider/src/vendor/core/ui.ts",
+  "packages/http/provider/src/ui/page.tsx",
   "packages/http/provider/src/vendor/core/http.ts",
 ]
 
@@ -49,7 +50,7 @@ export function inspector<T extends Emulator>(
 /** Follow the tab link labelled `label` and check the page it opens shows `text`. */
 export async function openTab(canvas: HTMLElement, label: string, text: string): Promise<void> {
   const tab = await hands(canvas)
-  const link = [...tab.doc.querySelectorAll<HTMLAnchorElement>(".inspector-tabs a")].find(
+  const link = [...tab.doc.querySelectorAll<HTMLAnchorElement>('nav[aria-label="Primary"] a')].find(
     (a) => a.textContent === label,
   )
   if (!link) throw new Error(`No ${label} tab`)

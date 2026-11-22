@@ -171,9 +171,8 @@ When("they clear {string}", async ({ dash }, label: string) => {
 
 When("they choose {string} as the {string}", async ({ dash }, option: string, label: string) => {
   await dash.idle()
-  const select = dash.field(label)
-  if ((await select.count()) > 0) await select.selectOption({ label: option })
-  else await dash.choice(label, option).check()
+  if ((await dash.picker(label).count()) > 0) await dash.pick(label, option)
+  else await dash.choose(label, option)
 })
 
 // ---- reading -------------------------------------------------------------------------------
@@ -216,10 +215,7 @@ Then("the field {string} says {string}", async ({ dash }, label: string, text: s
   await expect(control).toHaveAccessibleDescription(new RegExp(literal(text)))
   // The message is written under the field itself, not only announced.
   // A text field's holder contains it; a set of choices is its own holder.
-  const holder =
-    (await dash.field(label).count()) > 0
-      ? dash.form.locator("[data-field]").filter({ has: control })
-      : dash.choices(label)
+  const holder = control.locator("xpath=ancestor-or-self::*[@data-field][1]")
   await expect(holder.locator(".field-error")).toContainText(text)
 })
 

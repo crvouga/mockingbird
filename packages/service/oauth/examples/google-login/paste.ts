@@ -12,6 +12,7 @@ export function pasteDocument(host: HTMLElement, html: string): HTMLElement {
     .map((style) => style.textContent ?? "")
     .join("\n")
   for (const style of parsed.querySelectorAll("style")) style.remove()
+  registerProperties(owner, css)
 
   const shadow = host.shadowRoot ?? host.attachShadow({ mode: "open" })
   shadow.replaceChildren()
@@ -74,7 +75,10 @@ const scopeEmbeddedCss = (css: string): string => {
     }
     cursor = brace + 1
   }
-  const sized = out.replaceAll("100svh", "100%").replaceAll("100vh", "100%")
+  const sized = out
+    .replaceAll("100svh", "100%")
+    .replaceAll("100dvh", "100%")
+    .replaceAll("100vh", "100%")
   return `:host{display:block;box-sizing:border-box;width:100%;max-width:100%;min-width:0}.page{box-sizing:border-box;width:100%;max-width:100%;min-width:0;min-height:100%;container-type:inline-size}${sized}`
 }
 
@@ -131,4 +135,23 @@ const skipBlock = (css: string, openBrace: number): number => {
     }
   }
   return css.length
+}
+
+/**
+ * `@property` rules only register from a document's own stylesheets, never from a shadow tree's,
+ * and Tailwind's utilities (borders, shadows, rings) read the initial values they declare. Hoist
+ * them, once per distinct set, into the document that owns the shadow trees. Registering a custom
+ * property changes nothing until something uses it.
+ */
+export function registerProperties(owner: Document, css: string): void {
+  const rules = css.match(/@property\s+--[\w-]+\s*\{[^}]*\}/g)
+  if (!rules?.length) return
+  const text = rules.join("\n")
+  const marker = "data-example-properties"
+  for (const style of owner.head.querySelectorAll(`style[${marker}]`))
+    if (style.textContent === text) return
+  const style = owner.createElement("style")
+  style.setAttribute(marker, "")
+  style.textContent = text
+  owner.head.append(style)
 }

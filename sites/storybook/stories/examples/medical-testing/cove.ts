@@ -1,14 +1,15 @@
 /**
  * The medical-testing example ("Cove") in a story: a fresh in-process instance of the whole app
  * (Hono app, Postgres, and the OAuth, Stripe, Junction, Resend, Twilio, FCM and Slack emulators
- * behind it), put in the state a screen shows through the app's own API, then the real Preact
- * client mounted on it.
+ * behind it), put in the state a screen shows through the app's own API, then the real React
+ * client (HeroUI and the shared design system) mounted on it.
  *
  * The client is mounted into the story's canvas, not a frame: it is written for the document it
  * runs in (`document` for its modals' focus trap and Escape, `window` for its router), the way
- * the docs site embeds it, and its stylesheet is scoped under `.cove-app`. So its `play`
+ * the docs site embeds it, with the design system's stylesheet in the document. So its `play`
  * functions use `person()` here rather than `hands()`, which reaches into a frame.
  */
+import { MOCKINGBIRD_CSS } from "@crvouga/mockingbird-ui/styles"
 import type { StoryObj } from "@storybook/html-vite"
 import { userEvent } from "storybook/test"
 import {
@@ -22,7 +23,6 @@ import {
   navigate,
   type Route,
 } from "../../../../../packages/examples/medical-testing/src/client/router.js"
-import { STYLES } from "../../../../../packages/examples/medical-testing/src/client/theme.js"
 import {
   buildDemo,
   type Demo,
@@ -41,12 +41,11 @@ export const NEWCOMER = "grace.hopper@example.com"
 
 /** Every UI file of the client; a story names the ones its screen draws on top of these. */
 export const SHELL = [
-  "packages/examples/medical-testing/src/client/main.ts",
-  "packages/examples/medical-testing/src/client/theme.ts",
+  "packages/examples/medical-testing/src/client/main.tsx",
   "packages/examples/medical-testing/src/client/router.ts",
-  "packages/examples/medical-testing/src/client/components/Icons.ts",
-  "packages/examples/medical-testing/src/client/components/Logo.ts",
-  "packages/examples/medical-testing/src/client/components/States.ts",
+  "packages/examples/medical-testing/src/client/format.ts",
+  "packages/examples/medical-testing/src/client/product.ts",
+  "packages/examples/medical-testing/src/client/components/States.tsx",
   "packages/examples/medical-testing/src/composition/inProcessFetcher.ts",
   "packages/examples/medical-testing/src/composition/buildClientAssets.ts",
   "packages/examples/medical-testing/src/app/http/app.ts",
@@ -120,12 +119,12 @@ export async function start(setup: Setup = {}): Promise<Demo> {
   return demo
 }
 
-/** The app's stylesheet, once per preview document, as `composition/browser.ts` adds it. */
+/** The design system's stylesheet, once per preview document, as `composition/browser.ts` adds it. */
 function styles(): void {
-  if (document.getElementById("cove-app-styles")) return
+  if (document.getElementById("mockingbird-example-styles")) return
   const style = document.createElement("style")
-  style.id = "cove-app-styles"
-  style.textContent = STYLES
+  style.id = "mockingbird-example-styles"
+  style.textContent = MOCKINGBIRD_CSS
   document.head.append(style)
 }
 
@@ -143,7 +142,7 @@ export function draw(demo: Demo, route?: Route): HTMLElement {
   }
   if (route && route !== "dashboard") {
     const observer = new MutationObserver(() => {
-      if (!root.querySelector(".cove-shell")) return
+      if (!root.querySelector("[data-mockingbird-shell]")) return
       observer.disconnect()
       navigate(route)
     })

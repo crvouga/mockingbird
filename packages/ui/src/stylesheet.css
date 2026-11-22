@@ -1,0 +1,29 @@
+/*
+ * The entry `bun run build` compiles into dist/styles.css (`@crvouga/mockingbird-ui/styles.css`,
+ * and as a string, `MOCKINGBIRD_CSS` from `@crvouga/mockingbird-ui/styles`). One stylesheet for
+ * every Mockingbird surface, so the utilities any of them uses are in it: Tailwind only emits the
+ * classes it finds in these sources. Only `.tsx` files are scanned, so utility classes belong in
+ * React components, and editing a surface's logic (`.ts`) does not rebuild this stylesheet and
+ * everything that depends on it. A surface that adds a UI directory adds it here and to
+ * packages/ui/turbo.json's build inputs (so a change there rebuilds this file). The docs site
+ * compiles its own CSS from theme.css and is not scanned here.
+ */
+
+@import "./theme.css";
+
+@source "./**/*.tsx";
+@source "../../admin-ui/src/**/*.tsx";
+@source "../../notifications/src/**/*.tsx";
+@source "../../examples/medical-testing/src/**/*.tsx";
+@source "../../http/provider/src/**/*.tsx";
+@source "../../service/core/src/**/*.tsx";
+@source "../../service/*/src/ui/**/*.tsx";
+@source "../../service/oauth/src/**/*.tsx";
+@source "../../service/oauth/examples/**/*.tsx";
+@source "../../service/open-wearables/src/**/*.tsx";
+@source "../../service/sqlite/src/**/*.tsx";
+@source "../../service/sqlite/benchmarks/**/*.tsx";
+@source "../../service/postgres/src/**/*.tsx";
+@source "../../service/postgres/benchmarks/**/*.tsx";
+@source "../../../sites/fleet/src/**/*.tsx";
+@source "../../../sites/storybook/stories/**/*.tsx";

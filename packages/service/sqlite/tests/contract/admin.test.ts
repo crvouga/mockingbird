@@ -79,7 +79,7 @@ describe("sqlite admin", () => {
     const shell = await admin.fetch(request("/__admin/ui"));
     expect(shell.headers.get("content-type")).toContain("text/html");
     const html = await shell.text();
-    expect(html).toContain('data-admin-ui-library="antd"');
+    expect(html).toContain('data-admin-ui-library="heroui"');
     expect(html).toContain("MockingbirdAdmin.mount(");
   });
 });

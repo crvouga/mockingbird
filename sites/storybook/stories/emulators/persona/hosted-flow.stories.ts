@@ -13,7 +13,13 @@ import { departedTo, shows } from "../oauth/browser.js"
  */
 export default {
   title: "Emulators/Persona/Hosted flow",
-  parameters: { layout: "fullscreen", sources: ["packages/service/persona/src/index.ts"] },
+  parameters: {
+    layout: "fullscreen",
+    sources: [
+      "packages/service/persona/src/ui/server.tsx",
+      "packages/service/persona/src/index.ts",
+    ],
+  },
 } satisfies Meta
 
 const ORIGIN = "https://withpersona.mock"
@@ -64,6 +70,20 @@ export const OnAPhone: StoryObj = {
   globals: { viewport: { value: "phone", isRotated: false } },
 }
 
+/**
+ * Dark, as a visitor who chose it with Mockingbird's theme switch sees it: the page applies the
+ * remembered choice (`mb:theme`) to its root before first paint.
+ */
+const darkAppearance = async ({ canvasElement }: { canvasElement: HTMLElement }) => {
+  const page = await hands(canvasElement)
+  const root = page.doc.documentElement
+  root.classList.add("dark")
+  root.dataset.theme = "dark"
+  expect(page.doc.defaultView?.getComputedStyle(root).colorScheme).toContain("dark")
+}
+
+export const DarkAppearance: StoryObj = { ...verify(RETURN), play: darkAppearance }
+
 /** Approved: back to the app with the inquiry's id and status. */
 export const Approved: StoryObj = {
   ...verify(RETURN),
@@ -90,6 +110,15 @@ export const SentToReview: StoryObj = {
   play: async ({ canvasElement }) => {
     await finish(canvasElement, "needs_review")
     await shows(canvasElement, "Done: needs_review")
+  },
+}
+
+/** Approved without a `redirect-uri`: the page says so. */
+export const ApprovedWithoutRedirect: StoryObj = {
+  ...verify(),
+  play: async ({ canvasElement }) => {
+    await finish(canvasElement, "approve")
+    await shows(canvasElement, "Done: approved")
   },
 }
 

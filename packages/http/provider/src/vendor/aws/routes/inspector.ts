@@ -1,8 +1,7 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
 import type { RouteContext, InspectorTab } from "../../core/index.js";
-import { renderInspectorPage } from "../../core/index.js";
+import { renderInspectorPage, section, table, type Block } from "../../core/index.js";
 import { getAwsStore } from "../store.js";
-import { escapeXml } from "../helpers.js";
 
 const SERVICE_LABEL = "AWS";
 
@@ -16,7 +15,7 @@ export function inspectorRoutes(ctx: RouteContext): void {
   const { app, store } = ctx;
   const aws = () => getAwsStore(store);
 
-  app.get("/_inspector", (c) => {
+  app.get("/_inspector", async (c) => {
     const tab = c.req.query("tab") ?? "s3";
     const s3Store = aws();
 
@@ -25,114 +24,87 @@ export function inspectorRoutes(ctx: RouteContext): void {
     const users = s3Store.iamUsers.all();
     const roles = s3Store.iamRoles.all();
 
-    let contentHtml = "";
+    const blocks: Block[] = [];
 
     if (tab === "s3") {
-      const rows = buckets
-        .map((b) => {
-          const objects = s3Store.s3Objects.findBy("bucket_name", b.bucket_name);
-          return `<tr>
-            <td>${escapeXml(b.bucket_name)}</td>
-            <td>${objects.length}</td>
-            <td>${escapeXml(b.region)}</td>
-            <td>${escapeXml(b.creation_date)}</td>
-          </tr>`;
-        })
-        .join("\n");
-
-      contentHtml = `
-        <div class="inspector-section">
-          <h2>S3 Buckets (${buckets.length})</h2>
-          <table class="inspector-table">
-            <thead><tr><th>Bucket</th><th>Objects</th><th>Region</th><th>Created</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="4"><div class="inspector-empty">No buckets</div></td></tr>`}</tbody>
-          </table>
-        </div>`;
+      blocks.push(
+        counted(
+          "S3 Buckets",
+          buckets.length,
+          table(
+            ["Bucket", "Objects", "Region", "Created"],
+            buckets.map((b) => [
+              b.bucket_name,
+              String(s3Store.s3Objects.findBy("bucket_name", b.bucket_name).length),
+              b.region,
+              b.creation_date,
+            ]),
+            "No buckets",
+          ),
+        ),
+      );
 
       for (const bucket of buckets) {
         const objects = s3Store.s3Objects.findBy("bucket_name", bucket.bucket_name);
         if (objects.length > 0) {
-          const objRows = objects
-            .map(
-              (o) => `<tr>
-              <td>${escapeXml(o.key)}</td>
-              <td>${o.content_length}</td>
-              <td>${escapeXml(o.content_type)}</td>
-              <td>${escapeXml(o.last_modified)}</td>
-            </tr>`,
-            )
-            .join("\n");
-          contentHtml += `
-            <div class="inspector-section">
-              <h3>${escapeXml(bucket.bucket_name)} objects</h3>
-              <table class="inspector-table">
-                <thead><tr><th>Key</th><th>Size</th><th>Type</th><th>Last Modified</th></tr></thead>
-                <tbody>${objRows}</tbody>
-              </table>
-            </div>`;
+          blocks.push(
+            counted(
+              `${bucket.bucket_name} objects`,
+              objects.length,
+              table(
+                ["Key", "Size", "Type", "Last Modified"],
+                objects.map((o) => [o.key, String(o.content_length), o.content_type, o.last_modified]),
+                "No objects",
+              ),
+            ),
+          );
         }
       }
     } else if (tab === "sqs") {
-      const rows = queues
-        .map((q) => {
-          const messages = s3Store.sqsMessages.findBy("queue_name", q.queue_name);
-          return `<tr>
-            <td>${escapeXml(q.queue_name)}</td>
-            <td>${messages.length}</td>
-            <td>${q.fifo ? "Yes" : "No"}</td>
-            <td>${q.visibility_timeout}s</td>
-          </tr>`;
-        })
-        .join("\n");
-
-      contentHtml = `
-        <div class="inspector-section">
-          <h2>SQS Queues (${queues.length})</h2>
-          <table class="inspector-table">
-            <thead><tr><th>Queue</th><th>Messages</th><th>FIFO</th><th>Visibility Timeout</th></tr></thead>
-            <tbody>${rows || `<tr><td colspan="4"><div class="inspector-empty">No queues</div></td></tr>`}</tbody>
-          </table>
-        </div>`;
+      blocks.push(
+        counted(
+          "SQS Queues",
+          queues.length,
+          table(
+            ["Queue", "Messages", "FIFO", "Visibility Timeout"],
+            queues.map((q) => [
+              q.queue_name,
+              String(s3Store.sqsMessages.findBy("queue_name", q.queue_name).length),
+              q.fifo ? "Yes" : "No",
+              `${q.visibility_timeout}s`,
+            ]),
+            "No queues",
+          ),
+        ),
+      );
     } else if (tab === "iam") {
-      const userRows = users
-        .map(
-          (u) => `<tr>
-          <td>${escapeXml(u.user_name)}</td>
-          <td>${escapeXml(u.user_id)}</td>
-          <td>${u.access_keys.length}</td>
-          <td>${escapeXml(u.arn)}</td>
-        </tr>`,
-        )
-        .join("\n");
-
-      const roleRows = roles
-        .map(
-          (r) => `<tr>
-          <td>${escapeXml(r.role_name)}</td>
-          <td>${escapeXml(r.role_id)}</td>
-          <td>${escapeXml(r.description)}</td>
-          <td>${escapeXml(r.arn)}</td>
-        </tr>`,
-        )
-        .join("\n");
-
-      contentHtml = `
-        <div class="inspector-section">
-          <h2>IAM Users (${users.length})</h2>
-          <table class="inspector-table">
-            <thead><tr><th>User</th><th>User ID</th><th>Access Keys</th><th>ARN</th></tr></thead>
-            <tbody>${userRows || `<tr><td colspan="4"><div class="inspector-empty">No users</div></td></tr>`}</tbody>
-          </table>
-        </div>
-        <div class="inspector-section">
-          <h2>IAM Roles (${roles.length})</h2>
-          <table class="inspector-table">
-            <thead><tr><th>Role</th><th>Role ID</th><th>Description</th><th>ARN</th></tr></thead>
-            <tbody>${roleRows || `<tr><td colspan="4"><div class="inspector-empty">No roles</div></td></tr>`}</tbody>
-          </table>
-        </div>`;
+      blocks.push(
+        counted(
+          "IAM Users",
+          users.length,
+          table(
+            ["User", "User ID", "Access Keys", "ARN"],
+            users.map((u) => [u.user_name, u.user_id, String(u.access_keys.length), u.arn]),
+            "No users",
+          ),
+        ),
+        counted(
+          "IAM Roles",
+          roles.length,
+          table(
+            ["Role", "Role ID", "Description", "ARN"],
+            roles.map((r) => [r.role_name, r.role_id, r.description, r.arn]),
+            "No roles",
+          ),
+        ),
+      );
     }
 
-    return c.html(renderInspectorPage("Inspector", TABS, tab, contentHtml, SERVICE_LABEL));
+    return c.html(await renderInspectorPage("Inspector", TABS, tab, blocks, SERVICE_LABEL));
   });
+}
+
+/** A section with its row count beside the title. */
+function counted(title: string, count: number, ...blocks: Block[]): Block {
+  return { ...section(title, ...blocks), count } as Block;
 }

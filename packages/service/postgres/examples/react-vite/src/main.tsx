@@ -1,12 +1,13 @@
+import { mount } from "@crvouga/mockingbird-ui/react/client";
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
 import { App } from "./App.tsx";
-import "./styles.css";
+import "./app.css";
 
 const root = document.getElementById("root");
 if (!root) throw new Error("missing #root");
 
-createRoot(root).render(
+mount(
+  root,
   <StrictMode>
     <App />
   </StrictMode>,

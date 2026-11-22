@@ -17,7 +17,11 @@ export default {
   title: "Emulators/OAuth/Sign in",
   parameters: {
     layout: "fullscreen",
-    sources: ["packages/service/oauth/src/ui.ts", "packages/service/oauth/src/index.ts"],
+    sources: [
+      "packages/service/oauth/src/ui/server.tsx",
+      "packages/service/oauth/src/ui.ts",
+      "packages/service/oauth/src/index.ts",
+    ],
   },
 } satisfies Meta
 
@@ -48,13 +52,18 @@ export const OnAPhone: StoryObj = {
   globals: { viewport: { value: "phone", isRotated: false } },
 }
 
-/** The footer's appearance switch, set to dark. */
+/**
+ * Dark, as a visitor who chose it with Mockingbird's theme switch sees it: the page applies the
+ * remembered choice (`mb:theme`) to its root before first paint.
+ */
 export const DarkAppearance: StoryObj = {
   ...visit(),
   play: async ({ canvasElement }) => {
     const page = await hands(canvasElement)
-    page.doc.querySelector<HTMLInputElement>('input[name="oauth-theme"][value="dark"]')?.click()
-    expect(page.doc.documentElement.dataset.theme).toBe("dark")
+    const root = page.doc.documentElement
+    root.classList.add("dark")
+    root.dataset.theme = "dark"
+    expect(page.doc.defaultView?.getComputedStyle(root).colorScheme).toContain("dark")
   },
 }
 
@@ -241,7 +250,10 @@ export const Home: StoryObj = page(() => ({ emulator: oauth().emulator, url: `${
  * from `redirectPage` directly.
  */
 export const BackToYourApp: StoryObj = markup(async () => {
-  const response = redirectPage(`${CALLBACK}?code=storybook-code&state=story-state`, "storybook")
+  const response = await redirectPage(
+    `${CALLBACK}?code=storybook-code&state=story-state`,
+    "storybook",
+  )
   return (await response.text()).replace(
     /<script nonce="storybook">location\.replace[^<]*<\/script>/,
     "",

@@ -56,7 +56,7 @@ Feature: An organization's mockingbird.yaml in the dashboard
       When they open the "Configuration" tab of "Acme"
       And they press "Copy mockingbird.yaml"
       Then the clipboard holds the file on screen
-      And they see "Copied"
+      And there is a button "Copied"
 
     Scenario: The file can be downloaded
       When they open the "Configuration" tab of "Acme"

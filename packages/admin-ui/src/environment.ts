@@ -24,8 +24,12 @@ export type AdminEnvironment = {
   shortcutTarget?: EventTarget
   /** The box the UI fills. Defaults to the window, or the shadow host inside a shadow root. */
   viewport?: Element
-  /** Where Ant Design's `<style>` elements go. Defaults to `document.head` or the shadow root. */
-  styleContainer?: Element | ShadowRoot
+  /**
+   * Where the design system's stylesheet (`MOCKINGBIRD_CSS`, one `<style>` element) goes.
+   * Defaults to the shadow root the UI is mounted in, or `document.head`. `false` adds none, for
+   * a page that already loads `@crvouga/mockingbird-ui/styles.css` itself.
+   */
+  styleContainer?: Element | ShadowRoot | false
   /**
    * How a custom panel's `script` runs. The prebuilt document compiles its source string with
    * `new Function`, which a Content Security Policy without `'unsafe-eval'` refuses. The

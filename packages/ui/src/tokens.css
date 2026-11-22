@@ -1,0 +1,135 @@
+/*
+ * The Mockingbird theme: HeroUI v3's design tokens set to the docs site's identity (docs/DESIGN.md).
+ * Neutral GitHub-like surfaces, blue (#2563eb / #58a6ff) for actions and the current page, and
+ * pink-red for errors. Every surface (admin, System, Fleet Cloud, notifications, docs, examples
+ * and emulator-served pages) reads these, so changing a value here changes all of them.
+ *
+ * Light and dark come from one declaration each, through `light-dark()`: the page follows the
+ * system (`color-scheme: light dark` on the root), and `class="light" | "dark"` or
+ * `data-theme="light" | "dark"` on any element pins that subtree, which is the switch HeroUI's
+ * own stylesheet already uses. The tokens are re-declared on those elements (not only inherited
+ * from :root) so a pinned subtree also resolves HeroUI's computed colors (hover, soft) in its mode.
+ *
+ * Unlayered on purpose: HeroUI declares its defaults inside `@layer theme`, and unlayered rules
+ * win over layered ones whatever their specificity.
+ */
+
+:root,
+.light,
+.dark,
+[data-theme="light"],
+[data-theme="dark"] {
+  /* Base */
+  --background: light-dark(#f6f8fa, #0d1117);
+  --foreground: light-dark(#1f2328, #f0f6fc);
+
+  /* Cards, accordions, tables */
+  --surface: light-dark(#ffffff, #161b22);
+  --surface-foreground: var(--foreground);
+  --surface-secondary: light-dark(#f6f8fa, #1c2128);
+  --surface-secondary-foreground: var(--foreground);
+  --surface-tertiary: light-dark(#eaeef2, #21262d);
+  --surface-tertiary-foreground: var(--foreground);
+
+  /* Popovers, menus, modals, tooltips */
+  --overlay: light-dark(#ffffff, #161b22);
+  --overlay-foreground: var(--foreground);
+
+  --muted: light-dark(#59636e, #9da7b3);
+
+  /* Secondary buttons, default chips, tabs */
+  --default: light-dark(#eaeef2, #21262d);
+  --default-foreground: var(--foreground);
+
+  /* Blue identifies actions, links, focus and the current page. */
+  --accent: light-dark(#2563eb, #58a6ff);
+  --accent-foreground: light-dark(#ffffff, #0d1117);
+
+  --success: light-dark(#15803d, #4ade80);
+  --success-foreground: light-dark(#ffffff, #0d1117);
+  --warning: light-dark(#f59e0b, #fbbf24);
+  --warning-foreground: light-dark(#1f2328, #0d1117);
+  --danger: light-dark(#c2255c, #fb7185);
+  --danger-foreground: light-dark(#ffffff, #0d1117);
+
+  /* Form fields: bordered, like the docs site's inputs */
+  --field-background: light-dark(#ffffff, #0d1117);
+  --field-foreground: var(--foreground);
+  --field-placeholder: var(--muted);
+  --field-border: light-dark(#d8dee4, #30363d);
+  --field-border-width: 1px;
+
+  --segment: light-dark(#ffffff, #30363d);
+  --segment-foreground: var(--foreground);
+
+  --border: light-dark(#d8dee4, #30363d);
+  --separator: light-dark(#d8dee4, #30363d);
+  --focus: var(--accent);
+  --link: var(--accent);
+
+  --backdrop: light-dark(rgb(15 15 20 / 0.45), rgb(1 4 9 / 0.7));
+
+  /* A 1px ring in the border color: cards, alerts and tab lists are outlined, as on the docs site. */
+  --surface-shadow:
+    0 0 0 1px var(--border), 0 1px 2px light-dark(rgb(15 15 20 / 0.05), transparent);
+  --overlay-shadow:
+    0 2px 4px light-dark(rgb(15 15 20 / 0.04), rgb(0 0 0 / 0.4)),
+    0 16px 40px light-dark(rgb(15 15 20 / 0.12), rgb(0 0 0 / 0.55));
+  --field-shadow: 0 0 0 0 transparent;
+
+  /*
+   * HeroUI computes these from the colors above with color-mix(), once per mode. Re-declared so
+   * they are computed from this element's colors in whichever mode it resolves to.
+   */
+  --surface-hover: color-mix(in oklab, var(--surface) 92%, var(--surface-foreground) 8%);
+  --background-secondary: color-mix(in oklab, var(--background) 96%, var(--foreground) 4%);
+  --background-tertiary: color-mix(in oklab, var(--background) 92%, var(--foreground) 8%);
+  --background-inverse: var(--foreground);
+  --default-hover: color-mix(in oklab, var(--default) 92%, var(--default-foreground) 8%);
+  --accent-hover: color-mix(in oklab, var(--accent) 88%, var(--foreground) 12%);
+  --success-hover: color-mix(in oklab, var(--success) 90%, var(--success-foreground) 10%);
+  --warning-hover: color-mix(in oklab, var(--warning) 90%, var(--warning-foreground) 10%);
+  --danger-hover: color-mix(in oklab, var(--danger) 90%, var(--danger-foreground) 10%);
+  --field-hover: var(--field-background);
+  --field-focus: var(--field-background);
+  --field-border-hover: color-mix(in oklab, var(--field-border) 70%, var(--foreground) 30%);
+  --field-border-focus: var(--accent);
+  --default-soft: color-mix(in oklab, var(--default) 60%, transparent);
+  --default-soft-foreground: var(--default-foreground);
+  --default-soft-hover: color-mix(in oklab, var(--default) 80%, transparent);
+  --accent-soft: color-mix(in oklab, var(--accent) 12%, transparent);
+  --accent-soft-foreground: color-mix(in oklab, var(--accent) 85%, var(--foreground) 15%);
+  --accent-soft-hover: color-mix(in oklab, var(--accent) 18%, transparent);
+  --success-soft: color-mix(in oklab, var(--success) 12%, transparent);
+  --success-soft-foreground: color-mix(in oklab, var(--success) 85%, var(--foreground) 15%);
+  --success-soft-hover: color-mix(in oklab, var(--success) 18%, transparent);
+  --warning-soft: color-mix(in oklab, var(--warning) 14%, transparent);
+  --warning-soft-foreground: light-dark(#9a5b06, #fbbf24);
+  --warning-soft-hover: color-mix(in oklab, var(--warning) 20%, transparent);
+  --danger-soft: color-mix(in oklab, var(--danger) 12%, transparent);
+  --danger-soft-foreground: color-mix(in oklab, var(--danger) 85%, var(--foreground) 15%);
+  --danger-soft-hover: color-mix(in oklab, var(--danger) 18%, transparent);
+  --separator-secondary: color-mix(in oklab, var(--surface) 85%, var(--surface-foreground) 15%);
+  --separator-tertiary: color-mix(in oklab, var(--surface) 81%, var(--surface-foreground) 19%);
+  --border-secondary: color-mix(in oklab, var(--surface) 78%, var(--surface-foreground) 22%);
+  --border-tertiary: color-mix(in oklab, var(--surface) 66%, var(--surface-foreground) 34%);
+  --scrollbar-thumb: color-mix(in oklch, var(--foreground) 20%, transparent);
+
+  /* 6px, the docs site's radius. HeroUI derives every corner from it (cards 3x, fields 1.5x). */
+  --radius: 0.375rem;
+  --field-radius: var(--radius);
+}
+
+:root {
+  color-scheme: light dark;
+}
+
+.light,
+[data-theme="light"] {
+  color-scheme: light;
+}
+
+.dark,
+[data-theme="dark"] {
+  color-scheme: dark;
+}

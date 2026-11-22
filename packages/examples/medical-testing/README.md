@@ -105,7 +105,7 @@ and `src/worker.ts` (proxy).
 
 The application's domain and HTTP code under `src/app/` use plain application contracts and
 never import Mockingbird. The client uses those HTTP routes; its administration page renders
-the shared React and Ant Design UI through the same scoped fetch in both run modes. The
+the shared React and HeroUI admin UI through the same scoped fetch in both run modes. The
 synthetic report generator is explicit demonstration
 data; it must be replaced with a provider report ingestion path for a real deployment:
 

@@ -1,11 +1,13 @@
 ---
 import catalog from "virtual:mockingbird/catalog"
 import ControlDirectory from "../../components/ControlDirectory.astro"
-import Icon from "../../components/Icon.astro"
-import ServiceCard from "../../components/ServiceCard.astro"
 import Base from "../../layouts/Base.astro"
 import { plainSummary } from "../../lib/guides.ts"
+import type { Guide } from "../../lib/types.ts"
+import { AllGuides, DocsIndexHeader, FeaturedSection, GuideSection } from "../../ui/docs-index.tsx"
+import { summarize } from "../../ui/service-card.tsx"
 
+const link = (g: Guide) => ({ slug: g.slug, title: g.title, summary: plainSummary(g.summary) })
 /** Guides that are a set of pages get a section of their own, one card per page. */
 const sections = catalog.guides
   .filter((g) => !g.parent)
@@ -14,154 +16,18 @@ const sections = catalog.guides
 ---
 
 <Base title="Docs" description="Guides for using, testing and contributing to Mockingbird. The same markdown GitHub renders.">
-  <div class="container">
-    <header class="page-head">
-      <span class="eyebrow">Developer documentation</span>
-      <h1>Docs</h1>
-      <p class="lede">
-        Guides for using, testing and contributing to Mockingbird. Each page is a file in <code>docs/</code>, the same markdown
-        GitHub renders, so the two never differ. Each service's own guide is its README, on its
-        <a href="/services">service page</a>.
-      </p>
-    </header>
-    <section class="featured-docs" aria-labelledby="featured-title">
-      <h2 id="featured-title"><Icon name="star" /> Featured emulators</h2>
-      <p>Explore the guides, coverage, and live playgrounds for these four emulators.</p>
-      <div class="featured-grid">{catalog.services.filter((s) => s.featured).map((service) => <ServiceCard service={service} />)}</div>
-      <a href="/services?featured=1" class="text-link">Browse featured emulators <Icon name="arrow-right" /></a>
-    </section>
-    {
-      sections.map(({ guide, pages }) => (
-        <section class="guide-section" aria-labelledby={`section-${guide.slug}`}>
-          <h2 class="guides-heading" id={`section-${guide.slug}`}>
-            <a href={`/docs/${guide.slug}`}>{guide.title}</a>
-          </h2>
-          <p class="guide-section-summary">{plainSummary(guide.summary)}</p>
-          {guide.slug === "admin-controls" ? (
-            <ControlDirectory />
-          ) : (
-            <ul class="guides guide-pages">
-              {pages.map((page) => (
-                <li>
-                  <a href={`/docs/${page.slug}`}>
-                    <span class="g-text">
-                      <strong>{page.title}</strong>
-                      <span>{plainSummary(page.summary)}</span>
-                    </span>
-                    <Icon name="arrow-right" />
-                  </a>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      ))
-    }
-    <h2 class="guides-heading">Guides</h2>
-    <ul class="guides">
-      {
-        catalog.guides.filter((g) => !g.parent).map((g) => (
-          <li>
-            <a href={`/docs/${g.slug}`}>
-              <span class="g-icon"><Icon name="file" /></span>
-              <span class="g-text">
-                <strong>{g.title}</strong>
-                <span>{plainSummary(g.summary)}</span>
-              </span>
-              <Icon name="arrow-right" />
-            </a>
-          </li>
-        ))
-      }
-    </ul>
-  </div>
+  <DocsIndexHeader />
+  <FeaturedSection services={catalog.services.filter((s) => s.featured).map(summarize)} />
+  {
+    sections.map(({ guide, pages }) =>
+      guide.slug === "admin-controls" ? (
+        <GuideSection guide={link(guide)} pages={pages.map(link)}>
+          <ControlDirectory />
+        </GuideSection>
+      ) : (
+        <GuideSection guide={link(guide)} pages={pages.map(link)} />
+      ),
+    )
+  }
+  <AllGuides guides={catalog.guides.filter((g) => !g.parent).map(link)} />
 </Base>
-
-<style>
-  .featured-docs { margin-bottom: 40px; }
-  .featured-docs h2 { display: flex; align-items: center; gap: 8px; font-size: 20px; }
-  .featured-docs h2 :global(.i) { width: 18px; height: 18px; color: var(--highlight); }
-  .featured-docs > p { margin-top: 8px; color: var(--fg-muted); font-size: 14px; }
-  .featured-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 14px; margin: 16px 0; }
-  .text-link { display: inline-flex; align-items: center; gap: 6px; color: var(--highlight); font-size: 13px; }
-  .text-link :global(.i) { width: 14px; height: 14px; }
-  .guides-heading { margin-bottom: 16px; font-size: 20px; }
-  .guides-heading a:hover { color: var(--highlight); }
-  .guide-section { margin-bottom: 40px; }
-  .guide-section .guides-heading { margin-bottom: 8px; }
-  .guide-section-summary { max-width: 780px; margin-bottom: 16px; color: var(--fg-muted); font-size: 14px; }
-  .guide-pages { grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr)); }
-  .guide-pages a { padding: 14px 16px; }
-  .guide-pages .g-text span { -webkit-line-clamp: 2; font-size: 13px; }
-  .page-head code {
-    font-size: 0.85em;
-  }
-
-  .page-head a {
-    color: var(--accent-soft-fg);
-    text-decoration: underline;
-    text-underline-offset: 3px;
-  }
-
-  .guides {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr));
-    gap: 14px;
-  }
-
-  .guides a {
-    display: flex;
-    align-items: flex-start;
-    gap: 14px;
-    height: 100%;
-    padding: 18px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
-  }
-
-  .guides a:hover {
-    border-color: var(--border-strong);
-    box-shadow: var(--shadow-md);
-  }
-
-  .g-icon {
-    display: inline-grid;
-    place-items: center;
-    width: 34px;
-    height: 34px;
-    flex: none;
-    border-radius: var(--radius-sm);
-    background: var(--accent-soft);
-    color: var(--accent-soft-fg);
-  }
-
-  .g-text {
-    flex: 1;
-    min-width: 0;
-  }
-
-  .g-text strong {
-    display: block;
-    font-size: 15px;
-  }
-
-  .g-text span {
-    display: -webkit-box;
-    margin-top: 4px;
-    overflow: hidden;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    color: var(--fg-muted);
-    font-size: 13.5px;
-    line-height: 1.55;
-  }
-
-  .guides a > :global(.i:last-child) {
-    margin-top: 10px;
-    color: var(--fg-faint);
-  }
-</style>
