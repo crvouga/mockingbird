@@ -200,7 +200,7 @@ describe("admin ui", () => {
     expect(html).toContain("data-mockingbird-admin")
     expect(html).toContain('"brandsUrl":"/__admin/ui/brands.json"')
     expect(html).not.toContain("mockingbird.chrisvouga.dev/brands.json")
-    expect(html.includes('data-admin-ui-library="antd"')).toBe(true)
+    expect(html.includes('data-admin-ui-library="heroui"')).toBe(true)
     expect(html).not.toContain("https://stripe.com")
     expect((await call(runtime, "GET", "/__admin/ui/")).status).toBe(200)
 
@@ -240,13 +240,13 @@ describe("admin ui", () => {
     })
     const html = await (await call(runtime, "GET", "/__admin/ui")).text()
     expect(html.startsWith("<!-- notes -->")).toBe(true)
-    expect(html).toContain("<!DOCTYPE html>")
+    expect(html.toLowerCase()).toContain("<!doctype html>")
     expect(html.endsWith("<!-- end notes -->")).toBe(true)
   })
 
   test("the shared document contains the bundled component UI and escapes configuration", async () => {
     const html = await renderAdminDocument("stripe")
-    expect(html).toContain('data-admin-ui-library="antd"')
+    expect(html).toContain('data-admin-ui-library="heroui"')
     expect(html).toContain('id="admin-root"')
     expect(html).toContain("MockingbirdAdmin.mount(")
     expect(html).toContain('"brandsUrl":"/__admin/ui/brands.json"')

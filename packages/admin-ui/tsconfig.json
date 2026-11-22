@@ -1,5 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
-  "compilerOptions": { "noEmit": true, "jsx": "react-jsx", "types": ["bun"] },
+  "compilerOptions": {
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "types": ["bun"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
   "include": ["src", "scripts", "*.test.ts"]
 }

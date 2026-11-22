@@ -958,8 +958,8 @@ export class Connection implements Session {
         refused
           ? run()
           : workspace
-            ? db.transaction(run)
-            : runInImplicitTransaction(db.state, () => db.transaction(run));
+            ? db.statementTransaction(run)
+            : runInImplicitTransaction(db.state, () => db.statementTransaction(run));
       const outcome = workspace ? statement() : this.inSession(db, statement);
       if (this.transaction && mutatesDatabase(text)) {
         this.transaction.statements.push({ kind: "sql", sql: text, params: params.slice() });
@@ -1064,8 +1064,16 @@ export class Connection implements Session {
     workspace.transactions.begin();
     workspace.state.transactionXid = this.transaction?.xid ?? null;
     workspace.state.transactionStart = this.transaction?.start ?? null;
-    for (const logged of this.transaction?.statements ?? []) {
-      this.replay(workspace, logged);
+    // the session's open SAVEPOINTs are real subtransactions in the workspace, each at its place in the
+    // block: SET TRANSACTION's checks see them (#861), and not the workspace's own statement wrappers
+    const statements = this.transaction?.statements ?? [];
+    const savepoints = [...(this.transaction?.savepoints ?? [])];
+    for (let index = 0; index <= statements.length; index++) {
+      while (savepoints[0] && savepoints[0].statementCount <= index) {
+        workspace.transactions.savepoint(savepoints.shift()!.name);
+      }
+      const logged = statements[index];
+      if (logged) this.replay(workspace, logged);
     }
     return workspace;
   }
@@ -1656,7 +1664,7 @@ export class Connection implements Session {
       return this.inSession(db, () => {
         if (db.transactions.inTransaction) {
           const name = `__describe_${this.pid}`;
-          db.transactions.savepoint(name);
+          db.transactions.savepoint(name, true);
           try {
             return this.cluster.as(this, () => db.prepare(prepared.sql).textResult(...params));
           } finally {

@@ -5,10 +5,13 @@
     "types": ["node"],
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
   },
   "include": [
     "src/**/*.ts",
+    "src/**/*.tsx",
     "integrations/**/*.ts",
     "e2e/**/*.ts",
     "server/**/*.ts",

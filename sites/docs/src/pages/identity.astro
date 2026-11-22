@@ -1,65 +1,8 @@
 ---
-import BirdMark from "../components/BirdMark.astro"
-import Icon from "../components/Icon.astro"
 import Base from "../layouts/Base.astro"
-import { IDENTITY } from "../lib/content.ts"
-
-const swatches = [
-  { name: "Background", token: "--bg", note: "Page surface" },
-  { name: "Secondary surface", token: "--bg-subtle", note: "Toolbars and code panels" },
-  { name: "Text", token: "--fg", note: "Headings and body text" },
-  { name: "Accent", token: "--accent", note: "Primary actions" },
-  { name: "Highlight", token: "--highlight", note: "Links and active navigation" },
-  { name: "Border", token: "--border", note: "Panel and table dividers" },
-]
+import { Identity } from "../ui/identity.tsx"
 ---
 
 <Base title="Design system" description="The typography, colors, and components behind Mockingbird's emulator documentation.">
-  <div class="container">
-    <header class="page-head">
-      <span class="eyebrow">Developer documentation / Design system</span>
-      <h1>Technical by design.</h1>
-      <p class="lede">Clear interfaces for exploring APIs, inspecting state, and understanding emulator coverage.</p>
-    </header>
-    <section class="identity-panel">
-      <BirdMark size={72} />
-      <div><h2>Mockingbird</h2><p>{IDENTITY.tagline}</p><a href="/docs/design">Read the design guide <Icon name="arrow-right" /></a></div>
-    </section>
-    <section class="block">
-      <div class="section-head"><span class="eyebrow">Color tokens</span><h2>Neutral surfaces. Blue actions. Semantic status.</h2><p>These swatches use the live theme. Choose light, dark, or system in the header.</p></div>
-      <ul class="swatches">
-        {swatches.map((swatch) => <li><span class="sample" style={`background: var(${swatch.token})`}></span><div><strong>{swatch.name}</strong><code>{swatch.token}</code><p>{swatch.note}</p></div></li>)}
-      </ul>
-    </section>
-    <section class="block">
-      <div class="section-head"><span class="eyebrow">Typography</span><h2>Readable documentation, familiar developer tools.</h2></div>
-      <div class="type-sample"><h3>{IDENTITY.tagline}</h3><p>System sans-serif for headings and interface text. System monospace for code, routes, and technical labels.</p><code>POST /v1/customers → 200 OK</code></div>
-    </section>
-    <section class="block">
-      <div class="section-head"><span class="eyebrow">Interface components</span><h2>Consistent controls for every emulator.</h2><p>Single borders, restrained corners, and explicit status labels keep the documentation focused on behavior.</p></div>
-      <div class="controls"><a class="btn btn-primary" href="/services">Explore emulators <Icon name="arrow-right" /></a><a class="btn btn-secondary" href="/docs">Read documentation</a><span class="badge badge-ok"><span class="dot"></span>Verified sample</span><span class="badge badge-warn">Partial coverage</span><span class="badge">In-process fetch</span></div>
-    </section>
-  </div>
+  <Identity />
 </Base>
-
-<style>
-  .identity-panel { display: flex; align-items: center; gap: 24px; padding: 32px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--bg-subtle); }
-  .identity-panel h2 { font-size: 28px; }
-  .identity-panel p { margin-top: 6px; color: var(--fg-muted); }
-  .identity-panel a { display: inline-flex; align-items: center; gap: 8px; margin-top: 14px; color: var(--highlight); font-size: 13px; }
-  .block { padding-top: 56px; }
-  .swatches { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-  .swatches li { display: flex; align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: var(--radius); }
-  .sample { width: 48px; height: 48px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); flex: none; }
-  .swatches strong, .swatches code { display: block; }
-  .swatches strong { font-size: 13px; }
-  .swatches code { font-size: 11px; color: var(--fg-subtle); margin-top: 2px; }
-  .swatches p { font-size: 12px; color: var(--fg-subtle); margin-top: 4px; }
-  .type-sample { padding: 28px; border: 1px solid var(--border); border-radius: var(--radius); }
-  .type-sample h3 { font-size: 30px; }
-  .type-sample p { margin-top: 14px; color: var(--fg-muted); }
-  .type-sample > code { display: block; margin-top: 20px; padding: 14px; background: var(--bg-subtle); border-radius: var(--radius-sm); color: var(--highlight); }
-  .controls { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
-  @media (max-width: 900px) { .swatches { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-  @media (max-width: 560px) { .swatches { grid-template-columns: minmax(0, 1fr); } .identity-panel { padding: 22px; gap: 16px; } .identity-panel h2 { font-size: 22px; } }
-</style>

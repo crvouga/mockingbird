@@ -72,9 +72,19 @@ The application must honor the boot/request AbortSignals to terminate work it st
   arbitrary fetched source.
 - `selectPreviewAction(currentFacts, builtCommit)` chooses deploy/remove/skip from current PR
   state. Closed PRs select removal; forks and stale build heads cannot deploy.
-- `planPreviewSweep({ previews, openNames, owns, now, retentionMs, capacity })` is a pure plan
-  listing managed names removed for orphaning, expiry or capacity. It never removes unmanaged
-  names or performs cloud operations. Capacity eviction retains the newest managed previews.
+  `explainPreviewAction(currentFacts, builtCommit)` makes the same decision and says why it skips:
+  `{ action: "skip", reason: "fork" | "stale-head" | "no-build", message }` (for a CI log or PR
+  comment, e.g. `commit abc… is no longer the head (def…)`), or `{ action: "deploy" }` /
+  `{ action: "remove" }`.
+- `selectBranchAction({ head }, builtCommit)` applies the same rule to the branch the Worker
+  itself serves (for example `main`): `"deploy"` only when `head === builtCommit`, so an older
+  commit never replaces a newer one; otherwise `"skip"`. `explainBranchAction` adds the reason.
+- `planPreviewSweep({ previews, openNames, owns, now, retentionMs, capacity, capacityCounts })` is
+  a pure plan listing managed names removed for orphaning, expiry or capacity. It never removes
+  unmanaged names or performs cloud operations. Capacity eviction retains the newest managed
+  previews. `capacityCounts: "managed"` (default) applies `capacity` to managed previews only;
+  `"all"` counts every listed preview, including ones `owns` rejects, so a plan stays under a
+  limit on the Previews of a Worker.
 - `createPreviewPart`, `planPreviewParts`, `createPreviewPartsManifest`,
   `parsePreviewPartsManifest`, `deployPreviewParts`, `planPreviewPartSweep`,
   `sweepPreviewParts`, `loadPreviewPart`, `previewPartAssetFiles`, `previewPartPath` and
@@ -85,7 +95,10 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `remove`. `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
   callback. It checks current facts before upload and immediately before deployment, sends only
   missing assets, preserves optional `_headers` text and uses content identity to avoid repeating
-  an already identical deployment. `list` follows pages and throws on API failures; `remove`
+  an already identical deployment. It resolves to
+  `{ action: "remove" | "skip" }`, `{ action: "unchanged", preview }` or
+  `{ action: "deployed", preview, deploymentId }` (`CloudflarePreviewDeployResult`), so callers
+  can narrow on the literal action. `list` follows pages and throws on API failures; `remove`
   treats HTTP 404 as success. No production Worker deployment is changed.
 - `previewNodeHandler(fetch)` and `listenPreview(fetch, { port, hostname })`, from the `/node`
   export, expose the same Fetch handler or browser bridge to a Node HTTP test runner. The default

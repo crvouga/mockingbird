@@ -101,7 +101,7 @@ export async function pickAccount(canvas: HTMLElement, login: string): Promise<U
 /** `pickAccount`, for a vendor answering in `form_post`: the page that holds the code. */
 export async function pickAccountFormPost(canvas: HTMLElement, login: string) {
   const page = await press(canvas, login, "button.user-btn")
-  const form = page.doc.querySelector<HTMLFormElement>("form[method=POST]")
+  const form = page.doc.querySelector<HTMLFormElement>("form[method=post i]")
   expect(form?.getAttribute("action")).toBe(CALLBACK)
   expect(form?.querySelector<HTMLInputElement>('input[name="code"]')?.value).toBeTruthy()
   return page

@@ -1,5 +1,5 @@
 /**
- * The shared admin is a prebuilt React + Ant Design bundle (about 1.3 MB as a string). The
+ * The shared admin is a prebuilt React + HeroUI bundle with its stylesheet (about 1.5 MB as a string). The
  * runtime loads it lazily, on the first request for an admin page, through a dynamic `import()`
  * with a literal specifier: Node, Bun and every bundler resolve it, a bundler that splits code
  * keeps it in a chunk of its own, and an app that never serves `/__admin/ui` never parses it.

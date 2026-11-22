@@ -13,9 +13,14 @@ Native executables and arbitrary server packages cannot all run through JavaScri
 npm install @crvouga/mockingbird-adapter-browser esbuild
 ```
 
+The package ships built JavaScript and TypeScript declarations; no workspace source paths or
+build-machine environment values are needed. TypeScript projects also need `@types/node`, because
+the declarations describe the Node APIs the adapter provides (`Buffer`, `node:http`, memfs).
+`esbuild` is only needed for the `/build` export.
+
 ## Usage
 
-Build the runtime package, then use its configuration in your esbuild task:
+Use its configuration in your esbuild task:
 
 ```ts
 import { build } from "esbuild"

@@ -26,6 +26,9 @@
     "indentWidth": 2,
     "lineWidth": 100
   },
+  "css": {
+    "parser": { "tailwindDirectives": true }
+  },
   "javascript": {
     "formatter": {
       "quoteStyle": "double",
@@ -62,6 +65,13 @@
     }
   },
   "overrides": [
+    {
+      "includes": [
+        "packages/examples/medical-testing/src/client/**/*.ts",
+        "packages/examples/medical-testing/src/client/**/*.tsx"
+      ],
+      "linter": { "rules": { "correctness": { "useExhaustiveDependencies": "off" } } }
+    },
     {
       "includes": ["packages/ui/src/reset.css"],
       "linter": {

@@ -55,15 +55,17 @@ Then(
 
 Then("the page has no inline scripts or styles", async ({ dash }) => {
   await expect(dash.page.getByRole("heading", { level: 1 })).toBeVisible()
+  // React sets the few element styles it needs (HeroUI's visually hidden inputs, the bird's size)
+  // through the CSSOM, which the policy allows; what the policy forbids is markup: style
+  // elements, inline scripts and handler attributes. The browser reports anything it blocks.
   const inline = await dash.page.evaluate(() => ({
-    styled: document.querySelectorAll("[style]").length,
     styles: document.querySelectorAll("style").length,
     scripts: document.querySelectorAll("script:not([src])").length,
     handlers: [...document.querySelectorAll("*")].filter((element) =>
       element.getAttributeNames().some((name) => name.startsWith("on")),
     ).length,
   }))
-  expect(inline).toEqual({ styled: 0, styles: 0, scripts: 0, handlers: 0 })
+  expect(inline).toEqual({ styles: 0, scripts: 0, handlers: 0 })
 })
 
 Then("the browser reported no blocked resources", async ({ dash }) => {

@@ -142,6 +142,16 @@ before running it. A host without shared storage falls back to uploading every p
 See [Shared app parts](../packages/adapters/preview/README.md#shared-app-parts) for the host
 interface, garbage collection, integrity checks and the Cloudflare flow.
 
+## Your own lifecycle
+
+Driving Cloudflare Previews yourself instead of the workflow? The package exports pure helpers for the
+same decisions. `explainPreviewAction(pullRequest, builtCommit)` deploys, removes, or skips with a
+reason (`fork`, `stale-head`, `no-build`) and a message for your log or PR comment;
+`selectBranchAction({ head }, builtCommit)` deploys the branch the Worker serves only from its
+current head. `planPreviewSweep` lists previews to remove; pass `capacityCounts: "all"` to count
+previews it does not manage against `capacity` too. See the
+[package README](../packages/adapters/preview/README.md).
+
 ## What a preview does not do
 
 - **Checks status starts once the caller file is on your default branch.** GitHub runs

@@ -1,6 +1,6 @@
 /*! Adapted from vercel-labs/emulate (Apache-2.0), modified for Mockingbird. See port.json, LICENSE_EMULATE and THIRD_PARTY_NOTICES.md. */
 import type { InspectorTab, RouteContext } from "../../core/index.js";
-import { escapeHtml, renderInspectorPage } from "../../core/index.js";
+import { chip, renderInspectorPage, section, table, type Block } from "../../core/index.js";
 import { getTwilioStore } from "../store.js";
 import { maskSecret } from "../helpers.js";
 
@@ -21,7 +21,7 @@ type TabId = (typeof TABS)[number]["id"];
 export function inspectorRoutes({ app, store }: RouteContext): void {
   const ts = () => getTwilioStore(store);
 
-  app.get("/", (c) => {
+  app.get("/", async (c) => {
     const requested = c.req.query("tab") ?? "messages";
     const active = TABS.some((tab) => tab.id === requested) ? (requested as TabId) : "messages";
     const body =
@@ -40,107 +40,107 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
                   : active === "webhooks"
                     ? webhooksView()
                     : messagesView();
-    return c.html(renderInspectorPage("Twilio Inspector", TABS, active, body, SERVICE_LABEL));
+    return c.html(await renderInspectorPage("Twilio Inspector", TABS, active, body, SERVICE_LABEL));
   });
 
-  function messagesView(): string {
+  function messagesView(): Block[] {
     const rows = ts()
       .messages.all()
       .sort((a, b) => b.id - a.id)
       .map((message) => [
-        escapeHtml(message.sid),
-        escapeHtml(message.direction),
-        escapeHtml(message.status),
-        escapeHtml(message.from ?? ""),
-        escapeHtml(message.to),
-        escapeHtml(message.body ?? ""),
-        escapeHtml(message.created_at),
+        message.sid,
+        message.direction,
+        chip(message.status),
+        message.from ?? "",
+        message.to,
+        message.body ?? "",
+        message.created_at,
       ]);
-    return section(
+    return [section(
       "Messages",
       table(["SID", "Direction", "Status", "From", "To", "Body", "Created"], rows, "No messages."),
-    );
+    )];
   }
 
-  function verifyView(): string {
+  function verifyView(): Block[] {
     const serviceRows = ts()
       .verifyServices.all()
-      .map((service) => [escapeHtml(service.sid), escapeHtml(service.friendly_name), escapeHtml(service.code)]);
+      .map((service) => [service.sid, service.friendly_name, service.code]);
     const verificationRows = ts()
       .verifications.all()
       .sort((a, b) => b.id - a.id)
       .map((verification) => [
-        escapeHtml(verification.sid),
-        escapeHtml(verification.to),
-        escapeHtml(verification.channel),
-        escapeHtml(verification.status),
-        escapeHtml(verification.code),
-        escapeHtml(String(verification.attempts)),
+        verification.sid,
+        verification.to,
+        verification.channel,
+        chip(verification.status),
+        verification.code,
+        String(verification.attempts),
       ]);
-    return (
-      section("Verify Services", table(["SID", "Name", "Code"], serviceRows, "No Verify services.")) +
+    return [
+      section("Verify Services", table(["SID", "Name", "Code"], serviceRows, "No Verify services.")),
       section(
         "Verifications",
         table(["SID", "To", "Channel", "Status", "Code", "Attempts"], verificationRows, "No verifications."),
       )
-    );
+    ];
   }
 
-  function callsView(): string {
+  function callsView(): Block[] {
     const rows = ts()
       .calls.all()
       .sort((a, b) => b.id - a.id)
       .map((call) => [
-        escapeHtml(call.sid),
-        escapeHtml(call.direction),
-        escapeHtml(call.status),
-        escapeHtml(call.from),
-        escapeHtml(call.to),
-        escapeHtml(call.twiml_steps.join(", ")),
-        escapeHtml(call.created_at),
+        call.sid,
+        call.direction,
+        chip(call.status),
+        call.from,
+        call.to,
+        call.twiml_steps.join(", "),
+        call.created_at,
       ]);
-    return section("Calls", table(["SID", "Direction", "Status", "From", "To", "TwiML", "Created"], rows, "No calls."));
+    return [section("Calls", table(["SID", "Direction", "Status", "From", "To", "TwiML", "Created"], rows, "No calls."))];
   }
 
-  function numbersView(): string {
+  function numbersView(): Block[] {
     const rows = ts()
       .phoneNumbers.all()
       .map((number) => [
-        escapeHtml(number.sid),
-        escapeHtml(number.phone_number),
-        escapeHtml(number.friendly_name),
-        escapeHtml(number.sms_url ?? ""),
-        escapeHtml(number.voice_url ?? ""),
+        number.sid,
+        number.phone_number,
+        number.friendly_name,
+        number.sms_url ?? "",
+        number.voice_url ?? "",
       ]);
-    return section(
+    return [section(
       "Phone Numbers",
       table(["SID", "Number", "Name", "SMS URL", "Voice URL"], rows, "No phone numbers."),
-    );
+    )];
   }
 
-  function conversationsView(): string {
+  function conversationsView(): Block[] {
     const serviceRows = ts()
       .conversationServices.all()
       .map((service) => [
-        escapeHtml(service.sid),
-        escapeHtml(service.friendly_name),
-        escapeHtml(String(ts().conversations.count((item) => item.service_sid === service.sid))),
+        service.sid,
+        service.friendly_name,
+        String(ts().conversations.count((item) => item.service_sid === service.sid)),
       ]);
     const conversationRows = ts()
       .conversations.all()
       .map((conversation) => [
-        escapeHtml(conversation.sid),
-        escapeHtml(conversation.friendly_name ?? ""),
-        escapeHtml(conversation.unique_name ?? ""),
-        escapeHtml(conversation.state),
-        escapeHtml(String(ts().conversationParticipants.count((item) => item.conversation_sid === conversation.sid))),
-        escapeHtml(String(ts().conversationMessages.count((item) => item.conversation_sid === conversation.sid))),
+        conversation.sid,
+        conversation.friendly_name ?? "",
+        conversation.unique_name ?? "",
+        chip(conversation.state),
+        String(ts().conversationParticipants.count((item) => item.conversation_sid === conversation.sid)),
+        String(ts().conversationMessages.count((item) => item.conversation_sid === conversation.sid)),
       ]);
-    return (
+    return [
       section(
         "Conversation Services",
         table(["SID", "Name", "Conversations"], serviceRows, "No Conversation Services."),
-      ) +
+      ),
       section(
         "Conversations",
         table(
@@ -149,83 +149,66 @@ export function inspectorRoutes({ app, store }: RouteContext): void {
           "No conversations.",
         ),
       )
-    );
+    ];
   }
 
-  function servicesView(): string {
+  function servicesView(): Block[] {
     const messagingRows = ts()
       .messagingServices.all()
       .map((service) => [
-        escapeHtml(service.sid),
-        escapeHtml(service.friendly_name),
-        escapeHtml(String(ts().messagingServicePhoneNumbers.count((item) => item.service_sid === service.sid))),
-        escapeHtml(service.status_callback ?? ""),
+        service.sid,
+        service.friendly_name,
+        String(ts().messagingServicePhoneNumbers.count((item) => item.service_sid === service.sid)),
+        service.status_callback ?? "",
       ]);
-    return section(
+    return [section(
       "Messaging Services",
       table(["SID", "Name", "Senders", "Status Callback"], messagingRows, "No Messaging Services."),
-    );
+    )];
   }
 
-  function authView(): string {
+  function authView(): Block[] {
     const accountRows = ts()
       .accounts.all()
       .map((account) => [
-        escapeHtml(account.sid),
-        escapeHtml(account.friendly_name),
-        escapeHtml(account.status),
-        escapeHtml(maskSecret(account.auth_token)),
+        account.sid,
+        account.friendly_name,
+        chip(account.status),
+        maskSecret(account.auth_token),
       ]);
     const keyRows = ts()
       .apiKeys.all()
       .map((key) => [
-        escapeHtml(key.sid),
-        escapeHtml(key.friendly_name),
-        escapeHtml(key.account_sid),
-        escapeHtml(key.active ? "active" : "inactive"),
-        escapeHtml(maskSecret(key.secret)),
+        key.sid,
+        key.friendly_name,
+        key.account_sid,
+        chip(key.active ? "active" : "inactive"),
+        maskSecret(key.secret),
       ]);
-    return (
-      section("Accounts", table(["SID", "Name", "Status", "Auth Token"], accountRows, "No accounts.")) +
+    return [
+      section("Accounts", table(["SID", "Name", "Status", "Auth Token"], accountRows, "No accounts.")),
       section("API Keys", table(["SID", "Name", "Account", "Status", "Secret"], keyRows, "No API keys."))
-    );
+    ];
   }
 
-  function webhooksView(): string {
+  function webhooksView(): Block[] {
     const rows = ts()
       .webhookDeliveries.all()
       .slice(-50)
       .reverse()
       .map((delivery) => [
-        escapeHtml(delivery.event),
-        escapeHtml(delivery.url),
-        escapeHtml(String(delivery.response_status ?? "")),
-        escapeHtml(delivery.success ? "ok" : "failed"),
-        escapeHtml(delivery.error ?? ""),
-        escapeHtml(delivery.created_at),
+        delivery.event,
+        delivery.url,
+        String(delivery.response_status ?? ""),
+        chip(delivery.success ? "ok" : "failed"),
+        delivery.error ?? "",
+        delivery.created_at,
       ]);
-    return section(
+    return [section(
       "Webhook Deliveries",
       table(["Event", "URL", "Status", "Result", "Error", "Created"], rows, "No webhook deliveries."),
-    );
+    )];
   }
 }
 
-function section(title: string, body: string): string {
-  return `<section class="inspector-section">
-  <h2>${escapeHtml(title)}</h2>
-  ${body}
-</section>`;
-}
 
-function table(headers: string[], rows: string[][], empty: string): string {
-  if (rows.length === 0) return `<p class="inspector-empty">${escapeHtml(empty)}</p>`;
-  const headerHtml = headers.map((header) => `<th>${escapeHtml(header)}</th>`).join("");
-  const rowHtml = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell}</td>`).join("")}</tr>`).join("\n");
-  return `<table class="inspector-table">
-  <thead><tr>${headerHtml}</tr></thead>
-  <tbody>
-${rowHtml}
-  </tbody>
-</table>`;
-}

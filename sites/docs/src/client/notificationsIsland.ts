@@ -1,5 +1,5 @@
 /**
- * Starts the landing page's notifications demo (`components/landing/NotificationsDemo.astro`) when
+ * Starts the landing page's notifications demo (`ui/landing/notifications-demo.tsx`) when
  * its section nears the viewport. Only this file is in the page's first load; the emulators, the
  * harness and its UI arrive with the dynamic import.
  */

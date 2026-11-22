@@ -3,8 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Mockingbird Fleet</title>
-    <link rel="stylesheet" href="/app.css" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Fleet Cloud · Mockingbird</title>
+    <!-- The id tells React Aria its one rule is in app.css already, so it does not add a style
+         element, which the page's content security policy would refuse. -->
+    <link id="react-aria-pressable-style" rel="stylesheet" href="/app.css" />
   </head>
   <body>
     <div id="app"><p class="boot">Loading…</p></div>

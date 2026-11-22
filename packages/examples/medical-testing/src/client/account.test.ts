@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { formatPhone } from "./pages/Account.js"
-import { signInLinkToken } from "./pages/Landing.js"
+import { formatPhone, signInLinkToken } from "./format.js"
 
 describe("sign-in link", () => {
   test("the token is read from a pasted link or a page address", () => {
