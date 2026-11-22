@@ -24,16 +24,53 @@
 #
 # Forks get no secrets, so their PRs are skipped. workflow_run always runs the caller's workflow
 # from the default branch, so checks status starts once the caller file is on it.
+#
+# `mode: named-previews` (opt-in) instead deploys each PR as Preview `pr-<n>` of one assets-only
+# Worker per site (free plan at any traffic, served at `pr-<n>.<host>`), through the
+# `mockingbird-preview` CLI: no Worker script, no per-PR Worker, no `/__preview/*` live status.
+#
+#   pull_request opened/synchronize/reopened → per site (concurrently): build, gate checks,
+#                                              upload, prove version.json, checks again; a
+#                                              GitHub Deployment and the PR description section
+#   pull_request closed                      → delete every site's Preview, confirm it gone
+#   push (e.g. main)                         → the branch's Preview, with a strict gate
+#   schedule / workflow_dispatch             → sweep: orphans, retention, capacity
+#
+# Named mode also needs `permissions: { contents: read, pull-requests: write, deployments: write }`.
 
 name: Preview
 
 on:
   workflow_call:
     inputs:
-      name:
-        description: Worker name prefix; each PR deploys `<name>-pr-<number>`.
+      mode:
+        description: "`worker` (default): a Worker per PR, `<name>-pr-<number>`, with live status. `named-previews`: Preview `pr-<number>` of one assets-only Worker per site."
         type: string
-        required: true
+        default: worker
+      name:
+        description: Worker name prefix; each PR deploys `<name>-pr-<number>`. In named-previews mode without `sites`, the assets-only Worker's name.
+        type: string
+        default: ""
+      sites:
+        description: "named-previews: JSON array of `{ name, worker?, build?, outdir?, config?, host?, checks? }`, one Preview of its own Worker each. Empty: one site from name / build / outdir / wrangler-config / host / checks."
+        type: string
+        default: ""
+      host:
+        description: "named-previews: the custom domain Previews are served under (`pr-<n>.<host>`). Empty: the Preview's workers.dev URL."
+        type: string
+        default: ""
+      checks:
+        description: "named-previews: a module (relative to working-directory) whose default export `(origin, fetch) => Promise<{ name, ok, detail? }[]>` runs before and after upload."
+        type: string
+        default: ""
+      retention-days:
+        description: "named-previews: the sweep removes Previews of open PRs not deployed for this long."
+        type: string
+        default: "7"
+      capacity:
+        description: "named-previews: the sweep keeps at most this many PR Previews per Worker (newest first)."
+        type: string
+        default: "80"
       working-directory:
         description: Where install, build, the CLI and wrangler run.
         type: string
@@ -43,13 +80,13 @@ on:
         type: string
         default: bun install --frozen-lockfile
       build:
-        description: Builds the preview into `outdir` (e.g. a script calling buildPreview()).
+        description: Builds the preview into `outdir` (e.g. a script calling buildPreview()). Required unless every site of `sites` has its own.
         type: string
-        required: true
+        default: ""
       outdir:
-        description: The built preview, relative to working-directory.
+        description: The built preview, relative to working-directory. Required unless every site of `sites` has its own.
         type: string
-        required: true
+        default: ""
       wrangler-config:
         description: A wrangler config to deploy with (relative to working-directory). Empty generates one that serves `outdir` with the package's Worker.
         type: string
@@ -76,6 +113,7 @@ on:
 
 jobs:
   preview:
+    if: inputs.mode != 'named-previews'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -94,6 +132,9 @@ jobs:
           NAME: ${{ inputs.name }}
         run: |
           mode=skip
+          if [ -z "$NAME" ]; then
+            echo "::error::The per-PR Worker mode needs the name input."; exit 1
+          fi
           if [ -z "$PR_NUMBER" ] || [ "$SAME_REPO" != "true" ]; then
             echo "::notice::Not a same-repository pull request; no preview."
           elif [ "$HAS_TOKEN" != "true" ]; then
@@ -308,3 +349,287 @@ jobs:
             200|404) echo "Removed $WORKER (HTTP $status)" ;;
             *) cat "$RUNNER_TEMP/delete.json"; exit 1 ;;
           esac
+
+  # ── mode: named-previews ──────────────────────────────────────────────────────────────────────
+  # Previews `pr-<n>` of one assets-only Worker per site, through the `mockingbird-preview` CLI.
+
+  plan:
+    if: inputs.mode == 'named-previews'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      mode: ${{ steps.ctx.outputs.mode }}
+      pr: ${{ steps.ctx.outputs.pr }}
+      branch: ${{ steps.ctx.outputs.branch }}
+      sha: ${{ steps.ctx.outputs.sha }}
+      sites: ${{ steps.ctx.outputs.sites }}
+    steps:
+      - name: Resolve what to do and the sites
+        id: ctx
+        env:
+          EVENT: ${{ github.event_name }}
+          ACTION: ${{ github.event.action }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          SAME_REPO: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          HAS_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
+          SITES: ${{ inputs.sites }}
+          NAME: ${{ inputs.name }}
+          BUILD: ${{ inputs.build }}
+          OUTDIR: ${{ inputs.outdir }}
+          CONFIG: ${{ inputs.wrangler-config }}
+          HOST: ${{ inputs.host }}
+          CHECKS: ${{ inputs.checks }}
+        run: |
+          # One site from the single-site inputs, or the `sites` array; each site's missing fields
+          # fall back to those inputs. A site without a name, worker, build or outdir is an error.
+          if [ -z "$SITES" ]; then SITES='[{}]'; fi
+          sites=$(jq -c --arg name "$NAME" --arg build "$BUILD" --arg outdir "$OUTDIR" \
+            --arg config "$CONFIG" --arg host "$HOST" --arg checks "$CHECKS" '
+            if type != "array" or length == 0 then error("sites is a non-empty JSON array") else . end
+            | map({
+                name: (.name // .worker // $name),
+                worker: (.worker // .name // $name),
+                build: (.build // $build),
+                outdir: (.outdir // $outdir),
+                config: (.config // $config),
+                host: (.host // $host),
+                checks: (.checks // $checks)
+              })
+            | if any(.[]; .name == "" or .worker == "" or .build == "" or .outdir == "")
+              then error("every site needs a name (or worker), build and outdir") else . end
+            | if (map(.name) | unique | length) != length then error("site names repeat") else . end' \
+            <<< "$SITES")
+          mode=skip branch=""
+          if [ "$HAS_TOKEN" != "true" ]; then
+            echo "::notice::Previews need CLOUDFLARE_API_TOKEN and CLOUDFLARE_ACCOUNT_ID secrets."
+          elif [ "$EVENT" = "schedule" ] || [ "$EVENT" = "workflow_dispatch" ]; then mode=sweep
+          elif [ "$EVENT" = "pull_request" ]; then
+            if [ "$SAME_REPO" != "true" ]; then echo "::notice::Not a same-repository pull request; no preview."
+            elif [ "$ACTION" = "closed" ]; then mode=close
+            else mode=deploy; fi
+          elif [ "$EVENT" = "push" ] && [ "$REF_TYPE" = "branch" ]; then mode=deploy branch=$REF_NAME
+          fi
+          {
+            echo "mode=$mode"
+            echo "pr=$PR_NUMBER"
+            echo "branch=$branch"
+            echo "sha=$HEAD_SHA"
+            echo "sites=$sites"
+          } >> "$GITHUB_OUTPUT"
+          echo "mode=$mode pr=$PR_NUMBER branch=$branch sites=$(jq -r 'map(.name) | join(", ")' <<< "$sites")"
+
+      - uses: actions/checkout@v5
+        if: steps.ctx.outputs.mode == 'deploy' && steps.ctx.outputs.pr != ''
+      - uses: oven-sh/setup-bun@v2
+        if: steps.ctx.outputs.mode == 'deploy' && steps.ctx.outputs.pr != ''
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - name: Mark the PR's preview deploying
+        if: steps.ctx.outputs.mode == 'deploy' && steps.ctx.outputs.pr != ''
+        continue-on-error: true
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INSTALL: ${{ inputs.install }}
+          CLI: ${{ inputs.cli }}
+          PR: ${{ steps.ctx.outputs.pr }}
+          SHA: ${{ steps.ctx.outputs.sha }}
+          SITES: ${{ steps.ctx.outputs.sites }}
+        run: |
+          eval "$INSTALL"
+          mapfile -t names < <(jq -r '.[].name' <<< "$SITES")
+          site_args=()
+          for name in "${names[@]}"; do site_args+=(--site "$name"); done
+          $CLI pr-section --repository "$GITHUB_REPOSITORY" --pr "$PR" --state deploying \
+            "${site_args[@]}" --attempted "$SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+  site:
+    needs: plan
+    if: inputs.mode == 'named-previews' && (needs.plan.outputs.mode == 'deploy' || needs.plan.outputs.mode == 'close')
+    name: ${{ matrix.site.name }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Each site deploys on its own; one failing does not cancel or hold back the others.
+      fail-fast: false
+      matrix:
+        site: ${{ fromJSON(needs.plan.outputs.sites) }}
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      GITHUB_TOKEN: ${{ github.token }}
+      CLI: ${{ inputs.cli }}
+      SITE: ${{ matrix.site.name }}
+      WORKER: ${{ matrix.site.worker }}
+      PR: ${{ needs.plan.outputs.pr }}
+      BRANCH: ${{ needs.plan.outputs.branch }}
+      SHA: ${{ needs.plan.outputs.sha }}
+      ENVIRONMENT: preview/${{ matrix.site.name }}/pr-${{ needs.plan.outputs.pr }}
+      RESULT: ${{ github.workspace }}/.preview-results/${{ matrix.site.name }}.json
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - name: Install
+        env:
+          INSTALL: ${{ inputs.install }}
+        run: eval "$INSTALL"
+
+      - name: Start the GitHub Deployment
+        if: needs.plan.outputs.mode == 'deploy' && needs.plan.outputs.pr != ''
+        continue-on-error: true
+        run: |
+          $CLI deployment --repository "$GITHUB_REPOSITORY" --environment "$ENVIRONMENT" \
+            --state in_progress --ref "$SHA" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - name: Build
+        if: needs.plan.outputs.mode == 'deploy'
+        env:
+          BUILD: ${{ matrix.site.build }}
+        run: eval "$BUILD"
+
+      - name: Deploy the Preview
+        id: deploy
+        if: needs.plan.outputs.mode == 'deploy'
+        env:
+          OUTDIR: ${{ matrix.site.outdir }}
+          CONFIG: ${{ matrix.site.config }}
+          HOST: ${{ matrix.site.host }}
+          CHECKS: ${{ matrix.site.checks }}
+        run: |
+          # Assets only: the CLI refuses a config with a main, a binding, a var or run_worker_first.
+          args=(--site "$SITE" --worker "$WORKER" --outdir "$OUTDIR" --commit "$SHA"
+            --repository "$GITHUB_REPOSITORY" --result "$RESULT")
+          if [ -n "$PR" ]; then args+=(--pr "$PR"); else args+=(--branch "$BRANCH"); fi
+          if [ -n "$CONFIG" ]; then args+=(--config "$CONFIG"); fi
+          if [ -n "$HOST" ]; then args+=(--host "$HOST"); fi
+          if [ -n "$CHECKS" ]; then args+=(--checks "$CHECKS"); fi
+          status=0
+          $CLI deploy-preview "${args[@]}" || status=$?
+          if [ -f "$RESULT" ]; then
+            url=$(jq -r '.url // empty' "$RESULT")
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+            if [ -n "$url" ]; then echo "[$SITE preview]($url): $(jq -r .state "$RESULT")" >> "$GITHUB_STEP_SUMMARY"; fi
+          fi
+          exit "$status"
+
+      - name: Record a failure before upload
+        if: failure() && needs.plan.outputs.mode == 'deploy'
+        run: |
+          mkdir -p "$(dirname "$RESULT")"
+          [ -f "$RESULT" ] || jq -n --arg site "$SITE" --arg worker "$WORKER" --arg sha "$SHA" \
+            '{site: $site, worker: $worker, name: "", state: "failed", attempted: $sha,
+              message: "The build or deploy failed before upload; the previous deploy keeps serving"}' > "$RESULT"
+
+      - name: Finish the GitHub Deployment
+        if: always() && needs.plan.outputs.mode == 'deploy' && needs.plan.outputs.pr != ''
+        continue-on-error: true
+        env:
+          STATE: ${{ steps.deploy.outcome == 'success' && 'success' || 'failure' }}
+          URL: ${{ steps.deploy.outputs.url }}
+        run: |
+          args=()
+          if [ -n "$URL" ]; then args+=(--url "$URL"); fi
+          $CLI deployment --repository "$GITHUB_REPOSITORY" --environment "$ENVIRONMENT" \
+            --state "$STATE" "${args[@]}" \
+            --run-url "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+
+      - uses: actions/upload-artifact@v4
+        if: always() && needs.plan.outputs.mode == 'deploy' && needs.plan.outputs.pr != ''
+        with:
+          name: preview-result-${{ matrix.site.name }}
+          path: .preview-results/
+          if-no-files-found: ignore
+          include-hidden-files: true
+          retention-days: 1
+
+      - name: Remove the Preview
+        if: needs.plan.outputs.mode == 'close'
+        run: $CLI remove-preview --worker "$WORKER" --pr "$PR"
+
+      - name: Remove the GitHub Deployments
+        if: needs.plan.outputs.mode == 'close'
+        continue-on-error: true
+        run: $CLI deployment --repository "$GITHUB_REPOSITORY" --environment "$ENVIRONMENT" --state removed
+
+  report:
+    needs: [plan, site]
+    if: always() && inputs.mode == 'named-previews' && needs.plan.outputs.pr != '' && (needs.plan.outputs.mode == 'deploy' || needs.plan.outputs.mode == 'close')
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - uses: actions/download-artifact@v5
+        if: needs.plan.outputs.mode == 'deploy'
+        with:
+          pattern: preview-result-*
+          path: ${{ runner.temp }}/preview-results
+          merge-multiple: true
+      - name: Update the PR description's preview section
+        working-directory: ${{ inputs.working-directory }}
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          INSTALL: ${{ inputs.install }}
+          CLI: ${{ inputs.cli }}
+          MODE: ${{ needs.plan.outputs.mode }}
+          PR: ${{ needs.plan.outputs.pr }}
+          SHA: ${{ needs.plan.outputs.sha }}
+          SITES: ${{ needs.plan.outputs.sites }}
+        run: |
+          eval "$INSTALL"
+          mapfile -t names < <(jq -r '.[].name' <<< "$SITES")
+          site_args=()
+          for name in "${names[@]}"; do site_args+=(--site "$name"); done
+          run_url="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          if [ "$MODE" = "close" ]; then
+            $CLI pr-section --repository "$GITHUB_REPOSITORY" --pr "$PR" --state removed \
+              "${site_args[@]}" --run-url "$run_url"
+          else
+            $CLI pr-section --repository "$GITHUB_REPOSITORY" --pr "$PR" --state auto \
+              --results "$RUNNER_TEMP/preview-results" "${site_args[@]}" --attempted "$SHA" \
+              --run-url "$run_url"
+          fi
+
+  sweep:
+    needs: plan
+    if: inputs.mode == 'named-previews' && needs.plan.outputs.mode == 'sweep'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ inputs.bun-version }}
+      - name: Sweep orphaned, expired and over-capacity Previews
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+          INSTALL: ${{ inputs.install }}
+          CLI: ${{ inputs.cli }}
+          SITES: ${{ needs.plan.outputs.sites }}
+          RETENTION_DAYS: ${{ inputs.retention-days }}
+          CAPACITY: ${{ inputs.capacity }}
+        run: |
+          eval "$INSTALL"
+          status=0
+          for worker in $(jq -r '.[].worker' <<< "$SITES" | sort -u); do
+            $CLI sweep --worker "$worker" --retention-days "$RETENTION_DAYS" --capacity "$CAPACITY" \
+              --repository "$GITHUB_REPOSITORY" || status=1
+          done
+          exit "$status"

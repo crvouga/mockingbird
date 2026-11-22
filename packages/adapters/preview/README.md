@@ -91,15 +91,71 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `PREVIEW_PARTS_MANIFEST` publish each app of a preview once under `parts/<app>/<pin>/` and
   share it across previews, so a pull request rebuilds and uploads only the apps it changed. See
   [Shared app parts](#shared-app-parts).
-- `createCloudflarePreviews({ accountId, workerName, token, fetch })` returns `deploy`, `list` and
-  `remove`. `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
-  callback. It checks current facts before upload and immediately before deployment, sends only
-  missing assets, preserves optional `_headers` text and uses content identity to avoid repeating
-  an already identical deployment. It resolves to
-  `{ action: "remove" | "skip" }`, `{ action: "unchanged", preview }` or
-  `{ action: "deployed", preview, deploymentId }` (`CloudflarePreviewDeployResult`), so callers
-  can narrow on the literal action. `list` follows pages and throws on API failures; `remove`
-  treats HTTP 404 as success. No production Worker deployment is changed.
+- `createCloudflarePreviews({ accountId, workerName, token, fetch, uploadConcurrency? })` returns
+  `deploy`, `get`, `list`, `remove`, `subdomain` and `servePreviews`. No production Worker
+  deployment is changed.
+  - `deploy` takes explicit static files, source commit, a name and a `currentPullRequest`
+    callback. It checks current facts before upload and immediately before deployment, sends only
+    missing assets, preserves optional `_headers` text and uses content identity to avoid
+    repeating an already identical deployment. It resolves to `{ action: "remove" | "skip" }`,
+    `{ action: "unchanged", preview }` or `{ action: "deployed", preview, deploymentId }`
+    (`CloudflarePreviewDeployResult`), so callers can narrow on the literal action. The Preview
+    lookup (get or create, then its latest deployment) runs beside the asset upload. Buckets upload `uploadConcurrency` at a time
+    (default 3, wrangler's). A session JWT whose payload has `wrangler_single_asset_uploads: true`
+    switches to one raw request per asset (`POST /workers/assets/upload/<hash>`, the asset's type
+    as `Content-Type`), `edge_kv_upload_concurrency` (default 50) at a time unless
+    `uploadConcurrency` is set. The completion JWT is whichever upload response carries one. Every
+    multipart body is written by hand, so `_headers` goes as exactly `text/plain` and each asset
+    part with exactly its `contentType`, on Bun and Node alike.
+  - `get(name)` is one named Preview, `null` on HTTP 404; any other failure rejects.
+  - `list()` follows `result_info.cursor` when the response carries one, and otherwise
+    `page`/`per_page` with `result_info.total_pages`. A 404 from the Previews endpoint resolves to
+    `[]` only when the parent Worker (`GET /workers/workers/:worker`) is 404 too; otherwise it
+    rejects. An item without `updated_on` uses `created_on`. Other API failures reject.
+  - `remove(name)` treats HTTP 404 as success.
+  - `subdomain()` is the account's workers.dev subdomain (`GET /workers/subdomain`, without
+    `.workers.dev`); it rejects on any failure.
+  - `servePreviews(null)` turns on Preview URLs for the parent Worker without deploying it: it
+    reads `GET /workers/scripts/:worker/subdomain` and, only when `previews_enabled` is off, posts
+    `{ enabled: <unchanged>, previews_enabled: true }`. `servePreviews(host)` puts
+    `{ override_scope, override_existing_origin, override_existing_dns_record: true, origins: [{ hostname: host, previews_enabled: true }] }`
+    to `/workers/scripts/:worker/domains/records`. Like `wrangler deploy`'s own call,
+    `override_scope` makes `host` the Worker's whole set of custom domains: a Worker with other
+    custom domains loses them. Both send `Cloudflare-Workers-Script-Api-Date: 2025-08-01`. It
+    resolves to `{ changed }`.
+- `previewOrigin({ previewName, workerName, subdomain })` is
+  `https://<previewName>-<workerName>.<subdomain>.workers.dev`, and throws when that first label
+  exceeds 63 characters (Cloudflare would truncate it). `customPreviewOrigin({ previewName, host })`
+  is `https://<previewName>.<host>`. `isPreviewOriginOf({ origin, previewName, workerName?, subdomain?, host? })`
+  accepts only an exact https origin (no port, credentials or path) of that Preview on the
+  account's workers.dev or on `host`; without `workerName`, any Worker on that subdomain counts.
+  Use it before trusting a URL read from an editable PR description.
+- `assertAssetsOnlyConfig(config)` refuses a wrangler config that declares anything but static
+  files (a `main`, a binding, a non-empty `vars`, `assets.binding`, `assets.run_worker_first`, or
+  any key outside the static-file allowlist), naming every offending key, and returns the
+  `compatibilityDate`, `htmlHandling` and `notFoundHandling` a named Preview deploys with.
+  `parseJsonc(text)` reads a `wrangler.jsonc`.
+- `waitUntilServing(origin, commit, { timeoutMs, intervalMs, fetch })` polls `<origin>/version.json`
+  (no-store, cache-busted) until it names `commit`, and rejects with what it last saw after the
+  deadline. `runPreviewChecks(checks, origin, fetch)` runs a consumer's
+  `(origin, fetch) => Promise<{ name, ok, detail? }[]>` once (a throw is one failed check);
+  `checkUntilPassing(checks, origin, options)` re-runs it until it passes or the deadline passes.
+  `previewGateUploads(target, gatePassed)` is the gate policy: a `"pull-request"` uploads anyway
+  (best effort), a `"branch"` does not (strict).
+- `upsertPreviewSection(body, facts)` puts the preview block (`<!-- preview:start -->` …
+  `<!-- preview:end -->`) at the very top of a PR description with `{ state, sites, attempted?,
+  deployed?, runUrl?, repository? }`, replacing an earlier block anywhere in the body and leaving
+  the author's text byte for byte. Without `deployed`, or a site without `url`, the earlier block's
+  values (kept in a hidden data comment) carry over, so a failed run still shows what is served.
+  `stripPreviewSection`, `readPreviewSection` and `summarizePreviewState` are its helpers; the
+  markers are `PREVIEW_SECTION_START` / `PREVIEW_SECTION_END`, and `PREVIEW_SECTION_STATES` lists
+  `deploying`, `live`, `failing-checks`, `failed`, `removed` and `expired`.
+- `createPreviewGitHub({ token, repository, apiUrl?, fetch? })` holds the GitHub calls the named
+  Preview commands make: `pullRequest(n)` (facts for `selectPreviewAction` and the body),
+  `setPullRequestBody`, `openPullRequests`, `branchHead`, and Deployments: `startDeployment`
+  (transient environment, `in_progress` with `log_url`, every earlier deployment of the environment
+  marked inactive and deleted), `finishDeployment` (`success` / `failure`) and `removeDeployments`.
+  `previewEnvironment(site, preview)` is the environment name, `preview/<site>/<preview>`.
 - `previewNodeHandler(fetch)` and `listenPreview(fetch, { port, hostname })`, from the `/node`
   export, expose the same Fetch handler or browser bridge to a Node HTTP test runner. The default
   listener is loopback on an ephemeral port. Responses are always `Cache-Control: no-store` to
@@ -128,23 +184,49 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `ASSETS` binding's `/version.json`), the optional dev proxy serves its `basePath` with only the
   string env values, and everything else is `env.ASSETS.fetch(request)`. The `/worker-entry` export
   (`dist/worker-entry.js`) default-exports `createPreviewWorker()`, ready to be a wrangler `main`.
-- `bootPreview({ host?, versionUrl?, live? })`, from the `/boot` export (browser), is the boot
-  loader: it fetches `version.json` (no-store), imports the entry it names, calls its
-  `start(host, { build })` and follows every newer deploy with `createLivePreview`. On failure it
-  writes a readable message into the host (default `#preview`) and rejects.
-- `buildPreview({ entry, outdir, title?, hostId?, esbuild? })` and
-  `stampPreviewVersion({ outdir, version, pr?, builtAt? })`, from the `/build` export (Bun / Node;
+- `bootPreview({ host?, versionUrl?, baseUrl?, live? })`, from the `/boot` export (browser), is the
+  boot loader: it fetches `version.json` (no-store), imports the entry it names, calls its
+  `start(host, { build })` and follows every newer deploy with `createLivePreview`, which polls the
+  same `version.json`. Both resolve against `baseUrl`, the deployment root (default
+  `document.baseURI`). On failure it writes a readable message into the host (default `#preview`)
+  and rejects.
+- `buildPreview({ entry, outdir, title?, hostId?, base?, esbuild? })` and
+  `stampPreviewVersion({ outdir, version, pr?, builtAt?, stateVersion? })`, from the `/build` export (Bun / Node;
   `esbuild` is a peer dependency), build the static preview (hashed `app-<hash>.js`, `preview.js`,
   `index.html`, `build.json`, a development `version.json`) and stamp `version.json` with the
   commit a deploy ships. See [Building the preview](#building-the-preview).
-- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`) is what the preview workflow
-  runs. See [The CLI](#the-cli).
+- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`; for named Previews
+  `deploy-preview`, `remove-preview`, `sweep`, `pr-section`, `deployment`) is what the preview
+  workflow runs. See [The CLI](#the-cli).
 - `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
   browser side: it mounts `current`, follows the status stream (or polls it), and swaps in each newly deployed
   build without reloading the page. Its result is structurally the UI package's `SystemBuild`
   (pass it to `mountSystemHarness(…, { build })`) plus `start()` and `close()`.
   `isChunkLoadFailure(event)` recognizes a lazy chunk that failed to load, and
   `LIVE_PREVIEW_STORAGE_KEY` is where the auto-update preference persists.
+- `createBuildRelay({ provider, liveCommit, enabled?, caps?, cache?, clock?, allowOrigin? })`, from
+  the `/on-demand` export (also re-exported from the package root), is the on-demand build relay's
+  Fetch handler: `GET ?pr=<n>` answers the preview's `PreviewLaunch`, `POST ?pr=<n>` starts a build
+  of the head commit when none exists. `relay.launch(pr, start?)` is the same state machine without
+  HTTP. `createGitHubActionsProvider({ repository, workflow, token, input?, apiUrl?, fetch? })` is
+  the GitHub Actions `BuildProvider`; its failures are `BuildProviderError`s that never hold the
+  provider's body. `mapBuildStep(step)` maps a provider step (undefined for `Post …` and
+  `Complete job`). `previewSourceLiveCommit({ url, fetch? })` is the default `liveCommit`, reading
+  `preview-source.json` (`PREVIEW_SOURCE_PATH`) next to the preview's index;
+  `createPreviewSourceFile(source)` writes it and `parsePreviewSource(value)` validates it.
+  `parsePreviewLaunch(value, pr?)` validates a relay answer. `PREVIEW_LAUNCH_MESSAGES` holds every
+  fixed sentence. `createPreviewLaunchDemo(options)` is a simulated relay with timed builds and
+  the controls in `PREVIEW_LAUNCH_DEMO_CONTROLS`. See [On-demand previews](#on-demand-previews).
+- `watchFreshness({ source, running, interval?, onChange?, visibility?, fetch?, timers? })`, from
+  the `/freshness` export (also re-exported from the package root), tells an open tab whether its
+  build is current. `compareFreshness(running, status)` is the same answer as a pure function,
+  `changedParts(from, to)` the apps whose part differs and `planFreshnessUpdate(from, to)` whether
+  one app or the whole shell updates. `createBuildIdentity({ commit, builtAt?, parts })` and
+  `parseBuildIdentity(value)` make and validate a tab's identity; `parseFreshnessStatus(value)`,
+  `createFreshnessStatusFile(status, path?)`, `freshnessStatusResponse(status)` and
+  `freshnessFromLaunch(launch, current)` read, write, serve and derive the status document
+  (`FRESHNESS_STATUS_PATH`, served with `FRESHNESS_HEADERS`). `documentVisibility()` is the
+  default page visibility. See [Freshness](#freshness).
 - `createBackendHost({ backends, drainMs? })`, `backendControlHandler(host, { path?, importBackend? })`
   and `backendControls(fetch, { url?, pollMs? })`: lazy, swappable in-tab backends and emulators,
   their control routes, and the tab's client; `PreviewBackendDrainError` and
@@ -302,6 +384,17 @@ rules remain the caller's responsibility. Per-PR deployment jobs must be seriali
 the final head re-read narrows, but cannot eliminate, races without a provider compare-and-swap.
 A retry after an ambiguous create response should re-read the named preview before retrying.
 No live cloud credentials were used for the package's acceptance tests.
+
+These parts are a **best guess, not verified against a live account**, taken from wrangler
+4.151.3's source: per-asset uploads behind `wrangler_single_asset_uploads` and their default
+concurrency, 3 concurrent buckets, the Preview URL and custom-domain settings calls with their API
+date header, and `GET /workers/subdomain`. These parts follow the issues that asked for them and
+are not in wrangler at all: `list()` following `result_info.cursor` (wrangler does not list
+Previews; the page fallback is kept), the `created_on` fallback, the 404 parent-Worker check, and
+the `<preview>-<worker>.<subdomain>.workers.dev` and `<preview>.<host>` origin shapes.
+Asset hashes stay `sha256(bytes ∥ 0 ∥ contentType)`. wrangler's are BLAKE3 of the base64 bytes
+plus the extension, which WebCrypto cannot compute. So a Preview reuses its own earlier uploads,
+but not the uploads of a `wrangler deploy` of the parent Worker.
 
 Cloudflare protocol references:
 [official Preview API implementation](https://github.com/cloudflare/workers-sdk/blob/main/packages/deploy-helpers/src/preview/api.ts),
@@ -661,16 +754,30 @@ await buildPreview({
 `buildPreview` empties `outdir`, bundles the app as one hashed entry (`app-<hash>.js`, ESM,
 code-split, ES2022, minified; `esbuild` options are merged in, while the entry, output, format,
 splitting and file naming stay fixed), bundles the stable boot loader `preview.js` (which calls
-`bootPreview({ host: "#<hostId>" })`), and writes `build.json` (`{ entry }`), a development
-`version.json` and `index.html` (`<main id="<hostId>">` plus the boot script; `hostId` defaults to
-`preview`). The build may be a cache replay of an older commit's identical output, so the commit is
-stamped at deploy time by `stampPreviewVersion` (or `mockingbird-preview stamp`), which writes
-`version.json` as `{ version, builtAt, entry, pr? }`.
+`bootPreview({ host: "#<hostId>", baseUrl: <its own directory> })`), and writes `build.json`
+(`{ entry }`), a development `version.json` and `index.html` (`<main id="<hostId>">` plus the boot
+script; `hostId` defaults to `preview`). `index.html` loads the boot script by absolute path,
+`<base>preview.js` (`base` defaults to `/`; set it, with leading and trailing slashes, when the
+preview is served under a sub-path), and the loader resolves `version.json` and every entry against
+its own URL. So the single-page-application fallback can serve `index.html` at any deep link
+(`/settings/profile`) and the preview still boots, where a page-relative `./preview.js` would have
+asked for `/settings/preview.js` and received HTML. The build may be a cache replay of an older
+commit's identical output, so the commit is stamped at deploy time by `stampPreviewVersion` (or
+`mockingbird-preview stamp`), which writes `version.json` as `{ version, builtAt, entry, pr?,
+stateVersion? }`.
+
+`stateVersion` names the shape of the data the preview keeps in the tab (a schema or seed
+version). When the newly deployed `version.json` names a different one than the tab runs (or one
+starts or stops naming one), the update resets that data: `createLivePreview` reports
+`update.resetsData: true` and never applies it on its own (no countdown, not in a hidden tab, not
+after a lazy chunk fails to load); `applyUpdate()` still does when the person asks. The UI
+package's toast and Preview card say so, and the card offers Save first.
 
 ### The CLI
 
 ```sh
-mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>] \
+  [--state-version <v>]
 mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha> \
   [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
 mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>] \
@@ -685,6 +792,48 @@ and deletes the file. It prints one line and always exits 0, turning any failure
 `assets` (`binding: "ASSETS"`, `not_found_handling: "single-page-application"`,
 `run_worker_first: ["/__preview/*", …]`) and, with `--pr`, the `PREVIEW_PR` var.
 
+#### Named Previews of one assets-only Worker
+
+The reusable workflow's `mode: named-previews` ([docs/PREVIEWS.md](../../../docs/PREVIEWS.md))
+runs these commands. They read `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `GITHUB_TOKEN`
+(plus `GITHUB_API_URL` / `GITHUB_SERVER_URL` when set) from the environment.
+
+```sh
+mockingbird-preview deploy-preview --worker <name> --outdir <dir> --commit <sha> \
+  (--pr <n> | --branch <name>) --repository <owner/name> [--site <name>] [--name <preview>] \
+  [--config <wrangler.json(c)>] [--host <domain>] [--checks <module>] [--timeout-seconds 180] \
+  [--result <file>]
+mockingbird-preview remove-preview --worker <name> (--pr <n> | --name <preview>)
+mockingbird-preview sweep --worker <name> [--retention-days 7] [--capacity 80] \
+  (--repository <owner/name> | --open-prs <n,n,...>)
+mockingbird-preview pr-section --repository <owner/name> --pr <n> [--state auto|<state>] \
+  [--site <name>]... [--results <dir>] [--attempted <sha>] [--run-url <url>]
+mockingbird-preview deployment --repository <owner/name> --environment <env> \
+  --state in_progress|success|failure|removed [--ref <sha>] [--url <url>] [--run-url <url>]
+```
+
+- `deploy-preview` deploys `outdir` as Preview `pr-<n>` (or the branch's name) of the Worker:
+  it refuses a `--config` that is not assets-only before any network call, stamps `version.json`,
+  runs the `--checks` module's default export on the built directory (the gate), calls
+  `createCloudflarePreviews(…).deploy()` (which re-reads the PR or branch head before upload and
+  before deploying, and removes the Preview of a PR that closed meanwhile), waits until
+  `https://<preview>.<host>` serves the commit, falling back to the Preview's own URLs within a
+  60 s share of the deadline, then runs the checks against it until they pass. It writes
+  `{ site, worker, name, state, attempted, deployed?, url?, gate?, after?, message? }` to
+  `--result`, with `state` `live`, `failing-checks`, `failed`, `skipped` or `removed`, and exits 1
+  only for `failed`. A branch whose gate fails uploads nothing.
+- `remove-preview` deletes the Preview and lists the Worker's Previews to confirm it is gone; it
+  exits 1 when it is still listed.
+- `sweep` lists the Worker's Previews, reads open PRs (`--repository`, with `GITHUB_TOKEN`) or takes
+  `--open-prs`, plans with `planPreviewSweep` (only `pr-<n>` names are managed), deletes each
+  removed Preview, marks an open PR's section `expired`, and exits 1 if any removed one is still
+  listed or a deletion failed.
+- `pr-section` rewrites the PR's description block with `upsertPreviewSection`, from `--results`
+  (the files `deploy-preview --result` wrote) and `--site` names; `--state auto` is the worst site
+  state.
+- `deployment` manages the PR's GitHub Deployment of one site: `in_progress` creates one (and
+  removes the earlier ones), `success` / `failure` finishes the newest, `removed` deletes them all.
+
 ### Browser boot loader
 
 `buildPreview` emits the boot loader for you. By hand it is one call:
@@ -695,9 +844,13 @@ import { bootPreview } from "@crvouga/mockingbird-preview/boot"
 await bootPreview({ host: "#app", live: { storage: localStorage } })
 ```
 
-It fetches `./version.json` (no-store), creates `createLivePreview({ current, pr, load })` where
-`load` imports the version's entry relative to the page and calls its `start(host, { build: live })`
-(which returns a disposer), and starts it. The lower-level client is `createLivePreview`:
+It fetches `./version.json` (no-store), creates `createLivePreview({ current, pr, load, versionUrl })`
+(the live poller reads the same `version.json`) where `load` imports the version's entry and calls
+its `start(host, { build: live })`
+(which returns a disposer), and starts it. Both resolve against `baseUrl`, default
+`document.baseURI`; by hand in a module served from the deployment root, pass
+`baseUrl: new URL("./", import.meta.url).href` so deep links boot. The lower-level client is
+`createLivePreview`:
 
 ```ts
 import { createLivePreview, type PreviewVersion } from "@crvouga/mockingbird-preview"
@@ -735,6 +888,98 @@ version). A lazy chunk that fails to load (`Failed to fetch dynamically imported
 `ChunkLoadError`, …) means the tab's build was replaced: the client checks `/version.json` and
 applies the new build at once. If the first mount fails, `start()` still connects and then
 rejects, so a fixed build replaces the broken one as soon as it deploys.
+
+## On-demand previews
+
+Build a pull request's preview only when someone opens it, instead of on every push. A small
+trusted relay (an edge function) serves `createBuildRelay()`; the launcher page from
+`@crvouga/mockingbird-ui/launcher` polls it.
+
+```ts
+import {
+  createBuildRelay,
+  createGitHubActionsProvider,
+  previewSourceLiveCommit,
+} from "@crvouga/mockingbird-preview/on-demand"
+
+const relay = createBuildRelay({
+  provider: createGitHubActionsProvider({
+    repository: "acme/shop",
+    workflow: "preview.yml", // has `on: workflow_dispatch: inputs: pull_request`
+    token: process.env.PREVIEW_DISPATCH_TOKEN,
+  }),
+  liveCommit: previewSourceLiveCommit({ url: (pr) => `https://shop-pr-${pr}.acme.workers.dev/` }),
+})
+
+export default { fetch: relay }
+```
+
+`GET ?pr=<n>` answers a `PreviewLaunch` for the PR's current head commit; `POST ?pr=<n>` also
+starts a build when none exists. Each answer carries `pullRequest`, `head`, `estimateSeconds`
+(the median of the last ten successful on-demand runs) and, while the head is not live, the older
+commit that is (`live: { commit, url }`):
+
+| `state` | When | HTTP |
+| --- | --- | --- |
+| `idle` | Nothing has built the head commit. | 200 |
+| `queued` / `building` | A run for the head is queued or in progress, or a dispatch was just sent (`run`, `steps`). | 200, 202 after a dispatch |
+| `publishing` | A step matching `publishStep` (`/publish\|deploy/i`) runs, or the run succeeded and the commit is not live yet. | 200 |
+| `live` | `liveCommit(pr)` says the head commit is live (`commit`, `url`), whatever the runs say. | 200 |
+| `failed` | The latest run failed or was cancelled, or succeeded but was not live within `caps.publishMs` (10 min). `retryable`; POST starts a new build. | 200 |
+| `unsupported` | The dispatch was refused with HTTP 422: the branch's workflow predates the input. Says to merge the base branch. | 200 |
+| `closed` | The PR is closed, merged, from a fork, or missing. Nothing is dispatched. | 200 |
+| `unavailable` | Switched off (`enabled: false`), no token, `caps.attempts` (3) failures for the commit, `caps.concurrent` (8) builds already queued or running (HTTP 429 on POST), or the provider failed (HTTP 503). | 200 / 429 / 503 |
+
+- **Idempotent per commit.** A dispatch counts as `queued` until the provider lists a new run for
+  the head (or `dispatchGraceMs`, 2 min, passes). Calls for one PR are serialized within a relay
+  instance, so concurrent callers send one dispatch. Separate relay instances (several edge
+  isolates) do not share this memory: two instances racing on one fresh head can each dispatch;
+  give the workflow a `concurrency` group per PR to collapse them.
+- **Cheap to poll.** `GET` results are memoized per PR for 3 s, PR facts for 30 s and the estimate
+  for 10 min (`cache`), so a page polling every 5 s costs about two provider calls per poll (the
+  runs, and the running job's steps).
+- **Steps.** GitHub job steps map to `pending`, `running`, `done`, `failed` or `skipped`;
+  `Post …` and `Complete job` are dropped.
+- **Nothing private leaks.** Answers hold only the PR number, commits, the run link and step names:
+  never the token, the PR title, the branch name or a provider's error body.
+- **Security model.** Only open, same-repository PRs are built, and only on their own branch (the
+  dispatch's `ref` is the PR's head branch), so PR code never writes the base branch's caches.
+- **Which commit is live.** Every build writes `preview-source.json` (`{ commit, pullRequest,
+  builtAt, parts? }`, `createPreviewSourceFile`) next to its index; `previewSourceLiveCommit` reads
+  it with `no-store`, so the relay needs nothing from CI to know what is live.
+
+The GitHub provider calls `GET /repos/{repo}/pulls/{n}`, `GET …/actions/workflows/{workflow}/runs`
+(`head_sha`, `event=workflow_dispatch`; `status=queued|in_progress` for the cap; `status=success`
+for the estimate), `GET …/actions/runs/{id}/jobs` and `POST …/actions/workflows/{workflow}/dispatches`
+(`{ ref, inputs: { pull_request: "<n>" } }`), per the GitHub REST documentation; it is tested
+against recorded shapes, not a live repository. Other CI systems implement `BuildProvider`.
+
+`createPreviewLaunchDemo({ buildSeconds?, queueSeconds?, publishSeconds?, clock? })` runs the real
+relay against a simulated provider with timed builds; its `fetch` also answers `POST
+/demo/<push|fail|offline|online|token-off|token-on>`. The UI catalog's launcher stories use it.
+
+## Freshness
+
+An open tab knows which build it runs, which build is current for its preview, and what is
+happening to the next one.
+
+- **Build identity.** The tab carries `{ commit, builtAt, parts: { [appId]: pin } }`, a pin being
+  the content hash of that app's part (`createBuildIdentity` takes a `PreviewArtifact` per part).
+- **Status document.** One small JSON per preview (per PR, and per base branch):
+  `{ current: BuildIdentity | null, next?: { state: "queued" | "building" | "publishing" | "failed", commit, startedAt, run } }`.
+  Trusted CI writes it next to the deployment with `createFreshnessStatusFile(status)`, which also
+  returns the `_headers` lines (`no-store`, `access-control-allow-origin: *`); a Worker or the
+  on-demand relay serves it with `freshnessStatusResponse(freshnessFromLaunch(launch, current))`.
+- **Watching.** `watchFreshness({ source: "/freshness.json", running })` polls every 30 s while
+  visible, does nothing while hidden, checks at once on focus, and yields `current`, `newer-live`
+  (with `changed` apps and an `update` plan), `newer-building` / `newer-failed` (with the run link),
+  or `unknown` (retries doubling up to 10 min). It never throws into the app.
+- **Updating.** `planFreshnessUpdate` answers `{ kind: "app", app }` when exactly one app's part
+  changed (and no app was added or removed), else `{ kind: "reload" }`. Swapping one app's code in
+  place is the app's own job (#838); a reload starts fresh unless your app restores emulator and
+  database state from a snapshot (#783). Nothing here preserves state on its own.
+
+`mountFreshnessIndicator` and `freshnessBuild` in `@crvouga/mockingbird-ui` draw it.
 
 ## Validation
 

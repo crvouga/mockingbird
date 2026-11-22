@@ -107,4 +107,39 @@ describe("bootPreview", () => {
     expect(host.textContent).toContain("Unable to start the preview:")
     expect(host.textContent).toContain("exports no start")
   })
+
+  // #867: the live poller read the absolute /version.json, whatever the boot loader had read.
+  test("the live poller reads the same version.json the boot loader read", async () => {
+    const { opts, fetched } = options({ versionUrl: "./v1/version.json" })
+    const live = await bootPreview(opts)
+    expect(fetched[0]).toBe(`${BASE}v1/version.json`)
+    const polled = fetched.filter((url) => url.endsWith("version.json"))
+    expect(polled.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(polled)).toEqual(new Set([`${BASE}v1/version.json`]))
+    live.close()
+  })
+
+  test("under a sub-path deployment, boot and live polling read the sub-path's version.json", async () => {
+    const root = "https://example.test/apps/lab/"
+    const { opts, fetched, imported } = options({ baseUrl: root })
+    const live = await bootPreview({
+      ...opts,
+      live: { ...opts.live, origin: "https://example.test" },
+    })
+    expect(imported).toEqual([`${root}app-abc.js`])
+    const polled = fetched.filter((url) => url.endsWith("version.json"))
+    expect(polled.length).toBeGreaterThanOrEqual(2)
+    expect(new Set(polled)).toEqual(new Set([`${root}version.json`]))
+    live.close()
+  })
+
+  test("an explicit live.versionUrl still wins", async () => {
+    const { opts, fetched } = options()
+    const live = await bootPreview({
+      ...opts,
+      live: { ...opts.live, versionUrl: "/elsewhere/version.json" },
+    })
+    expect(fetched).toContain(`${BASE}elsewhere/version.json`)
+    live.close()
+  })
 })

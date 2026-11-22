@@ -240,6 +240,54 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 
 `mountSystemHarness` keeps working with plain `SystemSurface`s; the registry's fields (`defaultEnabled`, `route`, `backends`, `version`, `health`) are optional there too, and `harness.update(id, next?)` and `harness.notify(notice)` are available on any harness.
 
+## Launcher page
+
+`@crvouga/mockingbird-ui/launcher` is the page a pull request links to before anything is built. It polls an on-demand build relay (`GET <relay>?pr=<n>` answers a `PreviewLaunch`; `@crvouga/mockingbird-preview`'s `createBuildRelay()` is one), starts the build of the head commit with `POST <relay>?pr=<n>`, shows it live and opens the preview when it is ready, with no refresh. It is dependency-free and needs no worker, backends or emulators.
+
+- **Starting**: an `idle` state sends exactly one start request per head commit, across rerenders, a second mount (React StrictMode) and repeated polls; a failed start (network error, HTTP 429 or any non-2xx) is forgotten so the next poll retries.
+- **Building**: a Queued → Building → Publishing → Ready stepper, the CI steps with friendly labels ("Run actions/checkout@v4" reads "Getting the code"; unknown names lose a leading "Run "), elapsed time ticking every second from the run's start, a progress bar from `estimateSeconds` that stops at 95% until the preview is live (indeterminate without an estimate), and a link to the build log. When an older commit is live it offers "Open the current version (abc1234)".
+- **Ready**: shows Ready for 800 ms, then calls `onLive(url)` (default `location.replace(url)`). With `stay` it shows an Open preview link instead and keeps watching: a newer head commit is built while the live one stays on offer.
+- **Failed**: the reason, Try again (a start request) and the log. `unsupported`, `closed` and `unavailable` show the relay's message and never retry by themselves.
+- **Polling**: every 5 s while a build runs, 15 s while idle or failed, 30 s while ready and staying, never for terminal states. It pauses while the tab is hidden and refetches when it is shown or focused.
+- **Reconnecting**: HTTP 503, a network error, or a body that is not a `PreviewLaunch` for this pull request (a proxy's HTML fallback, another PR) shows a calm "Reconnecting…" and retries every 5 s.
+- **Accessibility**: the headline sits in an `aria-live="polite"` region, every action is a real link or button, reduced motion stops the animations, light and dark follow the system, and the layout fits a phone without sideways scrolling. Only the pull request number and short commit SHAs are shown; fields the launcher does not know are dropped.
+
+A static page served at `/pr/<number>` (the prefix is configurable; `/pr/0`, leading zeros and trailing segments are rejected):
+
+```html
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <!-- PREVIEW_LAUNCHER_HEAD, verbatim: the colour scheme and background, so nothing flashes -->
+    <meta name="color-scheme" content="light dark"><style>html{color-scheme:light dark;background:#f4f5f7;color:#14181f}body{margin:0;min-height:100vh}@media (prefers-color-scheme:dark){html{background:#0e1116;color:#e7eaf0}}</style>
+    <script type="module" src="./launcher.js"></script>
+  </head>
+  <body></body>
+</html>
+```
+
+```ts
+// launcher.js
+import { startPreviewLauncher } from "@crvouga/mockingbird-ui/launcher"
+
+startPreviewLauncher({ relay: "/api/preview-launch", prefix: "/pr/" })
+```
+
+Or mount it into your own page:
+
+```ts
+import { mountPreviewLauncher } from "@crvouga/mockingbird-ui/launcher"
+
+declare const host: HTMLElement
+const launcher = mountPreviewLauncher(host, { pullRequest: 42, relay: "/api/preview-launch", stay: true })
+launcher.refresh() // fetch now
+launcher.destroy()
+```
+
+Inject `fetch`, `now` and `timers` to drive it in tests; `launcherView(input, now, { stay })` is the pure view model it paints, and `createLauncherController()` the polling and start logic without a DOM.
+
 ## API
 
 - `@crvouga/mockingbird-ui/react`, `/react/server`, `/react/client`, `/document`, `/styles`, `/styles.css`, `/theme.css`, `/tokens.css`: the design system, above.
@@ -247,7 +295,7 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 - `mountSystemHarness`: mounts lazy application surfaces and manages switching and teardown.
 - `SystemSurface`, `SystemHarness`, `SystemHarnessOptions`: TypeScript lifecycle contracts.
 - `SystemServices`, `SystemService`, `SystemServiceMode`, `SystemDevStatus`: what the System screen lists and switches.
-- `SystemBuild`, `SystemBuildState`: a live preview's build, checks, connection and pending update, and the actions on it (`applyUpdate`, `postpone`, `setAutoUpdate`), for the switcher's status dot, the update toast and System's Preview card.
+- `SystemBuild`, `SystemBuildState`: a live preview's build, checks, connection and pending update, and the actions on it (`applyUpdate`, `postpone`, `setAutoUpdate`), for the switcher's status dot, the update toast and System's Preview card. `update.resetsData: true` marks an update that resets the preview's in-tab data (its `stateVersion` differs): the toast says "New version abc1234 resets this preview's data" without a countdown (`data-resets-data="true"`), and the Preview card says it too (`data-testid="system-preview-resets-data"`) with **Save** before **Update now** when the System screen has a snapshot to save (`{ save(): Promise<Blob> }`, downloaded as `preview-data-<sha>`). Such an update applies only when the person presses Update now.
 - `SystemIcon`, `SYSTEM_ICONS`: a surface's icon, and Mockingbird's icons for the surfaces it provides.
 - `ROTATION_KEY`, `ORDER_KEY`, `INCLUDED_KEY`: the localStorage keys of the surfaces left out of the switcher, of its order, and of the off-by-default surfaces switched on.
 - `defineSystem`, `mountSystem`, `PreviewApp`, `PreviewSystem`, `PreviewRegistryError`: the app registry and the shell it mounts.
@@ -258,3 +306,5 @@ const preview = mountSystem(host, system, { manifest, syncUrl: true })
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.
+- `@crvouga/mockingbird-ui/launcher`: `mountPreviewLauncher`, `startPreviewLauncher`, `matchLauncherPath`, `launcherView`, `parseLaunch`, `createLauncherController`, `PREVIEW_LAUNCHER_HEAD`, `PREVIEW_LAUNCHER_CSS` and the `PreviewLaunch` type (also exported from the root).
+- `@crvouga/mockingbird-ui/freshness` (also exported from the root): `mountFreshnessIndicator(host, { freshness, onUpdate?, compareUrl?, now? })` draws a quiet dot and one line saying whether a newer build is building, live or failed, with **Update now** (one app's part, or a reload), **What changed** (the commit range) and **Keep this version**. `freshnessBuild({ freshness, onUpdate?, pr?, auto? })` turns the same signal into a `SystemBuild` for `mountSystemHarness(…, { build })`: the switcher's dot, the update toast and System's Preview card. `freshnessView(value, now, kept?)` is the pure view model and `FRESHNESS_CSS` its stylesheet. A `FreshnessIdentity` may carry `stateVersion`; a newer live build with a different one is `resetsData` on the `SystemBuild`, says "Updating resets this preview's data." in the indicator, and is never applied on its own, even with `auto`. `freshness` is `watchFreshness()` from `@crvouga/mockingbird-preview/freshness` (structurally a `FreshnessFeed` of `FreshnessValue`s). The default update is `location.reload()`, which keeps no in-memory state: pass `onUpdate` to swap one app's code in place or to restore a snapshot.
