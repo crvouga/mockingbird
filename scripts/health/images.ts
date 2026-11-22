@@ -2,7 +2,7 @@ import { REPO } from "../release/lib.ts"
 import { inspect, json, request, workflowRuns } from "./io.ts"
 import { type HealthItem, report } from "./report.ts"
 
-const IMAGE = "crvouga-organization/chrisvouga-mockingbird-docs"
+const IMAGE = "crvouga/chrisvouga-mockingbird-docs"
 const ACCEPT =
   "application/vnd.oci.image.index.v1+json, application/vnd.oci.image.manifest.v1+json, application/vnd.docker.distribution.manifest.v2+json, application/vnd.docker.distribution.manifest.list.v2+json"
 type ImageManifest = {

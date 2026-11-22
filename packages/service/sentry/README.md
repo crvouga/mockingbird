@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-sentry
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 A stateful Sentry SDK transport and event/issue assertion emulator. This initial package is **wip**:
 its bounded surface follows the official envelope protocol and Relay responses, not the entire

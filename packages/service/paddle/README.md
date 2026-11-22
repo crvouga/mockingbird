@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-paddle
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Paddle Billing** API for test suites. Customers, addresses, businesses,
 products and prices behave as Paddle's do (validation, `invalid_field` errors, `include=`,
@@ -11,7 +11,7 @@ checkout in one call, run a renewal, fail a payment**. Every change produces the
 would emit, listed at `GET /events` and delivered as a `Paddle-Signature` webhook that the
 official SDK's `paddle.webhooks.unmarshal` verifies.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/paddle/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/paddle/SUPPORT.md)
 - `openapi.yaml` is hand-authored from Paddle's API reference and the wire types of
   `@paddle/paddle-node-sdk@3.10.0`.
 
@@ -231,4 +231,4 @@ map API keys to namespaces: `PUT /__admin/credentials {"credentials": {"<PADDLE_
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--webhook-url`, `--webhook-secret`, `--payment-link`, `--fixtures`); port 8795. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

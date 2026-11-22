@@ -88,4 +88,4 @@ Behavior:
 - `@crvouga/mockingbird-core`: the `FetchAPI` contract.
 - `@crvouga/mockingbird-adapter-bun`: the same adapter for `Bun.serve`.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

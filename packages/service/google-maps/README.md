@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-google-maps
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Emulator of the **Google Maps Platform** surface our member app uses for addresses: Places
 Autocomplete, Place Details and Find Place From Text (the JSON web services), the Geocoding API,
@@ -11,7 +11,7 @@ checks. Answers come from a corpus
 matching our QA fixtures, so the address step that waits 5 s for Google predictions (and then
 falls back to manual entry) resolves instantly and deterministically.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/google-maps/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/google-maps/SUPPORT.md)
 - Google publishes no OpenAPI document for these endpoints: `openapi.yaml` is hand-authored
   from Google's documented shapes and the fields our consumer reads. Address Validation follows
   the [REST reference](https://developers.google.com/maps/documentation/address-validation/reference/rest/v1/TopLevel/validateAddress)
@@ -251,4 +251,4 @@ records operation, status, the resolved `placeId` and the `sessionToken`, and fo
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--api-key`, `--public-url`); port 8814. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -15,14 +15,14 @@ account, or any self-hosted service.
   (`.github/actions/setup`). There is no remote cache or token.
 - **Hosting** — the docs site ships as the fleet service `mockingbird-docs`: `sites/docs/Dockerfile`
   (build context = repo root) is built and pushed to GHCR by `.github/workflows/publish.yml` on every
-  push to `main`, then deployed by `crvouga-organization/personal`. Never deploy from Railway or push images by
-  hand; the service entry lives in `crvouga-organization/personal`'s OpenTofu inventory and is requested with a
+  push to `main`, then deployed by `crvouga/personal`. Never deploy from Railway or push images by
+  hand; the service entry lives in `crvouga/personal`'s OpenTofu inventory and is requested with a
   `[hosting]` issue there. Hosting contract: https://www.chrisvouga.dev/llms-cloud.txt (re-fetch
   it, don't trust a cached copy).
 - **Fleet Cloud** — `sites/fleet` is the hosted, multi-tenant fleet service (`mockingbird-fleet`): one
   stateless image with an OpenAPI control plane, a dashboard that only calls that API, and emulator
   state in object storage ([README](sites/fleet/README.md)). Its PostgreSQL schema, bucket prefix and
-  sign-in come from the same hosting contract; request them with issues on `crvouga-organization/personal`, never by hand.
+  sign-in come from the same hosting contract; request them with issues on `crvouga/personal`, never by hand.
 
 UI work happens in the Storybook catalog (`bun run storybook`, [README](sites/storybook/README.md)):
 every page, screen, section and state of every emulator, admin UI, example app and the docs site is

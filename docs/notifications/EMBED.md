@@ -81,4 +81,4 @@ The UI is built with React and [HeroUI](https://heroui.com), Mockingbird's desig
 
 ## A working example
 
-The [lab ordering example](https://github.com/crvouga-organization/mockingbird/tree/main/packages/examples/medical-testing) mounts it as its **Notifications** tab, with Twilio, Resend and FCM emulators in the same tab. [Launch it](https://mockingbird.chrisvouga.dev/examples/medical-testing) and place an order.
+The [lab ordering example](https://github.com/crvouga/mockingbird/tree/main/packages/examples/medical-testing) mounts it as its **Notifications** tab, with Twilio, Resend and FCM emulators in the same tab. [Launch it](https://mockingbird.chrisvouga.dev/examples/medical-testing) and place an order.

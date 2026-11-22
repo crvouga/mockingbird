@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-emqx
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of an **EMQX 5** MQTT broker for test suites and local development: an MQTT 5
 broker over TCP and WebSocket (`/mqtt`), EMQX's password and JWT authentication with JWT ACLs,
@@ -9,7 +9,7 @@ client needs (`POST /api/v5/publish`, `DELETE /api/v5/clients/{clientid}`). It r
 process on OS-assigned ports, with no installed broker, Docker, or native binary, and session
 expiry follows a clock the suite moves instead of waiting.
 
-- Operation coverage (HTTP): [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/emqx/SUPPORT.md)
+- Operation coverage (HTTP): [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/emqx/SUPPORT.md)
 - No EMQX broker was available as an oracle, so behaviour follows the
   [MQTT 5.0 specification](https://docs.oasis-open.org/mqtt/mqtt/v5.0/os/mqtt-v5.0-os.html), the
   [EMQX documentation](https://docs.emqx.com/en/emqx/latest/) and the EMQX 5.8.6 source. What
@@ -208,4 +208,4 @@ Taken from the EMQX 5.8.6 source or left open, not observed on a broker:
 | `document`, `operationIds`, `supportedOperationIds` | values | The REST contract and its operation ids. |
 | `createServer`, `connectStream`, `serveTarget`, `DEFAULT_PORT`, `DEFAULT_MQTT_PORT` (`./server`) | Node | Serve HTTP, WebSocket and TCP (`{url, mqttUrl, mqttPort, wsUrl, runtime, close()}`; options add `port`, `mqttPort`, `host`, `sweepMs`); an in-process MQTT stream; the `serve` CLI target; ports 8850 and 1883. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-bedrock
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful, scriptable emulator of **Amazon Bedrock Runtime** for test suites: `Converse`,
 `ConverseStream` (byte-exact `application/vnd.amazon.eventstream` frames), `InvokeModel`
@@ -12,7 +12,7 @@ sees *dizzy* with `report_rx_symptom` available, emit this `toolUse`; after the 
 comes back, say this". Chat turns, approval cards, guardrail blocks, structured output and
 throttles become deterministic and take milliseconds.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/bedrock/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/bedrock/SUPPORT.md)
 - Proven with the official clients our consumer pins: `@aws-sdk/client-bedrock-runtime@3.1132.0`,
   `@aws-sdk/client-bedrock-agentcore@3.1074.0`, `@ai-sdk/amazon-bedrock@4.0.176` + `ai@6.0.283`.
 
@@ -273,7 +273,7 @@ cannot add headers, so map each worker's access key id:
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT`, `listenH2c` (`./server`) | Node | Serve h2c + HTTP/1.1 on one port; the `serve` CLI target; port 8796; the dual-protocol listener for any Fetch handler. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).
 
 ### In-process duplex streams
 

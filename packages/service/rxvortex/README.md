@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-rxvortex
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **RxVortex (Strive)** compounding-pharmacy API for test suites: the
 client-credentials token, order submit, status, cancel, the recovery lookup by sender order id,
@@ -8,7 +8,7 @@ the preset catalog, and the signed status webhooks the pharmacy posts back. Orde
 when a test says so (an admin transition or an auto-advance path on the emulator clock), so an eRx
 suite that waited up to 60 s on the real sandbox resolves in milliseconds.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/rxvortex/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/rxvortex/SUPPORT.md)
 - The vendor publishes no spec: the contract (`openapi.yaml`) is hand-authored from the wire
   shapes our consumer reads and writes, and every field fallback it relies on is served.
 
@@ -136,4 +136,4 @@ the client id they were issued to).
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT`, `loadCatalogFile` (`./server`) | Node | Serve over `node:http` (auto-advance ticks every 100 ms); the `serve` CLI target; port 8791; read a `--catalog` file. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -8,7 +8,7 @@
 #   permissions: { contents: read, pull-requests: write }
 #   jobs:
 #     preview:
-#       uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+#       uses: crvouga/mockingbird/.github/workflows/preview.yml@main
 #       with: { name: my-app, build: bun run preview:build, outdir: preview-dist }
 #       secrets:
 #         CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

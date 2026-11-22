@@ -106,7 +106,7 @@ flowchart LR
    permissions: { contents: read, pull-requests: write }
    jobs:
      preview:
-       uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+       uses: crvouga/mockingbird/.github/workflows/preview.yml@main
        with:
          name: my-app
          build: bun scripts/build-preview.ts
@@ -281,7 +281,7 @@ output:
 ```yaml
 jobs:
   preview:
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
     with: { name: my-app, build: bun run preview:build, outdir: preview-dist, pr-link: false }
     secrets: { ... }
   link:
@@ -298,7 +298,7 @@ jobs:
 only Vercel credentials:
 
 ```yaml
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
     with:
       name: my-app
       hosting: vercel
@@ -367,7 +367,7 @@ on:
 permissions: { contents: read, pull-requests: write, deployments: write }
 jobs:
   preview:
-    uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
+    uses: crvouga/mockingbird/.github/workflows/preview.yml@main
     with:
       mode: named-previews
       host: preview.example.com

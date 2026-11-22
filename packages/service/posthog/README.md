@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-posthog
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of **PostHog** for test suites: remote feature-flag evaluation (`/flags` v2 and
 the legacy `/decide` shape), remote config, event capture (`/batch/`, `/e/`, `/i/v0/e/`),
@@ -10,7 +10,7 @@ is set per test through admin routes, so paths our in-app overrides cannot reach
 booleans, `getConfig` payloads, EMR server gates, member-app variants) become controllable, and
 a stack run never reaches `us.i.posthog.com`.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/posthog/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/posthog/SUPPORT.md)
 - The contract (`openapi.yaml`) is hand-authored from the wire shapes of posthog-node 5.52.2,
   `@posthog/core` 1.54.0 (posthog-react-native 4.72.1's base) and posthog-js 1.433.2, and from
   our own raw fetches. All three SDKs are proven against it (`posthog.sdk.test.ts`).
@@ -183,4 +183,4 @@ Send the personal key in the Authorization header on each page request.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--import-flags dev\|prod`, `--session-recording`); port 8795. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

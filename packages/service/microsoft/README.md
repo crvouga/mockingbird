@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-microsoft
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 OAuth authorize, token exchange, userinfo, OIDC discovery, Graph /me, logout, token revocation. Runs through Mockingbird's portable Fetch runtime with SQLite persistence, namespaces, checkpoints, faults and admin controls.
 

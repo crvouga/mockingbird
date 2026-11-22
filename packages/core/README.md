@@ -125,4 +125,4 @@ their `this` binding.
 - `@crvouga/mockingbird-adapter-bun`: serve a `FetchAPI` with `Bun.serve`.
 - `@crvouga/mockingbird-service`: build a `FetchAPI` from an OpenAPI document.
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

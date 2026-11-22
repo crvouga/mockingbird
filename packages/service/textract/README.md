@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-textract
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful Amazon Textract emulator for the official SDK v3 client. It models synchronous and asynchronous document analysis, connected block graphs, stable pagination, idempotency, and completion notifications.
 

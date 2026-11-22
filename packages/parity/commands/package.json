@@ -18,10 +18,10 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/crvouga-organization/mockingbird.git",
+    "url": "git+https://github.com/crvouga/mockingbird.git",
     "directory": "packages/parity/commands"
   },
-  "homepage": "https://github.com/crvouga-organization/mockingbird/tree/main/packages/parity/commands#readme",
+  "homepage": "https://github.com/crvouga/mockingbird/tree/main/packages/parity/commands#readme",
   "keywords": [
     "mockingbird",
     "parity",

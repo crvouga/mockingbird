@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-adapter-browser
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Run server-oriented JavaScript in static, browser-local system previews. This adapter supplies a
 shared virtual filesystem and network plus a bundler configuration for Node standard-library

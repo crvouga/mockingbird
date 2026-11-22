@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-google-calendar
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of **Google Calendar v3** and **Google OAuth 2.0** for test suites, covering what
 our EMR backend calls: `calendarList.list`, `calendars.insert`, `events.list` (time windows,
@@ -10,7 +10,7 @@ update/delete`, `events.watch` with real push notifications to the channel's add
 OpenID userinfo. Practitioners connect, sync EMR appointments and receive calendar pushes
 without a Google account.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/google-calendar/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/google-calendar/SUPPORT.md)
 - The contract (`openapi.yaml`) is trimmed from Google's Calendar v3 discovery document and
   OAuth docs to what `google-calendar-service.ts`, `authorize.business.ts` and the webhook
   controller use.
@@ -186,4 +186,4 @@ generated calendar module over googleapis-common 7 / gaxios 6; the full `googlea
 | `document`, `operationIds`, `supportedOperationIds` | values | The OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--client`, `--require-https-webhooks`); port 8820. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-step-functions
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful AWS Step Functions emulator for the official SFN SDK v3 client. It models Standard execution identity, input/output strings, deterministic terminal transitions, callback tokens, stop requests, ordered history, pagination, and shared-clock scripts without contacting AWS.
 

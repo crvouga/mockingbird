@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-unsplash
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP Unsplash v1 photo search with deterministic results and synthetic local image bytes.
 

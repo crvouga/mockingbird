@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-firstpromoter
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **FirstPromoter v2** affiliate API for test suites: promoter create (adopt
 before create by `cust_id`), lookups by id / `cust_id` / `ref_token` / email, list, update,
@@ -11,7 +11,7 @@ The legacy **v1** promoters, signup-tracking and campaigns-report routes run ove
 recorded in the journal, so a checkout suite can assert what the post-checkout job sent instead
 of producing a failed job.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/firstpromoter/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/firstpromoter/SUPPORT.md)
 - FirstPromoter publishes no machine-readable spec: the contract (`openapi.yaml`) is
   hand-authored from our consumer's requests and the zod schemas it validates responses with.
 
@@ -238,4 +238,4 @@ Bearer token or, for v1 calls, the `X-API-KEY` value.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target; port 8812. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

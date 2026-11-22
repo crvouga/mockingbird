@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-intercom
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Intercom REST API (version 2.11)** for test suites. It serves the calls
 our backend makes:
@@ -18,7 +18,7 @@ replies) send Intercom's `notification_event` webhooks, signed with
 `X-Hub-Signature: sha1=<hex HMAC-SHA1>`, to both of our receivers: the backend's
 `POST /messaging/webhook` and the EMR's `POST /v1/webhooks/intercom`.
 
-- Operation coverage: [SUPPORT.md](https://github.com/crvouga-organization/mockingbird/blob/main/packages/service/intercom/SUPPORT.md)
+- Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/intercom/SUPPORT.md)
 - The contract (`openapi.yaml`) is trimmed from Intercom's published 2.11 reference to what our
   consumers use.
 
@@ -267,4 +267,4 @@ never records message bodies or contact details.
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
 | `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--webhook-url`, `--webhook-events`, `--emr-webhook-url`, `--webhook-secret`, `--access-token`); port 8807. |
 
-Part of [mockingbird](https://github.com/crvouga-organization/mockingbird).
+Part of [mockingbird](https://github.com/crvouga/mockingbird).

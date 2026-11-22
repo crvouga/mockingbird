@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-s3-control
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Transport scaffold for Amazon S3 Control. ESM; Node 22+ or Bun 1.2+.
 

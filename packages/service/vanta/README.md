@@ -1,6 +1,6 @@
 # @crvouga/mockingbird-service-vanta
 
-> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga-organization/mockingbird).
+> Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 WIP Manage Vanta OAuth, paginated compliance records, evidence metadata and offboarding.
 
