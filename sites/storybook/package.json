@@ -6,8 +6,8 @@
   "scripts": {
     "build": "bun scripts/build.ts",
     "dev": "bun scripts/dev.ts",
-    "storybook": "storybook dev -p 6008 --no-open",
-    "storybook:build": "storybook build -o storybook-static --quiet",
+    "storybook": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --disable-warning=DEP0205\" storybook dev -p 6008 --no-open",
+    "storybook:build": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --disable-warning=DEP0205\" storybook build -o storybook-static --quiet",
     "screenshots": "bun scripts/screenshots.ts",
     "verify": "bun scripts/verify.ts",
     "lint": "biome check .",

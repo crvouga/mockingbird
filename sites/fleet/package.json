@@ -11,8 +11,8 @@
     "openapi": "bun scripts/openapi.ts",
     "spec": "bddgen && playwright test",
     "start": "bun dist/main.js",
-    "storybook": "storybook dev -p 6006 --no-open",
-    "storybook:build": "storybook build -o storybook-static",
+    "storybook": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --disable-warning=DEP0205\" storybook dev -p 6006 --no-open",
+    "storybook:build": "NODE_OPTIONS=\"${NODE_OPTIONS:-} --disable-warning=DEP0205\" storybook build -o storybook-static",
     "storybook:screenshots": "bun scripts/storybook-screenshots.ts",
     "test": "bun test && bun run spec",
     "typecheck": "tsc -p tsconfig.json --noEmit"
