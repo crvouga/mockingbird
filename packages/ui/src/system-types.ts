@@ -173,6 +173,8 @@ export type HarnessController = {
   snapshot?: SystemSnapshot | undefined
   /** The keyboard shortcut that opens System ("Alt+Shift+S"), or false for none. */
   systemShortcut?: string | false | undefined
+  /** The shortcuts that step to the previous and next app, or false for none. */
+  switchShortcuts?: { previous: string; next: string } | false | undefined
   /** Whether `?system=<section>` is read and written (the harness's `syncUrl`). */
   syncUrl?: boolean | undefined
 }

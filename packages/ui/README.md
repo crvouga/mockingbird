@@ -286,7 +286,7 @@ While any service's `mode` is not `emulated`, the switcher bar gets a triangle b
 
 ### Opening System from anywhere
 
-The bar's System button (`data-testid="system-switcher-system"`) opens System from any surface. A keyboard shortcut also opens System from anywhere in the page: `systemShortcut` (default `DEFAULT_SYSTEM_SHORTCUT`, "Alt+Shift+S"). Write it as modifiers then a key, joined with `+`. The modifiers are Alt/Option, Ctrl/Control, Meta/Cmd and Shift. Letters and digits also match on the physical key, so Option+Shift+S works on a Mac. Pass `false` to turn the shortcut off. A shortcut that cannot be parsed throws at mount. The bar's accessible description names the shortcut: "Press Alt+Shift+S to open System."
+The bar's System button (`data-testid="system-switcher-system"`) opens System from any surface. A keyboard shortcut also opens System from anywhere in the page: `systemShortcut` (default `DEFAULT_SYSTEM_SHORTCUT`, "Alt+Shift+S"). Write it as modifiers then a key, joined with `+`. The modifiers are Alt/Option, Ctrl/Control, Meta/Cmd and Shift. Letters and digits also match on the physical key, so Option+Shift+S works on a Mac. Pass `false` to turn the shortcut off. A shortcut that cannot be parsed throws at mount. The bar's accessible description names the shortcut: "Press Alt+Shift+S to open System." Two more shortcuts step to the previous and next app: `switchShortcuts` (default `{ previous: DEFAULT_PREVIOUS_SHORTCUT, next: DEFAULT_NEXT_SHORTCUT }`, "Alt+Shift+[" and "Alt+Shift+]"; `false` turns them off). The shortcuts are shown where they are used: each control's tooltip ends with its keys (⌥⇧S on a Mac), each control carries `aria-keyshortcuts`, and holding a shortcut's modifiers (Alt, or Alt+Shift) for a moment lists every shortcut under the bar (`data-testid="system-shortcut-hints"`) until the keys are released.
 
 ## App registry
 
@@ -387,6 +387,7 @@ Inject `fetch`, `now` and `timers` to drive it in tests; `launcherView(input, no
 - `SystemSection`, `SystemSnapshot`, `SYSTEM_SECTION_IDS`, `SYSTEM_SECTION_PARAM`: the consumer's own System sections, the Data card's save, load and reset, the built-in section ids, and the `?system=` deep-link parameter.
 - `SystemServiceCall`, `SystemServiceTest`: a service's `lastCall` and what its `test` reports.
 - `DEFAULT_SYSTEM_SHORTCUT`: the keyboard shortcut that opens System unless `systemShortcut` says otherwise.
+- `DEFAULT_PREVIOUS_SHORTCUT`, `DEFAULT_NEXT_SHORTCUT`: the shortcuts that step through the apps unless `switchShortcuts` says otherwise.
 - `CSS_RESET`: stylesheet string for a document.
 - `scopeReset`: scopes the reset to a widget.
 - `@crvouga/mockingbird-ui/reset.css`: stylesheet asset for bundlers.

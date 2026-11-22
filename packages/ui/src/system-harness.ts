@@ -20,6 +20,8 @@ import {
 } from "./system-rotation.js"
 import { matchRoute } from "./system-routes.js"
 import {
+  DEFAULT_NEXT_SHORTCUT,
+  DEFAULT_PREVIOUS_SHORTCUT,
   DEFAULT_SYSTEM_SHORTCUT,
   parseShortcut,
   SYSTEM_SECTION_PARAM,
@@ -69,6 +71,8 @@ export {
   SWITCHER_BAR_HEIGHT,
 } from "./system-rotation.js"
 export {
+  DEFAULT_NEXT_SHORTCUT,
+  DEFAULT_PREVIOUS_SHORTCUT,
   DEFAULT_SYSTEM_SHORTCUT,
   SYSTEM_SECTION_IDS,
   SYSTEM_SECTION_PARAM,
@@ -169,6 +173,12 @@ export type SystemHarnessOptions = {
    */
   systemShortcut?: string | false
   /**
+   * The keyboard shortcuts that step to the previous and next app in the rotation (default
+   * `DEFAULT_PREVIOUS_SHORTCUT` and `DEFAULT_NEXT_SHORTCUT`, "Alt+Shift+[" and "Alt+Shift+]");
+   * `false` turns them off. Written as `systemShortcut` is.
+   */
+  switchShortcuts?: { previous: string; next: string } | false
+  /**
    * Called after the shown surface changes, with its id ("system" for System): by `show()`, the
    * bar's arrows, a System row's Open, or back/forward. Called once per change, synchronously,
    * after the address bar is written and before the surface's mount resolves. Not called for the
@@ -266,6 +276,14 @@ export function mountSystemHarness(
   const systemShortcut = options.systemShortcut ?? DEFAULT_SYSTEM_SHORTCUT
   // A shortcut that cannot be parsed fails here, not on the first key press.
   if (systemShortcut !== false) parseShortcut(systemShortcut)
+  const switchShortcuts = options.switchShortcuts ?? {
+    previous: DEFAULT_PREVIOUS_SHORTCUT,
+    next: DEFAULT_NEXT_SHORTCUT,
+  }
+  if (switchShortcuts !== false) {
+    parseShortcut(switchShortcuts.previous)
+    parseShortcut(switchShortcuts.next)
+  }
   const evictAfter = options.evictHiddenAfterMs
   if (evictAfter !== undefined && !(evictAfter >= 0))
     throw new Error(`evictHiddenAfterMs must be a number of milliseconds, not ${evictAfter}`)
@@ -417,6 +435,7 @@ export function mountSystemHarness(
     sections: options.sections,
     snapshot: options.snapshot,
     systemShortcut,
+    switchShortcuts,
     syncUrl: options.syncUrl,
   }
 

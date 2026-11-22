@@ -563,6 +563,64 @@ export const OpenSystemFromPill: StoryObj = {
   },
 }
 
+/**
+ * The shortcuts are easy to find: every tooltip shows its keys, the brackets step through the
+ * apps, and holding the shortcuts' modifiers lists them all under the bar.
+ */
+export const DiscoverShortcuts: StoryObj = {
+  render: () => {
+    stopAll()
+    reset()
+    const host = document.createElement("div")
+    host.style.height = "100vh"
+    mount(host, { initial: "app" })
+    return host
+  },
+  play: async ({ canvasElement }) => {
+    const page = within(canvasElement)
+    await page.findByRole("group", { name: "Switch apps" }, { timeout: 3000 })
+    const system = page.getByTestId("system-switcher-system")
+    const next = page.getByRole("button", { name: "Next app" })
+    const keys = (element: Element) =>
+      [...element.querySelectorAll("[data-shortcut]")].map((caps) =>
+        [...caps.querySelectorAll("kbd")].map((cap) => cap.textContent).join("+"),
+      )
+
+    // Each control names its shortcut, to assistive technology and in its tooltip.
+    await expect(system).toHaveAttribute("aria-keyshortcuts", "Alt+Shift+S")
+    await expect(next).toHaveAttribute("aria-keyshortcuts", "Alt+Shift+]")
+    await userEvent.hover(system)
+    const tip = await page.findByRole("tooltip")
+    await expect(tip).toHaveTextContent("System")
+    await expect(keys(tip)).toEqual(["Alt+Shift+S"])
+    await userEvent.hover(next)
+    await expect(keys(page.getByRole("tooltip"))).toEqual(["Alt+Shift+]"])
+    await userEvent.unhover(next)
+
+    // The brackets step through the rotation. Shift makes them type braces; the code matches.
+    await expect(visible(canvasElement)).toBe("app")
+    shortcut({ key: "}", code: "BracketRight", altKey: true, shiftKey: true })
+    await waitFor(() => expect(visible(canvasElement)).toBe("notifications"))
+    shortcut({ key: "{", code: "BracketLeft", altKey: true, shiftKey: true })
+    await waitFor(() => expect(visible(canvasElement)).toBe("app"))
+
+    // Holding the modifiers lists every shortcut; Shift alone, as in typing, does not.
+    shortcut({ key: "Shift", code: "ShiftLeft", shiftKey: true })
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    await expect(page.queryByTestId("system-shortcut-hints")).toBeNull()
+    shortcut({ key: "Alt", code: "AltLeft", altKey: true })
+    const hints = await page.findByTestId("system-shortcut-hints", {}, { timeout: 2000 })
+    await expect(keys(hints)).toEqual(["Alt+Shift+[", "Alt+Shift+]", "Alt+Shift+S"])
+    await expect(hints).toHaveTextContent("System")
+    // Under the bar, not over it.
+    const bar = page.getByTestId("system-switcher").getBoundingClientRect()
+    await expect(hints.getBoundingClientRect().top).toBeGreaterThanOrEqual(bar.bottom)
+    // Letting go hides them.
+    document.body.dispatchEvent(new KeyboardEvent("keyup", { bubbles: true, key: "Alt" }))
+    await waitFor(() => expect(page.queryByTestId("system-shortcut-hints")).toBeNull())
+  },
+}
+
 /** `systemShortcut` sets another shortcut, or `false` turns it off; the description follows. */
 export const CustomShortcut: StoryObj = {
   render: () => {

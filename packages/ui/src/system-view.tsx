@@ -39,7 +39,13 @@ import { IconMark } from "./system-mark.js"
 import { SWITCHER_BAR_HEIGHT, stepRotation } from "./system-rotation.js"
 import { SystemScreen } from "./system-screen.js"
 import { notEmulated, type ServicesStore, trackServices } from "./system-services-store.js"
-import { matchesShortcut, parseShortcut } from "./system-shortcut.js"
+import {
+  matchesShortcut,
+  parseShortcut,
+  type Shortcut,
+  shortcutKeys,
+  startsShortcut,
+} from "./system-shortcut.js"
 import type { HarnessController, HarnessSnapshot, SystemApp } from "./system-types.js"
 import { applyStoredTheme, THEME_STORAGE_KEY } from "./theme-preference.js"
 
@@ -261,6 +267,27 @@ type Tip = "previous" | "next" | "dot" | "dev" | "system"
 const BAR_BUTTON =
   "inline-flex size-5 shrink-0 cursor-pointer items-center justify-center rounded p-0 text-muted opacity-60 outline-offset-1 hover:bg-default hover:text-foreground hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-2 focus-visible:outline-focus"
 
+/** How long the shortcuts' modifiers are held before the bar shows what each shortcut does. */
+const HINT_DELAY_MS = 350
+
+const isMac = (doc: Document) => /Mac|iPhone|iPad/.test(doc.defaultView?.navigator.platform ?? "")
+
+/** A shortcut drawn as key caps. Read out through `aria-keyshortcuts`, so hidden here. */
+function Keys({ shortcut, mac }: { shortcut: Shortcut; mac: boolean }) {
+  return (
+    <span aria-hidden="true" data-shortcut="" className="inline-flex items-center gap-0.5">
+      {shortcutKeys(shortcut, mac).map((key) => (
+        <kbd
+          key={key}
+          className="inline-flex h-4 min-w-4 items-center justify-center rounded border border-border bg-surface-secondary px-1 font-sans text-[10px] leading-none text-muted"
+        >
+          {key}
+        </kbd>
+      ))}
+    </span>
+  )
+}
+
 /** The services not emulated, kept current: the bar's dev badge. */
 function useNotEmulated(store: ServicesStore | undefined) {
   const subscribe = useCallback(
@@ -303,20 +330,64 @@ function Chrome({
   const label = (step: -1 | 1) => `${step < 0 ? "Previous" : "Next"}: ${neighbour(step).label}`
   const current = controller.apps.find((app) => app.id === snapshot.current)
 
-  // The keyboard shortcut that opens System from anywhere in the page.
+  // The keyboard shortcuts, from anywhere in the page: open System, and step through the rotation.
+  const { systemShortcut, switchShortcuts } = controller
+  const stepKeys = controller.switcher && switchShortcuts ? switchShortcuts : undefined
+  const shortcuts = useMemo(
+    () => ({
+      system: systemShortcut ? parseShortcut(systemShortcut) : undefined,
+      previous: stepKeys ? parseShortcut(stepKeys.previous) : undefined,
+      next: stepKeys ? parseShortcut(stepKeys.next) : undefined,
+    }),
+    [systemShortcut, stepKeys],
+  )
+  const mac = isMac(shell.ownerDocument)
+  const stepRef = useRef((_step: -1 | 1) => {})
+  stepRef.current = (step) => controller.show(neighbour(step).id)
+  // While the shortcuts' modifiers are held, the bar says what each shortcut does.
+  const [hints, setHints] = useState(false)
   useEffect(() => {
-    const text = controller.systemShortcut
-    if (text === false || text === undefined) return
-    const shortcut = parseShortcut(text)
+    const all = [shortcuts.system, shortcuts.previous, shortcuts.next].filter(
+      (shortcut): shortcut is Shortcut => !!shortcut,
+    )
+    if (all.length === 0) return
     const doc = shell.ownerDocument
+    const view = doc.defaultView
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const hide = () => {
+      clearTimeout(timer)
+      timer = undefined
+      setHints(false)
+    }
+    const held = (event: KeyboardEvent) => {
+      if (!startsShortcut(event, all)) return hide()
+      timer ??= setTimeout(() => setHints(true), HINT_DELAY_MS)
+    }
     const press = (event: KeyboardEvent) => {
-      if (event.defaultPrevented || !matchesShortcut(event, shortcut)) return
+      held(event)
+      if (event.defaultPrevented) return
+      const run =
+        shortcuts.system && matchesShortcut(event, shortcuts.system)
+          ? () => openRef.current()
+          : shortcuts.previous && matchesShortcut(event, shortcuts.previous)
+            ? () => stepRef.current(-1)
+            : shortcuts.next && matchesShortcut(event, shortcuts.next)
+              ? () => stepRef.current(1)
+              : undefined
+      if (!run) return
       event.preventDefault()
-      openRef.current()
+      run()
     }
     doc.addEventListener("keydown", press)
-    return () => doc.removeEventListener("keydown", press)
-  }, [controller.systemShortcut, shell])
+    doc.addEventListener("keyup", held)
+    view?.addEventListener("blur", hide)
+    return () => {
+      hide()
+      doc.removeEventListener("keydown", press)
+      doc.removeEventListener("keyup", held)
+      view?.removeEventListener("blur", hide)
+    }
+  }, [shortcuts, shell])
 
   const dev = useNotEmulated(store)
   const devText =
@@ -364,6 +435,8 @@ function Chrome({
     else buttons.current.delete(name)
   }
 
+  const tipShortcut =
+    tip === "previous" || tip === "next" || tip === "system" ? shortcuts[tip] : undefined
   const destination = tip === "previous" ? neighbour(-1) : tip === "next" ? neighbour(1) : undefined
   const dotStatus = useDotStatus(build)
   const tipText =
@@ -389,7 +462,7 @@ function Chrome({
     const left = rect.left - outer.left + (rect.width - box.offsetWidth) / 2
     box.style.left = `${Math.max(4, Math.min(left, layer.clientWidth - box.offsetWidth - 4))}px`
     box.style.top = "6px"
-  }, [tip, tipText])
+  }, [tip, tipText, tipShortcut])
 
   return (
     <>
@@ -420,6 +493,7 @@ function Chrome({
                   className={BAR_BUTTON}
                   aria-label={step < 0 ? "Previous app" : "Next app"}
                   aria-description={label(step)}
+                  aria-keyshortcuts={stepKeys?.[name]}
                   data-tip={label(step)}
                   data-testid={`system-switcher-${name}`}
                   onClick={() => controller.show(neighbour(step).id)}
@@ -461,6 +535,7 @@ function Chrome({
                 ref={register("system")}
                 type="button"
                 aria-label="System"
+                aria-keyshortcuts={systemShortcut || undefined}
                 data-testid="system-switcher-system"
                 aria-current={snapshot.current === "system" ? "page" : undefined}
                 onClick={() => openSystem()}
@@ -480,7 +555,7 @@ function Chrome({
         <div
           ref={tipBox}
           role="tooltip"
-          hidden={!tip}
+          hidden={!tip || hints}
           className="tooltip pointer-events-none absolute flex items-center gap-2 whitespace-nowrap text-foreground"
         >
           {tip === "dev" ? (
@@ -502,7 +577,42 @@ function Chrome({
             />
           ) : null}
           {tipText}
+          {tipShortcut ? <Keys shortcut={tipShortcut} mac={mac} /> : null}
         </div>
+        {hints ? (
+          // The modifiers are held: every shortcut, under the control it presses.
+          <div
+            data-testid="system-shortcut-hints"
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-x-1 top-1.5 flex items-start justify-between gap-2 text-foreground"
+          >
+            <span
+              className={`flex items-center gap-3 whitespace-nowrap ${stepKeys ? "tooltip" : ""}`}
+            >
+              {([-1, 1] as const).map((step) => {
+                const shortcut = step < 0 ? shortcuts.previous : shortcuts.next
+                return shortcut ? (
+                  <span key={step} className="flex items-center gap-1.5">
+                    {step < 0 ? (
+                      <ArrowLeft className="size-3 text-muted" />
+                    ) : (
+                      <ArrowRight className="size-3 text-muted" />
+                    )}
+                    {neighbour(step).label}
+                    <Keys shortcut={shortcut} mac={mac} />
+                  </span>
+                ) : null
+              })}
+            </span>
+            {shortcuts.system ? (
+              <span className="tooltip flex items-center gap-1.5 whitespace-nowrap">
+                <Sliders className="size-3 text-muted" />
+                System
+                <Keys shortcut={shortcuts.system} mac={mac} />
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </Layer>
     </>
   )
