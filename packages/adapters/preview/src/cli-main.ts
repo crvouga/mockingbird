@@ -8,8 +8,10 @@
  *   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
  *     [--compatibility-date <date>] [--run-worker-first <pattern>]… [--pr <n> --pr-url <url>]
  *
- * and, for named Previews of one assets-only Worker, deploy-preview, remove-preview, sweep,
- * pr-section and deployment (./cli-previews.ts).
+ * and, for named Previews of one assets-only Worker, deploy-preview, gate-preview, check-preview,
+ * remove-preview, sweep, pr-section and deployment (./cli-previews.ts); the asset preflight
+ * `check` and the Vercel host commands host-deploy, host-status, host-exists and host-remove
+ * (./cli-hosting.ts).
  *
  * Bun / Node only.
  */
@@ -19,6 +21,7 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { stampPreviewVersion } from "./build.js"
+import { HOSTING_COMMANDS, HOSTING_COMMANDS_USAGE } from "./cli-hosting.js"
 import {
   PREVIEW_COMMANDS,
   PREVIEW_COMMANDS_USAGE,
@@ -46,7 +49,8 @@ const USAGE = `Usage:
     [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
     [--compatibility-date <date>] [--run-worker-first <pattern>]... [--pr <n> --pr-url <url>]
-${PREVIEW_COMMANDS_USAGE}`
+${PREVIEW_COMMANDS_USAGE}
+${HOSTING_COMMANDS_USAGE}`
 
 class UsageError extends PreviewUsageError {}
 
@@ -286,8 +290,15 @@ export async function runPreviewCli(
   try {
     if (command === "stamp") return await stamp(parseArgs(rest), io)
     if (command === "wrangler-config") return wranglerConfig(parseArgs(rest), io)
-    const named = command === undefined ? undefined : PREVIEW_COMMANDS[command]
-    if (named) return await named(parseArgs(rest), io, deps)
+    const named =
+      command === undefined ? undefined : (PREVIEW_COMMANDS[command] ?? HOSTING_COMMANDS[command])
+    // `--split` is the one flag without a value.
+    if (named)
+      return await named(
+        parseArgs(rest.map((token) => (token === "--split" ? "--split=true" : token))),
+        io,
+        deps,
+      )
     if (command === "--help" || command === "-h" || command === "help") {
       io.stdout(USAGE)
       return 0

@@ -6,6 +6,7 @@
 import { existsSync } from "node:fs"
 import { readdir, readFile, writeFile } from "node:fs/promises"
 import { extname, join, relative, resolve, sep } from "node:path"
+import { assertPreviewAssets, type PreviewAssetLimits } from "./assets-check.js"
 import type { AssetsOnlyConfig } from "./assets-only.js"
 import { stampPreviewVersion } from "./build.js"
 import type { CloudflarePreview, createCloudflarePreviews, PreviewAssetFile } from "./cloudflare.js"
@@ -139,7 +140,7 @@ export type PreviewSiteResult = {
   message?: string
 }
 
-const failedChecks = (checks: PreviewCheck[]) =>
+export const failedPreviewChecks = (checks: PreviewCheck[]) =>
   checks
     .filter((check) => !check.ok)
     .map((check) => (check.detail ? `${check.name}: ${check.detail}` : check.name))
@@ -165,6 +166,18 @@ export async function deployPreviewSite(input: {
   config?: AssetsOnlyConfig
   host?: string
   checks?: PreviewChecks
+  /**
+   * The gate's results when they were computed elsewhere (`mockingbird-preview gate-preview` in a
+   * job without credentials), in place of running `checks` on the built directory here.
+   */
+  gate?: PreviewCheck[]
+  /**
+   * Run `checks` after upload here (default true). The reusable workflow passes false and runs
+   * them in a job without credentials (`mockingbird-preview check-preview`).
+   */
+  checksAfterUpload?: boolean
+  /** Refuse the upload when the directory breaks these limits (`assertPreviewAssets`). */
+  limits?: Partial<PreviewAssetLimits>
   timeoutMs?: number
   fetch?: PreviewHttpFetch
   sleep?: (ms: number) => Promise<void>
@@ -181,21 +194,33 @@ export async function deployPreviewSite(input: {
   }
   await stampPreviewDirectory(input.outdir, input.commit, input.pr)
   let gate: PreviewCheck[] | undefined
-  if (input.checks) {
-    const outcome = await runPreviewChecks(
-      input.checks,
-      PREVIEW_LOCAL_ORIGIN,
-      directoryFetch(input.outdir),
-    )
+  if (input.gate || input.checks) {
+    const outcome = input.gate
+      ? { passed: input.gate.every((check) => check.ok === true), results: input.gate }
+      : await runPreviewChecks(
+          input.checks as PreviewChecks,
+          PREVIEW_LOCAL_ORIGIN,
+          directoryFetch(input.outdir),
+        )
     gate = outcome.results
-    log(`gate: ${outcome.passed ? "passed" : `failed (${failedChecks(gate)})`}`)
+    log(`gate: ${outcome.passed ? "passed" : `failed (${failedPreviewChecks(gate)})`}`)
     if (!previewGateUploads(input.target, outcome.passed))
       return {
         ...base,
         state: "failed",
         gate,
-        message: `The checks failed before upload, so nothing was uploaded and the last passing deploy keeps serving: ${failedChecks(gate)}`,
+        message: `The checks failed before upload, so nothing was uploaded and the last passing deploy keeps serving: ${failedPreviewChecks(gate)}`,
       }
+  }
+  try {
+    await assertPreviewAssets(input.outdir, { ...(input.limits ? { limits: input.limits } : {}) })
+  } catch (error) {
+    return {
+      ...base,
+      state: "failed",
+      ...(gate ? { gate } : {}),
+      message: `Nothing was uploaded: ${error instanceof Error ? error.message : String(error)}`,
+    }
   }
   const { files, headers } = await readPreviewDirectory(input.outdir)
   const deployed = await input.previews.deploy({
@@ -245,10 +270,12 @@ export async function deployPreviewSite(input: {
     }
   log(`serving ${input.commit.slice(0, 7)} at ${url}`)
   let after: PreviewCheck[] | undefined
-  if (input.checks) {
+  if (input.checks && input.checksAfterUpload !== false) {
     const outcome = await checkUntilPassing(input.checks, url, poll)
     after = outcome.results
-    log(`checks after upload: ${outcome.passed ? "passed" : `failed (${failedChecks(after)})`}`)
+    log(
+      `checks after upload: ${outcome.passed ? "passed" : `failed (${failedPreviewChecks(after)})`}`,
+    )
   }
   const failing = [...(gate ?? []), ...(after ?? [])].filter((check) => !check.ok)
   return {
@@ -258,7 +285,7 @@ export async function deployPreviewSite(input: {
     state: failing.length > 0 ? "failing-checks" : "live",
     ...(gate ? { gate } : {}),
     ...(after ? { after } : {}),
-    ...(failing.length > 0 ? { message: failedChecks(failing) } : {}),
+    ...(failing.length > 0 ? { message: failedPreviewChecks(failing) } : {}),
   }
 }
 

@@ -7,6 +7,7 @@ import { existsSync } from "node:fs"
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, join, resolve } from "node:path"
 import { pathToFileURL } from "node:url"
+import type { PreviewAssetLimits } from "./assets-check.js"
 import { assertAssetsOnlyConfig, parseJsonc } from "./assets-only.js"
 import { createCloudflarePreviews } from "./cloudflare.js"
 import { createPreviewGitHub } from "./github.js"
@@ -19,9 +20,18 @@ import {
   summarizePreviewState,
   upsertPreviewSection,
 } from "./pr-section.js"
-import type { PreviewChecks, PreviewHttpFetch } from "./serving.js"
+import {
+  checkUntilPassing,
+  type PreviewCheck,
+  type PreviewChecks,
+  type PreviewHttpFetch,
+  runPreviewChecks,
+} from "./serving.js"
 import {
   deployPreviewSite,
+  directoryFetch,
+  failedPreviewChecks,
+  PREVIEW_LOCAL_ORIGIN,
   type PreviewSiteResult,
   PULL_REQUEST_PREVIEW,
   pullRequestPreviewName,
@@ -111,6 +121,103 @@ const loadChecks = async (path: string): Promise<PreviewChecks> => {
   return checks as PreviewChecks
 }
 
+/** `--max-file-mib` / `--max-files`, when given. */
+export const assetLimits = (args: PreviewArgs): Partial<PreviewAssetLimits> | undefined => {
+  const file = one(args, "max-file-mib")
+  const files = one(args, "max-files")
+  if (file === undefined && files === undefined) return undefined
+  const limits: Partial<PreviewAssetLimits> = {}
+  if (file !== undefined) {
+    const value = Number(file)
+    if (!(value > 0)) throw new PreviewUsageError("--max-file-mib is a positive number")
+    limits.maxFileBytes = Math.floor(value * 1024 * 1024)
+  }
+  if (files !== undefined) {
+    const value = Number(files)
+    if (!(Number.isSafeInteger(value) && value > 0))
+      throw new PreviewUsageError("--max-files is a positive integer")
+    limits.maxFiles = value
+  }
+  return limits
+}
+
+/** A gate result file `gate-preview` wrote: an array of `{ name, ok, detail? }`. */
+const readGate = async (path: string): Promise<PreviewCheck[]> => {
+  const value: unknown = JSON.parse(await readFile(path, "utf8"))
+  if (
+    !Array.isArray(value) ||
+    value.some(
+      (check) =>
+        !check ||
+        typeof check !== "object" ||
+        typeof (check as PreviewCheck).name !== "string" ||
+        typeof (check as PreviewCheck).ok !== "boolean",
+    )
+  )
+    throw new PreviewUsageError(`${path} is not a gate result (an array of { name, ok, detail? })`)
+  return (value as PreviewCheck[]).map((check) => ({
+    name: check.name,
+    ok: check.ok,
+    ...(typeof check.detail === "string" ? { detail: check.detail } : {}),
+  }))
+}
+
+/**
+ * Runs a site's checks on the built directory and writes the results (`--out`). The reusable
+ * workflow runs it in the build job, which holds no credentials, and hands the file to the deploy
+ * (`deploy-preview --gate`).
+ */
+const gatePreview = async (args: PreviewArgs, io: Io) => {
+  allow(args, ["outdir", "checks", "out", "site"])
+  const outdir = need(args, "outdir")
+  const site = one(args, "site") ?? "site"
+  const checks = await loadChecks(need(args, "checks"))
+  const outcome = await runPreviewChecks(checks, PREVIEW_LOCAL_ORIGIN, directoryFetch(outdir))
+  const out = need(args, "out")
+  await mkdir(dirname(resolve(out)), { recursive: true })
+  await writeFile(out, `${JSON.stringify(outcome.results, null, 2)}\n`)
+  io.stdout(
+    `${site}: gate ${outcome.passed ? "passed" : `failed (${failedPreviewChecks(outcome.results)})`}`,
+  )
+  return 0
+}
+
+/**
+ * Runs a site's checks against its deployed origin (from a `deploy-preview --result` file),
+ * re-read until they pass or the deadline passes, and records them in the same file: a live site
+ * whose checks fail becomes `failing-checks`. The reusable workflow runs it in a job without
+ * credentials, after the deploy.
+ */
+const checkPreview = async (args: PreviewArgs, io: Io, deps: PreviewCliDeps) => {
+  allow(args, ["checks", "result", "timeout-seconds"])
+  const path = need(args, "result")
+  const result = JSON.parse(await readFile(path, "utf8")) as PreviewSiteResult
+  if (!result.url || (result.state !== "live" && result.state !== "failing-checks")) {
+    io.stdout(`${result.site ?? "site"}: nothing deployed to check (${result.state})`)
+    return 0
+  }
+  const checks = await loadChecks(need(args, "checks"))
+  const outcome = await checkUntilPassing(checks, result.url, {
+    timeoutMs: positive(one(args, "timeout-seconds"), "timeout-seconds", 180) * 1000,
+    fetch: deps.fetch,
+    ...(deps.sleep ? { sleep: deps.sleep } : {}),
+    ...(deps.now ? { now: deps.now } : {}),
+  })
+  const failing = [...(result.gate ?? []), ...outcome.results].filter((check) => !check.ok)
+  const next: PreviewSiteResult = {
+    ...result,
+    after: outcome.results,
+    state: failing.length > 0 ? "failing-checks" : "live",
+  }
+  if (failing.length > 0) next.message = failedPreviewChecks(failing)
+  else delete next.message
+  await writeFile(path, `${JSON.stringify(next, null, 2)}\n`)
+  io.stdout(`${result.site}: checks after upload ${outcome.passed ? "passed" : "failed"}`)
+  if (failing.length > 0)
+    io.stdout(`::warning::${result.site} preview deployed, but failing its checks: ${next.message}`)
+  return 0
+}
+
 const deployPreview = async (args: PreviewArgs, io: Io, deps: PreviewCliDeps) => {
   allow(args, [
     "site",
@@ -124,6 +231,9 @@ const deployPreview = async (args: PreviewArgs, io: Io, deps: PreviewCliDeps) =>
     "config",
     "host",
     "checks",
+    "gate",
+    "max-file-mib",
+    "max-files",
     "timeout-seconds",
     "result",
   ])
@@ -145,7 +255,10 @@ const deployPreview = async (args: PreviewArgs, io: Io, deps: PreviewCliDeps) =>
     : undefined
   const checksPath = one(args, "checks")
   const checks = checksPath ? await loadChecks(checksPath) : undefined
+  const gatePath = one(args, "gate")
+  const gate = gatePath ? await readGate(gatePath) : undefined
   const host = one(args, "host")
+  const limits = assetLimits(args)
   const gh = github(deps, repository)
   const server = deps.env.GITHUB_SERVER_URL ?? "https://github.com"
   const currentPullRequest = async (): Promise<PullRequestFacts> => {
@@ -171,6 +284,8 @@ const deployPreview = async (args: PreviewArgs, io: Io, deps: PreviewCliDeps) =>
     ...(config ? { config } : {}),
     ...(host ? { host } : {}),
     ...(checks ? { checks } : {}),
+    ...(gate ? { gate } : {}),
+    ...(limits ? { limits } : {}),
     timeoutMs: positive(one(args, "timeout-seconds"), "timeout-seconds", 180) * 1000,
     fetch: deps.fetch,
     ...(deps.sleep ? { sleep: deps.sleep } : {}),
@@ -365,6 +480,8 @@ export const PREVIEW_COMMANDS: Record<
   (args: PreviewArgs, io: Io, deps: PreviewCliDeps) => Promise<number>
 > = {
   "deploy-preview": deployPreview,
+  "gate-preview": (args, io) => gatePreview(args, io),
+  "check-preview": checkPreview,
   "remove-preview": removePreview,
   sweep,
   "pr-section": prSection,
@@ -373,8 +490,10 @@ export const PREVIEW_COMMANDS: Record<
 
 export const PREVIEW_COMMANDS_USAGE = `  mockingbird-preview deploy-preview --worker <name> --outdir <dir> --commit <sha>
     (--pr <n> | --branch <name>) --repository <owner/name> [--site <name>] [--name <preview>]
-    [--config <wrangler.json(c)>] [--host <domain>] [--checks <module>] [--timeout-seconds <n>]
-    [--result <file>]
+    [--config <wrangler.json(c)>] [--host <domain>] [--checks <module> | --gate <file>]
+    [--max-file-mib 25] [--max-files 20000] [--timeout-seconds <n>] [--result <file>]
+  mockingbird-preview gate-preview --outdir <dir> --checks <module> --out <file> [--site <name>]
+  mockingbird-preview check-preview --result <file> --checks <module> [--timeout-seconds <n>]
   mockingbird-preview remove-preview --worker <name> (--pr <n> | --name <preview>)
   mockingbird-preview sweep --worker <name> [--retention-days 7] [--capacity 80]
     (--repository <owner/name> | --open-prs <n,n,...>)

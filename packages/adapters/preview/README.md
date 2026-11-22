@@ -238,6 +238,17 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `watchPreviewParts`, from the `/node` export (`esbuild` is a peer dependency, loaded on first
   use), build the content-addressed parts and the load manifest and run the dev loop.
   `acceptPreviewFrame()` connects an iframe app to the bridge.
+- `loadSplitPreviewFile(url, { fetch?, signal? })` loads a file the asset preflight split into
+  parts (`<file>.part-NNN` next to `<file>.parts.json`, `PREVIEW_SPLIT_MANIFEST_SUFFIX`), verifying
+  every part's and the whole file's size and SHA-256; `parsePreviewSplitManifest(value)` validates
+  the manifest and `previewSplitPartName(file, index)` names a part. `checkPreviewAssets`,
+  `assertPreviewAssets` and `PREVIEW_ASSET_LIMITS`, from the `/node` export, run the preflight. See
+  [Asset preflight and split files](#asset-preflight-and-split-files).
+- `createVercelPreviewHosting({ token, project, teamId?, domain?, bypassSecret?, fetch? })` hosts
+  previews on Vercel behind the `PreviewHosting` interface (`exists`, `deploy`, `setStatus`,
+  `remove`); `vercelPreviewConfig()` is the `vercel.json` it deploys, and `VERCEL_PREVIEW_STATUS`
+  / `VERCEL_PREVIEW_STATE` the status snapshot and state files. A **best guess, not verified**
+  against a live Vercel account. See [Hosting on Vercel](#hosting-on-vercel).
 
 ## System parts
 
@@ -664,6 +675,8 @@ name: Preview
 on:
   pull_request: { types: [opened, synchronize, reopened, closed] }
   workflow_run: { workflows: [CI], types: [requested, completed] }
+# contents: read checks out the code; pull-requests: write writes the PR link and reads the PR head.
+permissions: { contents: read, pull-requests: write }
 jobs:
   preview:
     uses: crvouga-organization/mockingbird/.github/workflows/preview.yml@main
@@ -684,6 +697,15 @@ Inputs:
 | `outdir`            | The built preview, relative to `working-directory`.                                     |
 | `wrangler-config`   | Optional path to your own wrangler config (e.g. a Worker with a dev proxy).             |
 | `bun-version`       | Bun version for the job.                                                                |
+| `hosting`           | `cloudflare` (default) or `vercel` (`createVercelPreviewHosting`).                      |
+| `runs-on`, `timeout-minutes`, `package-manager`, `node-version(-file)`, `pnpm-version` | The build jobs' runner and toolchain. |
+| `cache-paths`, `cache-key-prefix` | Build caches: restored read-only on PRs, saved only on the default branch. |
+| `paths`             | Globs of what the preview ships; a push changing none of them builds nothing.           |
+| `link-path`, `pr-link` | Where the PR's Preview link opens (default `/`); `false` leaves the description alone. |
+| `max-file-mib`, `max-files`, `split-large-files` | The asset preflight, and splitting large files.  |
+
+The full table, the trust model (the PR's code builds in a job with no secret; the deploy never
+runs it) and examples are in [docs/PREVIEWS.md](../../../docs/PREVIEWS.md).
 
 The `workflow_run` trigger is what reports your CI checks (`running` on `requested`, `passed` or
 `failed` on `completed`) to the preview of that commit's PR. Secrets are passed explicitly, never
@@ -792,6 +814,72 @@ and deletes the file. It prints one line and always exits 0, turning any failure
 `assets` (`binding: "ASSETS"`, `not_found_handling: "single-page-application"`,
 `run_worker_first: ["/__preview/*", …]`) and, with `--pr`, the `PREVIEW_PR` var.
 
+#### Asset preflight and split files
+
+```sh
+mockingbird-preview check --outdir <dir> [--hosting cloudflare|vercel] [--max-file-mib <n>] \
+  [--max-files <n>] [--split]
+```
+
+`check` walks `outdir` and exits 1, printing one `::error::` per problem, when a file is over the
+host's per-file limit, the count is over its per-deployment limit, or an entry is not a regular
+file or directory (a symlink, a socket). `PREVIEW_ASSET_LIMITS` holds the defaults: Cloudflare's
+documented 25 MiB and 20 000 files, and for Vercel 100 MiB and 15 000 files, a **best guess, not
+verified** against a live account. With `--split`, each file over the limit is first replaced by
+`<file>.part-000`, `-001`, … (each at most the limit) and `<file>.parts.json`
+(`{ format: 1, path, bytes, sha256, parts: [{ path, bytes, sha256 }] }`).
+
+```ts
+import { loadSplitPreviewFile } from "@crvouga/mockingbird-preview"
+import { checkPreviewAssets } from "@crvouga/mockingbird-preview/node"
+
+const report = await checkPreviewAssets("dist", { split: true }) // { files, bytes, split, problems }
+const bytes = await loadSplitPreviewFile("/workers/backend.js") // in the browser
+```
+
+`loadSplitPreviewFile(url, { fetch?, signal? })` fetches `<url>.parts.json`; when it exists it
+fetches every part and verifies each part's size and SHA-256 and the joined file's, throwing on
+any mismatch; when it answers 404 it fetches `url` itself. `deploy-preview` and `host-deploy` run
+the same preflight before uploading (`--max-file-mib`, `--max-files`).
+
+#### Hosting on Vercel
+
+```sh
+mockingbird-preview host-deploy --hosting vercel --name <preview> --outdir <dir> [--domain <d>] \
+  [--version <sha>] [--pr <n> --pr-url <url>] [--max-file-mib <n>] [--max-files <n>]
+mockingbird-preview host-status --hosting vercel --name <preview> --values <json> [--domain <d>]
+mockingbird-preview host-exists --hosting vercel --name <preview> [--domain <d>]
+mockingbird-preview host-remove --hosting vercel --name <preview> [--domain <d>]
+```
+
+They read `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and optionally `VERCEL_ORG_ID` (the team) and
+`VERCEL_AUTOMATION_BYPASS_SECRET` from the environment, and drive
+`createVercelPreviewHosting({ token, project, teamId?, domain?, bypassSecret?, fetch? })`, the
+Vercel implementation of the `PreviewHosting` interface:
+
+```ts
+import type { PreviewAssetFile } from "@crvouga/mockingbird-preview"
+
+type PreviewHosting = {
+  exists(name: string): Promise<boolean>
+  deploy(input: { name: string; files: PreviewAssetFile[]; vars?: Record<string, string> }): Promise<{ url: string }>
+  setStatus(name: string, values: Record<string, string>): Promise<void> // PREVIEW_BUILD / PREVIEW_CHECKS
+  remove(name: string): Promise<void>
+}
+```
+
+Preview `name` is served at `https://<name>.<domain>`, or `https://<name>.vercel.app` without a
+domain. `deploy` uploads the files Vercel does not have yet (it creates the deployment and uploads
+only what Vercel reports `missing_files`), adds `vercel.json` (no build, single-page fallback,
+`no-store` status files), `/__preview/status` (the snapshot `createPreviewStatus` would answer for
+those vars) and `/__preview/deployment.json` (the vars and file list), waits until the deployment
+is `READY`, moves the alias and deletes the deployment the alias pointed at. `setStatus` reads
+`deployment.json` from the preview, merges the values and redeploys the same files with a new
+status file. Only `PREVIEW_*` values are accepted: a static preview cannot hold secrets. `host-status`
+always exits 0, warning on failure; `host-*` with `--hosting cloudflare` is an explicit usage error
+(the workflow deploys Workers with wrangler). The REST calls follow Vercel's public API docs and
+are a **best guess, not verified** against a live account.
+
 #### Named Previews of one assets-only Worker
 
 The reusable workflow's `mode: named-previews` ([docs/PREVIEWS.md](../../../docs/PREVIEWS.md))
@@ -801,8 +889,10 @@ runs these commands. They read `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` a
 ```sh
 mockingbird-preview deploy-preview --worker <name> --outdir <dir> --commit <sha> \
   (--pr <n> | --branch <name>) --repository <owner/name> [--site <name>] [--name <preview>] \
-  [--config <wrangler.json(c)>] [--host <domain>] [--checks <module>] [--timeout-seconds 180] \
-  [--result <file>]
+  [--config <wrangler.json(c)>] [--host <domain>] [--checks <module> | --gate <file>] \
+  [--max-file-mib 25] [--max-files 20000] [--timeout-seconds 180] [--result <file>]
+mockingbird-preview gate-preview --outdir <dir> --checks <module> --out <file> [--site <name>]
+mockingbird-preview check-preview --result <file> --checks <module> [--timeout-seconds 180]
 mockingbird-preview remove-preview --worker <name> (--pr <n> | --name <preview>)
 mockingbird-preview sweep --worker <name> [--retention-days 7] [--capacity 80] \
   (--repository <owner/name> | --open-prs <n,n,...>)
@@ -821,7 +911,12 @@ mockingbird-preview deployment --repository <owner/name> --environment <env> \
   60 s share of the deadline, then runs the checks against it until they pass. It writes
   `{ site, worker, name, state, attempted, deployed?, url?, gate?, after?, message? }` to
   `--result`, with `state` `live`, `failing-checks`, `failed`, `skipped` or `removed`, and exits 1
-  only for `failed`. A branch whose gate fails uploads nothing.
+  only for `failed`. A branch whose gate fails uploads nothing, and so does a directory over the
+  asset limits. `--gate <file>` takes the gate's results instead of running `--checks` (the
+  reusable workflow runs the checks only in jobs without credentials).
+- `gate-preview` runs the checks module on the built directory and writes the results to `--out`;
+  `check-preview` runs it against the `url` of a `--result` file until it passes or the deadline
+  passes, records `after` and turns a `live` site into `failing-checks` (or back).
 - `remove-preview` deletes the Preview and lists the Worker's Previews to confirm it is gone; it
   exits 1 when it is still listed.
 - `sweep` lists the Worker's Previews, reads open PRs (`--repository`, with `GITHUB_TOKEN`) or takes
