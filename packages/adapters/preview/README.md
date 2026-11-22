@@ -858,6 +858,8 @@ They read `VERCEL_TOKEN`, `VERCEL_PROJECT_ID`, and optionally `VERCEL_ORG_ID` (t
 Vercel implementation of the `PreviewHosting` interface:
 
 ```ts
+import type { PreviewAssetFile } from "@crvouga/mockingbird-preview"
+
 type PreviewHosting = {
   exists(name: string): Promise<boolean>
   deploy(input: { name: string; files: PreviewAssetFile[]; vars?: Record<string, string> }): Promise<{ url: string }>
