@@ -33,19 +33,25 @@ import { PageHeader } from "./react/page-header.js"
 import { EmptyState, ErrorState } from "./react/states.js"
 import { type Status, StatusChip } from "./react/status-chip.js"
 import { ThemeSwitch } from "./react/theme-switch.js"
-import { PreviewCard } from "./system-build.js"
+import { PreviewCard, RelativeTime } from "./system-build.js"
 import type { SystemBuild } from "./system-build-status.js"
+import type { SystemIcon } from "./system-icons.js"
 import { IconMark } from "./system-mark.js"
 import { move, summarizeServices } from "./system-rotation.js"
+import { SYSTEM_SECTION_PARAM } from "./system-shortcut.js"
+import { DataCard, SectionMount } from "./system-snapshot.js"
 import type {
   SystemApp,
   SystemBackend,
   SystemBackends,
   SystemDevStatus,
   SystemHealth,
+  SystemSection,
   SystemService,
   SystemServiceMode,
   SystemServices,
+  SystemServiceTest,
+  SystemSnapshot,
 } from "./system-types.js"
 
 /** What the harness hands the System screen. */
@@ -63,6 +69,14 @@ export type SystemScreenProps = {
   build?: SystemBuild | undefined
   /** The backends and emulators behind the apps; with any app's `backends`, adds a Backends list. */
   backends?: SystemBackends | undefined
+  /** The consumer's own sections, after the built-in ones. */
+  sections?: readonly SystemSection[] | undefined
+  /** Save, load and reset: adds the Data card. */
+  snapshot?: SystemSnapshot | undefined
+  /** Read and write `?system=<section>`. */
+  syncUrl?: boolean | undefined
+  /** A section to bring into view (the switcher's dev badge asks for Services). */
+  request?: { id: string; count: number } | undefined
 }
 
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -70,8 +84,89 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
 const reducedMotion = (node: Element) =>
   node.ownerDocument.defaultView?.matchMedia("(prefers-reduced-motion: reduce)").matches ?? true
 
-/** The System screen: the preview's build, its apps and the switcher's order, and its services. */
+const readSection = (doc: Document | undefined) => {
+  try {
+    const href = doc?.defaultView?.location.href
+    return href ? (new URL(href).searchParams.get(SYSTEM_SECTION_PARAM) ?? undefined) : undefined
+  } catch {
+    return undefined
+  }
+}
+
+type NavItem = { id: string; label: string; icon?: SystemIcon | undefined }
+
+/**
+ * The System screen: the preview's build, its apps and the switcher's order, its backends and
+ * services, the Data card, and the consumer's own sections, each with a deep link.
+ */
 export function SystemScreen(props: SystemScreenProps) {
+  const root = useRef<HTMLDivElement>(null)
+  const sections = props.sections ?? []
+  const hasBackends = !!props.backends || props.apps.some((app) => app.backends?.length)
+  const nav: NavItem[] = [
+    ...(props.build ? [{ id: "preview", label: "Preview" }] : []),
+    { id: "apps", label: "Apps" },
+    ...(hasBackends ? [{ id: "backends", label: "Backends" }] : []),
+    { id: "services", label: "Services" },
+    ...(props.snapshot ? [{ id: "data", label: "Data" }] : []),
+    ...sections.map(({ id, label, icon }) => ({ id, label, icon })),
+  ]
+  const [current, setCurrent] = useState<string | undefined>(() =>
+    props.syncUrl ? readSection(root.current?.ownerDocument ?? globalThis.document) : undefined,
+  )
+  const known = nav.some((item) => item.id === current)
+
+  const bring = useCallback((id: string, focus: boolean) => {
+    const node = root.current?.querySelector<HTMLElement>(
+      `[data-system-section="${CSS.escape(id)}"]`,
+    )
+    if (!node) return
+    node.scrollIntoView?.({ block: "start", behavior: reducedMotion(node) ? "auto" : "smooth" })
+    if (focus) node.focus({ preventScroll: true })
+  }, [])
+  const hrefFor = (id: string) => {
+    const win = root.current?.ownerDocument.defaultView
+    if (!win) return `?${SYSTEM_SECTION_PARAM}=${encodeURIComponent(id)}`
+    const url = new URL(win.location.href)
+    url.searchParams.set(SYSTEM_SECTION_PARAM, id)
+    return url.pathname + url.search + url.hash
+  }
+  const select = useCallback(
+    (id: string) => {
+      setCurrent(id)
+      const win = root.current?.ownerDocument.defaultView
+      if (props.syncUrl && win) {
+        const url = new URL(win.location.href)
+        url.searchParams.set(SYSTEM_SECTION_PARAM, id)
+        if (url.href !== win.location.href) win.history.replaceState(win.history.state, "", url)
+      }
+      bring(id, true)
+    },
+    [props.syncUrl, bring],
+  )
+
+  // A deep link: once drawn, the section it names is in view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only on the first draw.
+  useLayoutEffect(() => {
+    if (current) bring(current, false)
+  }, [])
+  // biome-ignore lint/correctness/useExhaustiveDependencies: each request once.
+  useEffect(() => {
+    if (props.request) select(props.request.id)
+  }, [props.request?.count])
+
+  const wrap = (id: string, children: ReactNode) => (
+    <div
+      key={id}
+      data-system-section={id}
+      data-current={known && current === id ? "" : undefined}
+      tabIndex={-1}
+      className="scroll-mt-4 outline-none"
+    >
+      {children}
+    </div>
+  )
+
   return (
     <AppShell product="System" actions={<ThemeSwitch />}>
       <PageHeader
@@ -87,37 +182,89 @@ export function SystemScreen(props: SystemScreenProps) {
           ) : undefined
         }
       />
-      <div className="flex flex-col gap-10">
-        {props.build ? <PreviewCard build={props.build} /> : null}
-        <Apps {...props} />
-        <Backends apps={props.apps} backends={props.backends} />
-        {props.services ? (
-          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
-            <ServicesArea services={props.services} />
-          </div>
-        ) : (
-          <NoServices />
+      <div ref={root} className="flex flex-col gap-10">
+        {sections.length > 0 || props.snapshot ? (
+          <nav aria-label="System sections" data-testid="system-sections-nav" className="-mt-4">
+            <ul className="m-0 flex list-none flex-wrap gap-1 p-0">
+              {nav.map((item) => (
+                <li key={item.id}>
+                  <a
+                    href={hrefFor(item.id)}
+                    aria-current={known && current === item.id ? "location" : undefined}
+                    data-section={item.id}
+                    onClick={(event) => {
+                      if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey)
+                        return
+                      event.preventDefault()
+                      select(item.id)
+                    }}
+                    className={`${buttonVariants({ variant: "ghost", size: "sm" })} aria-[current=location]:bg-default aria-[current=location]:text-foreground`}
+                  >
+                    {item.icon ? <IconMark icon={item.icon} label={item.label} size="sm" /> : null}
+                    {item.label}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
+        ) : null}
+        {props.build
+          ? wrap("preview", <PreviewCard build={props.build} snapshot={props.snapshot} />)
+          : null}
+        {wrap("apps", <Apps {...props} />)}
+        {hasBackends
+          ? wrap("backends", <Backends apps={props.apps} backends={props.backends} />)
+          : null}
+        {wrap(
+          "services",
+          props.services ? (
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+              <ServicesArea services={props.services} />
+            </div>
+          ) : (
+            <NoServices />
+          ),
+        )}
+        {props.snapshot ? wrap("data", <DataCard snapshot={props.snapshot} />) : null}
+        {sections.map((section) =>
+          wrap(
+            section.id,
+            <section aria-labelledby={`msh-section-${section.id}`}>
+              <SectionHead
+                id={`msh-section-${section.id}`}
+                title={section.label}
+                icon={section.icon}
+              />
+              <SectionMount section={section} />
+            </section>,
+          ),
         )}
       </div>
     </AppShell>
   )
 }
 
-function SectionHead({
+export function SectionHead({
   id,
   title,
   children,
   actions,
+  icon,
 }: {
   id: string
   title: string
   children?: ReactNode
   actions?: ReactNode
+  icon?: SystemIcon | undefined
 }) {
   return (
     <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
       <div className="min-w-0 flex-1 basis-72">
-        <h2 id={id} className="text-xl font-semibold tracking-tight text-foreground">
+        <h2
+          id={id}
+          className="flex items-center gap-2 text-xl font-semibold tracking-tight text-foreground"
+        >
+          {icon ? <IconMark icon={icon} label={title} size="sm" /> : null}
           {title}
         </h2>
         {children}
@@ -575,7 +722,9 @@ function ServicesArea({ services }: { services: SystemServices }) {
   }, [services])
   useEffect(() => {
     void load()
-  }, [load])
+    // Another tab, a test harness or the proxy changed something: list again.
+    return services.subscribe?.(() => void load())
+  }, [load, services])
 
   const sharedReason = dev && dev.state !== "ready" ? dev.message : undefined
   const choose = async (id: string, mode: SystemServiceMode) => {
@@ -689,6 +838,7 @@ function ServicesArea({ services }: { services: SystemServices }) {
                       sharedId={sharedId}
                       sharedReason={sharedReason}
                       choose={(mode) => choose(row.service.id, mode)}
+                      test={services.test ? () => testService(services, row.service.id) : undefined}
                     />
                   ))
                 )}
@@ -701,18 +851,48 @@ function ServicesArea({ services }: { services: SystemServices }) {
   )
 }
 
+/** A service's Test, with a thrown error as a failed result. */
+const testService = async (services: SystemServices, id: string): Promise<SystemServiceTest> => {
+  try {
+    const result = await services.test?.(id)
+    return result ?? { ok: false, message: "This preview cannot test services." }
+  } catch (error) {
+    return { ok: false, message: message(error) }
+  }
+}
+
 function ServiceRow({
   row,
   sharedId,
   sharedReason,
   choose,
+  test,
 }: {
   row: Row
   sharedId: string
   sharedReason: string | undefined
   choose(mode: SystemServiceMode): Promise<void>
+  test?: (() => Promise<SystemServiceTest>) | undefined
 }) {
   const { service, pending, error } = row
+  const [testing, setTesting] = useState(false)
+  const [tested, setTested] = useState<SystemServiceTest>()
+  const alive = useRef(true)
+  useEffect(
+    () => () => {
+      alive.current = false
+    },
+    [],
+  )
+  const runTest = async () => {
+    if (!test || testing) return
+    setTesting(true)
+    setTested(undefined)
+    const result = await test()
+    if (!alive.current) return
+    setTesting(false)
+    setTested(result)
+  }
   const noteId = useId()
   const buttons = useRef(new Map<SystemServiceMode, HTMLButtonElement>())
   const refocus = useRef(false)
@@ -765,7 +945,26 @@ function ServiceRow({
             </span>
           </span>
           <span className="text-sm text-muted">{service.category ?? "Service"}</span>
+          {service.lastCall ? <LastCall call={service.lastCall} /> : null}
         </div>
+        {test ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={testing}
+            aria-label={`Test ${service.label}`}
+            data-testid="system-service-test"
+            onPress={() => {
+              void runTest()
+            }}
+          >
+            <PlugConnection
+              aria-hidden="true"
+              className={`size-4 ${testing ? "motion-safe:animate-pulse" : ""}`}
+            />
+            Test
+          </Button>
+        ) : null}
         <div onKeyDownCapture={onKeyDownCapture} className="max-sm:w-full">
           <ToggleButtonGroup
             aria-label={`${service.label} mode`}
@@ -806,6 +1005,21 @@ function ServiceRow({
         <CircleInfo className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span>{unavailable ?? ""}</span>
       </p>
+      {test ? (
+        <p
+          role="status"
+          data-testid="system-service-test-result"
+          data-ok={tested ? String(tested.ok) : undefined}
+          hidden={!testing && !tested}
+          className={`m-0 flex items-start gap-2 text-sm ${tested && !tested.ok ? "text-danger" : "text-muted"}`}
+        >
+          {testing
+            ? `Testing ${service.label} through the dev proxy…`
+            : tested
+              ? `${tested.ok ? "Test passed" : "Test failed"}${tested.message ? `: ${tested.message}` : "."}`
+              : ""}
+        </p>
+      ) : null}
       <p role="status" className="sr-only">
         {pending
           ? `Switching to ${service.mode === "dev" ? "the dev resource" : "the emulator"}…`
@@ -820,6 +1034,23 @@ function ServiceRow({
         </Alert>
       ) : null}
     </li>
+  )
+}
+
+/** The last request the service answered: when, and whether it succeeded. */
+function LastCall({ call }: { call: NonNullable<SystemService["lastCall"]> }) {
+  return (
+    <span
+      data-testid="system-service-last-call"
+      data-ok={String(call.ok)}
+      className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted"
+    >
+      <span>
+        Last call <RelativeTime iso={call.at} />
+        {call.status !== undefined ? ` · HTTP ${call.status}` : ""}
+      </span>
+      <StatusChip status={call.ok ? "ok" : "error"}>{call.ok ? "OK" : "Failed"}</StatusChip>
+    </span>
   )
 }
 

@@ -32,6 +32,7 @@ export {
 } from "./preview-launcher.js"
 export { CSS_RESET, scopeReset } from "./reset.js"
 export {
+  DEFAULT_SYSTEM_SHORTCUT,
   DOCK_KEY,
   defineSystem,
   INCLUDED_KEY,
@@ -60,6 +61,8 @@ export {
   type PreviewSystemSurface,
   planPartUpdate,
   ROTATION_KEY,
+  SYSTEM_SECTION_IDS,
+  SYSTEM_SECTION_PARAM,
   type SystemBackend,
   type SystemBackendState,
   type SystemBackends,
@@ -73,9 +76,13 @@ export {
   type SystemHealth,
   type SystemNotice,
   type SystemPreview,
+  type SystemSection,
   type SystemService,
+  type SystemServiceCall,
   type SystemServiceMode,
   type SystemServices,
+  type SystemServiceTest,
+  type SystemSnapshot,
   type SystemSurface,
   systemSurfaces,
 } from "./system-harness.js"
