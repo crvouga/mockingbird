@@ -213,6 +213,7 @@ function Harness({ controller }: { controller: HarnessController }) {
               services={controller.services}
               docsUrl={controller.docsUrl}
               build={controller.build}
+              backends={controller.backends}
             />
           </div>
         </Portal>
@@ -493,6 +494,7 @@ function Chrome({
           />
         ) : null}
       </div>
+      <Notice notice={snapshot.notice} dismiss={controller.dismissNotice} />
       {build ? (
         <UpdateToast
           build={build}
@@ -769,6 +771,41 @@ function UpdateToast({
           </Button>
         </div>
       )}
+    </Card>
+  )
+}
+
+const NOTICE_DOT: Record<"info" | "warning" | "error", string> = {
+  info: "bg-accent ring-accent-soft",
+  warning: "bg-warning ring-warning-soft",
+  error: "bg-danger ring-danger-soft",
+}
+
+/** Over the apps, centered at the top: why an update needs a reload, or what failed. */
+function Notice({ notice, dismiss }: { notice: HarnessSnapshot["notice"]; dismiss(): void }) {
+  return (
+    <Card
+      role={notice?.tone === "error" ? "alert" : "status"}
+      data-testid="system-notice"
+      data-tone={notice?.tone}
+      hidden={!notice}
+      className="pointer-events-auto absolute top-3 left-1/2 w-max max-w-[min(40rem,calc(100%-2rem))] -translate-x-1/2 flex-row flex-wrap items-center gap-x-3 gap-y-2 py-2.5 pr-2.5 pl-3.5 text-sm shadow-overlay"
+    >
+      <span
+        aria-hidden="true"
+        className={`size-2 shrink-0 rounded-full ring-4 ${NOTICE_DOT[notice?.tone ?? "info"]}`}
+      />
+      <p className="m-0 min-w-0 flex-[1_1_240px] text-foreground">{notice?.text}</p>
+      <div className="ml-auto flex gap-1.5">
+        <Button size="sm" variant="ghost" onPress={dismiss}>
+          Dismiss
+        </Button>
+        {notice?.action ? (
+          <Button size="sm" onPress={notice.action.run}>
+            {notice.action.label}
+          </Button>
+        ) : null}
+      </div>
     </Card>
   )
 }

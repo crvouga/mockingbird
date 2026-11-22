@@ -25,6 +25,69 @@ export function writeExcluded(storage: () => Store, excluded: ReadonlySet<string
   }
 }
 
+/**
+ * localStorage key holding the off-by-default ids (`defaultEnabled: false`) a person switched on,
+ * as a JSON string array. Without it they stay out of the switcher.
+ */
+export const INCLUDED_KEY = "mockingbird.system-switcher.included"
+
+/** The off-by-default ids a person switched on. Unreadable or malformed storage means none. */
+export function readIncluded(storage: () => Store): Set<string> {
+  try {
+    const saved: unknown = JSON.parse(storage().getItem(INCLUDED_KEY) ?? "[]")
+    if (Array.isArray(saved))
+      return new Set(saved.filter((id): id is string => typeof id === "string" && id !== "system"))
+  } catch {
+    /* Storage can be unavailable or hold something else; off-by-default apps stay off. */
+  }
+  return new Set()
+}
+
+export function writeIncluded(storage: () => Store, included: ReadonlySet<string>): void {
+  try {
+    storage().setItem(INCLUDED_KEY, JSON.stringify([...included].sort()))
+  } catch {
+    /* A convenience; the choice holds for this session without storage. */
+  }
+}
+
+/**
+ * The ids out of the switcher when it mounts: the ones a person switched off, plus every
+ * off-by-default id they never switched on.
+ */
+export function initialExcluded(
+  storage: () => Store,
+  defaultOff: readonly string[],
+): { excluded: Set<string>; included: Set<string> } {
+  const excluded = readExcluded(storage)
+  const included = readIncluded(storage)
+  for (const id of defaultOff) if (id !== "system" && !included.has(id)) excluded.add(id)
+  return { excluded, included }
+}
+
+/** Records one switch flip, keeping both keys consistent. */
+export function setRotation(
+  storage: () => Store,
+  state: { excluded: Set<string>; included: Set<string> },
+  defaultOff: readonly string[],
+  id: string,
+  on: boolean,
+): void {
+  if (id === "system") return
+  if (on) state.excluded.delete(id)
+  else state.excluded.add(id)
+  if (defaultOff.includes(id)) {
+    if (on) state.included.add(id)
+    else state.included.delete(id)
+    writeIncluded(storage, state.included)
+  }
+  // Off-by-default ids are left out of ROTATION_KEY: their absence from INCLUDED_KEY says it.
+  writeExcluded(
+    storage,
+    new Set([...state.excluded].filter((value) => !defaultOff.includes(value))),
+  )
+}
+
 /** localStorage key holding the switcher's order (System included), as a JSON string array. */
 export const ORDER_KEY = "mockingbird.system-switcher.order"
 
