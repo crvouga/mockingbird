@@ -80,7 +80,8 @@ function container(host: HTMLElement, style = ""): HTMLElement {
   return element
 }
 
-// ---- Theme: the host page's pinned light or dark (`class` / `data-theme` on <html>), or the system's.
+// ---- Theme: the host page's pinned light or dark (`class` / `data-theme` on <html>), else the
+// background the harness actually sits on, else the system's.
 
 const pinned = (doc: Document): MockingbirdTheme => {
   const root = doc.documentElement
@@ -90,19 +91,83 @@ const pinned = (doc: Document): MockingbirdTheme => {
   if (root.classList.contains("light")) return "light"
   return "system"
 }
-function useHostTheme(doc: Document): MockingbirdTheme {
+
+/**
+ * Whether a computed `background-color` reads as dark; undefined when it paints nothing (or is in
+ * a notation this does not read, which leaves the system's theme in charge).
+ */
+export function isDarkBackground(color: string): boolean | undefined {
+  const match =
+    /^rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)(?:\s*[,/]\s*([\d.]+%?))?\s*\)$/.exec(
+      color.trim(),
+    )
+  if (!match) return undefined
+  const alpha =
+    match[4] === undefined
+      ? 1
+      : match[4].endsWith("%")
+        ? Number.parseFloat(match[4]) / 100
+        : Number(match[4])
+  if (!(alpha >= 0.5)) return undefined
+  const [red, green, blue] = [match[1], match[2], match[3]].map(Number) as [number, number, number]
+  // Perceived lightness (Rec. 709 luma): close enough to tell a dark page from a light one.
+  return (0.2126 * red + 0.7152 * green + 0.0722 * blue) / 255 < 0.5
+}
+
+/** How the harness's own UI is themed, and whether its bar can sit on the host's background. */
+export type HostTheme = {
+  theme: MockingbirdTheme
+  /**
+   * True when the host page paints a background behind the harness and pins no theme: the bar
+   * is then transparent over it, so it reads as part of that page whatever its colors are.
+   */
+  blend: boolean
+}
+
+/**
+ * The theme for a harness in `shell`. A pin on <html> wins (Mockingbird's own switch sets one).
+ * Otherwise the nearest ancestor that paints a background decides, so a dark app on a machine set
+ * to light gets dark chrome, with no option to pass. A page that paints none gets the system's.
+ */
+export function hostTheme(shell: HTMLElement): HostTheme {
+  const doc = shell.ownerDocument
+  const pin = pinned(doc)
+  if (pin !== "system") return { theme: pin, blend: false }
+  const view = doc.defaultView
+  for (let element = shell.parentElement; element && view; element = element.parentElement) {
+    const dark = isDarkBackground(view.getComputedStyle(element).backgroundColor)
+    if (dark !== undefined) return { theme: dark ? "dark" : "light", blend: true }
+  }
+  return { theme: "system", blend: false }
+}
+
+function useHostTheme(shell: HTMLElement): HostTheme {
+  const doc = shell.ownerDocument
   const subscribe = useCallback(
     (listener: () => void) => {
+      // A theme switch of the host's own: a class, an attribute or an inline style, on <html>,
+      // <body> or the element the harness is mounted in.
       const observer = new MutationObserver(listener)
-      observer.observe(doc.documentElement, {
-        attributes: true,
-        attributeFilter: ["class", "data-theme"],
-      })
-      return () => observer.disconnect()
+      const options = { attributes: true, attributeFilter: ["class", "data-theme", "style"] }
+      for (const element of new Set([doc.documentElement, doc.body, shell.parentElement]))
+        if (element) observer.observe(element, options)
+      const media = doc.defaultView?.matchMedia?.("(prefers-color-scheme: dark)")
+      media?.addEventListener("change", listener)
+      return () => {
+        observer.disconnect()
+        media?.removeEventListener("change", listener)
+      }
     },
-    [doc],
+    [doc, shell],
   )
-  return useSyncExternalStore(subscribe, () => pinned(doc))
+  const key = useSyncExternalStore(subscribe, () => {
+    const { theme, blend } = hostTheme(shell)
+    return `${theme}${blend ? " blend" : ""}`
+  })
+  return useMemo(
+    () => ({ theme: key.split(" ")[0] as MockingbirdTheme, blend: key.endsWith(" blend") }),
+    [key],
+  )
 }
 
 /** Mounts the view into the harness's chrome layer; the harness disposes it on destroy. */
@@ -191,7 +256,7 @@ export type SectionRequest = { id: string; count: number }
 
 function Harness({ controller }: { controller: HarnessController }) {
   const snapshot = useSnapshot(controller)
-  const theme = useHostTheme(controller.shell.ownerDocument)
+  const { theme, blend } = useHostTheme(controller.shell)
   const store = useMemo(
     () => (controller.services ? trackServices(controller.services) : undefined),
     [controller.services],
@@ -213,6 +278,7 @@ function Harness({ controller }: { controller: HarnessController }) {
         controller={controller}
         snapshot={snapshot}
         theme={theme}
+        blend={blend}
         store={store}
         openSystem={openSystem}
       />
@@ -307,12 +373,15 @@ function Chrome({
   controller,
   snapshot,
   theme,
+  blend,
   store,
   openSystem,
 }: {
   controller: HarnessController
   snapshot: HarnessSnapshot
   theme: MockingbirdTheme
+  /** The bar sits on the host page's own background instead of painting Mockingbird's. */
+  blend: boolean
   store: ServicesStore | undefined
   openSystem(section?: string): void
 }) {
@@ -480,9 +549,10 @@ function Chrome({
             onKeyDown={(event) => {
               if (event.key === "Escape") setTip(undefined)
             }}
-            className={`flex items-center gap-0.5 border-b bg-background px-1.5 text-foreground select-none ${
-              devText ? "border-warning" : "border-transparent"
-            }`}
+            data-blend={blend ? "" : undefined}
+            className={`flex items-center gap-0.5 border-b px-1.5 text-foreground select-none ${
+              blend ? "bg-transparent" : "bg-background"
+            } ${devText ? "border-warning" : "border-transparent"}`}
             style={{ height: SWITCHER_BAR_HEIGHT }}
           >
             {([-1, 1] as const).map((step) => {
@@ -697,6 +767,9 @@ function BuildDot({
   )
 }
 
+/** How long an update may take to apply before the toast says "Updating…". */
+export const APPLYING_TOAST_DELAY_MS = 400
+
 /** Under the bar's right end (never over it) while an update is ready, applying, or failed. */
 function UpdateToast({ build, focusDot }: { build: SystemBuild; focusDot(): void }) {
   const state = useBuildState(build)
@@ -705,8 +778,19 @@ function UpdateToast({ build, focusDot }: { build: SystemBuild; focusDot(): void
   const [, setTick] = useState(0)
   const next = nextVersion(state)
   const { update } = state
+  // An update that applies at once (a dev server's, or one in a background tab) and is done
+  // within a moment says nothing: the toast is for a wait, a choice or a failure.
+  const [slow, setSlow] = useState(false)
+  useEffect(() => {
+    if (!update.applying) return setSlow(false)
+    const timer = setTimeout(() => setSlow(true), APPLYING_TOAST_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [update.applying])
+  const wasShowing = useRef(false)
   const showing =
-    update.available && (update.applying || update.error !== undefined || next !== dismissed)
+    update.available &&
+    (update.error !== undefined ||
+      (update.applying ? slow || wasShowing.current : next !== dismissed))
   // An update that resets the preview's data never counts down, whatever the source says.
   const resets = update.resetsData === true
   const ticking =
@@ -718,7 +802,6 @@ function UpdateToast({ build, focusDot }: { build: SystemBuild; focusDot(): void
   }, [ticking])
 
   // Leave focus somewhere sensible rather than on a hidden button.
-  const wasShowing = useRef(showing)
   useLayoutEffect(() => {
     const node = toast.current
     const root = node?.ownerDocument

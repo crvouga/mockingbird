@@ -24,6 +24,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web"
 import { gzipSync } from "node:zlib"
 import { type BuildContext, build, context, formatMessages, type Message } from "esbuild"
 import { type BuildPreviewOptions, planPreviewBuild } from "./build.js"
+import { devWaitingPage } from "./dev-boot.js"
 import type { PreviewVersion } from "./live.js"
 import type { PreviewStatusSnapshot } from "./preview-status.js"
 
@@ -123,14 +124,6 @@ const isLoopback = (hostname: string) =>
 /** Node's `Uint8Array` is a `BodyInit` at run time; the DOM's declaration does not say so. */
 const body = (bytes: Uint8Array) => bytes as unknown as BodyInit
 
-const escapeHtml = (value: string): string =>
-  value.replace(
-    /[&<>"']/g,
-    (character) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ??
-      character,
-  )
-
 const describe = async (error: unknown): Promise<string> => {
   const errors = (error as { errors?: Message[] } | undefined)?.errors
   if (Array.isArray(errors) && errors.length > 0) {
@@ -139,16 +132,6 @@ const describe = async (error: unknown): Promise<string> => {
   }
   return (error instanceof Error ? error.message : String(error)).slice(0, MAX_MESSAGE)
 }
-
-/** The page served while no build has succeeded yet: the error, and a reload once one does. */
-const waitingPage = (message: string | undefined) => `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light dark"><title>${message === undefined ? "Building…" : "Build failed"}</title>
-<style>body{margin:0;padding:24px;font:14px/1.5 system-ui,sans-serif}h1{font-size:16px;margin:0 0 12px}pre{margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}</style>
-</head><body><h1>${message === undefined ? "Building the preview…" : "The preview does not build yet"}</h1><pre>${escapeHtml(message ?? "")}</pre>
-<script>(()=>{const s=new EventSource("/__preview/live");let first=true;s.addEventListener("snapshot",e=>{const d=JSON.parse(e.data);if(d.deployed||(!first&&d.build&&d.build.state==="failed"))location.reload();first=false})})()</script>
-</body></html>
-`
 
 const send = async (response: Response, incoming: IncomingMessage, outgoing: ServerResponse) => {
   outgoing.statusCode = response.status
@@ -476,7 +459,7 @@ export async function devPreview(options: DevPreviewOptions): Promise<DevPreview
     }
     // A missing file is a 404, never the page: a script that got HTML fails with a riddle.
     if (extname(path) !== "") return html("Not found", 404)
-    return html(current ? plan.html : waitingPage(history.at(-1)?.error))
+    return html(current ? plan.html : devWaitingPage(history.at(-1)?.error))
   }
 
   const server = createServer((incoming, outgoing) => {

@@ -4,6 +4,8 @@
  * card in the corner holds the compiler's message; the app underneath keeps running its last good
  * version, and the card goes away with the next good build.
  *
+ * Also the page the dev server answers with before any build has succeeded (`devWaitingPage`).
+ *
  * Browser: `document`, `EventSource`.
  */
 import { type BootPreviewOptions, bootPreview } from "./boot.js"
@@ -46,6 +48,28 @@ export function showDevBuildError(doc: Document, message: string | undefined): v
   card.append(header, text)
   root.append(style, card)
 }
+
+const escapeHtml = (value: string): string =>
+  value.replace(
+    /[&<>"']/g,
+    (character) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[character] ??
+      character,
+  )
+
+/**
+ * The page the dev server answers with while no build has succeeded yet: the compiler's message
+ * (or, with `undefined`, that the first build is running), reloading itself into the app as soon
+ * as a build succeeds, and again when the message changes.
+ */
+export const devWaitingPage = (message: string | undefined): string => `<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark"><title>${message === undefined ? "Building…" : "Build failed"}</title>
+<style>body{margin:0;padding:24px;font:14px/1.5 system-ui,sans-serif}h1{font-size:16px;margin:0 0 12px}pre{margin:0;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;word-break:break-word}</style>
+</head><body><h1>${message === undefined ? "Building the preview…" : "The preview does not build yet"}</h1><pre>${escapeHtml(message ?? "")}</pre>
+<script>(()=>{const s=new EventSource("/__preview/live?overlay");let first=true;s.addEventListener("snapshot",e=>{const d=JSON.parse(e.data);if(d.deployed||(!first&&d.build&&d.build.state==="failed"))location.reload();first=false})})()</script>
+</body></html>
+`
 
 /** Boots the preview and keeps the build error card in step with the dev server's status. */
 export function bootDevPreview(options: BootPreviewOptions = {}): void {

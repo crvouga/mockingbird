@@ -319,7 +319,9 @@ export function mountSystemHarness(
   shell.className = "msh"
   shell.dataset.testid = "system-harness"
   shell.style.cssText =
-    "position:relative;display:flex;flex-direction:column;height:100%;min-height:240px;isolation:isolate;background:Canvas;color:CanvasText"
+    // No background or color of its own: the surfaces sit on the host page's, as they would
+    // without the harness. The bar and the System screen paint theirs (`system-view.tsx`).
+    "position:relative;display:flex;flex-direction:column;height:100%;min-height:240px;isolation:isolate"
   // The switcher bar: a thin strip across the top, in the layout, so it never covers a surface.
   // Shown only while there are surfaces to switch between; `setSurfaces` can change that.
   let barHeight = 0
@@ -408,10 +410,17 @@ export function mountSystemHarness(
     panel.setAttribute("aria-label", spec.label)
     panel.tabIndex = -1
     // Positioned, so absolutely placed descendants scroll and clip with the panel.
-    panel.style.cssText = "position:relative;flex:1 1 0;min-height:0;overflow:auto;outline:none"
+    panel.style.cssText = "position:relative;height:100%;overflow:auto;outline:none"
+    // The panel's frame: the box below the bar that the surface fills. Layout containment makes
+    // it what `position: fixed` inside the surface is placed against, so an app's fixed header,
+    // bottom navigation or toast sits inside its own area, below the bar, and does not scroll.
+    const frame = doc.createElement("div")
+    frame.className = "msh-frame"
+    frame.style.cssText = "position:relative;flex:1 1 0;min-height:0;overflow:hidden;contain:layout"
+    frame.append(panel)
     setHidden(panel, true)
     panel.inert = true
-    shell.insertBefore(panel, chrome)
+    shell.insertBefore(frame, chrome)
     return { spec, panel, abort: new AbortController() }
   }
   let entries: Entry[] = [systemSpec, ...specs].map(createEntry)
@@ -727,7 +736,7 @@ export function mountSystemHarness(
       entry.evictTimer = undefined
       // Aborts a pending mount (its late result is disposed by `load`) and disposes a settled one.
       unmount(entry)
-      entry.panel.remove()
+      entry.panel.parentElement?.remove()
       lastPath.delete(entry.spec.id)
     }
     entries = [
@@ -853,6 +862,9 @@ function validateSurfaces(surfaces: readonly SystemSurface[]): void {
 function setHidden(panel: HTMLElement, hidden: boolean) {
   panel.hidden = hidden
   panel.style.display = hidden ? "none" : ""
+  // Its frame takes no room either.
+  const frame = panel.parentElement
+  if (frame?.classList.contains("msh-frame")) frame.style.display = hidden ? "none" : ""
 }
 
 /** What applying a newer load manifest did. */

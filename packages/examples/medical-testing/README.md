@@ -223,6 +223,16 @@ or open the standalone static preview. The arrows on the thin bar across the top
 Notifications; hover one to see where it goes. These surfaces share the same running database and emulators.
 The emulator inspector includes SQL queries, state, clock, faults, journal and routes.
 
+**As a preview that updates as you save** (the quickest loop for UI work: nothing to restart, and
+open tabs take each change in place):
+
+```bash
+bun run preview:ui               # from the repo root; prints the addresses, also for a phone
+```
+
+It runs `scripts/dev-preview.ts` (`devPreview` from `@crvouga/mockingbird-preview/dev-server`)
+with the dev resources proxy at `/__dev`, reading non-production keys from `.env.local`.
+
 **As a standalone dev server:**
 
 ```bash

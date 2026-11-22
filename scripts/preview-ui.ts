@@ -144,10 +144,12 @@ if (fixed) {
   })
   if (process.argv.includes("--packages"))
     spawn(["bunx", "turbo", "watch", "build", `${filter}^...`], root)
-  // Listening, with the first build done, before the addresses are printed.
+  // Listening, with the first build over (good or bad), before the addresses are printed.
   for (let waited = 0; waited < 60_000; waited += 100) {
     const up = await fetch(`http://127.0.0.1:${port}/__preview/status`).then(
-      (response) => response.ok,
+      async (response) =>
+        response.ok &&
+        ((await response.json()) as { build?: { state?: string } }).build?.state !== "building",
       () => false,
     )
     if (up) break
