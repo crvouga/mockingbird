@@ -97,6 +97,37 @@ from the package root. The embedded `Database` shares
 the same in-memory engine (no filesystem) and all its methods are **synchronous**; do not `await`
 them. See [Method semantics](#method-semantics).
 
+### Finding a statement that blocks the thread
+
+The engine runs each statement to completion on the caller's thread: in Node, Bun, a browser tab or
+a worker, nothing else in that thread (other requests, timers, rendering, other connections to the
+wire server) runs until the statement returns. One slow statement therefore looks like a frozen
+process. To find it, register a statement observer and log what crosses a threshold:
+
+```ts
+const db = new Database({
+  // called after each statement that took at least slowStatementMs (0, the default, reports all)
+  onStatement: ({ sql, durationMs, rows, error }) =>
+    console.warn(`[postgres] ${durationMs.toFixed(0)} ms, ${rows} rows${error ? " (failed)" : ""}: ${sql}`),
+  slowStatementMs: 250,
+});
+// or later, with its own threshold; returns a function that stops it
+const stop = db.observeStatements((event) => report(event), { slowStatementMs: 1000 });
+```
+
+Each event carries `{ sql, durationMs, rows, command?, error? }`; a multi-statement `exec()` script is
+reported one statement at a time. Bound parameter values are left out unless you pass
+`includeParams: true` (they can hold personal data). With no observer nothing is timed. An observer
+that throws is ignored, and branches or snapshots opened from the database do not inherit it. The
+wire server takes the same options, `serve({ onStatement, slowStatementMs, includeParams })` (events
+add the connection's `pid`; the duration includes time spent waiting for the engine or a lock), and
+the CLI prints them with `mockingbird-postgres serve --slow-ms 250`. The admin surface keeps the most
+recent slow statements of each namespace for its "Slow queries" view:
+`createAdmin({ database, slowStatementMs: 250, slowStatementLimit: 50 })` serves them, newest first and
+without parameters, at `GET /__admin/sql/slow-statements` (and `admin.slowStatements(namespace?)`).
+`statement_timeout` (see [compatibility notes](#compatibility-notes-for-integrators)) can additionally
+cancel a runaway statement.
+
 ### Per-test isolation with snapshots
 
 Run migrations and fixtures once, `snapshot()` the result, and boot a server from that snapshot
@@ -223,7 +254,9 @@ of connections pays the PBKDF2 cost once rather than per connection.
 `serve({ database })` shares an existing `Database`, and `serve({ database: snapshot })` boots every
 server from one frozen template, so a seeded stack starts from the same bytes each time.
 `createAdmin` from `@crvouga/mockingbird-service-postgres/admin` serves the same `/__admin`
-surface as every other emulator, including the table explorer (`GET /sql/tables`, `POST /sql/query`).
+surface as every other emulator, including the table explorer (`GET /sql/tables`, `POST /sql/query`)
+and the recent slow statements (`GET /sql/slow-statements`, see
+[finding a statement that blocks the thread](#finding-a-statement-that-blocks-the-thread)).
 The wire server does not speak that HTTP API.
 
 `mockingbird-postgres serve --config mockingbird.json` also supervises a mixed HTTP/Postgres/Redis
@@ -248,7 +281,9 @@ syntax error or unsupported construct rejected at Parse is logged too. A portal 
 `Describe` or `Execute`, whichever comes first, and is logged under that step. `rowCount` is the
 rows returned or affected on success. `serve({ onLog, logParams: true })` adds the bound `params`
 of extended-protocol statements, so a failure can be replayed; it is off by default because values
-may be large.
+may be large. `serve({ onStatement, slowStatementMs, includeParams })` reports the same statements
+to a [statement observer](#finding-a-statement-that-blocks-the-thread), only those at or above the
+threshold.
 
 One committed engine is shared by every connection. Explicit transactions execute in per-session
 copy-on-write workspaces that rebase each statement on the latest committed state, providing
@@ -733,7 +768,7 @@ Stable runtime exports of the main entry include `openDurableDatabase`, `openDur
 
 Signatures (types are exported too: `DatabaseOptions`, `HistoryCheckpoint`, `DatabaseHistory`,
 `RegisterFunctionOptions`, `ResultSet`, `RunResult`, `ErrorCategory`, `BindValue`, `JsValue`,
-`QueryRow`):
+`QueryRow`, `StatementEvent`, `StatementObserver`, `StatementObserverOptions`, `SlowStatement`):
 
 ```ts
 interface DatabaseOptions {
@@ -742,6 +777,19 @@ interface DatabaseOptions {
   now?: Date | (() => Date) | "system"   // default 2000-01-01T00:00:00.000Z; "system" is wall clock
   int8?: "bigint" | "number" | "string"  // default "bigint"; "number" is unsafe beyond MAX_SAFE_INTEGER
   maxCheckpoints?: number                // timeline checkpoints to retain; default 1000
+  onStatement?: (event: StatementEvent) => void  // after each statement at/above slowStatementMs
+  slowStatementMs?: number               // default 0: report every statement
+  includeParams?: boolean                // add bound values to events; default false
+}
+
+interface StatementEvent {
+  sql: string
+  params?: readonly unknown[]            // only with includeParams
+  durationMs: number
+  rows: number                           // returned or affected; 0 when it failed
+  command?: string                       // e.g. "SELECT"; absent when it failed
+  error?: unknown                        // what it threw (still thrown to the caller)
+  pid?: number                           // wire server only
 }
 
 interface HistoryCheckpoint {
@@ -767,6 +815,8 @@ declare class Database {
   prepare(sql: string): Statement
   transaction<T>(fn: () => T): T
   copyFrom(sql: string, data: string): number   // COPY t FROM STDIN payload (\copy analog)
+  observeStatements(observer: (event: StatementEvent) => void,
+                    options?: { slowStatementMs?: number; includeParams?: boolean }): () => void
   snapshot(): Snapshot
   checkpoint(): Snapshot
   record(branch?: string): HistoryCheckpoint

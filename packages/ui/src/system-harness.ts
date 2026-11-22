@@ -1,6 +1,12 @@
 /// <reference lib="dom" />
 
 import type { SystemBuild } from "./system-build-status.js"
+import {
+  DEFAULT_FRAME_READY_TIMEOUT_MS,
+  frameLocation,
+  mountFrame,
+  type SystemFrame,
+} from "./system-frame.js"
 import { SYSTEM_ICONS, type SystemIcon } from "./system-icons.js"
 import {
   createPartRuntime,
@@ -38,6 +44,7 @@ import type {
   PanelStatus,
   SystemApp,
   SystemBackends,
+  SystemFactsSection,
   SystemHealth,
   SystemNotice,
   SystemSection,
@@ -46,6 +53,11 @@ import type {
 } from "./system-types.js"
 
 export type { SystemBuild, SystemBuildState } from "./system-build-status.js"
+export {
+  DEFAULT_FRAME_READY_TIMEOUT_MS,
+  FRAME_PATHS_KEY,
+  type SystemFrame,
+} from "./system-frame.js"
 export {
   defineSystem,
   PREVIEW_FRAME_CONNECT,
@@ -88,15 +100,20 @@ export type {
   SystemBackendState,
   SystemBackends,
   SystemDevStatus,
+  SystemFact,
+  SystemFactGroup,
+  SystemFactsSection,
   SystemHealth,
   SystemNotice,
   SystemSection,
   SystemService,
   SystemServiceCall,
+  SystemServiceField,
   SystemServiceMode,
   SystemServices,
   SystemServiceTest,
   SystemSnapshot,
+  SystemTimelineStep,
 } from "./system-types.js"
 
 /** Product code supplies lazy surfaces; the shell knows nothing about their services. */
@@ -107,7 +124,14 @@ export type SystemSurface = {
   description?: string
   /** Shown on its row and in the switcher's tooltips; see `SystemIcon`. Defaults to its first letter. */
   icon?: SystemIcon
-  mount(host: HTMLElement, signal: AbortSignal): Promise<() => void> | (() => void)
+  /** Draws the surface into `host`; returns its disposer. Give a surface `mount` or `frame`. */
+  mount?(host: HTMLElement, signal: AbortSignal): Promise<() => void> | (() => void)
+  /**
+   * A same-origin page in an iframe, in place of `mount`: the harness creates and removes the
+   * iframe, keeps its last inner path, follows its navigations into the tab's address, and keeps
+   * the panel loading until it is `ready` (see `SystemFrame`). `harness.frame(id)` returns it.
+   */
+  frame?: SystemFrame
   /** `false` keeps it out of the switcher until switched on (kept under `INCLUDED_KEY`). Default true. */
   defaultEnabled?: boolean
   /**
@@ -169,8 +193,9 @@ export type SystemHarnessOptions = {
   /**
    * The consumer's own System sections (feature flags, start-up timings), after the built-in
    * ones and each deep-linkable as `?system=<id>` with `syncUrl`, instead of another surface.
+   * A `SystemFactsSection` (with `load` in place of `mount`) is drawn by the screen from data.
    */
-  sections?: readonly SystemSection[]
+  sections?: readonly (SystemSection | SystemFactsSection)[]
   /** Save, load and reset of the whole in-tab state: adds a Data card to System. */
   snapshot?: SystemSnapshot
   /**
@@ -212,6 +237,11 @@ export type SystemHarnessOptions = {
    * false` does. A missing or cleared store means these defaults, not everything on.
    */
   defaultExcluded?: readonly string[]
+  /**
+   * How long a `frame` surface's page may take to become `ready` before its panel shows the error
+   * and Retry. Default `DEFAULT_FRAME_READY_TIMEOUT_MS` (30 s); `Infinity` waits for ever.
+   */
+  readyTimeoutMs?: number
 }
 export type SystemHarness = {
   show(id: string): Promise<void>
@@ -245,6 +275,8 @@ export type SystemHarness = {
    * anything: the preview stays as it was.
    */
   setSurfaces(surfaces: readonly SystemSurface[]): void
+  /** A `frame` surface's iframe while it is mounted (from its mount until it is disposed). */
+  frame(id: string): HTMLIFrameElement | undefined
   /** Shows a notice over the apps until dismissed or replaced; `undefined` clears it. */
   notify(notice: SystemNotice | undefined): void
   destroy(): void
@@ -253,7 +285,15 @@ export type SystemHarness = {
 const SYSTEM_APP: Required<
   Omit<
     SystemSurface,
-    "mount" | "defaultEnabled" | "route" | "backends" | "version" | "health" | "onShow" | "onHide"
+    | "mount"
+    | "frame"
+    | "defaultEnabled"
+    | "route"
+    | "backends"
+    | "version"
+    | "health"
+    | "onShow"
+    | "onHide"
   >
 > = {
   id: "system",
@@ -305,6 +345,9 @@ export function mountSystemHarness(
   const evictAfter = options.evictHiddenAfterMs
   if (evictAfter !== undefined && !(evictAfter >= 0))
     throw new Error(`evictHiddenAfterMs must be a number of milliseconds, not ${evictAfter}`)
+  const readyTimeout = options.readyTimeoutMs ?? DEFAULT_FRAME_READY_TIMEOUT_MS
+  if (!(readyTimeout > 0))
+    throw new Error(`readyTimeoutMs must be a positive number of milliseconds, not ${readyTimeout}`)
   const defaultOffOf = (list: readonly SystemSurface[]) => [
     ...new Set([
       ...list.filter((s) => s.defaultEnabled === false).map((s) => s.id),
@@ -391,6 +434,8 @@ export function mountSystemHarness(
     evictTimer?: number | undefined
     /** `setSurfaces` dropped it: it never mounts again. */
     removed?: boolean
+    /** A `frame` surface's iframe, while mounted. */
+    frame?: HTMLIFrameElement | undefined
   }
   const systemSpec: SystemSurface = {
     ...SYSTEM_APP,
@@ -411,16 +456,16 @@ export function mountSystemHarness(
     panel.tabIndex = -1
     // Positioned, so absolutely placed descendants scroll and clip with the panel.
     panel.style.cssText = "position:relative;height:100%;overflow:auto;outline:none"
-    // The panel's frame: the box below the bar that the surface fills. Layout containment makes
+    // The panel's stage: the box below the bar that the surface fills. Layout containment makes
     // it what `position: fixed` inside the surface is placed against, so an app's fixed header,
     // bottom navigation or toast sits inside its own area, below the bar, and does not scroll.
-    const frame = doc.createElement("div")
-    frame.className = "msh-frame"
-    frame.style.cssText = "position:relative;flex:1 1 0;min-height:0;overflow:hidden;contain:layout"
-    frame.append(panel)
+    const stage = doc.createElement("div")
+    stage.className = "msh-stage"
+    stage.style.cssText = "position:relative;flex:1 1 0;min-height:0;overflow:hidden;contain:layout"
+    stage.append(panel)
     setHidden(panel, true)
     panel.inert = true
-    shell.insertBefore(frame, chrome)
+    shell.insertBefore(stage, chrome)
     return { spec, panel, abort: new AbortController() }
   }
   let entries: Entry[] = [systemSpec, ...specs].map(createEntry)
@@ -524,7 +569,25 @@ export function mountSystemHarness(
     entry.pending = Promise.resolve()
       .then(() => {
         if (destroyed || signal.aborted) return
-        return (entry.mount ?? entry.spec.mount)(content, signal)
+        const mount = entry.mount ?? entry.spec.mount
+        if (mount) return mount(content, signal)
+        const frame = entry.spec.frame as SystemFrame
+        let mine: HTMLIFrameElement | undefined
+        return mountFrame(content, signal, {
+          id,
+          label,
+          frame,
+          storage,
+          timeoutMs: readyTimeout,
+          navigated: (location) => frameNavigated(entry, location),
+          // Only this mount's own iframe: a late, aborted mount never clears a newer one.
+          attach: (element) => {
+            if (element) {
+              mine = element
+              if (!signal.aborted) entry.frame = element
+            } else if (entry.frame === mine) entry.frame = undefined
+          },
+        })
       })
       .then((dispose) => {
         status.remove()
@@ -549,6 +612,27 @@ export function mountSystemHarness(
         if (!signal.aborted) entry.panel.removeAttribute("aria-busy")
       })
     return entry.pending
+  }
+
+  /** A shown frame surface navigated inside itself: its `address` becomes the tab's address. */
+  function frameNavigated(entry: Entry, location: Location) {
+    if (destroyed || entry.removed || snapshot.current !== entry.spec.id) return
+    const next = frameAddress(entry, location)
+    if (next && next.href !== win.location.href)
+      win.history.replaceState(win.history.state, "", next)
+  }
+
+  /** What a frame surface's `address` maps its location to, as a URL; undefined to leave it. */
+  function frameAddress(entry: Entry, location = entry.frame && frameLocation(entry.frame)) {
+    const address = entry.spec.frame?.address
+    if (!address || !location) return undefined
+    try {
+      const next = address(location)
+      return next === undefined ? undefined : new URL(next, win.location.href)
+    } catch (error) {
+      console.error(`mockingbird: ${entry.spec.id}'s frame address threw`, error)
+      return undefined
+    }
   }
 
   function update(
@@ -673,7 +757,10 @@ export function mountSystemHarness(
     for (const candidate of entries) if (candidate !== entry) syncVisible(candidate)
     syncVisible(entry)
     scheduleEviction()
-    if (hostUrl && !fromHistory && hostUrl.read(win.location) !== entry.spec.id) {
+    // A mounted frame surface's own page says where the tab is.
+    const framed = fromHistory ? undefined : frameAddress(entry)
+    if (framed && (hostUrl || !options.syncUrl)) go(framed)
+    else if (hostUrl && !fromHistory && hostUrl.read(win.location) !== entry.spec.id) {
       const next = hostUrl.write(entry.spec.id, win.location)
       if (next !== undefined) go(new URL(next, win.location.href))
     } else if (options.syncUrl && !fromHistory) {
@@ -707,7 +794,7 @@ export function mountSystemHarness(
             : undefined
         url = new URL(saved ?? here ?? route, url)
       }
-      go(url)
+      go(framed ?? url)
     }
     if (!first && previous !== entry)
       try {
@@ -816,6 +903,7 @@ export function mountSystemHarness(
     active: () => snapshot.current,
     update,
     setSurfaces,
+    frame: (id) => entries.find((entry) => entry.spec.id === id)?.frame,
     notify,
     destroy() {
       if (destroyed) return
@@ -841,7 +929,10 @@ export function mountSystemHarness(
   }
 }
 
-/** Throws on a missing, duplicate or reserved id, or two surfaces declaring one route. */
+/**
+ * Throws on a missing, duplicate or reserved id, two surfaces declaring one route, or a surface
+ * without exactly one of `mount` and `frame`.
+ */
 function validateSurfaces(surfaces: readonly SystemSurface[]): void {
   const ids = new Set(["system"])
   const routes = new Map<string, string>()
@@ -849,6 +940,15 @@ function validateSurfaces(surfaces: readonly SystemSurface[]): void {
     if (!surface?.id || ids.has(surface.id))
       throw new Error(`Duplicate or reserved surface: ${surface?.id}`)
     ids.add(surface.id)
+    const mounts = typeof surface.mount === "function"
+    const framed = surface.frame !== undefined
+    if (mounts === framed)
+      throw new Error(`Surface ${surface.id} needs exactly one of mount and frame`)
+    if (framed) {
+      const src = surface.frame?.src
+      if (typeof src !== "string" && typeof src !== "function")
+        throw new Error(`Surface ${surface.id}'s frame needs a src`)
+    }
     if (surface.route !== undefined) {
       const owner = routes.get(surface.route)
       if (owner !== undefined)
@@ -862,9 +962,9 @@ function validateSurfaces(surfaces: readonly SystemSurface[]): void {
 function setHidden(panel: HTMLElement, hidden: boolean) {
   panel.hidden = hidden
   panel.style.display = hidden ? "none" : ""
-  // Its frame takes no room either.
-  const frame = panel.parentElement
-  if (frame?.classList.contains("msh-frame")) frame.style.display = hidden ? "none" : ""
+  // Its stage takes no room either.
+  const stage = panel.parentElement
+  if (stage?.classList.contains("msh-stage")) stage.style.display = hidden ? "none" : ""
 }
 
 /** What applying a newer load manifest did. */

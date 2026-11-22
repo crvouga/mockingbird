@@ -1,405 +1,366 @@
 /**
- * The preview's dev loop: `devPreview` builds the same preview `buildPreview` does, keeps it in
- * memory, serves it, and rebuilds when a source file changes. Open tabs hear about each build
- * over the same `/__preview/live` stream a deployed preview uses, so they swap the new version in
- * place, at once: no reload, no countdown, and whatever the page keeps outside the app (the
- * scroll position of other surfaces, an in-tab backend that was not rebuilt) stays.
+ * The local dev loop for a built preview: serves the preview directory, watches the consumer's
+ * sources, runs the consumer's build on every change, stamps a new `version.json`, and pushes the
+ * new build to every open tab over the same `/__preview/live` stream `createLivePreview` reads. The
+ * snapshots it sends say `dev: true`, so the tab applies each build at once (no countdown, no
+ * prompt) whenever it keeps the tab's data (`stateVersion` unchanged).
  *
- * - **Incremental.** One esbuild context: a rebuild reparses only the files that changed.
- * - **Content addressed.** A version is its entry's hash, so a save that changes no output is not
- *   an update, and chunks that did not change keep their URL and stay cached in the browser.
- * - **Never a dead tab.** A failing build keeps the last good version serving and shows the
- *   compiler's message in the page; with no good build yet, the page shows the message and loads
- *   the app as soon as one succeeds.
+ *   mockingbird-preview dev --outdir preview-dist --build "bun run build:preview" --watch src
  *
- * Bun / Node only (esbuild, the file system and `node:http`). esbuild is a peer dependency.
+ * Bun / Node only (the file system, `node:http` and child processes).
  */
+import { spawn } from "node:child_process"
 import { type FSWatcher, watch } from "node:fs"
+import { readFile, stat, writeFile } from "node:fs/promises"
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
-import type { AddressInfo } from "node:net"
-import { dirname, extname, relative, resolve, sep } from "node:path"
-import { Readable } from "node:stream"
-import { pipeline } from "node:stream/promises"
-import type { ReadableStream as NodeReadableStream } from "node:stream/web"
-import { gzipSync } from "node:zlib"
-import { type BuildContext, build, context, formatMessages, type Message } from "esbuild"
-import { type BuildPreviewOptions, planPreviewBuild } from "./build.js"
-import { devWaitingPage } from "./dev-boot.js"
+import { extname, join, relative, resolve, sep } from "node:path"
 import type { PreviewVersion } from "./live.js"
 import type { PreviewStatusSnapshot } from "./preview-status.js"
 
-export type DevPreviewOptions = Omit<BuildPreviewOptions, "outdir"> & {
-  /** Default 4173. When it is taken the next free one is used, unless `strictPort`. `0`: any. */
+/**
+ * The consumer's build: a function, a shell command line, or an argv (run without a shell). It
+ * writes the built preview (with `version.json` or `build.json` naming the entry) into `outdir`.
+ */
+export type PreviewDevBuild =
+  | string
+  | readonly string[]
+  | ((context: { changed: readonly string[]; signal: AbortSignal }) => unknown)
+
+export type PreviewDevServerOptions = {
+  /** The built preview directory the server serves (what `buildPreview` writes). */
+  outdir: string
+  build: PreviewDevBuild
+  /** Files or directories (watched recursively) whose changes trigger a build. */
+  watch: readonly string[]
+  /** Paths never trigger a build: default `node_modules`, `.git` and `outdir` itself. */
+  ignore?: (path: string) => boolean
+  /** Default 0 (any free port). */
   port?: number
-  /** Fail when `port` is taken instead of using the next free one. */
-  strictPort?: boolean
-  /** Default "127.0.0.1". "0.0.0.0" also serves other devices on the network. */
+  /** Default "127.0.0.1". */
   hostname?: string
-  /** Default false: a dev build is readable and a little quicker to make. */
-  minify?: boolean
-  /** Linked source maps. Default false: on a large app they roughly double the rebuild time. */
-  sourcemap?: boolean
-  /** How long file changes are gathered before one rebuild. Default 20 ms. */
+  /** Where the status and live stream are served. Default "/__preview". */
+  basePath?: string
+  /** Quiet time after the last change before building. Default 100 ms. */
   debounceMs?: number
   /**
-   * How long an open tab counts down before it applies a new version. Default 0: at once. The
-   * System screen's Auto-update switch still holds a tab on its version.
+   * The data shape the build keeps in the tab. Default: whatever the built `version.json` names.
+   * When it changes, open tabs offer the update (it resets their data) instead of applying it.
    */
-  countdownMs?: number
-  /**
-   * More routes on the same origin, asked before the static files: a dev resources proxy at
-   * `/__dev`, an API. Answer `undefined` to pass the request on.
-   */
-  fetch?(request: Request): Promise<Response | undefined> | Response | undefined
-  /** One line per event (listening, each build, each failure). Default `console.log`. */
-  log?(line: string): void
+  stateVersion?: string | (() => string | undefined | Promise<string | undefined>)
+  /** Where relative paths and the build command run. Default `process.cwd()`. */
+  cwd?: string
+  /** Extra routes (the dev proxy, part updates, …); `undefined` falls through to the files. */
+  handle?: (request: Request) => Response | Promise<Response> | undefined
+  /** Progress lines. Default `console.log`. */
+  log?: (line: string) => void
+  /** Run the first build before serving. Default true; false serves what `outdir` holds. */
+  initialBuild?: boolean
 }
 
-/** One build of the dev loop. */
-export type DevPreviewBuild = {
+/** One build the dev server ran. */
+export type PreviewDevBuildResult = {
+  /** The version it stamped (`dev-<session>-<n>`); on failure the version it would have been. */
+  version: string
   ok: boolean
-  /** The version built (the entry's hash); on a failure, the last good one, if any. */
-  version?: string
-  /** How long esbuild took. */
-  ms: number
-  /** The files whose change started it, relative to the working directory; empty for the first. */
+  /** The files whose change started it (empty for the first build or `rebuild()`). */
   changed: string[]
-  /** The compiler's message, when `ok` is false. */
+  ms: number
   error?: string
 }
 
-export type DevPreview = {
-  /** `http://<hostname>:<port><base>`. */
-  url: string
-  port: number
-  /** What `/version.json` answers now; undefined until a build succeeds. */
+export type PreviewDevServer = {
+  /** `http://<hostname>:<port>`, once listening. */
+  readonly url: string
+  /** Resolves after the first build (or at once when `initialBuild` is false). */
+  ready: Promise<void>
+  /** Builds now (queued behind a running build) and resolves with its result. */
+  rebuild(changed?: readonly string[]): Promise<PreviewDevBuildResult>
+  /** The version served now. */
   version(): PreviewVersion | undefined
-  /** Every build so far, oldest first. */
-  builds(): DevPreviewBuild[]
-  /** Called after each build, good or bad. */
-  subscribe(listener: (build: DevPreviewBuild) => void): () => void
-  /** Builds now and resolves with the result (also what a file change does). */
-  rebuild(): Promise<DevPreviewBuild>
-  /** The server's Fetch handler, for tests and for mounting it in a server of your own. */
+  builds(): PreviewDevBuildResult[]
+  /** The status snapshot the live stream sends now. */
+  snapshot(): PreviewStatusSnapshot
+  /** The same routes the HTTP server serves, as a Fetch handler. */
   fetch(request: Request): Promise<Response>
-  /** Open tabs listening on `/__preview/live`. */
-  tabs(): number
+  /** Number of open `/live` streams. */
+  connections(): number
   close(): Promise<void>
 }
 
-const TYPES: Record<string, string> = {
+const CONTENT_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
   ".js": "text/javascript; charset=utf-8",
   ".mjs": "text/javascript; charset=utf-8",
   ".css": "text/css; charset=utf-8",
   ".json": "application/json; charset=utf-8",
   ".map": "application/json; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".jpg": "image/jpeg",
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".webp": "image/webp",
-  ".avif": "image/avif",
   ".ico": "image/x-icon",
+  ".wasm": "application/wasm",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
-  ".wasm": "application/wasm",
   ".txt": "text/plain; charset=utf-8",
 }
-const COMPRESSIBLE = /^(?:text\/|application\/(?:json|wasm)|image\/svg)/
-/** Hashed files never change, so a reload re-reads none of them. */
-const IMMUTABLE = "public, max-age=31536000, immutable"
-/** Generations of output kept, so a tab one or two builds behind can still load its lazy chunks. */
-const KEEP_GENERATIONS = 3
-const MAX_MESSAGE = 6_000
+
 const HEARTBEAT_MS = 15_000
 
-type OutFile = { bytes: Uint8Array; type: string; generation: number; gzip?: Uint8Array }
+const describe = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
-const isLoopback = (hostname: string) =>
-  hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]"
-
-/** Node's `Uint8Array` is a `BodyInit` at run time; the DOM's declaration does not say so. */
-const body = (bytes: Uint8Array) => bytes as unknown as BodyInit
-
-const describe = async (error: unknown): Promise<string> => {
-  const errors = (error as { errors?: Message[] } | undefined)?.errors
-  if (Array.isArray(errors) && errors.length > 0) {
-    const lines = await formatMessages(errors, { kind: "error", color: false, terminalWidth: 100 })
-    return lines.join("\n").trim().slice(0, MAX_MESSAGE)
+const readJson = async (path: string): Promise<Record<string, unknown> | undefined> => {
+  try {
+    const value: unknown = JSON.parse(await readFile(path, "utf8"))
+    return typeof value === "object" && value !== null && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : undefined
+  } catch {
+    return undefined
   }
-  return (error instanceof Error ? error.message : String(error)).slice(0, MAX_MESSAGE)
 }
 
-const send = async (response: Response, incoming: IncomingMessage, outgoing: ServerResponse) => {
-  outgoing.statusCode = response.status
-  response.headers.forEach((value, key) => {
-    if (key !== "set-cookie") outgoing.setHeader(key, value)
-  })
-  const cookies = response.headers.getSetCookie()
-  if (cookies.length) outgoing.setHeader("set-cookie", cookies)
-  if (!response.body || incoming.method === "HEAD") {
-    await response.body?.cancel()
-    outgoing.end()
-    return
-  }
-  outgoing.flushHeaders()
-  await pipeline(
-    Readable.fromWeb(response.body as unknown as NodeReadableStream<Uint8Array>),
-    outgoing,
-  )
-}
-
-const listen = (server: ReturnType<typeof createServer>, port: number, hostname: string) =>
+/** Runs a command line (through the shell) or an argv; rejects with its output's tail. */
+const runCommand = (command: string | readonly string[], cwd: string, signal: AbortSignal) =>
   new Promise<void>((done, fail) => {
-    server.once("error", fail)
-    server.listen(port, hostname, () => {
-      server.off("error", fail)
-      done()
+    const [file, ...rest] = typeof command === "string" ? [command] : command
+    if (file === undefined || file === "") {
+      fail(new Error("The build command is empty"))
+      return
+    }
+    const child = spawn(file, rest, {
+      cwd,
+      shell: typeof command === "string",
+      stdio: ["ignore", "pipe", "pipe"],
+      signal,
+    })
+    let output = ""
+    const collect = (chunk: Buffer) => {
+      output = (output + chunk.toString("utf8")).slice(-4_000)
+    }
+    child.stdout.on("data", collect)
+    child.stderr.on("data", collect)
+    child.on("error", (error) => fail(error))
+    child.on("close", (code) => {
+      if (code === 0) done()
+      else {
+        const tail = output.trim().split("\n").slice(-5).join("\n")
+        fail(new Error(`The build exited ${code ?? "on a signal"}${tail ? `: ${tail}` : ""}`))
+      }
     })
   })
 
 /**
- * Serves the preview and rebuilds it on every change. Resolves once it is listening and the first
- * build has finished, whether or not that build succeeded.
+ * Serves a built preview locally and keeps every open tab on the newest build: a change under
+ * `watch` runs `build`, stamps `version.json` with a new dev version and pushes it over
+ * `/__preview/live`. See the module comment.
  */
-export async function devPreview(options: DevPreviewOptions): Promise<DevPreview> {
-  const plan = planPreviewBuild(options)
-  const { workingDir, base } = plan
+export async function createPreviewDevServer(
+  options: PreviewDevServerOptions,
+): Promise<PreviewDevServer> {
+  const cwd = resolve(options.cwd ?? process.cwd())
+  const outdir = resolve(cwd, options.outdir)
+  let basePath = options.basePath ?? "/__preview"
+  while (basePath.endsWith("/")) basePath = basePath.slice(0, -1)
   const log = options.log ?? ((line: string) => console.log(line))
-  const outdir = resolve(workingDir, ".preview-dev")
-  const files = new Map<string, OutFile>()
-  const history: DevPreviewBuild[] = []
-  const listeners = new Set<(build: DevPreviewBuild) => void>()
-  const streams = new Set<(snapshot: PreviewStatusSnapshot) => void>()
-  /** The streams that are a tab's app (its error card listens on a second one). */
-  const tabs = new Set<unknown>()
-  const watchers = new Map<string, FSWatcher>()
-  let inputs = new Set<string>()
+  const debounceMs = options.debounceMs ?? 100
+  const session = Math.random().toString(36).slice(2, 8)
+  const ignored =
+    options.ignore ??
+    ((path: string) =>
+      path === outdir ||
+      path.startsWith(`${outdir}${sep}`) ||
+      path.split(sep).some((part) => part === "node_modules" || part === ".git"))
+
+  let sequence = 0
   let current: PreviewVersion | undefined
-  let status: PreviewStatusSnapshot["build"]
-  let generation = 0
+  let building: { version: string; at: string } | undefined
+  let lastFailure: { version: string; at: string; message: string } | undefined
+  const history: PreviewDevBuildResult[] = []
+  const streams = new Set<(snapshot: PreviewStatusSnapshot) => void>()
+  const closers = new Set<() => void>()
   let closed = false
+  const lifetime = new AbortController()
 
-  const snapshot = (): PreviewStatusSnapshot => ({
-    ...(status === undefined ? {} : { build: status }),
-    ...(current === undefined
-      ? {}
-      : { deployed: { version: current.version, at: current.builtAt } }),
-    source: "ci",
-    updatedAt: new Date().toISOString(),
-  })
-  const announce = (next: PreviewStatusSnapshot["build"]) => {
-    status = next
+  const snapshot = (): PreviewStatusSnapshot => {
+    const at = new Date().toISOString()
+    const build = building
+      ? { kind: "build" as const, state: "building" as const, ...building }
+      : lastFailure
+        ? {
+            kind: "build" as const,
+            state: "failed" as const,
+            version: lastFailure.version,
+            at: lastFailure.at,
+            message: lastFailure.message.slice(0, 500),
+          }
+        : current
+          ? {
+              kind: "build" as const,
+              state: "deployed" as const,
+              version: current.version,
+              at: current.builtAt,
+            }
+          : undefined
+    return {
+      ...(build ? { build } : {}),
+      ...(current ? { deployed: { version: current.version, at: current.builtAt } } : {}),
+      source: "none",
+      message: "Local dev server",
+      dev: true,
+      updatedAt: at,
+    }
+  }
+  const publish = () => {
     const value = snapshot()
-    for (const push of streams) push(value)
+    for (const send of streams) send(value)
   }
 
-  const loader = await build({
-    ...plan.loader({ dev: true, live: { countdownMs: options.countdownMs ?? 0 } }),
-    minify: false,
-    write: false,
-    outfile: resolve(outdir, "preview.js"),
-    logLevel: "silent",
-  })
-  const bootLoader = loader.outputFiles?.[0]?.contents ?? new Uint8Array()
-
-  const app: BuildContext = await context({
-    ...plan.app,
-    minify: options.minify ?? false,
-    ...(options.sourcemap ? { sourcemap: "linked" as const } : {}),
-    outdir,
-    write: false,
-    logLevel: "silent",
-  })
-
-  // ---- Watching: the directories of the files the last good build read.
-
-  let pending = new Set<string>()
-  let timer: ReturnType<typeof setTimeout> | undefined
-  const rewatch = () => {
-    // Dependencies do not change while you work; watching them would cost thousands of handles.
-    const dirs = new Set(
-      [...inputs]
-        .filter((file) => !file.includes(`${sep}node_modules${sep}`))
-        .map((file) => dirname(file)),
-    )
-    // With nothing built yet, the entry's own directory is where the fix will be made.
-    if (dirs.size === 0) dirs.add(dirname(plan.entryPath))
-    for (const [dir, watcher] of watchers)
-      if (!dirs.has(dir)) {
-        watcher.close()
-        watchers.delete(dir)
-      }
-    for (const dir of dirs) {
-      if (watchers.has(dir)) continue
-      try {
-        const watcher = watch(dir, (_event, name) => {
-          if (closed || !name) return
-          const file = resolve(dir, name.toString())
-          // While the build is broken the fix may be a file it has never read.
-          if (!inputs.has(file) && history.at(-1)?.ok !== false) return
-          pending.add(file)
-          clearTimeout(timer)
-          timer = setTimeout(changedOnDisk, options.debounceMs ?? 20)
-        })
-        watcher.on("error", () => {
-          watcher.close()
-          watchers.delete(dir)
-        })
-        watchers.set(dir, watcher)
-      } catch {
-        // A directory that vanished is watched again after the next build that reads it.
-      }
-    }
+  const stateVersion = async (built: Record<string, unknown> | undefined) => {
+    const option = options.stateVersion
+    if (typeof option === "function") return await option()
+    if (option !== undefined) return option
+    return typeof built?.stateVersion === "string" ? built.stateVersion : undefined
   }
 
-  // ---- Building: one at a time; changes that arrive meanwhile start one more.
-
-  let queue: Promise<unknown> = Promise.resolve()
-  let queued = false
-  const once = async (): Promise<DevPreviewBuild> => {
-    queued = false
-    const changed = [...pending].map((file) => relative(workingDir, file)).sort()
-    pending = new Set()
-    const started = performance.now()
-    announce({
-      kind: "build",
-      state: "building",
-      version: "changes",
-      at: new Date().toISOString(),
-    })
-    let result: DevPreviewBuild
-    try {
-      const built = await app.rebuild()
-      const entry = plan.entryOf(built.metafile as NonNullable<typeof built.metafile>, outdir)
-      generation++
-      for (const file of built.outputFiles ?? []) {
-        const path = relative(outdir, file.path).split(sep).join("/")
-        // A hashed name is its content: the same path is the same bytes (and gzip) as before.
-        const kept = files.get(path)
-        if (kept) kept.generation = generation
-        else
-          files.set(path, {
-            bytes: file.contents,
-            type: TYPES[extname(path)] ?? "application/octet-stream",
-            generation,
-          })
-      }
-      for (const [path, file] of files)
-        if (file.generation <= generation - KEEP_GENERATIONS) files.delete(path)
-      inputs = new Set(
-        Object.keys(built.metafile?.inputs ?? {})
-          .filter((input) => !input.includes(":"))
-          .map((input) => resolve(workingDir, input)),
-      )
-      const version = /-([A-Za-z0-9]+)\.js$/.exec(entry)?.[1] ?? `build-${generation}`
-      const at = new Date().toISOString()
-      if (current?.version !== version) current = { version, builtAt: at, entry }
-      result = { ok: true, version, ms: Math.round(performance.now() - started), changed }
-      announce({ kind: "build", state: "deployed", version, at })
-      const bytes = (built.outputFiles ?? []).reduce((sum, file) => sum + file.contents.length, 0)
-      log(
-        `${history.length === 0 ? "built" : "rebuilt"} ${version} in ${result.ms} ms · ${(bytes / 1e6).toFixed(1)} MB` +
-          (changed.length
-            ? ` · ${changed.slice(0, 3).join(", ")}${changed.length > 3 ? "…" : ""}`
-            : "") +
-          (tabs.size ? ` · ${tabs.size} tab${tabs.size === 1 ? "" : "s"} updated` : ""),
-      )
-    } catch (error) {
-      const message = await describe(error)
-      result = {
-        ok: false,
-        ...(current ? { version: current.version } : {}),
-        ms: Math.round(performance.now() - started),
-        changed,
-        error: message,
-      }
-      announce({
-        kind: "build",
-        state: "failed",
-        version: "changes",
-        at: new Date().toISOString(),
-        message,
-      })
-      log(`build failed in ${result.ms} ms\n${message}`)
+  /** Reads what the build wrote and stamps `version.json` with the next dev version. */
+  const stamp = async (version: string): Promise<PreviewVersion> => {
+    const built = await readJson(join(outdir, "version.json"))
+    const manifest = await readJson(join(outdir, "build.json"))
+    const entry =
+      typeof manifest?.entry === "string"
+        ? manifest.entry
+        : typeof built?.entry === "string"
+          ? built.entry
+          : undefined
+    if (entry === undefined)
+      throw new Error(`${outdir} has no build.json or version.json naming the entry`)
+    const state = await stateVersion(built)
+    const next: PreviewVersion = {
+      version,
+      builtAt: new Date().toISOString(),
+      entry,
+      ...(state === undefined || state === "" ? {} : { stateVersion: state }),
     }
-    history.push(result)
-    rewatch()
-    for (const listener of listeners) {
-      try {
-        listener(result)
-      } catch {
-        // A listener's failure is its own.
-      }
-    }
-    return result
-  }
-  const run = (): Promise<DevPreviewBuild> => {
-    const next = queue.then(once)
-    queue = next.catch(() => {})
+    await writeFile(join(outdir, "version.json"), `${JSON.stringify(next)}\n`, "utf8")
     return next
   }
-  /** A file changed: one build covers every change gathered before it starts. */
-  const changedOnDisk = () => {
-    if (queued || closed) return
-    queued = true
-    void run()
+
+  let queue: Promise<unknown> = Promise.resolve()
+  const runBuild = (changed: readonly string[]): Promise<PreviewDevBuildResult> => {
+    const result = queue.then(async (): Promise<PreviewDevBuildResult> => {
+      const version = `dev-${session}-${++sequence}`
+      const started = Date.now()
+      building = { version, at: new Date(started).toISOString() }
+      publish()
+      let outcome: PreviewDevBuildResult
+      try {
+        const build = options.build
+        if (typeof build === "function") await build({ changed, signal: lifetime.signal })
+        else await runCommand(build, cwd, lifetime.signal)
+        current = await stamp(version)
+        lastFailure = undefined
+        outcome = { version, ok: true, changed: [...changed], ms: Date.now() - started }
+        log(`mockingbird-preview dev: built ${version} in ${outcome.ms} ms`)
+      } catch (error) {
+        lastFailure = { version, at: new Date().toISOString(), message: describe(error) }
+        outcome = {
+          version,
+          ok: false,
+          changed: [...changed],
+          ms: Date.now() - started,
+          error: describe(error),
+        }
+        log(`mockingbird-preview dev: build ${version} failed: ${describe(error)}`)
+      }
+      building = undefined
+      history.push(outcome)
+      if (!closed) publish()
+      return outcome
+    })
+    queue = result.catch(() => {})
+    return result
   }
 
-  // ---- Serving.
+  // Changes while a build runs collect into the next one.
+  let pending = new Set<string>()
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const onChange = (path: string) => {
+    if (closed || ignored(path)) return
+    pending.add(path)
+    clearTimeout(timer)
+    timer = setTimeout(() => {
+      const changed = [...pending].sort()
+      pending = new Set()
+      void runBuild(changed.map((file) => relative(cwd, file)))
+    }, debounceMs)
+  }
+  const watchers: FSWatcher[] = []
+  for (const target of options.watch) {
+    const path = resolve(cwd, target)
+    let directory = false
+    try {
+      directory = (await stat(path)).isDirectory()
+    } catch {
+      throw new Error(`Cannot watch ${path}: it does not exist`)
+    }
+    watchers.push(
+      watch(path, { recursive: directory }, (_event, name) => {
+        onChange(directory && name ? resolve(path, name.toString()) : path)
+      }),
+    )
+  }
 
-  const json = (body: unknown, status = 200) =>
-    new Response(JSON.stringify(body), {
-      status,
-      headers: { "content-type": TYPES[".json"] as string, "cache-control": "no-store" },
-    })
-  const html = (body: string, status = 200) =>
-    new Response(body, {
-      status,
-      headers: { "content-type": TYPES[".html"] as string, "cache-control": "no-store" },
-    })
+  const readVersion = async (): Promise<PreviewVersion | undefined> => {
+    const value = await readJson(join(outdir, "version.json"))
+    if (
+      typeof value?.version === "string" &&
+      typeof value.builtAt === "string" &&
+      typeof value.entry === "string"
+    )
+      return value as PreviewVersion
+    return undefined
+  }
 
   const live = (request: Request): Response => {
-    const counted = !new URL(request.url).searchParams.has("overlay")
     const encoder = new TextEncoder()
     let stop = () => {}
-    const stream = new ReadableStream<Uint8Array>({
+    const body = new ReadableStream<Uint8Array>({
       start(controller) {
-        const write = (chunk: string) => {
+        const write = (text: string) => {
           try {
-            controller.enqueue(encoder.encode(chunk))
+            controller.enqueue(encoder.encode(text))
           } catch {
             stop()
           }
         }
-        const push = (value: PreviewStatusSnapshot) =>
+        const send = (value: PreviewStatusSnapshot) =>
           write(`event: snapshot\ndata: ${JSON.stringify(value)}\n\n`)
         const heartbeat = setInterval(() => write(": heartbeat\n\n"), HEARTBEAT_MS)
         stop = () => {
           clearInterval(heartbeat)
-          streams.delete(push)
-          tabs.delete(push)
+          streams.delete(send)
+          closers.delete(stop)
           request.signal.removeEventListener("abort", stop)
           try {
             controller.close()
           } catch {
-            // Already closed or cancelled.
+            /* Already closed. */
           }
         }
+        streams.add(send)
+        closers.add(stop)
         request.signal.addEventListener("abort", stop)
-        streams.add(push)
-        if (counted) tabs.add(push)
-        write("retry: 500\n\n")
-        push(snapshot())
+        write("retry: 1000\n\n")
+        send(snapshot())
       },
       cancel() {
         stop()
       },
     })
-    return new Response(stream, {
+    return new Response(body, {
       headers: {
         "content-type": "text/event-stream; charset=utf-8",
         "cache-control": "no-store",
@@ -408,142 +369,137 @@ export async function devPreview(options: DevPreviewOptions): Promise<DevPreview
     })
   }
 
-  const fetchHandler = async (request: Request): Promise<Response> => {
-    const url = new URL(request.url)
-    const { pathname } = url
-    const reading = request.method === "GET" || request.method === "HEAD"
-    if (pathname === "/__preview/live" || pathname === "/__preview/status") {
-      // The status holds nothing secret, but another site has no business reading your builds.
-      if (request.headers.get("sec-fetch-site") === "cross-site")
-        return json({ error: "cross-origin request refused" }, 403)
-      if (!reading) return json({ error: "method not allowed" }, 405)
-      return pathname.endsWith("/live") ? live(request) : json(snapshot())
-    }
-    const extra = await options.fetch?.(request)
-    if (extra) return extra
-    if (!reading) return json({ error: "method not allowed" }, 405)
-    if (!pathname.startsWith(base)) return html("Not found", 404)
-    let path: string
+  const file = async (request: Request, pathname: string): Promise<Response> => {
+    let decoded: string
     try {
-      path = decodeURIComponent(pathname.slice(base.length))
+      decoded = decodeURIComponent(pathname)
     } catch {
-      return html("Not found", 404)
+      return new Response("Bad path", { status: 400 })
     }
-    if (path === "preview.js")
-      return new Response(body(bootLoader), {
-        headers: { "content-type": TYPES[".js"] as string, "cache-control": "no-cache" },
-      })
-    if (path === "version.json")
-      return current ? json(current) : json({ error: "no build yet" }, 503)
-    if (path === "build.json")
-      return current ? json({ entry: current.entry }) : json({ error: "no build yet" }, 503)
-    const file = files.get(path)
-    if (file) {
-      const headers: Record<string, string> = {
-        "content-type": file.type,
-        "cache-control": IMMUTABLE,
-      }
-      // Another device pays for every byte; this machine would only pay for the compression.
-      if (
-        !isLoopback(url.hostname) &&
-        file.bytes.length > 1024 &&
-        COMPRESSIBLE.test(file.type) &&
-        /\bgzip\b/.test(request.headers.get("accept-encoding") ?? "")
-      ) {
-        file.gzip ??= gzipSync(file.bytes, { level: 1 })
-        return new Response(body(file.gzip), {
-          headers: { ...headers, "content-encoding": "gzip", vary: "accept-encoding" },
-        })
-      }
-      return new Response(body(file.bytes), { headers })
+    let path = resolve(outdir, `.${decoded}`)
+    if (path !== outdir && !path.startsWith(`${outdir}${sep}`))
+      return new Response("Not found", { status: 404 })
+    let info = await stat(path).catch(() => undefined)
+    if (info?.isDirectory()) {
+      path = join(path, "index.html")
+      info = await stat(path).catch(() => undefined)
     }
-    // A missing file is a 404, never the page: a script that got HTML fails with a riddle.
-    if (extname(path) !== "") return html("Not found", 404)
-    return html(current ? plan.html : devWaitingPage(history.at(-1)?.error))
+    if (!info?.isFile()) {
+      // The single-page-application fallback: a deep link without an extension gets index.html.
+      if (extname(decoded) !== "") return new Response("Not found", { status: 404 })
+      path = join(outdir, "index.html")
+      info = await stat(path).catch(() => undefined)
+      if (!info?.isFile()) return new Response("Not found", { status: 404 })
+    }
+    // Revalidated on every load, so a rebuilt file is never stale, while an unchanged one
+    // answers 304 and keeps the browser's caches (including its compiled-code cache).
+    const etag = `W/"${info.size.toString(36)}-${Math.floor(info.mtimeMs).toString(36)}"`
+    const headers = {
+      "content-type": CONTENT_TYPES[extname(path).toLowerCase()] ?? "application/octet-stream",
+      "cache-control": path.endsWith(`${sep}version.json`) ? "no-store" : "no-cache",
+      etag,
+    }
+    if (request.headers.get("if-none-match") === etag)
+      return new Response(null, { status: 304, headers })
+    const bytes = await readFile(path)
+    return new Response(request.method === "HEAD" ? null : bytes, { headers })
   }
 
-  const server = createServer((incoming, outgoing) => {
+  const fetch = async (request: Request): Promise<Response> => {
+    const extra = options.handle?.(request)
+    if (extra !== undefined) return extra
+    const { pathname } = new URL(request.url)
+    if (pathname === `${basePath}/live` || pathname === `${basePath}/status`) {
+      if (request.method !== "GET" && request.method !== "HEAD")
+        return Response.json({ error: "method not allowed" }, { status: 405 })
+      if (pathname.endsWith("/live")) return live(request)
+      return Response.json(snapshot(), { headers: { "cache-control": "no-store" } })
+    }
+    if (request.method !== "GET" && request.method !== "HEAD")
+      return new Response("Method not allowed", { status: 405 })
+    return file(request, pathname)
+  }
+
+  const handler = (incoming: IncomingMessage, outgoing: ServerResponse) => {
     const abort = new AbortController()
-    outgoing.on("close", () => {
-      if (!outgoing.writableFinished) abort.abort()
-    })
+    outgoing.on("close", () => abort.abort())
     void (async () => {
-      const chunks: Buffer[] = []
-      for await (const chunk of incoming) chunks.push(Buffer.from(chunk))
-      const method = incoming.method ?? "GET"
-      const response = await fetchHandler(
-        new Request(
-          new URL(incoming.url ?? "/", `http://${incoming.headers.host ?? "localhost"}`),
-          {
-            method,
-            headers: Object.entries(incoming.headers).flatMap(([key, value]) =>
-              value === undefined
-                ? []
-                : Array.isArray(value)
-                  ? value.map((item) => [key, item] as [string, string])
-                  : [[key, value] as [string, string]],
-            ),
-            body: method === "GET" || method === "HEAD" ? null : Buffer.concat(chunks),
-            signal: abort.signal,
-            redirect: "manual",
-          },
-        ),
+      const headers = new Headers()
+      for (const [key, value] of Object.entries(incoming.headers)) {
+        if (typeof value === "string") headers.set(key, value)
+        else if (Array.isArray(value)) for (const item of value) headers.append(key, item)
+      }
+      const response = await fetch(
+        new Request(new URL(incoming.url ?? "/", "http://localhost"), {
+          method: incoming.method ?? "GET",
+          headers,
+          signal: abort.signal,
+        }),
       )
-      await send(response, incoming, outgoing)
-    })().catch(() => {
+      outgoing.writeHead(response.status, Object.fromEntries(response.headers))
+      if (!response.body) {
+        outgoing.end()
+        return
+      }
+      outgoing.flushHeaders()
+      const reader = response.body.getReader()
+      abort.signal.addEventListener("abort", () => void reader.cancel().catch(() => {}))
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        outgoing.write(value)
+      }
+      outgoing.end()
+    })().catch((error) => {
       if (outgoing.headersSent) outgoing.destroy()
       else {
-        outgoing.writeHead(502)
-        outgoing.end("Preview request failed")
+        outgoing.writeHead(500)
+        outgoing.end(describe(error))
       }
     })
-  })
-
-  const hostname = options.hostname ?? "127.0.0.1"
-  const wanted = options.port ?? 4173
-  for (let port = wanted; ; port++) {
-    try {
-      await listen(server, port, hostname)
-      break
-    } catch (error) {
-      const taken = (error as { code?: string }).code === "EADDRINUSE"
-      if (!taken || options.strictPort || wanted === 0 || port >= wanted + 50) {
-        await app.dispose()
-        throw error
-      }
-    }
   }
-  const { port } = server.address() as AddressInfo
-  const shown = hostname === "0.0.0.0" || hostname === "::" ? "localhost" : hostname
-  const url = `http://${shown.includes(":") ? `[${shown}]` : shown}:${port}${base}`
-  log(`preview dev server: ${url}`)
-  await run()
+
+  const server = createServer(handler)
+  await new Promise<void>((done, fail) => {
+    server.once("error", fail)
+    server.listen(options.port ?? 0, options.hostname ?? "127.0.0.1", () => {
+      server.off("error", fail)
+      done()
+    })
+  })
+  const address = server.address()
+  if (!address || typeof address === "string") throw new Error("The dev server has no address")
+  const host = address.family === "IPv6" ? `[${address.address}]` : address.address
+  const url = `http://${host}:${address.port}`
+
+  const ready =
+    options.initialBuild === false
+      ? readVersion().then((version) => {
+          current = version
+        })
+      : runBuild([]).then(() => {})
 
   return {
     url,
-    port,
+    ready,
+    rebuild: (changed = []) => runBuild(changed),
     version: () => current,
     builds: () => history.map((entry) => ({ ...entry, changed: [...entry.changed] })),
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    rebuild: run,
-    fetch: fetchHandler,
-    tabs: () => tabs.size,
+    snapshot,
+    fetch,
+    connections: () => streams.size,
     async close() {
       if (closed) return
       closed = true
       clearTimeout(timer)
-      for (const watcher of watchers.values()) watcher.close()
-      watchers.clear()
-      listeners.clear()
+      for (const watcher of watchers) watcher.close()
+      for (const stop of [...closers]) stop()
+      lifetime.abort()
       await queue
       await new Promise<void>((done) => {
         server.close(() => done())
         server.closeAllConnections()
       })
-      await app.dispose()
     },
   }
 }

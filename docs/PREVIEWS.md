@@ -139,7 +139,7 @@ A project whose build needs esbuild options (plugins, defines, the browser runti
 
 ```ts
 // scripts/dev-preview.ts
-import { devPreview } from "@crvouga/mockingbird-preview/dev-server"
+import { devPreview } from "@crvouga/mockingbird-preview/dev-preview"
 await devPreview({ entry: "src/preview-app.ts", title: "My app preview" })
 ```
 

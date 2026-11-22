@@ -1,4 +1,4 @@
-import { devPreview } from "@crvouga/mockingbird-preview/dev-server"
+import { devPreview } from "@crvouga/mockingbird-preview/dev-preview"
 import { DEV_PROXY_BASE_PATH, devProxy } from "../src/devProxy.ts"
 import { previewOptions } from "./preview-options.ts"
 

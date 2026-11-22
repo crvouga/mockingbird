@@ -3,7 +3,7 @@
  * switcher's dev badge. A switch made on the screen, and every change the host's own `subscribe`
  * reports, reaches both. Framework-free, so it can be tested without a DOM.
  */
-import type { SystemService, SystemServices } from "./system-types.js"
+import type { SystemService, SystemServiceField, SystemServices } from "./system-types.js"
 
 export type ServicesStore = {
   /** What the screen calls: the host's services, with `subscribe` always present. */
@@ -19,6 +19,32 @@ export type ServicesStore = {
 /** The services not running emulated in this tab. */
 export const notEmulated = (services: readonly SystemService[] | undefined) =>
   (services ?? []).filter((service) => service.mode !== "emulated")
+
+/**
+ * Whether the row takes credentials typed in the browser (#903): the service describes `fields`
+ * and the host can keep them. Such a row can switch to Dev without the proxy.
+ */
+export const takesCredentials = (
+  service: SystemService,
+  services: Pick<SystemServices, "setCredentials">,
+) => !!service.fields?.length && typeof services.setCredentials === "function"
+
+/** What a service's inputs start with: a select's first option, an empty text input. */
+export const blankCredentials = (fields: readonly SystemServiceField[]): Record<string, string> =>
+  Object.fromEntries(fields.map((field) => [field.name, field.options?.[0]?.value ?? ""]))
+
+/** The labels of the fields left empty (only spaces counts as empty). */
+export const missingCredentials = (
+  fields: readonly SystemServiceField[],
+  values: Readonly<Record<string, string>>,
+) => fields.filter((field) => !(values[field.name] ?? "").trim()).map((field) => field.label)
+
+/** The typed values, trimmed, with one entry per field. */
+export const credentialValues = (
+  fields: readonly SystemServiceField[],
+  values: Readonly<Record<string, string>>,
+): Record<string, string> =>
+  Object.fromEntries(fields.map((field) => [field.name, (values[field.name] ?? "").trim()]))
 
 export function trackServices(inner: SystemServices): ServicesStore {
   let latest: readonly SystemService[] | undefined
@@ -68,6 +94,23 @@ export function trackServices(inner: SystemServices): ServicesStore {
       }
     },
     ...(inner.test ? { test: (id: string) => inner.test?.(id) ?? Promise.reject() } : {}),
+    // Saved or forgotten values change `configured` (and perhaps a mode): everyone lists again.
+    ...(inner.setCredentials
+      ? {
+          async setCredentials(id: string, values: Record<string, string>) {
+            await inner.setCredentials?.(id, values)
+            announce()
+          },
+        }
+      : {}),
+    ...(inner.clearCredentials
+      ? {
+          async clearCredentials(id?: string) {
+            await inner.clearCredentials?.(id)
+            announce()
+          },
+        }
+      : {}),
   }
 
   // The host's own changes start a new generation too, so the next list is fresh.

@@ -18,7 +18,7 @@ export default {
     layout: "fullscreen",
     sources: [
       "packages/adapters/preview/src/dev-boot.ts",
-      "packages/adapters/preview/src/dev-server.ts",
+      "packages/adapters/preview/src/dev-preview.ts",
     ],
   },
 } satisfies Meta

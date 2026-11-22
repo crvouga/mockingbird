@@ -1,253 +1,355 @@
 import { afterAll, describe, expect, test } from "bun:test"
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import type { DevPreview, DevPreviewBuild, DevPreviewOptions } from "./src/dev-server.js"
-import { devPreview } from "./src/dev-server.js"
+import { runPreviewCli } from "./src/cli-main.js"
+import { createPreviewDevServer, type PreviewDevServer } from "./src/dev-server.js"
+import { createLivePreview, type EventSourceLike, type PreviewVersion } from "./src/live.js"
+import type { PreviewStatusSnapshot } from "./src/preview-status.js"
 
-const dirs: string[] = []
-const open: DevPreview[] = []
-afterAll(async () => {
-  for (const preview of open) await preview.close()
-  for (const dir of dirs) rmSync(dir, { recursive: true, force: true })
-})
+const root = mkdtempSync(join(tmpdir(), "mockingbird-preview-dev-"))
+afterAll(() => rmSync(root, { recursive: true, force: true }))
 
-/** A fixture app in a directory of its own, served on any free port, logging into `lines`. */
-const fixture = async (options: Partial<DevPreviewOptions> = {}, app?: string) => {
-  // The real path: esbuild names the files it read by it, and they are what is watched.
-  const root = realpathSync(mkdtempSync(join(tmpdir(), "mockingbird-preview-dev-")))
-  dirs.push(root)
-  writeFileSync(
-    join(root, "app.ts"),
-    app ??
-      `import { label } from "./label.ts"
-export const start = async (host: HTMLElement) => {
-  const { lazy } = await import("./lazy.ts")
-  host.textContent = label + lazy
-  return () => { host.textContent = "" }
-}
-`,
-  )
-  writeFileSync(join(root, "label.ts"), `export const label = "one"\n`)
-  writeFileSync(join(root, "lazy.ts"), `export const lazy = "!"\n`)
-  const lines: string[] = []
-  const preview = await devPreview({
-    entry: "app.ts",
-    port: 0,
-    debounceMs: 5,
-    esbuild: { absWorkingDir: root },
-    log: (line) => lines.push(line),
-    ...options,
-  })
-  open.push(preview)
-  const get = (path: string, headers: Record<string, string> = {}) =>
-    preview.fetch(new Request(new URL(path, preview.url), { headers }))
-  /** The next build a file change (or `rebuild()`) produces. */
-  const next = () =>
-    new Promise<DevPreviewBuild>((done) => {
-      const off = preview.subscribe((build) => {
-        off()
-        done(build)
-      })
-    })
-  return { root, preview, lines, get, next }
+let dirs = 0
+/** A consumer project: `src/app.txt` is its source; its build copies it into a hashed entry. */
+const project = () => {
+  const dir = join(root, `p${++dirs}`)
+  mkdirSync(join(dir, "src"), { recursive: true })
+  mkdirSync(join(dir, "dist"), { recursive: true })
+  writeFileSync(join(dir, "src", "app.txt"), "one")
+  writeFileSync(join(dir, "src", "state.txt"), "schema-1")
+  let builds = 0
+  const build = () => {
+    builds++
+    const source = readFileSync(join(dir, "src", "app.txt"), "utf8")
+    if (source === "broken") throw new Error("syntax error in app.txt")
+    const entry = `./app-${source}.js`
+    writeFileSync(
+      join(dir, "dist", entry.slice(2)),
+      `export const value = ${JSON.stringify(source)}`,
+    )
+    writeFileSync(join(dir, "dist", "index.html"), "<!doctype html><main id=preview></main>")
+    writeFileSync(join(dir, "dist", "build.json"), JSON.stringify({ entry }))
+    writeFileSync(
+      join(dir, "dist", "version.json"),
+      JSON.stringify({
+        version: "development",
+        builtAt: new Date().toISOString(),
+        entry,
+        stateVersion: readFileSync(join(dir, "src", "state.txt"), "utf8"),
+      }),
+    )
+  }
+  return { dir, build, builds: () => builds }
 }
 
-/** Reads `count` snapshots off a `/__preview/live` response. */
-const snapshots = async (response: Response, count: number) => {
-  const reader = (response.body as ReadableStream<Uint8Array>).getReader()
-  const decoder = new TextDecoder()
-  const out: Record<string, unknown>[] = []
-  let text = ""
-  while (out.length < count) {
-    const { value, done } = await reader.read()
-    if (done) break
-    text += decoder.decode(value, { stream: true })
-    for (;;) {
-      const end = text.indexOf("\n\n")
-      if (end < 0) break
-      const data = /^data: (.*)$/m.exec(text.slice(0, end))?.[1]
-      text = text.slice(end + 2)
-      if (data) out.push(JSON.parse(data))
+const until = async (check: () => boolean | Promise<boolean>, ms = 5_000) => {
+  const deadline = Date.now() + ms
+  while (!(await check())) {
+    if (Date.now() > deadline) throw new Error("timed out")
+    await new Promise((resolve) => setTimeout(resolve, 10))
+  }
+}
+
+/** Just enough of `EventSource` over `fetch` (Bun has none). */
+const fetchEventSource = () =>
+  class implements EventSourceLike {
+    readyState = 0
+    #abort = new AbortController()
+    #listeners = new Map<string, ((event: { data?: unknown }) => void)[]>()
+    constructor(url: string) {
+      void this.#run(url)
+    }
+    addEventListener(type: string, listener: (event: { data?: unknown }) => void) {
+      this.#listeners.set(type, [...(this.#listeners.get(type) ?? []), listener])
+    }
+    close() {
+      this.readyState = 2
+      this.#abort.abort()
+    }
+    #emit(type: string, data?: string) {
+      for (const listener of this.#listeners.get(type) ?? []) listener({ data })
+    }
+    async #run(url: string) {
+      try {
+        const response = await fetch(url, { signal: this.#abort.signal })
+        if (!response.body) throw new Error("no body")
+        this.readyState = 1
+        this.#emit("open")
+        const decoder = new TextDecoder()
+        let buffer = ""
+        for await (const chunk of response.body) {
+          buffer += decoder.decode(chunk, { stream: true })
+          let end = buffer.indexOf("\n\n")
+          while (end >= 0) {
+            const block = buffer.slice(0, end)
+            buffer = buffer.slice(end + 2)
+            const type = /^event: (.*)$/m.exec(block)?.[1]
+            const data = /^data: (.*)$/m.exec(block)?.[1]
+            if (type && data !== undefined) this.#emit(type, data)
+            end = buffer.indexOf("\n\n")
+          }
+        }
+      } catch {
+        if (this.readyState !== 2) this.#emit("error")
+      }
     }
   }
-  return { out, reader }
+
+/** Reads `/__preview/live` and collects the snapshots it pushes. */
+const follow = (server: PreviewDevServer) => {
+  const snapshots: PreviewStatusSnapshot[] = []
+  const Source = fetchEventSource()
+  const source = new Source(`${server.url}/__preview/live`)
+  source.addEventListener("snapshot", (event) =>
+    snapshots.push(JSON.parse(String(event.data)) as PreviewStatusSnapshot),
+  )
+  return { snapshots, close: () => source.close() }
 }
 
-describe("devPreview", () => {
-  test("serves the page, the boot loader, version.json and the hashed app from memory", async () => {
-    const { preview, get, lines } = await fixture({ title: "Lab <dev>", hostId: "system" })
-    const version = preview.version()
-    expect(version?.entry).toMatch(/^\.\/app-[A-Z0-9]+\.js$/)
-    expect(version?.version).toBe(/-([A-Z0-9]+)\.js$/.exec(version?.entry ?? "")?.[1] as string)
-    expect(preview.builds()).toEqual([
-      { ok: true, version: version?.version as string, ms: expect.any(Number), changed: [] },
-    ])
-
-    const page = await get("/")
-    expect(page.headers.get("cache-control")).toBe("no-store")
-    const html = await page.text()
-    expect(html).toContain('<main id="system"')
-    expect(html).toContain("<title>Lab &lt;dev&gt;</title>")
-    // A deep link is the page; a missing file is not.
-    expect(await (await get("/settings/profile")).text()).toBe(html)
-    expect((await get("/gone-ABCDEFGH.js")).status).toBe(404)
-
-    expect(await (await get("/version.json")).json()).toEqual(version)
-    expect(await (await get("/build.json")).json()).toEqual({ entry: version?.entry })
-
-    const loader = await get("/preview.js")
-    expect(loader.headers.get("content-type")).toContain("text/javascript")
-    const source = await loader.text()
-    // The dev loader: updates apply at once, and build errors show in the page.
-    expect(source).toContain(`"countdownMs": 0`)
-    expect(source).toContain("mockingbird-preview-dev-error")
-
-    const app = await get(`/${version?.entry.slice(2)}`)
-    expect(app.status).toBe(200)
-    expect(app.headers.get("cache-control")).toContain("immutable")
-    expect(app.headers.get("content-encoding")).toBeNull()
-    // Readable: a dev build is not minified.
-    expect(await app.text()).toContain("host.textContent = label + lazy")
-
-    expect((await preview.fetch(new Request(preview.url, { method: "POST" }))).status).toBe(405)
-    expect(lines[0]).toBe(`preview dev server: ${preview.url}`)
-    expect(lines[1]).toMatch(/^built [A-Z0-9]+ in \d+ ms · \d+\.\d MB$/)
-  })
-
-  test("a saved file is a new version, pushed to open tabs; an untouched chunk keeps its URL", async () => {
-    const { root, preview, get, next, lines } = await fixture()
-    const first = preview.version()
-    const live = await get("/__preview/live")
-    expect(live.headers.get("content-type")).toContain("text/event-stream")
-    const built = next()
-    writeFileSync(join(root, "label.ts"), `export const label = "two"\n`)
-    const build = await built
-    expect(build.ok).toBe(true)
-    expect(build.changed).toEqual(["label.ts"])
-    const second = preview.version()
-    expect(second?.version).not.toBe(first?.version)
-    expect(build.version).toBe(second?.version as string)
-
-    // The stream said: what is deployed, a build starting, the new version deployed.
-    const { out, reader } = await snapshots(live, 3)
-    expect(preview.tabs()).toBe(1)
-    await reader.cancel()
-    expect(preview.tabs()).toBe(0)
-    expect(out.map((snapshot) => (snapshot.build as { state: string }).state)).toEqual([
-      "deployed",
-      "building",
-      "deployed",
-    ])
-    expect(out[0]?.deployed).toEqual({ version: first?.version, at: first?.builtAt })
-    expect(out[2]?.deployed).toEqual({ version: second?.version, at: second?.builtAt })
-    expect(await (await get("/__preview/status")).json()).toMatchObject({
-      deployed: { version: second?.version },
-      build: { state: "deployed", version: second?.version },
+describe("createPreviewDevServer", () => {
+  test("builds, serves, and pushes each rebuild a watched change starts to open tabs", async () => {
+    const p = project()
+    const server = await createPreviewDevServer({
+      cwd: p.dir,
+      outdir: "dist",
+      build: p.build,
+      watch: ["src"],
+      debounceMs: 20,
+      log: () => {},
     })
+    try {
+      await server.ready
+      const first = server.version() as PreviewVersion
+      expect(first.version).toMatch(/^dev-[a-z0-9]+-1$/)
+      expect(first.entry).toBe("./app-one.js")
+      expect(first.stateVersion).toBe("schema-1")
+      const served = (await (await fetch(`${server.url}/version.json`)).json()) as PreviewVersion
+      expect(served).toEqual(first)
 
-    // The version a tab still runs keeps loading, lazy chunk and all.
-    expect((await get(`/${first?.entry.slice(2)}`)).status).toBe(200)
-    expect(await (await get(`/${second?.entry.slice(2)}`)).text()).toContain('"two"')
-    expect(lines.at(-1)).toMatch(/^rebuilt [A-Z0-9]+ in \d+ ms · .* · label\.ts · 1 tab updated$/)
+      const live = follow(server)
+      await until(() => live.snapshots.length > 0)
+      expect(live.snapshots[0]).toMatchObject({
+        dev: true,
+        deployed: { version: first.version },
+        build: { state: "deployed", version: first.version },
+      })
+      expect(server.connections()).toBe(1)
 
-    // A rebuild that changes nothing is not a new version.
-    const same = await preview.rebuild()
-    expect(same.version).toBe(second?.version as string)
-    expect(preview.version()).toEqual(second)
-  })
-
-  test("a failing build keeps the last good version serving and says why; the fix recovers", async () => {
-    const { root, preview, get, next } = await fixture()
-    const good = preview.version()
-    let built = next()
-    writeFileSync(join(root, "label.ts"), `export const label = \n`)
-    const failed = await built
-    expect(failed.ok).toBe(false)
-    expect(failed.version).toBe(good?.version as string)
-    expect(failed.error).toContain("label.ts:")
-    expect(preview.version()).toEqual(good)
-    expect((await get(`/${good?.entry.slice(2)}`)).status).toBe(200)
-    const status = (await (await get("/__preview/status")).json()) as {
-      build: { state: string; message: string }
-      deployed: { version: string }
-    }
-    expect(status.build.state).toBe("failed")
-    expect(status.build.message).toContain("label.ts:")
-    expect(status.deployed.version).toBe(good?.version as string)
-
-    built = next()
-    writeFileSync(join(root, "label.ts"), `export const label = "fixed"\n`)
-    const fixed = await built
-    expect(fixed.ok).toBe(true)
-    expect(preview.version()?.version).not.toBe(good?.version)
-  })
-
-  test("with no good build yet the page shows the error, then the first good build serves", async () => {
-    const { root, preview, get, next } = await fixture({}, `export const start = (\n`)
-    expect(preview.version()).toBeUndefined()
-    expect(preview.builds()[0]?.ok).toBe(false)
-    const waiting = await (await get("/")).text()
-    expect(waiting).toContain("The preview does not build yet")
-    expect(waiting).toContain("app.ts:")
-    expect((await get("/version.json")).status).toBe(503)
-
-    const built = next()
-    writeFileSync(join(root, "app.ts"), `export const start = async () => () => {}\n`)
-    expect((await built).ok).toBe(true)
-    expect(await (await get("/")).text()).toContain('<main id="preview"')
-    expect((await get("/version.json")).status).toBe(200)
-  })
-
-  test("extra routes answer first, the status refuses other sites, and other devices get gzip", async () => {
-    const { preview, get } = await fixture(
-      {
-        base: "/lab/",
-        fetch: (request) =>
-          new URL(request.url).pathname === "/__dev/" ? Response.json({ dev: true }) : undefined,
-      },
-      `export const start = async (host: HTMLElement) => { host.textContent = ${JSON.stringify("x".repeat(2048))}; return () => {} }\n`,
-    )
-    expect(preview.url.endsWith("/lab/")).toBe(true)
-    expect(await (await get("/__dev/")).json()).toEqual({ dev: true })
-    expect((await get("/")).status).toBe(404)
-    expect(await (await get("/lab/deep/link")).text()).toContain('src="/lab/preview.js"')
-    expect((await get("/lab/version.json")).status).toBe(200)
-    expect((await get("/__preview/status", { "sec-fetch-site": "cross-site" })).status).toBe(403)
-    expect((await get("/__preview/status", { "sec-fetch-site": "same-origin" })).status).toBe(200)
-
-    const entry = preview.version()?.entry.slice(2)
-    const far = await preview.fetch(
-      new Request(`http://192.168.0.9:${preview.port}/lab/preview.js`, {
-        headers: { "accept-encoding": "gzip" },
-      }),
-    )
-    // The loader is not a hashed build output; the app's chunks are.
-    expect(far.headers.get("content-encoding")).toBeNull()
-    const chunk = (host: string) =>
-      preview.fetch(
-        new Request(`http://${host}:${preview.port}/lab/${entry}`, {
-          headers: { "accept-encoding": "gzip, br" },
-        }),
+      writeFileSync(join(p.dir, "src", "app.txt"), "two")
+      await until(() => live.snapshots.some((s) => s.deployed?.version !== first.version))
+      const second = server.version() as PreviewVersion
+      expect(second.version).toMatch(/-2$/)
+      expect(second.entry).toBe("./app-two.js")
+      expect(live.snapshots.some((s) => s.build?.state === "building")).toBe(true)
+      expect(server.builds().at(-1)).toMatchObject({ ok: true, changed: [join("src", "app.txt")] })
+      expect(await (await fetch(`${server.url}/app-two.js`)).text()).toBe(
+        'export const value = "two"',
       )
-    expect((await chunk("192.168.0.9")).headers.get("content-encoding")).toBe("gzip")
-    expect((await chunk("localhost")).headers.get("content-encoding")).toBeNull()
+      live.close()
+      await until(() => server.connections() === 0)
+    } finally {
+      await server.close()
+    }
   })
 
-  test("serves over HTTP and steps over a taken port", async () => {
-    const first = await fixture()
-    const second = await fixture({ port: first.preview.port })
-    expect(second.preview.port).toBeGreaterThan(first.preview.port)
-    const response = await fetch(new URL("version.json", second.preview.url))
-    expect(await response.json()).toEqual(second.preview.version())
+  test("a failed build is reported and keeps serving the last good one", async () => {
+    const p = project()
+    const server = await createPreviewDevServer({
+      cwd: p.dir,
+      outdir: "dist",
+      build: p.build,
+      watch: ["src"],
+      debounceMs: 10_000,
+      log: () => {},
+    })
+    try {
+      await server.ready
+      const good = server.version() as PreviewVersion
+      writeFileSync(join(p.dir, "src", "app.txt"), "broken")
+      const result = await server.rebuild()
+      expect(result.ok).toBe(false)
+      expect(result.error).toContain("syntax error")
+      expect(server.version()).toEqual(good)
+      const status = (await (
+        await fetch(`${server.url}/__preview/status`)
+      ).json()) as PreviewStatusSnapshot
+      expect(status.build).toMatchObject({ state: "failed", message: "syntax error in app.txt" })
+      expect(status.deployed?.version).toBe(good.version)
+    } finally {
+      await server.close()
+    }
+  })
+
+  test("runs a build command, and reports its exit code and output", async () => {
+    const p = project()
+    writeFileSync(
+      join(p.dir, "build.ts"),
+      `import { writeFileSync } from "node:fs"
+if (process.env.FAIL_BUILD) { console.error("boom from the build"); process.exit(3) }
+writeFileSync("dist/app-x.js", "export {}")
+writeFileSync("dist/version.json", JSON.stringify({ version: "development", builtAt: "x", entry: "./app-x.js" }))
+`,
+    )
+    const server = await createPreviewDevServer({
+      cwd: p.dir,
+      outdir: "dist",
+      build: [process.execPath, "build.ts"],
+      watch: ["src"],
+      log: () => {},
+    })
+    try {
+      await server.ready
+      expect(server.version()?.entry).toBe("./app-x.js")
+      expect(server.version()?.stateVersion).toBeUndefined()
+      process.env.FAIL_BUILD = "1"
+      const failed = await server.rebuild()
+      expect(failed.ok).toBe(false)
+      expect(failed.error).toContain("exited 3")
+      expect(failed.error).toContain("boom from the build")
+    } finally {
+      delete process.env.FAIL_BUILD
+      await server.close()
+    }
+  })
+
+  test("serves files with revalidation, the SPA fallback, and nothing outside outdir", async () => {
+    const p = project()
+    const server = await createPreviewDevServer({
+      cwd: p.dir,
+      outdir: "dist",
+      build: p.build,
+      watch: ["src"],
+      log: () => {},
+    })
+    try {
+      await server.ready
+      const asset = await fetch(`${server.url}/app-one.js`)
+      expect(asset.headers.get("content-type")).toContain("text/javascript")
+      expect(asset.headers.get("cache-control")).toBe("no-cache")
+      const etag = asset.headers.get("etag") as string
+      expect(
+        (await fetch(`${server.url}/app-one.js`, { headers: { "if-none-match": etag } })).status,
+      ).toBe(304)
+      expect((await fetch(`${server.url}/version.json`)).headers.get("cache-control")).toBe(
+        "no-store",
+      )
+      const deep = await fetch(`${server.url}/settings/profile`)
+      expect(await deep.text()).toContain("<main id=preview>")
+      expect((await fetch(`${server.url}/missing.js`)).status).toBe(404)
+      expect((await server.fetch(new Request("http://x/%2e%2e/src/app.txt"))).status).toBe(404)
+    } finally {
+      await server.close()
+    }
+  })
+
+  test("createLivePreview on the dev server is live and applies a build at once, keeping the tab's data", async () => {
+    const p = project()
+    const server = await createPreviewDevServer({
+      cwd: p.dir,
+      outdir: "dist",
+      build: p.build,
+      watch: ["src"],
+      debounceMs: 20,
+      log: () => {},
+    })
+    try {
+      await server.ready
+      const current = (await (await fetch(`${server.url}/version.json`)).json()) as PreviewVersion
+      const loads: string[] = []
+      const live = createLivePreview({
+        current,
+        origin: server.url,
+        // A long countdown: a dev server's build must not wait for it.
+        countdownMs: 60_000,
+        EventSource: fetchEventSource(),
+        fetch: ((input: string, init?: RequestInit) => fetch(input, init)) as typeof fetch,
+        document: { addEventListener() {}, removeEventListener() {}, hidden: false },
+        window: { addEventListener() {}, removeEventListener() {} },
+        load: async (version) => {
+          loads.push(version.entry)
+          return () => {}
+        },
+      })
+      await live.start()
+      await until(() => live.get().connection === "live")
+
+      writeFileSync(join(p.dir, "src", "app.txt"), "two")
+      await until(() => loads.includes("./app-two.js"))
+      expect(live.get().current.version).toBe((server.version() as PreviewVersion).version)
+
+      // A new stateVersion resets the tab's data: offered, never applied on its own.
+      writeFileSync(join(p.dir, "src", "state.txt"), "schema-2")
+      writeFileSync(join(p.dir, "src", "app.txt"), "three")
+      await until(() => live.get().update.resetsData === true)
+      await new Promise((resolve) => setTimeout(resolve, 200))
+      expect(loads).toEqual(["./app-one.js", "./app-two.js"])
+      expect(live.get().update.autoApplyAt).toBeUndefined()
+      live.close()
+    } finally {
+      await server.close()
+    }
+  })
+
+  test("an unknown watch path fails before serving", async () => {
+    const p = project()
     await expect(
-      devPreview({
-        entry: "app.ts",
-        port: first.preview.port,
-        strictPort: true,
-        esbuild: { absWorkingDir: first.root },
+      createPreviewDevServer({
+        cwd: p.dir,
+        outdir: "dist",
+        build: p.build,
+        watch: ["nope"],
         log: () => {},
       }),
-    ).rejects.toMatchObject({ code: "EADDRINUSE" })
+    ).rejects.toThrow("does not exist")
+  })
+})
+
+describe("mockingbird-preview dev", () => {
+  test("serves until its signal, building with the command", async () => {
+    const p = project()
+    writeFileSync(
+      join(p.dir, "build.ts"),
+      `import { writeFileSync } from "node:fs"
+writeFileSync(${JSON.stringify(join(p.dir, "dist", "app-c.js"))}, "export {}")
+writeFileSync(${JSON.stringify(join(p.dir, "dist", "build.json"))}, JSON.stringify({ entry: "./app-c.js" }))
+`,
+    )
+    const out: string[] = []
+    const abort = new AbortController()
+    const running = runPreviewCli(
+      [
+        "dev",
+        "--outdir",
+        join(p.dir, "dist"),
+        "--build",
+        `${process.execPath} ${join(p.dir, "build.ts")}`,
+        "--watch",
+        join(p.dir, "src"),
+        "--port",
+        "0",
+        "--state-version",
+        "v9",
+      ],
+      { stdout: (line) => out.push(line), stderr: (line) => out.push(line) },
+      { env: {}, fetch: (input, init) => fetch(input, init), signal: abort.signal },
+    )
+    await until(() => out.some((line) => line.includes("built dev-")))
+    const url = out.find((line) => line.includes("serving"))?.split("serving ")[1] as string
+    const version = (await (await fetch(`${url}/version.json`)).json()) as PreviewVersion
+    expect(version).toMatchObject({ entry: "./app-c.js", stateVersion: "v9" })
+    abort.abort()
+    expect(await running).toBe(0)
+  })
+
+  test("refuses a missing --watch", async () => {
+    const err: string[] = []
+    const code = await runPreviewCli(
+      ["dev", "--outdir", "dist", "--build", "true"],
+      { stdout: () => {}, stderr: (line) => err.push(line) },
+      { env: {}, fetch: (input, init) => fetch(input, init) },
+    )
+    expect(code).toBe(1)
+    expect(err[0]).toContain("--watch is required")
   })
 })

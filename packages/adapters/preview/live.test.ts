@@ -515,6 +515,25 @@ describe("createLivePreview", () => {
     h.live.close()
   })
 
+  test("a dev server's snapshot (dev: true) applies a new build at once, with no countdown", async () => {
+    const h = harness()
+    await h.live.start()
+    h.socket().open()
+    h.served.version = V2
+    h.socket().snapshot({ ...deployedSnapshot(V2), dev: true })
+    await h.clock.advance(0)
+    expect(h.loads).toEqual([V1.version, V2.version])
+    expect(h.live.get().update.autoApplyAt).toBeUndefined()
+    expect(h.live.get().connection).toBe("live")
+    // Unless it resets the tab's data, or the person turned auto-update off.
+    h.served.version = { ...V3, stateVersion: "schema-2" }
+    h.socket().snapshot({ ...deployedSnapshot(V3), dev: true })
+    await h.clock.advance(60_000)
+    expect(h.loads).toEqual([V1.version, V2.version])
+    expect(h.live.get().update.resetsData).toBe(true)
+    h.live.close()
+  })
+
   test("countdownMs is configurable and applyUpdate applies at once", async () => {
     const h = harness({ countdownMs: 3_000 })
     h.served.version = V2

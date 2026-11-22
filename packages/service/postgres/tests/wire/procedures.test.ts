@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, expect, test } from "bun:test";
 import pg from "pg";
-import { splitStatements } from "../../src/wire/split.ts";
+import { splitStatements } from "../../src/sql/split.ts";
 import { type PostgresServer, serve } from "../../src/wire/index.ts";
 
 let server: PostgresServer;

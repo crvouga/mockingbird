@@ -7,6 +7,15 @@ import { followSignInLink } from "../client/signInLink.js"
 import { buildDemo } from "./build.js"
 import { createLabDevResources, DEV_DOCS_URL } from "./dev.js"
 import { createInProcessFetcher } from "./inProcessFetcher.js"
+import {
+  API_READY,
+  checkStripeKey,
+  labBackends,
+  labConfiguration,
+  STRIPE_KEY_FIELDS,
+  startupClock,
+  withBrowserKey,
+} from "./systemScreen.js"
 
 export { createInProcessFetcher }
 
@@ -30,6 +39,7 @@ export const mount = async (
     build?: SystemBuild
   } = {},
 ): Promise<() => void> => {
+  const clock = startupClock()
   const dev = createLabDevResources(options.devProxyUrl)
   // The emailed sign-in link points at this page, showing the app. A click on it in Notifications
   // is followed here, in the tab that issued it; pasted into the sign-in screen it works too.
@@ -41,7 +51,9 @@ export const mount = async (
     signInPage: signInPage.href,
     ...(dev.upstream ? { upstream: dev.upstream } : {}),
   })
+  clock.mark("database and emulators")
   setFetcher(createInProcessFetcher(demo.app))
+  clock.mark(API_READY)
 
   // The design system's stylesheet, once per document: the app is React and HeroUI, drawn with
   // the same tokens as the System screen around it.
@@ -116,10 +128,18 @@ export const mount = async (
   const dashboard = mountSystem(host, system, {
     initial: "app",
     syncUrl: options.syncUrl ?? false,
-    services: dev.controls(demo.admins),
+    // Stripe also takes a test key typed on the System screen, for previews with no dev proxy.
+    services: withBrowserKey(dev.controls(demo.admins), {
+      id: "stripe",
+      fields: STRIPE_KEY_FIELDS,
+      check: checkStripeKey,
+    }),
+    backends: labBackends(clock, demo.admins),
+    sections: [labConfiguration({ devProxyUrl: options.devProxyUrl, keyed: ["stripe"] })],
     docsUrl: DEV_DOCS_URL,
     ...(options.build ? { build: options.build } : {}),
   })
+  clock.mark("System mounted")
   setInboxOpener((target) => {
     void dashboard.show("notifications").then(() => notifications?.show(target))
   })

@@ -73,3 +73,9 @@ export {
 } from "./api/schema-report.ts";
 export { type ResultSet, type RunResult, Statement } from "./api/statement.ts";
 export { type ErrorCategory, PostgresError } from "./errors/error.ts";
+export type {
+  SlowStatement,
+  StatementEvent,
+  StatementObserver,
+  StatementObserverOptions,
+} from "./runtime/statement-observer.ts";

@@ -52,6 +52,11 @@ export type PreviewStatusSnapshot = {
   source: PreviewStatusSource
   /** Why CI status is missing. */
   message?: string
+  /**
+   * Set by a local dev server (`createPreviewDevServer`): every new build is applied at once,
+   * without the countdown, as long as it keeps the tab's data (same `stateVersion`).
+   */
+  dev?: true
   updatedAt: string
 }
 

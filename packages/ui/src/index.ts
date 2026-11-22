@@ -31,12 +31,22 @@ export {
   startPreviewLauncher,
 } from "./preview-launcher.js"
 export { CSS_RESET, scopeReset } from "./reset.js"
+// #903: credentials typed on the System screen, start-up timings, and facts sections.
+export type {
+  SystemFact,
+  SystemFactGroup,
+  SystemFactsSection,
+  SystemServiceField,
+  SystemTimelineStep,
+} from "./system-harness.js"
 export {
+  DEFAULT_FRAME_READY_TIMEOUT_MS,
   DEFAULT_NEXT_SHORTCUT,
   DEFAULT_PREVIOUS_SHORTCUT,
   DEFAULT_SYSTEM_SHORTCUT,
   DOCK_KEY,
   defineSystem,
+  FRAME_PATHS_KEY,
   INCLUDED_KEY,
   type MountSystemOptions,
   mountSystem,
@@ -72,6 +82,7 @@ export {
   type SystemBuild,
   type SystemBuildState,
   type SystemDevStatus,
+  type SystemFrame,
   type SystemHarness,
   type SystemHarnessOptions,
   type SystemHarnessStorage,

@@ -15,6 +15,26 @@ export type SystemService = {
   unavailable?: string
   /** The last request this service answered (or the dev resource did): when, and how it went. */
   lastCall?: SystemServiceCall
+  /**
+   * The values a developer types to reach this service's dev resource from the browser (an API
+   * key, a region), drawn under the row while Dev is chosen. With `setCredentials` on
+   * `SystemServices`, the row can switch to Dev even when `unavailable` is set (no proxy).
+   */
+  fields?: readonly SystemServiceField[]
+  /** Whether the host already holds values for `fields`, so the row says "Key saved". */
+  configured?: boolean
+}
+
+/** One input under a service's row: text, a password input when `secret`, a select with `options`. */
+export type SystemServiceField = {
+  /** The key in the values `setCredentials` receives. */
+  name: string
+  label: string
+  /** Drawn as a password input, and never shown back. */
+  secret?: boolean
+  placeholder?: string
+  /** A fixed choice (a region, an environment) in place of free text. */
+  options?: readonly { value: string; label: string }[]
 }
 
 /** One request a service answered: an ISO time, whether it succeeded, and its HTTP status. */
@@ -47,6 +67,13 @@ export type SystemServices = {
   subscribe?(listener: () => void): () => void
   /** Probes one service through the dev proxy; adds a Test button to each row. */
   test?(id: string): Promise<SystemServiceTest>
+  /**
+   * Keeps the values a developer typed into a service's `fields`; the host decides where (memory,
+   * IndexedDB). The screen never stores them. Then lists again, so `configured` follows.
+   */
+  setCredentials?(id: string, values: Record<string, string>): Promise<void>
+  /** Forgets one service's values, or every service's without an id. */
+  clearCredentials?(id?: string): Promise<void>
 }
 
 /**
@@ -60,6 +87,32 @@ export type SystemSection = {
   icon?: SystemIcon
   /** Draws into `host` once, when the System screen first draws; returns the disposer. */
   mount(host: HTMLElement, signal: AbortSignal): (() => void) | Promise<() => void>
+}
+
+/**
+ * A read-only section the screen draws itself from data (feature flags, configuration): named
+ * groups of label / value rows, with a filter. Passed in `sections` beside mount-based ones.
+ */
+export type SystemFactsSection = {
+  /** Unique, URL-safe, and not one of the built-in ids (`SYSTEM_SECTION_IDS`). */
+  id: string
+  label: string
+  icon?: SystemIcon
+  /** Called once, when the System screen first draws; a rejection shows with a Retry. */
+  load(): Promise<readonly SystemFactGroup[]>
+}
+
+/** One named group of a facts section's rows (an app's feature flags). */
+export type SystemFactGroup = { group: string; rows: readonly SystemFact[] }
+
+/** One row of a facts section: a label, its value, how the value reads, and why. */
+export type SystemFact = {
+  label: string
+  value: string
+  /** `on` reads as enabled, `off` as disabled, `muted` as not applicable. */
+  tone?: "on" | "off" | "muted"
+  /** One line under the row (why a flag is kept off). */
+  note?: string
 }
 
 /** Save, load and reset of the whole in-tab state: the System screen's Data card. */
@@ -85,7 +138,12 @@ export type SystemBackend = {
   state?: SystemBackendState
   /** Why it failed, or what it is doing ("Booting · 40%"). */
   message?: string
+  /** How long it took to become ready, in milliseconds; shown on its card. */
+  startedInMs?: number
 }
+
+/** One step of the start-up timeline: what happened, in milliseconds since the page began. */
+export type SystemTimelineStep = { label: string; atMs: number }
 
 /**
  * The in-tab backends and emulators. `@crvouga/mockingbird-preview`'s `createBackendHost()` and
@@ -94,6 +152,8 @@ export type SystemBackend = {
 export type SystemBackends = {
   list(): Promise<readonly SystemBackend[]> | readonly SystemBackend[]
   subscribe?(listener: () => void): () => void
+  /** The steps of start-up (fetched, evaluated, database, first server), drawn under the list. */
+  timeline?(): Promise<readonly SystemTimelineStep[]> | readonly SystemTimelineStep[]
 }
 
 /** What a surface's `health` probe answers. */
@@ -168,7 +228,7 @@ export type HarnessController = {
   /** The in-tab backends and emulators, for the System screen's Backends list. */
   backends?: SystemBackends | undefined
   /** The consumer's own System sections, after the built-in ones. */
-  sections?: readonly SystemSection[] | undefined
+  sections?: readonly (SystemSection | SystemFactsSection)[] | undefined
   /** Save, load and reset, for the System screen's Data card. */
   snapshot?: SystemSnapshot | undefined
   /** The keyboard shortcut that opens System ("Alt+Shift+S"), or false for none. */

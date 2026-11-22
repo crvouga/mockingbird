@@ -2,7 +2,7 @@
  * Builds a static live preview: the app as one hashed entry per version, the stable boot loader
  * (`preview.js`, see `./boot`), `index.html`, `build.json` and a development `version.json`. A
  * deploy then stamps `version.json` with the commit it ships (`stampPreviewVersion`). While you
- * work, `devPreview` (`./dev-server`) serves the same preview from memory and rebuilds on save.
+ * work, `devPreview` (`./dev-preview`) serves the same preview from memory and rebuilds on save.
  *
  * Bun / Node only (esbuild and the file system). esbuild is a peer dependency.
  */

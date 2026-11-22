@@ -230,7 +230,7 @@ open tabs take each change in place):
 bun run preview:ui               # from the repo root; prints the addresses, also for a phone
 ```
 
-It runs `scripts/dev-preview.ts` (`devPreview` from `@crvouga/mockingbird-preview/dev-server`)
+It runs `scripts/dev-preview.ts` (`devPreview` from `@crvouga/mockingbird-preview/dev-preview`)
 with the dev resources proxy at `/__dev`, reading non-production keys from `.env.local`.
 
 **As a standalone dev server:**
