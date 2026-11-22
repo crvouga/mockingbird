@@ -100,6 +100,32 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `{ action: "deployed", preview, deploymentId }` (`CloudflarePreviewDeployResult`), so callers
   can narrow on the literal action. `list` follows pages and throws on API failures; `remove`
   treats HTTP 404 as success. No production Worker deployment is changed.
+- `assertAssetsOnlyConfig(config)` refuses a wrangler config that declares anything but static
+  files (a `main`, a binding, a non-empty `vars`, `assets.binding`, `assets.run_worker_first`, or
+  any key outside the static-file allowlist), naming every offending key, and returns the
+  `compatibilityDate`, `htmlHandling` and `notFoundHandling` a named Preview deploys with.
+  `parseJsonc(text)` reads a `wrangler.jsonc`.
+- `waitUntilServing(origin, commit, { timeoutMs, intervalMs, fetch })` polls `<origin>/version.json`
+  (no-store, cache-busted) until it names `commit`, and rejects with what it last saw after the
+  deadline. `runPreviewChecks(checks, origin, fetch)` runs a consumer's
+  `(origin, fetch) => Promise<{ name, ok, detail? }[]>` once (a throw is one failed check);
+  `checkUntilPassing(checks, origin, options)` re-runs it until it passes or the deadline passes.
+  `previewGateUploads(target, gatePassed)` is the gate policy: a `"pull-request"` uploads anyway
+  (best effort), a `"branch"` does not (strict).
+- `upsertPreviewSection(body, facts)` puts the preview block (`<!-- preview:start -->` …
+  `<!-- preview:end -->`) at the very top of a PR description with `{ state, sites, attempted?,
+  deployed?, runUrl?, repository? }`, replacing an earlier block anywhere in the body and leaving
+  the author's text byte for byte. Without `deployed`, or a site without `url`, the earlier block's
+  values (kept in a hidden data comment) carry over, so a failed run still shows what is served.
+  `stripPreviewSection`, `readPreviewSection` and `summarizePreviewState` are its helpers; the
+  markers are `PREVIEW_SECTION_START` / `PREVIEW_SECTION_END`, and `PREVIEW_SECTION_STATES` lists
+  `deploying`, `live`, `failing-checks`, `failed`, `removed` and `expired`.
+- `createPreviewGitHub({ token, repository, apiUrl?, fetch? })` holds the GitHub calls the named
+  Preview commands make: `pullRequest(n)` (facts for `selectPreviewAction` and the body),
+  `setPullRequestBody`, `openPullRequests`, `branchHead`, and Deployments: `startDeployment`
+  (transient environment, `in_progress` with `log_url`, every earlier deployment of the environment
+  marked inactive and deleted), `finishDeployment` (`success` / `failure`) and `removeDeployments`.
+  `previewEnvironment(site, preview)` is the environment name, `preview/<site>/<preview>`.
 - `previewNodeHandler(fetch)` and `listenPreview(fetch, { port, hostname })`, from the `/node`
   export, expose the same Fetch handler or browser bridge to a Node HTTP test runner. The default
   listener is loopback on an ephemeral port. Responses are always `Cache-Control: no-store` to
@@ -137,8 +163,9 @@ The application must honor the boot/request AbortSignals to terminate work it st
   `esbuild` is a peer dependency), build the static preview (hashed `app-<hash>.js`, `preview.js`,
   `index.html`, `build.json`, a development `version.json`) and stamp `version.json` with the
   commit a deploy ships. See [Building the preview](#building-the-preview).
-- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`) is what the preview workflow
-  runs. See [The CLI](#the-cli).
+- The `mockingbird-preview` CLI (`stamp`, `status`, `wrangler-config`; for named Previews
+  `deploy-preview`, `remove-preview`, `sweep`, `pr-section`, `deployment`) is what the preview
+  workflow runs. See [The CLI](#the-cli).
 - `createLivePreview({ current, load, basePath?, versionUrl?, countdownMs?, storage?, … })` is the
   browser side: it mounts `current`, follows the status stream (or polls it), and swaps in each newly deployed
   build without reloading the page. Its result is structurally the UI package's `SystemBuild`
@@ -668,6 +695,48 @@ and deletes the file. It prints one line and always exits 0, turning any failure
 `main` (default the package's `dist/worker-entry.js`, as an absolute path), `compatibility_date`,
 `assets` (`binding: "ASSETS"`, `not_found_handling: "single-page-application"`,
 `run_worker_first: ["/__preview/*", …]`) and, with `--pr`, the `PREVIEW_PR` var.
+
+#### Named Previews of one assets-only Worker
+
+The reusable workflow's `mode: named-previews` ([docs/PREVIEWS.md](../../../docs/PREVIEWS.md))
+runs these commands. They read `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and `GITHUB_TOKEN`
+(plus `GITHUB_API_URL` / `GITHUB_SERVER_URL` when set) from the environment.
+
+```sh
+mockingbird-preview deploy-preview --worker <name> --outdir <dir> --commit <sha> \
+  (--pr <n> | --branch <name>) --repository <owner/name> [--site <name>] [--name <preview>] \
+  [--config <wrangler.json(c)>] [--host <domain>] [--checks <module>] [--timeout-seconds 180] \
+  [--result <file>]
+mockingbird-preview remove-preview --worker <name> (--pr <n> | --name <preview>)
+mockingbird-preview sweep --worker <name> [--retention-days 7] [--capacity 80] \
+  (--repository <owner/name> | --open-prs <n,n,...>)
+mockingbird-preview pr-section --repository <owner/name> --pr <n> [--state auto|<state>] \
+  [--site <name>]... [--results <dir>] [--attempted <sha>] [--run-url <url>]
+mockingbird-preview deployment --repository <owner/name> --environment <env> \
+  --state in_progress|success|failure|removed [--ref <sha>] [--url <url>] [--run-url <url>]
+```
+
+- `deploy-preview` deploys `outdir` as Preview `pr-<n>` (or the branch's name) of the Worker:
+  it refuses a `--config` that is not assets-only before any network call, stamps `version.json`,
+  runs the `--checks` module's default export on the built directory (the gate), calls
+  `createCloudflarePreviews(…).deploy()` (which re-reads the PR or branch head before upload and
+  before deploying, and removes the Preview of a PR that closed meanwhile), waits until
+  `https://<preview>.<host>` serves the commit, falling back to the Preview's own URLs within a
+  60 s share of the deadline, then runs the checks against it until they pass. It writes
+  `{ site, worker, name, state, attempted, deployed?, url?, gate?, after?, message? }` to
+  `--result`, with `state` `live`, `failing-checks`, `failed`, `skipped` or `removed`, and exits 1
+  only for `failed`. A branch whose gate fails uploads nothing.
+- `remove-preview` deletes the Preview and lists the Worker's Previews to confirm it is gone; it
+  exits 1 when it is still listed.
+- `sweep` lists the Worker's Previews, reads open PRs (`--repository`, with `GITHUB_TOKEN`) or takes
+  `--open-prs`, plans with `planPreviewSweep` (only `pr-<n>` names are managed), deletes each
+  removed Preview, marks an open PR's section `expired`, and exits 1 if any removed one is still
+  listed or a deletion failed.
+- `pr-section` rewrites the PR's description block with `upsertPreviewSection`, from `--results`
+  (the files `deploy-preview --result` wrote) and `--site` names; `--state auto` is the worst site
+  state.
+- `deployment` manages the PR's GitHub Deployment of one site: `in_progress` creates one (and
+  removes the earlier ones), `success` / `failure` finishes the newest, `removed` deletes them all.
 
 ### Browser boot loader
 
