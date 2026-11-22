@@ -744,6 +744,7 @@ export function mountSystemHarness(
     apps = appsOf(specs)
     layoutBar()
     fit()
+    fit()
     // As a reload would find them: an off-by-default surface is out until someone switches it on.
     defaultOff = defaultOffOf(specs)
     rotation.excluded = excludedWithDefaults(rotation, defaultOff)

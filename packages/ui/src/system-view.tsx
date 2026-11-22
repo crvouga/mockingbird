@@ -466,7 +466,8 @@ function Chrome({
 
   return (
     <>
-      {controller.switcher ? (
+      {
+        // Always drawn, and hidden while there is no app to switch to (`setSurfaces` can add one).
         <Portal host={controller.bar} theme={theme} style="height:100%">
           {/* biome-ignore lint/a11y/useSemanticElements: a bar of buttons, not a form fieldset. */}
           <div
@@ -475,6 +476,7 @@ function Chrome({
             {...(description ? { "aria-description": description } : {})}
             data-testid="system-switcher"
             data-dev={devText ? "" : undefined}
+            hidden={!controller.switcher}
             onKeyDown={(event) => {
               if (event.key === "Escape") setTip(undefined)
             }}
@@ -546,7 +548,7 @@ function Chrome({
             </span>
           </div>
         </Portal>
-      ) : null}
+      }
       <Layer theme={theme} className="pointer-events-none absolute inset-0">
         <Notice notice={snapshot.notice} dismiss={controller.dismissNotice} />
         {build ? (
