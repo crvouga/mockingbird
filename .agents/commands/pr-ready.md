@@ -223,7 +223,6 @@ before `ready`.
 When `checks` exits 0, run the ready gate. It verifies, without merging:
 - the PR is open and not a draft;
 - the worktree is clean and pushed;
-- the branch is not behind `origin/main`;
 - every check on the PR passed;
 - every check that ran is a required status check;
 - GitHub reports the PR mergeable.
@@ -247,8 +246,8 @@ bun run pr:ready status
 
 Report exactly: branch, PR number and URL, base branch, the PR `state` (must be `OPEN`, not a draft),
 every check name with its bucket, and the required contexts. Say auto-merge is enabled (or that it
-merged). If `main` moves first, the PR becomes `BEHIND`: `sync`/`publish` (or `gh pr update-branch`)
-and wait for the checks again. Success requires `ready: true` — never report success on a partial, queued, or filtered run.
+merged). A PR does not have to be up to date with `main` to merge; if `main` moves first it still
+lands, unless the two conflict (then `sync`/`publish` and wait for the checks again). Success requires `ready: true` — never report success on a partial, queued, or filtered run.
 
 ## Rules
 
