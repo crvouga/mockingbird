@@ -31,6 +31,8 @@ bun run health -- trusted-publisher --interactive # inspect settings requiring n
 bun run secrets:doctor                 # npm / Trusted Publishing / live parity status
 ```
 
+The seed builds only the published packages (reusing the primary checkout's turbo cache) and publishes them back to back. Waiting for npm to list each version, attaching its publisher and tagging it happen in the background, and npm's 2FA prompts still come one at a time. A dependent is tagged only after every dependency released in the same run is visible on npm. Every progress line shows the elapsed time (`[+42.0s]`). Set `RELEASE_DEBUG=1` to also trace each registry request, visibility poll, npm command and wait for the prompt lock.
+
 Only an npm auth failure (`ENEEDAUTH`, 401, 403, 404) is reported as a Trusted Publisher rejection. For existing packages rejected with `ENEEDAUTH`, use
 `bun run release:seed -- --trust-only --refresh-rejected`. It reads the latest completed
 failed Release on `main` and recreates matching publisher settings for the packages that
