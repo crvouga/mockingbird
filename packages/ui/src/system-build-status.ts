@@ -38,6 +38,12 @@ export type SystemBuildState = {
     autoApplyAt?: string
     /** Why the last update failed. */
     error?: string
+    /**
+     * True when the pending version resets the data this preview keeps in the tab (its
+     * `stateVersion` differs). Such an update never applies on its own: the toast says why and
+     * the Preview card offers Save before Update now.
+     */
+    resetsData?: boolean
   }
   pr?: { number: number; url: string }
 }

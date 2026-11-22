@@ -43,6 +43,14 @@
     "./build": {
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
+    },
+    "./on-demand": {
+      "types": "./dist/on-demand.d.ts",
+      "default": "./dist/on-demand.js"
+    },
+    "./freshness": {
+      "types": "./dist/freshness.d.ts",
+      "default": "./dist/freshness.js"
     }
   },
   "bin": {
@@ -68,7 +76,9 @@
       "worker-entry": "portable",
       "boot": "portable",
       "build": "node",
-      "cli": "node"
+      "cli": "node",
+      "on-demand": "portable",
+      "freshness": "portable"
     }
   },
   "scripts": {

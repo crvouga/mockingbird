@@ -2,10 +2,14 @@
  * `mockingbird-preview`: the commands a preview workflow runs.
  *
  *   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+ *     [--state-version <v>]
  *   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
  *     [--run-url <url>] [--summary <s>] [--message <m>] [--wrangler <cmd>]
  *   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
  *     [--compatibility-date <date>] [--run-worker-first <pattern>]… [--pr <n> --pr-url <url>]
+ *
+ * and, for named Previews of one assets-only Worker, deploy-preview, remove-preview, sweep,
+ * pr-section and deployment (./cli-previews.ts).
  *
  * Bun / Node only.
  */
@@ -15,6 +19,12 @@ import { tmpdir } from "node:os"
 import { dirname, join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { stampPreviewVersion } from "./build.js"
+import {
+  PREVIEW_COMMANDS,
+  PREVIEW_COMMANDS_USAGE,
+  type PreviewCliDeps,
+  PreviewUsageError,
+} from "./cli-previews.js"
 import { PREVIEW_ENV } from "./preview-status.js"
 
 const here = dirname(fileURLToPath(import.meta.url))
@@ -31,12 +41,14 @@ export type PreviewCliIo = {
 
 const USAGE = `Usage:
   mockingbird-preview stamp --outdir <dir> --version <sha> [--pr <n> --pr-url <url>]
+    [--state-version <v>]
   mockingbird-preview status --worker <name> --kind build|checks --state <state> --version <sha>
     [--run-url <url>] [--summary <text>] [--message <text>] [--wrangler <cmd>]
   mockingbird-preview wrangler-config --name <worker> --assets <dir> [--main <path>]
-    [--compatibility-date <date>] [--run-worker-first <pattern>]... [--pr <n> --pr-url <url>]`
+    [--compatibility-date <date>] [--run-worker-first <pattern>]... [--pr <n> --pr-url <url>]
+${PREVIEW_COMMANDS_USAGE}`
 
-class UsageError extends Error {}
+class UsageError extends PreviewUsageError {}
 
 type Args = Map<string, string[]>
 
@@ -213,11 +225,18 @@ const status = async (args: Args, io: PreviewCliIo): Promise<number> => {
 }
 
 const stamp = async (args: Args, io: PreviewCliIo): Promise<number> => {
-  only(args, ["outdir", "version", "pr", "pr-url"])
+  only(args, ["outdir", "version", "pr", "pr-url", "state-version"])
   const outdir = requiredArg(args, "outdir")
   const version = requiredArg(args, "version")
   const pr = prArg(args)
-  await stampPreviewVersion({ outdir, version, ...(pr === undefined ? {} : { pr }) })
+  const stateVersion = optionalArg(args, "state-version")
+  if (stateVersion === "") throw new UsageError("--state-version needs a value")
+  await stampPreviewVersion({
+    outdir,
+    version,
+    ...(pr === undefined ? {} : { pr }),
+    ...(stateVersion === undefined ? {} : { stateVersion }),
+  })
   io.stdout(`version.json: ${version.slice(0, 7)} (${resolve(outdir)})`)
   return 0
 }
@@ -246,6 +265,10 @@ export async function runPreviewCli(
     stdout: (line) => process.stdout.write(`${line}\n`),
     stderr: (line) => process.stderr.write(`${line}\n`),
   },
+  deps: PreviewCliDeps = {
+    env: process.env,
+    fetch: (input, init) => fetch(input, init),
+  },
 ): Promise<number> {
   const [command, ...rest] = argv
   if (command === "status") {
@@ -263,6 +286,8 @@ export async function runPreviewCli(
   try {
     if (command === "stamp") return await stamp(parseArgs(rest), io)
     if (command === "wrangler-config") return wranglerConfig(parseArgs(rest), io)
+    const named = command === undefined ? undefined : PREVIEW_COMMANDS[command]
+    if (named) return await named(parseArgs(rest), io, deps)
     if (command === "--help" || command === "-h" || command === "help") {
       io.stdout(USAGE)
       return 0
@@ -272,7 +297,7 @@ export async function runPreviewCli(
     )
   } catch (error) {
     io.stderr(`mockingbird-preview: ${error instanceof Error ? error.message : String(error)}`)
-    if (error instanceof UsageError) io.stderr(USAGE)
+    if (error instanceof PreviewUsageError) io.stderr(USAGE)
     return 1
   }
 }

@@ -23,6 +23,12 @@ export type BuildPreviewOptions = {
   /** The id of the element the app mounts into. Default "preview". */
   hostId?: string
   /**
+   * The path the preview is served under, with leading and trailing slashes. Default "/".
+   * `index.html` loads `<base>preview.js` by absolute path, so the single-page-application fallback
+   * can serve it at any deep link (`/settings/profile`) and still boot.
+   */
+  base?: string
+  /**
    * Extra esbuild options merged into the app build (plugins, inject, define, platform, target,
    * …), e.g. `browserRuntimeBuildOptions()` from `@crvouga/mockingbird-adapter-browser/build`.
    * The entry, output, format, splitting, naming and metafile stay as `buildPreview` sets them.
@@ -38,6 +44,11 @@ export type StampPreviewVersionOptions = {
   pr?: { number: number; url: string }
   /** Default now. */
   builtAt?: string
+  /**
+   * The shape of the data the build keeps in the tab (a schema or seed version). Open tabs on a
+   * different `stateVersion` say the update resets their data and never apply it on their own.
+   */
+  stateVersion?: string
 }
 
 /**
@@ -66,6 +77,8 @@ export async function buildPreview(options: BuildPreviewOptions): Promise<{ entr
   const hostId = options.hostId ?? "preview"
   if (!/^[A-Za-z][\w-]*$/.test(hostId)) throw new Error(`Invalid hostId ${hostId}`)
   const title = options.title ?? "Preview"
+  const base = options.base ?? "/"
+  if (!/^\/(?:[\w.~-]+\/)*$/.test(base)) throw new Error(`Invalid base ${base}`)
   const extra = (options.esbuild ?? {}) as BuildOptions
   const workingDir = extra.absWorkingDir ?? process.cwd()
   const outdir = resolve(workingDir, options.outdir)
@@ -110,7 +123,9 @@ export async function buildPreview(options: BuildPreviewOptions): Promise<{ entr
     minify: true,
     absWorkingDir: workingDir,
     stdin: {
-      contents: `import { bootPreview } from ${literal(join(here, `boot${extension}`))}\nbootPreview({ host: ${literal(`#${hostId}`)} }).catch(() => {})\n`,
+      // `baseUrl` is the loader's own directory, the deployment root, never the page's address:
+      // at a deep link the page is `/settings/profile` but version.json is still `/version.json`.
+      contents: `import { bootPreview } from ${literal(join(here, `boot${extension}`))}\nbootPreview({ host: ${literal(`#${hostId}`)}, baseUrl: new URL("./", import.meta.url).href }).catch(() => {})\n`,
       resolveDir: here,
       sourcefile: "preview-boot.js",
       loader: "js",
@@ -131,7 +146,7 @@ export async function buildPreview(options: BuildPreviewOptions): Promise<{ entr
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${escapeHtml(title)}</title>
 <style>html,body,#${hostId}{height:100%;margin:0}body{font-family:system-ui}</style>
-</head><body><main id="${hostId}" aria-label="${escapeHtml(title)}"></main><script type="module" src="./preview.js"></script></body></html>
+</head><body><main id="${hostId}" aria-label="${escapeHtml(title)}"></main><script type="module" src="${base}preview.js"></script></body></html>
 `,
     "utf8",
   )
@@ -145,6 +160,7 @@ export async function buildPreview(options: BuildPreviewOptions): Promise<{ entr
  */
 export async function stampPreviewVersion(options: StampPreviewVersionOptions): Promise<void> {
   if (options.version === "") throw new Error("version is required")
+  if (options.stateVersion === "") throw new Error("stateVersion, when given, is not empty")
   const outdir = resolve(options.outdir)
   const manifest = JSON.parse(await readFile(join(outdir, "build.json"), "utf8")) as {
     entry?: unknown
@@ -159,5 +175,6 @@ export async function stampPreviewVersion(options: StampPreviewVersionOptions): 
     builtAt: options.builtAt ?? new Date().toISOString(),
     entry: manifest.entry,
     ...(pr === undefined ? {} : { pr: { number: pr.number, url: pr.url } }),
+    ...(options.stateVersion === undefined ? {} : { stateVersion: options.stateVersion }),
   })
 }

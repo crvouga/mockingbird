@@ -668,6 +668,86 @@ describe("createLivePreview", () => {
     h.live.close()
   })
 
+  // #873: a build whose stateVersion differs resets the in-tab data, so it waits for the person.
+  describe("a pending version with a different stateVersion", () => {
+    const S1: PreviewVersion = { ...V1, stateVersion: "schema-1" }
+    const S2: PreviewVersion = { ...V2, stateVersion: "schema-2" }
+
+    test("says it resets the data and never auto-updates: no countdown, hidden tab or chunk failure", async () => {
+      const h = harness({ current: S1 })
+      await h.live.start()
+      h.socket().open()
+      h.served.version = S2
+      h.socket().snapshot(deployedSnapshot(S2))
+      await h.clock.advance(0)
+      expect(h.live.get().update).toEqual({
+        available: true,
+        applying: false,
+        auto: true,
+        resetsData: true,
+      })
+      await h.clock.advance(5 * 60_000)
+      h.doc.hidden = true
+      h.doc.dispatch("visibilitychange")
+      await h.clock.advance(5 * 60_000)
+      h.win.dispatch("unhandledrejection", {
+        reason: new TypeError(
+          `Failed to fetch dynamically imported module: ${ORIGIN}/chunk-abc.js`,
+        ),
+      })
+      await flush()
+      expect(h.loads).toEqual([S1.version])
+      expect(h.live.get().current.version).toBe(S1.version)
+      expect(h.live.get().update.resetsData).toBe(true)
+      h.live.close()
+    })
+
+    test("still updates when the person asks, and then no longer resets", async () => {
+      const h = harness({ current: S1 })
+      h.served.version = S2
+      await h.live.start()
+      expect(h.live.get().update.autoApplyAt).toBeUndefined()
+      await h.live.applyUpdate()
+      expect(h.loads).toEqual([S1.version, S2.version])
+      expect(h.live.get().update).toEqual({ available: false, applying: false, auto: true })
+      h.live.close()
+    })
+
+    test("a version that starts or stops naming a stateVersion also resets", async () => {
+      const h = harness()
+      h.served.version = S2
+      await h.live.start()
+      expect(h.live.get().update.resetsData).toBe(true)
+      await h.clock.advance(60_000)
+      expect(h.loads).toEqual([V1.version])
+      h.live.close()
+    })
+
+    test("the same stateVersion keeps the countdown and leaves resetsData out", async () => {
+      const h = harness({ current: S1 })
+      h.served.version = { ...V2, stateVersion: "schema-1" }
+      await h.live.start()
+      expect(h.live.get().update).toEqual({
+        available: true,
+        applying: false,
+        auto: true,
+        autoApplyAt: new Date(T0 + 10_000).toISOString(),
+      })
+      await h.clock.advance(10_000)
+      expect(h.live.get().current.version).toBe(V2.version)
+      h.live.close()
+    })
+
+    test("a non-string stateVersion in version.json is ignored", async () => {
+      const h = harness()
+      h.served.version = { ...V2, stateVersion: 7 } as unknown as PreviewVersion
+      await h.live.start()
+      expect(h.live.get().update.resetsData).toBeUndefined()
+      expect(h.live.get().update.autoApplyAt).toBeDefined()
+      h.live.close()
+    })
+  })
+
   test("a chunk-load failure with nothing newer does nothing", async () => {
     const h = harness()
     await h.live.start()
