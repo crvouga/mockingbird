@@ -1,6 +1,6 @@
 /**
- * How the pull-request gate (.github/workflows/pr.yml) splits `bun run check` across runners, and
- * which of those runners a change needs.
+ * How the release checks (.github/workflows/ci.yml) split `bun run check` across runners, and
+ * which live parity services a merged change reaches.
  *
  * `bun run check` stays the one definition of the gate. Its tasks are split two ways:
  *   static  — `lint` plus every root task (`//#…` in turbo.json), including SQL type/performance
@@ -17,8 +17,8 @@
  * them. A file that belongs to no package and is not on a list of paths the shards provably do not
  * read runs every package.
  *
- *   bun scripts/ci-plan.ts changes --base origin/main   # what a PR against main would run
- *   bun scripts/ci-plan.ts changes --all                # push to main: everything
+ *   bun scripts/ci-plan.ts changes --all                # the release checks: every package
+ *   bun scripts/ci-plan.ts changes --base HEAD^1        # what a merge reaches (live parity)
  *   bun scripts/ci-plan.ts static                       # the static job
  *   bun scripts/ci-plan.ts shard 2/4                    # one shard job
  *   bun scripts/ci-plan.ts smoke-key                    # fingerprint of what the smoke installs
@@ -197,10 +197,10 @@ async function changes(args: string[]): Promise<void> {
     "",
     "| Job | Runs |",
     "| --- | --- |",
-    "| Commitlint, Static | always |",
+    "| Static | always |",
     `| Shards (build, typecheck, test, pack, portability) | ${shards ? `${packages.size} of ${everyPackage.length} packages, on ${shardCount} runner(s)` : "no: nothing they read changed"} |`,
     `| Consumer smoke | ${smoke ? "yes" : "no: no published package changed"} |`,
-    `| Live parity (advisory) | ${parity.length > 0 ? parity.join(", ") : "none"} |`,
+    `| Live parity (never holds the publish) | ${parity.length > 0 ? parity.join(", ") : "none"} |`,
     "",
   ].join("\n")
 
