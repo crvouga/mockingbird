@@ -12,6 +12,7 @@ html { height: 100%; }
 html, body { height: 100%; }
 :root[data-theme="dark"]{color:red}
 .app{min-height:100vh}
+.card{min-height:100dvh}.tall{min-height:100lvh}
 .pane{height:100%}
 .body{color:blue}
 `)
@@ -41,6 +42,9 @@ html, body { height: 100%; }
     expect(css).not.toContain(":root")
     expect(css).not.toContain("100vh")
     expect(css).not.toContain("100svh")
+    expect(css).not.toContain("100dvh")
+    expect(css).not.toContain("100lvh")
+    expect(css).toContain('[data-mockingbird-paste="test"]>.page .card{min-height:100%}')
   })
 
   test("width breakpoints follow the pasted box, not the browser window", () => {
