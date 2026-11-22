@@ -1,34 +1,26 @@
-# Pull-request gate. A green run of this workflow is the release decision:
-# merging to main publishes (see ci.yml). Do not add a second quality bar there.
+# Pull-request gate. Deliberately small, so a pull request merges in about a minute: the commit
+# messages (they decide the release bump) and Biome's format and lint. Nothing else runs on a pull
+# request.
+#
+# Everything slower (build, typecheck, tests, pack, portability, the root checks, the consumer
+# smoke, the fleet container, npm names, live parity) runs after the merge, as the release checks in
+# ci.yml. Those hold the publish, not the merge, and a failing one opens a GitHub issue. Add a slow
+# check there, not here.
 #
 # Required status checks on main (scripts/pr-ready.ts REQUIRED_CHECKS): Commitlint, and Check,
-# which passes only when every job it needs passed or was not needed. The jobs in between (Static,
-# Shard i, Consumer smoke) can be renamed or split freely; rename Commitlint or Check and update that
-# list in the same change.
+# which passes only when every job it needs passed. Lint can be renamed or split freely; rename
+# Commitlint or Check and update that list in the same change.
 #
-# Together the Static and Shard jobs run exactly `bun run check` (scripts/ci-plan.ts splits it and
-# fails on drift), spread over parallel runners. Changes decides what a change needs from
-# Turborepo's dependency graph: the Shard jobs run only the packages a change reaches (each changed
-# package and everything that depends on it), and skip entirely when it reaches none; turbo's
-# content hashes then replay what did not change inside those. Non-blocking checks (live parity,
-# lint annotations) live in advisory.yml.
-#
-# It also runs on every push to main. That is what keeps main's turbo cache warm per job, so a PR's
-# first run replays everything it did not touch (see .github/actions/setup). Those runs are never
-# cancelled; PR runs are superseded by the next push.
-#
-# Local replica: bun run check:full
+# Local replica of everything, release checks included: bun run check:full
 name: CI
 
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-  push:
-    branches: [main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -37,31 +29,8 @@ env:
   HUSKY: "0"
 
 jobs:
-  changes:
-    name: Changes
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      shards: ${{ steps.plan.outputs.shards }}
-      smoke: ${{ steps.plan.outputs.smoke }}
-      matrix: ${{ steps.plan.outputs.matrix }}
-      packages: ${{ steps.plan.outputs.packages }}
-    steps:
-      # A pull_request checkout is the merge commit, so HEAD^1 is the base it will land on.
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 2
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-
-      - id: plan
-        run: bun scripts/ci-plan.ts changes ${{ github.event_name == 'pull_request' && '--base HEAD^1' || '--all' }}
-
   commitlint:
     name: Commitlint
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -95,10 +64,10 @@ jobs:
             The PR title "{title}" looks empty after the type/scope prefix.
             Use a Conventional Commits title, e.g. "feat: add junction emulator".
 
-  # Root checks include the bounded SQL performance suite; its upstream builds run through turbo.
-  # The static job still starts independently of Changes.
-  static:
-    name: Static
+  # Biome over the whole repository: format and lint, reported as inline annotations on the diff.
+  # No build and no turbo, so it needs only node_modules from the cache.
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -106,160 +75,14 @@ jobs:
 
       - uses: ./.github/actions/setup
         with:
-          turbo-cache: static
+          turbo-cache: "false"
 
-      - name: Format, lint, boundaries, agents, worktree, llms.txt, README, brands, scripts, workflows
-        run: bun scripts/ci-plan.ts static --output-logs=errors-only --continue=dependencies-successful
-
-      - if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: emulator-performance
-          path: .performance/
-          retention-days: 14
-          if-no-files-found: ignore
-
-      - if: always()
-        uses: ./.github/actions/turbo-cache-save
-        with:
-          scope: static
-
-  shard:
-    name: Shard ${{ matrix.shard }}
-    needs: changes
-    if: needs.changes.outputs.shards == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    strategy:
-      # Every shard finishes and saves its cache, so a retry replays what already passed.
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.changes.outputs.matrix) }}
-    env:
-      FC_NUM_RUNS: "40"
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ./.github/actions/setup
-
-      # Browser tests launch Chromium directly. Install it before any of them run, rather than
-      # relying on whichever test happens to install it first. The browser download is cached per
-      # Playwright version; like node_modules, it is saved only on main.
-      - id: playwright
-        shell: bash
-        run: echo "version=$(grep -o '"playwright-core@[0-9.]*"' bun.lock | head -1 | tr -d '"')" >> "$GITHUB_OUTPUT"
-      - id: chromium
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium
-      # From a package that depends on it, so bunx runs the pinned Playwright, not the latest.
-      - name: Install Chromium for browser tests
-        working-directory: packages/adapters/browser
-        run: bunx playwright install --with-deps chromium
-      - if: steps.chromium.outputs.cache-hit != 'true' && github.ref == 'refs/heads/main'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ steps.chromium.outputs.cache-primary-key }}
-
-      - name: Build, typecheck, test, pack, portability (shard ${{ matrix.shard }}/${{ strategy.job-total }})
-        timeout-minutes: 20
-        env:
-          AFFECTED_PACKAGES: ${{ needs.changes.outputs.packages }}
-        # Each task can spawn compilers or SDK workers. Turbo's default of ten concurrent
-        # tasks starves multipart uploads on hosted runners; keep every check, bound the load.
-        run: >-
-          bun scripts/ci-plan.ts shard ${{ matrix.shard }}/${{ strategy.job-total }}
-          --concurrency=2 --output-logs=errors-only --continue=dependencies-successful
-
-      - if: always()
-        uses: ./.github/actions/turbo-cache-save
-        with:
-          scope: shard-${{ matrix.shard }}
-
-  # Pack every public package like the release does and install it into a clean npm project. Runs
-  # beside the shards rather than after them: it builds from the same caches, so waiting would only
-  # add their duration to its own.
-  smoke:
-    name: Consumer smoke
-    needs: changes
-    if: needs.changes.outputs.smoke == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: ./.github/actions/setup
-
-      - name: Build
-        timeout-minutes: 12
-        run: bunx turbo run build --output-logs=errors-only
-
-      # The smoke is a pure function of the tarballs it installs: a fingerprint that already passed
-      # (on main or an earlier run of this PR) is not re-checked. Only the empty stamp is cached.
-      - id: smoke-key
-        run: echo "key=smoke-v1-${{ runner.os }}-$(bun scripts/ci-plan.ts smoke-key)" >> "$GITHUB_OUTPUT"
-
-      - id: smoke-stamp
-        uses: actions/cache/restore@v5
-        with:
-          path: .smoke-passed
-          key: ${{ steps.smoke-key.outputs.key }}
-          lookup-only: true
-
-      - name: Consumer smoke (npm install + import + typecheck every published entry point)
-        if: steps.smoke-stamp.outputs.cache-hit != 'true'
-        timeout-minutes: 6
-        run: bun run release:smoke && mkdir -p .smoke-passed && touch .smoke-passed/ok
-
-      - if: steps.smoke-stamp.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: .smoke-passed
-          key: ${{ steps.smoke-key.outputs.key }}
-
-  # Trusted Publishing (OIDC) cannot create an npm package, so a never-published public package
-  # would turn the Release workflow on main red after merge. Catch it here, while a maintainer can
-  # still reserve the name from the branch (bun run release:seed -- --reserve).
-  npm-names:
-    name: npm names
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v5
-
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.4.0"
-
-      - name: Every public package exists on npm
-        run: bun run release:npm-names
-
-  fleet-container:
-    name: Fleet container (${{ matrix.arch }})
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - arch: amd64
-            runner: ubuntu-latest
-          - arch: arm64
-            runner: ubuntu-24.04-arm
-    runs-on: ${{ matrix.runner }}
-    timeout-minutes: 25
-    steps:
-      - uses: actions/checkout@v5
-      - uses: ./.github/actions/setup
-      - name: Build pinned reference image
-        run: docker build --platform linux/${{ matrix.arch }} -f packages/examples/fleet-reference/Dockerfile -t mockingbird-fleet:smoke .
-      - name: Verify non-root mixed-protocol fresh-process recovery
-        run: bun run --cwd packages/examples/fleet-reference smoke
+      - run: bunx biome ci --reporter=github .
 
   check:
     name: Check
     if: always()
-    needs: [changes, static, shard, smoke, fleet-container, npm-names]
+    needs: [lint]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -268,14 +91,4 @@ jobs:
           NEEDS: ${{ toJSON(needs) }}
         run: |
           echo "$NEEDS" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
-          echo "$NEEDS" | jq -e '
-            def ran_or_not_needed($job; $needed):
-              .[$job].result == "success"
-              or (.[$job].result == "skipped" and .changes.outputs[$needed] == "false");
-            .changes.result == "success"
-            and .static.result == "success"
-            and .["fleet-container"].result == "success"
-            and .["npm-names"].result == "success"
-            and ran_or_not_needed("shard"; "shards")
-            and ran_or_not_needed("smoke"; "smoke")
-          ' > /dev/null
+          echo "$NEEDS" | jq -e 'all(.[]; .result == "success")' > /dev/null

@@ -7,11 +7,11 @@
  *
  *   "mockingbird": { …, "parityTier": "cold" }
  *
- *   hot   every pull request that changes the service (advisory.yml → parity.yml)
+ *   hot   every merge to main that changes the service (ci.yml → parity.yml)
  *   warm  on a schedule (parity.yml's `schedule:`)
  *   cold  only when someone dispatches it: `bun run parity:remote -- <service>`
  *
- * On a PR a hot service runs only when something in its dependency graph changed (see
+ * After a merge a hot service runs only when something in its dependency graph changed (see
  * scripts/affected.ts and ci-plan.ts); `parityInputs` lists files outside that graph it also reads.
  *
  * A service with no `parityTier` is cold. Promoting a service is changing that one value: every

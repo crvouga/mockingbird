@@ -9,12 +9,11 @@ description: Bun + cached node_modules + Turborepo's cache kept in the GitHub Ac
 #                              can read it; a PR that changes the lockfile installs (~10 s).
 #   turbo-v3-<os>-static-…     the Static job's tasks (lint + root checks).
 #   turbo-v3-<os>-shard-<i>-…  shard i's tasks (scripts/ci-plan.ts). Only the Static and shard
-#                              jobs of .github/workflows/pr.yml save; everything else reads.
+#                              jobs of .github/workflows/ci.yml save; everything else reads.
 #   smoke-v1-<os>-<fingerprint> an empty stamp: the consumer smoke passed for these tarballs
-#                              (`bun scripts/ci-plan.ts smoke-key`), so pr.yml skips re-running it.
-# A cache is looked up in the current ref first, then main. pr.yml also runs on every push to main,
-# so main always holds a warm cache per scope and a PR's first run replays everything it did not
-# change. Turbo's content hashes decide what replays, so a stale restore is harmless.
+#                              (`bun scripts/ci-plan.ts smoke-key`), so ci.yml skips re-running it.
+# A cache is looked up in the current ref first, then main. ci.yml's release checks run on every push to
+# main, so main always holds a warm cache per scope for previews, parity and the next release. Turbo's content hashes decide what replays, so a stale restore is harmless.
 #
 # Every job that builds restores all four shard caches: together they hold every package's build,
 # so which shard built a package does not matter. Keep the shard steps in step with SHARDS in

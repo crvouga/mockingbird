@@ -31,8 +31,8 @@ export const SHARD_IRRELEVANT = [
   ".github/ISSUE_TEMPLATE/**",
   ".github/labels.json",
   ".github/pull_request_template.md",
-  // Workflows other than pr.yml do not change what the pull-request gate runs.
-  ".github/workflows/{advisory,cache-cleanup,ci,issue-labels,parity,publish,resolve-issues,verify}.yml",
+  // Workflows other than ci.yml do not change what the release checks run.
+  ".github/workflows/{cache-cleanup,pr,issue-labels,parity,publish,resolve-issues,verify}.yml",
   // Read only by junction's live parity script (its `parityInputs`).
   "PARITY_FAILURE_SEED_REGISTRY.json",
   "scripts/parity-tiers.ts",
