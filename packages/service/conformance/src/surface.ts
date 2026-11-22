@@ -68,6 +68,7 @@ import type { createRuntime as createMedplum } from "@crvouga/mockingbird-servic
 import type { createRuntime as createMeta } from "@crvouga/mockingbird-service-meta"
 import type { createRuntime as createMicrosoft } from "@crvouga/mockingbird-service-microsoft"
 import type { createRuntime as createMongoatlas } from "@crvouga/mockingbird-service-mongoatlas"
+import type { createRuntime as createMosaic } from "@crvouga/mockingbird-service-mosaic"
 import type { createRuntime as createNotion } from "@crvouga/mockingbird-service-notion"
 import type { createRuntime as createOauth } from "@crvouga/mockingbird-service-oauth"
 import type { createRuntime as createOdx } from "@crvouga/mockingbird-service-odx"
@@ -179,6 +180,7 @@ export type SurfaceProof = [
   Assert<typeof createMailosaur>,
   Assert<typeof createMediaconvert>,
   Assert<typeof createMedplum>,
+  Assert<typeof createMosaic>,
   Assert<typeof createNotion>,
   Assert<typeof createOauth>,
   Assert<typeof createGoogleAds>,

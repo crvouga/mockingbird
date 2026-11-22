@@ -1,0 +1,9 @@
+{
+  "status": 400,
+  "body": {
+    "type": "redacted",
+    "title": "redacted",
+    "status": 0,
+    "traceId": "redacted"
+  }
+}

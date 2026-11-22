@@ -70,6 +70,7 @@ export const LOADERS: Record<string, () => Promise<{ serveTarget?: unknown }>> =
   "meta": () => import("@crvouga/mockingbird-service-meta/server"),
   "microsoft": () => import("@crvouga/mockingbird-service-microsoft/server"),
   "mongoatlas": () => import("@crvouga/mockingbird-service-mongoatlas/server"),
+  "mosaic": () => import("@crvouga/mockingbird-service-mosaic/server"),
   "notion": () => import("@crvouga/mockingbird-service-notion/server"),
   "oauth": () => import("@crvouga/mockingbird-service-oauth/server"),
   "odx": () => import("@crvouga/mockingbird-service-odx/server"),

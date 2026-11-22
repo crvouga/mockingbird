@@ -629,6 +629,14 @@ export const CATALOG: readonly CatalogEntry[] = [
     "docs": "https://www.mongodb.com/docs/atlas/api/"
   },
   {
+    "target": "mosaic",
+    "package": "@crvouga/mockingbird-service-mosaic",
+    "displayName": "Mosaic Diagnostics",
+    "category": "health",
+    "description": "Stateful emulator of the Mosaic Diagnostics practitioner ordering API.",
+    "website": "https://mosaicdx.com"
+  },
+  {
     "target": "notion",
     "package": "@crvouga/mockingbird-service-notion",
     "displayName": "Notion",

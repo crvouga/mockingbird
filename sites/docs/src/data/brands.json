@@ -991,6 +991,19 @@
     "logo": "/brands/mongoatlas.ico",
     "logoSource": "site"
   },
+  "mosaic": {
+    "vendor": "Mosaic Diagnostics",
+    "website": "https://mosaicdx.com",
+    "docs": null,
+    "description": "Laboratory testing for healthcare practitioners.",
+    "color": null,
+    "logo": "/brands/mosaic.png",
+    "logoSource": "favicon-service",
+    "input": {
+      "website": "https://mosaicdx.com",
+      "description": "Laboratory testing for healthcare practitioners."
+    }
+  },
   "notion": {
     "vendor": "Notion",
     "website": "https://www.notion.com",
