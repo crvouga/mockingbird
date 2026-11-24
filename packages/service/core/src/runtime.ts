@@ -17,6 +17,7 @@ import {
   deriveClock,
   restoreClock,
 } from "./clock.js"
+import { RecordLimitError, recordLimitResponse, setRecordLimit } from "./collection.js"
 import {
   ADMIN_KEY_HEADER,
   ADMIN_PREFIX,
@@ -69,7 +70,13 @@ import {
   responseNotes,
 } from "./journal.js"
 import type { LatencyRegistry } from "./latency.js"
-import { createMetrics, type Metrics, type RejectedRequest, type RequestLog } from "./metrics.js"
+import {
+  createMetrics,
+  type Metrics,
+  type RejectedRequest,
+  type RequestLog,
+  type ResourceReport,
+} from "./metrics.js"
 import {
   type BootScope,
   type ControlSettings,
@@ -205,6 +212,19 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   /** Retained time-travel checkpoints per namespace. Default 1,000. */
   maxCheckpoints?: number
   /**
+   * Forget a namespace (as `DELETE /__admin/namespaces/<key>` does) once no request has named
+   * it for this many wall-clock milliseconds. `default` is never forgotten, nor is a namespace
+   * with a webhook delivery still waiting. Default 0: namespaces are kept until dropped.
+   */
+  namespaceIdleMs?: number
+  /**
+   * Records each namespace may hold; a write that would store another answers `507`. The cap
+   * belongs to the SQLite database, so runtimes sharing one share it. Default: no cap.
+   */
+  maxRecords?: number
+  /** Named snapshots each namespace may hold; another is refused with `400`. Default: no cap. */
+  maxSnapshots?: number
+  /**
    * Record a time-travel checkpoint after every accepted mutation and stamp its id in
    * `x-mockingbird-checkpoint`. Default true. Each checkpoint reads the whole namespace, so a
    * long-running mock that never travels back can turn this off to keep a write's cost its own;
@@ -232,6 +252,8 @@ export type RuntimeIO = {
   monotonicNow(): number
   /** Wait on the wall clock. Rejects with the signal's reason when it aborts first. */
   sleep(ms: number, signal?: AbortSignal): Promise<void>
+  /** Bytes of heap in use, for `GET /__admin/metrics`; `undefined` where the host cannot say. */
+  heapUsedBytes(): number | undefined
 }
 
 export type ServiceTimelineState = Readonly<{
@@ -287,6 +309,8 @@ export type ServiceRuntime<T extends ServiceInstance> = FetchAPI & {
   reset(namespace?: string): Promise<void>
   /** Reset a namespace and forget it, releasing everything it held. */
   dropNamespace(namespace: string): Promise<void>
+  /** What the runtime holds across every namespace, as `GET /__admin/metrics` reports it. */
+  resources(): ResourceReport
   /** A namespace's controls: seed, clock, virtual time, latency, faults and snapshots. */
   controls(namespace?: string): ControlState & { snapshots: SnapshotInfo[] }
   /** Apply a control document to a namespace. A given key replaces that control. */
@@ -430,6 +454,17 @@ const realSleep = (ms: number, signal?: AbortSignal): Promise<void> =>
     signal?.addEventListener("abort", abort, { once: true })
   })
 
+const hostHeapUsed = (): number | undefined => {
+  const host = globalThis as { process?: { memoryUsage?: () => { heapUsed: number } } }
+  return host.process?.memoryUsage?.().heapUsed
+}
+
+const optionalCount = (value: number | undefined, label: string, least: number) => {
+  if (value !== undefined && !(Number.isSafeInteger(value) && value >= least))
+    throw new RangeError(`${label} must be an integer of at least ${least} (got ${value})`)
+  return value
+}
+
 const NULL_BODY_STATUS = new Set([101, 204, 205, 304])
 
 /** Let `bytes` of the body through, then fail the stream the way a dying connection does. */
@@ -544,6 +579,16 @@ export const createRuntime = <T extends ServiceInstance>(
   const wallNow = options.io?.wallNow ?? Date.now
   const monotonicNow = options.io?.monotonicNow ?? (() => performance.now())
   const sleep = options.io?.sleep ?? realSleep
+  const heapUsedBytes = options.io?.heapUsedBytes ?? hostHeapUsed
+  const idleMs = optionalCount(options.namespaceIdleMs, "namespaceIdleMs", 0) ?? 0
+  const maxSnapshots = optionalCount(options.maxSnapshots, "maxSnapshots", 1)
+  const maxRecords = optionalCount(options.maxRecords, "maxRecords", 1)
+  if (maxRecords !== undefined) setRecordLimit(sqlite, maxRecords)
+  /** When each namespace was last named, on the wall clock, while idle expiry is on. */
+  const lastSeen = new Map<string, number>()
+  const touch = (name: string): void => {
+    if (idleMs > 0 && name !== DEFAULT_NAMESPACE) lastSeen.set(name, wallNow())
+  }
   const metrics = createMetrics()
   const upstreamModes = new Map<string, UpstreamState>()
   const bootUpstream = options.upstream
@@ -648,6 +693,7 @@ export const createRuntime = <T extends ServiceInstance>(
     instances.set(key, created)
     namespaceForStorage.set(key, publicNamespace)
     publicNamespaces.add(publicNamespace)
+    touch(publicNamespace)
     // A namespace starts from its boot controls and, when one is given, its boot snapshot.
     if (key === publicNamespace) controls.ensure(key)
     return created
@@ -875,7 +921,34 @@ export const createRuntime = <T extends ServiceInstance>(
     rngs.delete(name)
     namespaceClocks.delete(name)
     controls.forget(name)
+    lastSeen.delete(name)
   }
+
+  const forgetIdle = async (current: string): Promise<void> => {
+    if (idleMs === 0) return
+    const now = wallNow()
+    for (const [name, seen] of [...lastSeen]) {
+      if (name === current || now - seen <= idleMs) continue
+      if ((options.webhooks?.pending(name) ?? 0) > 0) continue
+      lastSeen.delete(name)
+      await dropNamespace(name)
+    }
+  }
+
+  const storagePrefix = `${options.name}:`
+  const countRecords = sqlite.prepare(
+    "SELECT COUNT(*) AS n FROM mockingbird_records WHERE namespace = ? OR (namespace >= ? AND namespace < ?)",
+  )
+  const resources = (): ResourceReport => ({
+    namespaces: publicNamespaces.size,
+    records: Number(
+      countRecords.get<{ n: number }>(options.name, storagePrefix, `${options.name};`)?.n ?? 0,
+    ),
+    journalEntries: journal.count(),
+    snapshots: [...kept.values()].reduce((total, each) => total + each.size, 0),
+    webhooksPending: options.webhooks?.pending() ?? 0,
+    heapUsedBytes: heapUsedBytes() ?? null,
+  })
 
   /** Everything a namespace is: records, clock, random streams, faults, latency, webhooks. */
   const captureAll = (namespace: string): Kept => {
@@ -1084,6 +1157,14 @@ export const createRuntime = <T extends ServiceInstance>(
 
   const kept = new Map<string, Map<string, Stored>>()
   const snapshotCounters = new Map<string, number>()
+  const assertSnapshotRoom = (namespace: string, id: string | undefined): void => {
+    const store = kept.get(namespace)
+    if (maxSnapshots === undefined || !store || store.size < maxSnapshots) return
+    if (id !== undefined && store.has(id)) return
+    throw new ControlError(
+      `namespace ${namespace} already holds ${maxSnapshots} snapshots, the most maxSnapshots allows; delete one or reuse its name`,
+    )
+  }
   const keep = (namespace: string, given: string | undefined, point: Kept): SnapshotInfo => {
     let store = kept.get(namespace)
     if (!store) {
@@ -1109,14 +1190,20 @@ export const createRuntime = <T extends ServiceInstance>(
   }
   /** Named snapshots, kept per namespace so two workers never see each other's ids. */
   const snapshotStore: SnapshotStore = {
-    create: (namespace, id) => keep(namespace, id, captureAll(namespace)),
+    create(namespace, id) {
+      assertSnapshotRoom(namespace, id)
+      return keep(namespace, id, captureAll(namespace))
+    },
     list: (namespace) => [...(kept.get(namespace)?.values() ?? [])].map((each) => each.info),
     get: (namespace, id) => kept.get(namespace)?.get(id)?.info,
     export(namespace, id) {
       const found = kept.get(namespace)?.get(id)
       return found ? toDocument(found) : undefined
     },
-    import: (namespace, id, document) => keep(namespace, id, fromDocument(namespace, document)),
+    import(namespace, id, document) {
+      assertSnapshotRoom(namespace, id)
+      return keep(namespace, id, fromDocument(namespace, document))
+    },
     restore(namespace, id) {
       const found = kept.get(namespace)?.get(id)
       if (!found) return false
@@ -1250,6 +1337,7 @@ export const createRuntime = <T extends ServiceInstance>(
     namespaces: () => [...publicNamespaces].sort(),
     reset,
     dropNamespace,
+    resources,
     controls: (namespace = DEFAULT_NAMESPACE) => describeControls(namespace),
     configure(document, namespace = DEFAULT_NAMESPACE) {
       applyControls(namespace, normalizeControls(document))
@@ -1321,6 +1409,8 @@ export const createRuntime = <T extends ServiceInstance>(
         const mapped = credential !== undefined ? credentials.get(credential) : undefined
         if (mapped !== undefined) namespace = mapped
       }
+      if (KEY_PATTERN.test(namespace)) touch(namespace)
+      await forgetIdle(namespace)
       const selectedBranch = request.headers.get(BRANCH_HEADER) ?? "main"
       const at = request.headers.get(AT_HEADER) ?? undefined
       const stamp = (response: Response): Response => {
@@ -1425,6 +1515,8 @@ export const createRuntime = <T extends ServiceInstance>(
             ...(requested.timeout !== undefined ? { timeoutMs: requested.timeout } : {}),
           })
         const lost = requested?.restore !== undefined ? CONTROL_HEADERS.restore : at && AT_HEADER
+        if (requested?.snapshot !== undefined && !requested.reset)
+          assertSnapshotRoom(namespace, requested.snapshot)
         if (requested?.reset && lost)
           throw new ControlError(
             `${CONTROL_HEADERS.reset}: a reset discards snapshots and history, so ${lost} cannot follow it`,
@@ -1598,6 +1690,10 @@ export const createRuntime = <T extends ServiceInstance>(
       try {
         response = await instanceFor(storage, namespace).fetch(request)
       } catch (error) {
+        if (error instanceof RecordLimitError) {
+          log(507, hits[0]?.id)
+          return finish(recordLimitResponse(error))
+        }
         log(error instanceof DroppedConnectionError ? 0 : 500, hits[0]?.id)
         throw error
       } finally {
@@ -1668,6 +1764,7 @@ export const createRuntime = <T extends ServiceInstance>(
     namespaces: runtime.namespaces,
     reset,
     dropNamespace,
+    resources,
     controls,
     snapshots: snapshotStore,
     applyControls,

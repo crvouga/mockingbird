@@ -58,6 +58,22 @@ export type MetricsReport = {
   totalDurationMs: number
 }
 
+/** What a runtime holds across every namespace: the gauges a long-running mock is watched by. */
+export type ResourceReport = {
+  /** Namespaces that hold state now (`GET /__admin/namespaces`). */
+  namespaces: number
+  /** Stored records, every collection and branch included. */
+  records: number
+  /** Journal entries held (`GET /__admin/requests`). */
+  journalEntries: number
+  /** Named snapshots held. */
+  snapshots: number
+  /** Webhook deliveries waiting for an attempt or a retry. */
+  webhooksPending: number
+  /** Heap in use, or `null` where the host cannot say. */
+  heapUsedBytes: number | null
+}
+
 export type Metrics = {
   record(entry: RequestLog): void
   report(namespace?: string): MetricsReport

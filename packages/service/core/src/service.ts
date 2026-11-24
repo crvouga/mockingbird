@@ -14,6 +14,7 @@ import {
   type SqliteClient,
 } from "@crvouga/mockingbird-sqlite"
 import { type Context, Hono } from "hono"
+import { RecordLimitError, recordLimitResponse } from "./collection.js"
 import { annotateResponse } from "./journal.js"
 import { operationPath } from "./path.js"
 import { recordedIssues } from "./validation.js"
@@ -202,7 +203,11 @@ export const createService = (options: ServiceOptions): Service => {
   const now = options.now ?? (() => Date.now())
   const app = new Hono()
   app.notFound((c) => options.notFound(c.req.raw))
-  app.onError((error, c) => options.onError(error, c.req.raw))
+  app.onError((error, c) =>
+    error instanceof RecordLimitError
+      ? recordLimitResponse(error)
+      : options.onError(error, c.req.raw),
+  )
 
   const operations = [...listOperations(options.document)].sort(routeOrder)
   for (const operation of operations) {

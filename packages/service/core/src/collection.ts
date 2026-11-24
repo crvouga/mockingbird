@@ -13,6 +13,34 @@ export type ListRecordsOptions<T> = {
 
 type RecordRow = { id: string; seq: number; value: string }
 
+const RECORD_LIMITS = new WeakMap<SqliteClient, number>()
+
+/** A write that would store more records in one namespace than the runtime's `maxRecords`. */
+export class RecordLimitError extends RangeError {
+  constructor(readonly limit: number) {
+    super(
+      `this namespace already holds ${limit} records, the most maxRecords allows; reset or delete the namespace to free them`,
+    )
+    this.name = "RecordLimitError"
+  }
+}
+
+/** How a request that hit the record cap is answered: `507`, in the admin error shape. */
+export const recordLimitResponse = (error: RecordLimitError): Response =>
+  new Response(JSON.stringify({ error: { type: "mockingbird_admin", message: error.message } }), {
+    status: 507,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  })
+
+/**
+ * Cap the records each namespace may hold in `sqlite`, or lift the cap with `undefined`.
+ * Inserting a new id past it throws {@link RecordLimitError}; replacing a record never does.
+ */
+export const setRecordLimit = (sqlite: SqliteClient, limit: number | undefined): void => {
+  if (limit === undefined) RECORD_LIMITS.delete(sqlite)
+  else RECORD_LIMITS.set(sqlite, limit)
+}
+
 /**
  * A SQLite-backed table of JSON records addressed by id. Ordering is by insertion
  * sequence, never by id lexicographic order, so list semantics stay stable.
@@ -94,9 +122,19 @@ export class Collection<T> {
     return row !== undefined
   }
 
+  private assertRoom(id: string): void {
+    const limit = RECORD_LIMITS.get(this.sqlite)
+    if (limit === undefined || this.has(id)) return
+    const row = this.prepare(
+      "SELECT COUNT(*) AS n FROM mockingbird_records WHERE namespace = ?",
+    ).get<{ n: number }>(this.namespace)
+    if (Number(row?.n ?? 0) >= limit) throw new RecordLimitError(limit)
+  }
+
   /** Insert a new record, assigning it the next sequence number. */
   insert(id: string, value: T): Stored<T> {
     return this.sqlite.transaction(() => {
+      this.assertRoom(id)
       this.journalRecord(id)
       const seq = this.bumpCollectionSeq()
       const stored = { seq, value }

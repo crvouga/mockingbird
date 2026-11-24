@@ -14,6 +14,7 @@ A namespace is an isolation key. Each key has its own records, clock, random str
 | Admin API | `?namespace=<key>` or the header on any admin route · `GET /__admin/namespaces` · `DELETE /__admin/namespaces/<key>` |
 | At boot | `adminControls.namespaces` · `adminControls.credentials` |
 | In process | `runtime.instance(key)` · `runtime.namespaces()` · `runtime.dropNamespace(key)` · `runtime.credentials` |
+| Long-running mocks | `createRuntime({ namespaceIdleMs, maxRecords, maxSnapshots })` · `GET /__admin/metrics?resources=1` |
 | Admin page | The header **Namespace** select. There is no Namespaces screen |
 
 A key matches `[A-Za-z0-9_.-]{1,64}`. A request that names none uses `default`, which is a key like any other.
@@ -65,7 +66,7 @@ The keys in use.
 
 ### `DELETE /__admin/namespaces/<key>`
 
-[Reset](RESET.md) the namespace and forget it: its records, controls, snapshots, journal and clock are released. Use it to tear down a namespace a long-running emulator will not see again.
+[Reset](RESET.md) the namespace and forget it: its records, controls, snapshots, checkpoints, journal, metrics, clock and webhook deliveries are released, and any webhook retry it had scheduled is cancelled. Use it to tear down a namespace a long-running emulator will not see again.
 
 ```bash
 curl -X DELETE localhost:8787/__admin/namespaces/worker-3
@@ -120,6 +121,18 @@ Remove one mapping with `?credential=<credential>`, or all of them without it. A
 
 See [Boot configuration](BOOT.md) for where this document goes.
 
+## Long-running mocks
+
+A mock that stays up all day while suites come and go can keep only what live tests use. Each option is off unless set, so a runtime that sets none behaves as before.
+
+| Option | What it does |
+| --- | --- |
+| `namespaceIdleMs` | Forget a namespace, as `DELETE /__admin/namespaces/<key>` does, once no request has named it for this many wall-clock milliseconds. A vendor request, an admin call or `runtime.instance(key)` counts as naming it. `default` is never forgotten, nor is a namespace with a webhook delivery still waiting. Expiry is checked on each request, so it needs no timer. `0` (the default) keeps namespaces until dropped. |
+| `maxRecords` | Records one namespace may hold. A request that would store another answers `507` and stores nothing; replacing a record is always allowed. |
+| `maxSnapshots` | Named snapshots one namespace may hold. Another is refused with `400`; reusing a name replaces that snapshot and is always allowed. |
+
+Time-travel checkpoints are already capped by `maxCheckpoints` (default `1000`), the journal by `journalSize` (default `1000`), and webhook messages and finished deliveries by the hub's `keep` (default `500`). A webhook delivery still waiting for an attempt is never dropped. `GET /__admin/metrics?resources=1` reports what the runtime holds; see [Journal, metrics and state](JOURNAL_AND_STATE.md#get-__adminmetrics).
+
 ## In process
 
 ```ts
@@ -150,6 +163,8 @@ runtime.headers({ namespace: "worker-3" }) // { "x-mockingbird-namespace": "work
 | Status | When |
 | --- | --- |
 | `400` | The key does not match `[A-Za-z0-9_.-]{1,64}` |
+| `400` | A snapshot past `maxSnapshots` |
+| `507` | A request that would store a record past `maxRecords` |
 
 ## Related
 
