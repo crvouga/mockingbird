@@ -31,7 +31,8 @@ const wallClock = () => {
 }
 
 const resources = async (runtime: ReturnType<typeof mock>) =>
-  (await admin<{ resources: ResourceReport }>(runtime, "GET", "/metrics")).body.resources
+  (await admin<{ resources: ResourceReport }>(runtime, "GET", "/metrics?resources=1")).body
+    .resources
 
 describe("idle namespaces are forgotten", () => {
   test("a namespace no request names for longer than namespaceIdleMs is dropped", async () => {
@@ -250,10 +251,11 @@ describe("GET /__admin/metrics reports what the mock holds", () => {
     expect(runtime.resources()).toEqual(await resources(runtime))
   })
 
-  test("a namespace-scoped report is unchanged and carries no runtime-wide gauges", async () => {
+  test("only when asked: a plain or namespace-scoped report is unchanged", async () => {
     const runtime = mock()
     await create(runtime, "a", ns("a"))
-    const scoped = await admin(runtime, "GET", "/metrics", undefined, ns("a"))
+    expect((await admin(runtime, "GET", "/metrics")).body).not.toHaveProperty("resources")
+    const scoped = await admin(runtime, "GET", "/metrics?resources=1", undefined, ns("a"))
     expect(scoped.body).not.toHaveProperty("resources")
   })
 

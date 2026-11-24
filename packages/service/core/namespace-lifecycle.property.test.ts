@@ -78,8 +78,9 @@ describe("namespace lifecycle", () => {
           }
         }
         touch("default")
-        const report = (await admin<{ resources: ResourceReport }>(runtime, "GET", "/metrics")).body
-          .resources
+        const report = (
+          await admin<{ resources: ResourceReport }>(runtime, "GET", "/metrics?resources=1")
+        ).body.resources
         const live = [...model.keys()].filter((key) => key !== "default").sort()
         expect(runtime.namespaces().filter((key) => key !== "default")).toEqual(live)
         expect(report.records).toBe([...model.values()].reduce((n, h) => n + h.records, 0))
