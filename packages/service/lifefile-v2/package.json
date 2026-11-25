@@ -70,9 +70,9 @@
       "contract": "openapi.yaml",
       "types": "dist/index.d.ts",
       "oracle": {
-        "kind": "Recorded sandbox replies, live sandbox optional",
+        "kind": "Live vendor API or sandbox",
         "command": "bun run parity:service -- lifefile-v2",
-        "note": "Replays corpus/probe-calls.json offline with no credentials; set LIFEFILE_V2_* in .env.local to also probe the live sandbox read-only. Missing credentials skip the live half."
+        "note": "Run from a Mockingbird checkout; credentials come only from .env.local or GitHub Actions secrets. Missing credentials exit 2."
       },
       "introspection": [
         "GET /__admin/health",
