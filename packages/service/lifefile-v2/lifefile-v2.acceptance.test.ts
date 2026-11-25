@@ -768,6 +768,23 @@ describe("status writes", () => {
   })
 })
 
+describe("strict order filters", () => {
+  test("an array-style rx UUID filter is refused instead of matching every order", async () => {
+    const { client } = boot()
+    const first = await client.createOrder(orderBody())
+    const second = await client.createOrder(orderBody())
+    expect(first.ok && second.ok).toBe(true)
+    const listed = await client.call<unknown>(
+      "GET",
+      `/orders?${new URLSearchParams({ "filter[rx][uuid][]": "f120f5b8-09fd-4b7d-a01b-08c4ec85bc25" })}`,
+    )
+    expect(listed.ok).toBe(false)
+    expect(listed).toMatchObject({
+      failure: { httpStatus: 422, category: "validation", fields: ["filter.rx.uuid[]"] },
+    })
+  })
+})
+
 describe("shipping changes", () => {
   test("PUT {shipping: {...}} merges into the order's shipping", async () => {
     const { client } = boot()

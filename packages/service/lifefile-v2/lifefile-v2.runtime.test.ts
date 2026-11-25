@@ -222,6 +222,30 @@ describe("service contract", () => {
   })
 })
 
+describe("intake on a real clock", () => {
+  test("the intake move and its push happen on time with no further requests", async () => {
+    const pushes = sink()
+    const runtime = createRuntime({
+      latency: "none",
+      settings: { intake: { status: "b3644", afterMs: 50 } },
+      push: {
+        url: "http://receiver.local/webhooks/lifefile",
+        username: "push-user",
+        password: "push-pass",
+        retryDelaysMs: [0],
+        fetch: pushes.fetch,
+      },
+    })
+    const fetch = (request: Request) => runtime.fetch(request)
+    const client = consumer(BASE, fetch)
+    const created = await client.createOrder(orderBody())
+    expect(created.ok).toBe(true)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    await runtime.webhooks.idle()
+    expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toContain("b3644")
+  })
+})
+
 describe("Data Push (provisional shape)", () => {
   test("a status change pushes JSON with Basic auth and the provisional-shape header", async () => {
     const { client, runtime, pushes, clock } = boot()

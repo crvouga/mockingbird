@@ -474,6 +474,22 @@ describe("serve bounds a namespace without making every write slower", () => {
   })
 })
 
+describe("the API user cap counts only open enrollment", () => {
+  test("seeded and admin-added users never use up maxApiUsers", async () => {
+    const { runtime } = boot({
+      maxApiUsers: 1,
+      apiUsers: [
+        { clientId: "seeded-a", secret: "secret-a" },
+        { clientId: "seeded-b", secret: "secret-b" },
+      ],
+    })
+    const fetch = (r: Request) => runtime.fetch(r)
+    expect((await token(BASE, fetch, "enrolled-1")).status).toBe(200)
+    expect((await token(BASE, fetch, "enrolled-2")).status).toBe(401)
+    expect((await token(BASE, fetch, "seeded-a", "secret-a")).status).toBe(200)
+  })
+})
+
 describe("namespace deletion", () => {
   test("deleting a namespace leaves none of its records behind", async () => {
     const { runtime } = boot()
