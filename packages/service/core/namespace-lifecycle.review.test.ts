@@ -284,12 +284,21 @@ describe("risk checks around clean-up", () => {
 
   test("a namespace that only ever received controls is expired once idle", async () => {
     const wall = wallClock()
-    const runtime = bare({ namespaceIdleMs: MINUTE, wallNow: wall.now }, async () => new Response("ok"))
+    const runtime = bare(
+      { namespaceIdleMs: MINUTE, wallNow: wall.now },
+      async () => new Response("ok"),
+    )
     const set = await admin(runtime, "PUT", "/controls", { seed: 7 }, ns("controls-only"))
     expect(set.status).toBe(200)
     wall.advance(2 * MINUTE)
     await send(runtime, "GET", "/__admin/health")
-    const after = await admin<{ seed: number | string }>(runtime, "GET", "/controls", undefined, ns("controls-only"))
+    const after = await admin<{ seed: number | string }>(
+      runtime,
+      "GET",
+      "/controls",
+      undefined,
+      ns("controls-only"),
+    )
     expect(after.body.seed).not.toBe(7)
   })
 
