@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { createClock } from "@crvouga/mockingbird-service"
 import {
   createRuntime,
+  document,
   LIFEFILE_V2_PRESETS,
   PROVISIONAL_PUSH_SHAPE,
   PUSH_SHAPE_HEADER,
@@ -87,6 +88,34 @@ const placed = async (client: ReturnType<typeof consumer>, uuid = crypto.randomU
 }
 
 describe("service contract", () => {
+  test("the docs playground's sign-in sample from the contract issues a token on a fresh emulator", async () => {
+    const pkg = (await Bun.file(new URL("./package.json", import.meta.url)).json()) as {
+      mockingbird: { playground: { operation: string; headers: Record<string, string> } }
+    }
+    const { operation, headers } = pkg.mockingbird.playground
+    const paths = (
+      document as unknown as {
+        paths: Record<string, Record<string, { operationId?: string; requestBody?: unknown }>>
+      }
+    ).paths
+    const [path, method, op] = Object.entries(paths)
+      .flatMap(([p, ops]) => Object.entries(ops).map(([m, o]) => [p, m, o] as const))
+      .find(([, , o]) => o.operationId === operation) ?? [undefined, undefined, undefined]
+    const media = (
+      op?.requestBody as { content?: Record<string, { example?: unknown }> } | undefined
+    )?.content?.["application/x-www-form-urlencoded"]
+    expect(media?.example).toBeObject()
+    const response = await createRuntime().fetch(
+      new Request(`${BASE}${path}`, {
+        method: String(method).toUpperCase(),
+        headers: { ...headers, "content-type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(media?.example as Record<string, string>).toString(),
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { access_token?: unknown }).access_token).toBeString()
+  })
+
   test("health answers without credentials and names the corpus; vendor routes need a bearer", async () => {
     const { runtime } = boot()
     const health = await runtime.fetch(new Request(`${BASE}/__admin/health`))
