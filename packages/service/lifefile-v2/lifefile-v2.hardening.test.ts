@@ -607,11 +607,15 @@ describe("namespace deletion", () => {
 describe("a refused status write leaves due intake on time", () => {
   const refusedThenWait = async (
     write: (client: ReturnType<typeof consumer>, id: number) => Promise<unknown>,
+    rateLimits?: { api: number; token: number },
   ) => {
     const received: string[] = []
     const runtime = createRuntime({
       latency: "none",
-      settings: { intake: { status: "b3644", afterMs: 300 } },
+      settings: {
+        intake: { status: "b3644", afterMs: 300 },
+        ...(rateLimits ? { rateLimits } : {}),
+      },
       push: {
         url: "http://receiver.local/webhooks/lifefile",
         username: "push-user",
@@ -652,6 +656,29 @@ describe("a refused status write leaves due intake on time", () => {
       if (!write.ok) expect(write.failure.httpStatus).toBe(422)
     })
     expect(outcome).toEqual({ status: "b3644", received: ["b3644"] })
+  })
+
+  test("a rate-limited status write (429) is followed by intake with one push", async () => {
+    const intoMinute = Date.now() % 60_000
+    if (intoMinute > 55_000)
+      await new Promise((resolve) => setTimeout(resolve, 60_100 - intoMinute))
+    const outcome = await refusedThenWait(
+      async (client, id) => {
+        const write = await client.setStatus(id, "del")
+        expect(write.ok).toBe(false)
+        if (!write.ok) expect(write.failure.httpStatus).toBe(429)
+      },
+      { api: 1, token: 120 },
+    )
+    expect(outcome).toEqual({ status: "b3644", received: ["b3644"] })
+  }, 15_000)
+
+  test("an accepted status write is not overwritten by the intake that runs after it", async () => {
+    const outcome = await refusedThenWait(async (client, id) => {
+      expect((await client.setStatus(id, "be584")).ok).toBe(true)
+    })
+    expect(outcome.status).toBe("be584")
+    expect(outcome.received.at(-1)).toBe("be584")
   })
 })
 
