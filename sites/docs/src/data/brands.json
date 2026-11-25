@@ -867,6 +867,20 @@
     "logo": "/brands/lifefile.jpg",
     "logoSource": "site"
   },
+  "lifefile-v2": {
+    "vendor": "LifeFile",
+    "website": "https://www.lifefile.net",
+    "docs": null,
+    "description": "LifeFile provides pharmacy management software with an external order API and outbound Data Push.",
+    "input": {
+      "name": "LifeFile",
+      "website": "https://www.lifefile.net",
+      "description": "LifeFile provides pharmacy management software with an external order API and outbound Data Push."
+    },
+    "color": null,
+    "logo": "/brands/lifefile-v2.jpg",
+    "logoSource": "site"
+  },
   "linear": {
     "vendor": "Linear",
     "website": "https://linear.app",
