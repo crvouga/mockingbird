@@ -428,8 +428,7 @@ const adminRoutes = (
     json(200, { tokenGeneration: seeded(runtime, namespace).revokeTokens() }),
   "GET /api-users": ({ namespace }) =>
     json(200, {
-      apiUsers: runtime
-        .instance(namespace)
+      apiUsers: seeded(runtime, namespace)
         .state.apiUsers.list({ order: "oldest" })
         .map(({ value: { secret: _secret, ...user } }) => user),
     }),
