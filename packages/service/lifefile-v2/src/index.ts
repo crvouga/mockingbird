@@ -856,7 +856,8 @@ export class LifeFileV2API implements FetchAPI {
       !record ||
       record.revoked ||
       record.clientId !== claims.sub ||
-      record.nonce !== claims.nonce
+      record.nonce !== claims.nonce ||
+      record.issuedAt !== claims.iat * 1000
     )
       return failure(401, INACTIVE, [])
     if (now - record.lastUsedAt >= settings.tokenIdleSeconds * 1000)
