@@ -1,0 +1,314 @@
+import { describe, expect, test } from "bun:test"
+import { readdir } from "node:fs/promises"
+import { join } from "node:path"
+import { createClock } from "@crvouga/mockingbird-service"
+import { CATALOG_DATA, createRuntime, PRODUCTION_STATUSES, SANDBOX_STATUSES } from "./src/index.js"
+import { serveTarget } from "./src/server.js"
+import { consumer, orderBody } from "./test/consumer.js"
+
+const BASE = "http://lifefile.local"
+const COMMON = { adminKey: undefined, seed: undefined, onLog: undefined }
+const T0 = Date.parse("2026-11-24T22:57:51.000Z")
+const PACKAGE = import.meta.dir
+
+const boot = (options: Parameters<typeof createRuntime>[0] = {}) => {
+  const clock = createClock()
+  clock.set(T0)
+  clock.freeze()
+  const runtime = createRuntime({ latency: "none", clock, ...options })
+  const fetch = (request: Request) => runtime.fetch(request)
+  return { runtime, clock, fetch, client: consumer(BASE, fetch, { now: clock.now }) }
+}
+
+const admin = async (
+  runtime: { fetch: (r: Request) => Promise<Response> },
+  method: string,
+  path: string,
+  body?: unknown,
+) => {
+  const response = await runtime.fetch(
+    new Request(`${BASE}/__admin${path}`, {
+      method,
+      headers: { "content-type": "application/json" },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    }),
+  )
+  const text = await response.text()
+  return {
+    status: response.status,
+    json: (text ? JSON.parse(text) : null) as Record<string, unknown>,
+  }
+}
+
+const token = (
+  base: string,
+  fetch: (r: Request) => Promise<Response>,
+  clientId: string,
+  secret = "anything-at-all",
+) =>
+  fetch(
+    new Request(`${base}/api/v2/auth/token`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/x-www-form-urlencoded",
+        "x-vendor-id": "10001",
+      },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: clientId,
+        client_secret: secret,
+      }),
+    }),
+  )
+
+const textFiles = async (dir: string): Promise<string[]> => {
+  const entries = await readdir(dir, { withFileTypes: true })
+  const out: string[] = []
+  for (const entry of entries) {
+    if (["node_modules", "dist", ".soak"].includes(entry.name)) continue
+    const path = join(dir, entry.name)
+    if (entry.isDirectory()) out.push(...(await textFiles(path)))
+    else if (/\.(ts|json|yaml|md)$/.test(entry.name)) out.push(path)
+  }
+  return out
+}
+
+describe("what the package publishes", () => {
+  const sandboxPairs = new Set(SANDBOX_STATUSES.map((s) => `${s.id}\u0000${s.label}`))
+  const synthetic = (status: { id: string; label: string }) =>
+    sandboxPairs.has(`${status.id}\u0000${status.label}`) ||
+    /^Production Status P-\d{2}$/.test(status.label)
+
+  test("the production catalog keeps its status codes but only LifeFile-default or synthetic labels", async () => {
+    expect(PRODUCTION_STATUSES).toHaveLength(55)
+    expect(PRODUCTION_STATUSES.filter((s) => !synthetic(s))).toEqual([])
+    const file = (await Bun.file(join(PACKAGE, "corpus", "statuses.json")).json()) as {
+      production: { id: string; label: string }[]
+    }
+    expect(file.production.filter((s) => !synthetic(s))).toEqual([])
+  })
+
+  test("the production shipping services are synthetic: names, ids, prices and colours", () => {
+    const services = CATALOG_DATA.production.shippingServices as unknown as Record<
+      string,
+      unknown
+    >[]
+    expect(services.length).toBeGreaterThan(0)
+    for (const [index, service] of services.entries()) {
+      expect(service.name).toBe(`Production Shipping S-${index + 1}`)
+      expect(service.id).toBe(60_001 + index)
+      expect(service.color ?? null).toBeNull()
+      expect([0, 10, 20, 30]).toContain(service.price as number)
+    }
+  })
+
+  test("no published file names a vendor server path", async () => {
+    const offenders: string[] = []
+    for (const path of await textFiles(PACKAGE)) {
+      if (path.endsWith("hardening.test.ts")) continue
+      const text = await Bun.file(path).text()
+      if (/\/var\/www|\.php\b/.test(text)) offenders.push(path.slice(PACKAGE.length + 1))
+    }
+    expect(offenders).toEqual([])
+  })
+})
+
+describe("serve limits for a long-lived local stack", () => {
+  test("--max-records caps the default namespace with a 507", async () => {
+    const runtime = (await serveTarget.create(
+      { "no-latency": true, "max-records": "20" },
+      COMMON,
+    )) as ReturnType<typeof createRuntime>
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    let refused = 0
+    for (let i = 0; i < 15; i++) {
+      const created = await client.createOrder(orderBody({ uuid: crypto.randomUUID() }))
+      if (!created.ok && created.failure.httpStatus === 507) refused++
+    }
+    expect(refused).toBeGreaterThan(0)
+  })
+
+  test("serve caps snapshots by default (50) and --max-snapshots changes it", async () => {
+    const runtime = (await serveTarget.create({ "no-latency": true }, COMMON)) as ReturnType<
+      typeof createRuntime
+    >
+    for (let i = 0; i < 50; i++) {
+      expect((await admin(runtime, "POST", "/snapshots", { name: `s${i}` })).status).toBe(201)
+    }
+    expect((await admin(runtime, "POST", "/snapshots", { name: "s50" })).status).toBe(400)
+    const two = (await serveTarget.create(
+      { "no-latency": true, "max-snapshots": "2" },
+      COMMON,
+    )) as ReturnType<typeof createRuntime>
+    await admin(two, "POST", "/snapshots", { name: "a" })
+    await admin(two, "POST", "/snapshots", { name: "b" })
+    expect((await admin(two, "POST", "/snapshots", { name: "c" })).status).toBe(400)
+  })
+
+  test.each([
+    ["max-records", "0"],
+    ["max-records", "abc"],
+    ["max-snapshots", "-1"],
+  ])("--%s %s is refused", (flag, value) => {
+    expect(() => serveTarget.create({ [flag]: value }, COMMON)).toThrow(`--${flag}`)
+  })
+
+  test("signing in again and again leaves only live tokens behind", async () => {
+    const { runtime, clock } = boot()
+    for (let i = 0; i < 5; i++) {
+      const client = consumer(BASE, (r) => runtime.fetch(r), { now: clock.now })
+      expect((await client.call("GET", "/ping")).ok).toBe(true)
+      clock.advance(2 * 3_600_000)
+    }
+    expect(runtime.instance().state.tokens.count()).toBe(1)
+  })
+
+  test("a revoked token stays dead after later sign-ins prune the token rows", async () => {
+    const { runtime, clock } = boot()
+    const fetch = (r: Request) => runtime.fetch(r)
+    const issued = (await (await token(BASE, fetch, "lifefile-client", "lifefile-secret")).json()) as {
+      access_token: string
+    }
+    const call = (method: string, path: string) =>
+      fetch(
+        new Request(`${BASE}/api/v2${path}`, {
+          method,
+          headers: { authorization: `Bearer ${issued.access_token}`, "x-vendor-id": "10001" },
+        }),
+      )
+    expect((await call("GET", "/ping")).status).toBe(200)
+    expect((await call("DELETE", "/auth/token")).status).toBeLessThan(300)
+    clock.advance(60_000)
+    expect((await token(BASE, fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
+    expect((await call("GET", "/ping")).status).toBe(401)
+  })
+})
+
+describe("enrollment", () => {
+  test("serve with --client-id closes open enrollment: an unknown client is invalid_client", async () => {
+    const runtime = (await serveTarget.create(
+      { "no-latency": true, "client-id": "stack-client", "client-secret": "stack-secret" },
+      COMMON,
+    )) as ReturnType<typeof createRuntime>
+    const fetch = (r: Request) => runtime.fetch(r)
+    const refused = await token(BASE, fetch, "stack-clinet")
+    expect(refused.status).toBe(401)
+    expect(await refused.json()).toEqual({
+      error: "invalid_client",
+      error_description: "Invalid Credentials",
+    })
+    const known = consumer(BASE, fetch, { clientId: "stack-client", clientSecret: "stack-secret" })
+    expect((await known.call("GET", "/ping")).ok).toBe(true)
+  })
+
+  test("--open-enrollment keeps it open beside a seeded client", async () => {
+    const runtime = (await serveTarget.create(
+      { "no-latency": true, "client-id": "stack-client", "open-enrollment": true },
+      COMMON,
+    )) as ReturnType<typeof createRuntime>
+    expect((await token(BASE, (r) => runtime.fetch(r), "someone-new")).status).toBe(200)
+  })
+
+  test("serve with no client keeps open enrollment, as the banner says", async () => {
+    const runtime = (await serveTarget.create({ "no-latency": true }, COMMON)) as ReturnType<
+      typeof createRuntime
+    >
+    expect((await token(BASE, (r) => runtime.fetch(r), "someone-new")).status).toBe(200)
+  })
+
+  test("openEnrollment: false refuses unknown clients and still serves known ones", async () => {
+    const { runtime, client } = boot({ settings: { openEnrollment: false } })
+    expect((await token(BASE, (r) => runtime.fetch(r), "someone-new")).status).toBe(401)
+    expect((await client.call("GET", "/ping")).ok).toBe(true)
+  })
+})
+
+describe("rate limits", () => {
+  test("requests naming unknown vendors share one window instead of one each", async () => {
+    const { runtime } = boot()
+    await admin(runtime, "PUT", "/settings", { rateLimits: { api: 5, token: 120 } })
+    const statuses: number[] = []
+    for (let i = 0; i < 7; i++) {
+      const response = await runtime.fetch(
+        new Request(`${BASE}/api/v2/ping`, { headers: { "x-vendor-id": String(70_000 + i) } }),
+      )
+      statuses.push(response.status)
+    }
+    expect(statuses.slice(0, 5).every((s) => s === 401)).toBe(true)
+    expect(statuses.slice(5)).toEqual([429, 429])
+  })
+
+  test("rateLimits: null turns limiting off for a test stack", async () => {
+    const { runtime, client } = boot()
+    const put = await admin(runtime, "PUT", "/settings", { rateLimits: null })
+    expect(put.status).toBe(200)
+    for (let i = 0; i < 130; i++) {
+      const signedIn = consumer(BASE, (r) => runtime.fetch(r))
+      expect((await signedIn.call("GET", "/ping")).ok).toBe(true)
+    }
+    expect((await client.call("GET", "/ping")).ok).toBe(true)
+  })
+})
+
+describe("admin settings refuse values that would break the namespace", () => {
+  test.each([
+    ["timeZone", { timeZone: "Not/AZone" }],
+    ["rateLimits", { rateLimits: { api: 0, token: 120 } }],
+    ["rateLimits", { rateLimits: { api: 10, token: -1 } }],
+    ["rateLimits", { rateLimits: { api: 1.5, token: 120 } }],
+    ["intake", { intake: { status: "zzzzz", afterMs: 500 } }],
+    ["intake", { intake: { status: "b3644", afterMs: -1 } }],
+    ["fastTrackStatus", { fastTrackStatus: "zzzzz" }],
+    ["practice", { practice: { id: 1.5, name: "P" } }],
+    ["practice", { practice: { id: 0, name: "P" } }],
+    ["vendorId", { vendorId: 1.5 }],
+    ["fastTrackWindowMs", { fastTrackWindowMs: 0.5 }],
+  ])("%s %j is a 400 and leaves the namespace working", async (key, body) => {
+    const { runtime, client } = boot()
+    const put = await admin(runtime, "PUT", "/settings", body)
+    expect(put.status).toBe(400)
+    expect(JSON.stringify(put.json)).toContain(key)
+    const created = await client.createOrder(orderBody())
+    expect(created.ok).toBe(true)
+    if (created.ok) expect((await client.order(created.data.orderId)).ok).toBe(true)
+  })
+
+  test("a valid time zone and a catalog's own intake code are accepted", async () => {
+    const { runtime } = boot()
+    expect(
+      (
+        await admin(runtime, "PUT", "/settings", {
+          timeZone: "America/New_York",
+          intake: { status: "b3644", afterMs: 0 },
+          practice: { id: 900002, name: "Other" },
+        })
+      ).status,
+    ).toBe(200)
+  })
+
+  test("the Data Push password never comes back from the settings routes", async () => {
+    const { runtime } = boot({
+      push: { url: "http://receiver.local/push", username: "push-user", password: "s3cret-pw" },
+    })
+    const read = await admin(runtime, "GET", "/settings")
+    expect(read.json.push).toEqual({ url: "http://receiver.local/push", username: "push-user" })
+    const written = await admin(runtime, "PUT", "/settings", {
+      push: { url: "http://receiver.local/other", username: "u2", password: "other-pw" },
+    })
+    expect(written.status).toBe(200)
+    expect(JSON.stringify(written.json)).not.toContain("other-pw")
+    expect(JSON.stringify(read.json)).not.toContain("s3cret-pw")
+  })
+})
+
+describe("fast track on the recorded latency and a real clock", () => {
+  test("a del sent straight after the create reply still fast-tracks", async () => {
+    const runtime = createRuntime({})
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    const created = await client.createOrder(orderBody())
+    expect(created.ok).toBe(true)
+    if (!created.ok) return
+    const first = await client.setStatus(created.data.orderId, "del")
+    expect(first).toMatchObject({ ok: true, data: { current_order_status: "b3644" } })
+  }, 20_000)
+})
