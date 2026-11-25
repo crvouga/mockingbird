@@ -473,3 +473,31 @@ describe("serve bounds a namespace without making every write slower", () => {
     expect((await token(BASE, fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
   })
 })
+
+describe("namespace deletion", () => {
+  test("deleting a namespace leaves none of its records behind", async () => {
+    const { runtime } = boot()
+    const fetch = (r: Request) => runtime.fetch(r)
+    await consumer(BASE, fetch).call("GET", "/ping")
+    const before = runtime.resources().records
+    for (let i = 0; i < 5; i++) {
+      const c = consumer(`${BASE}/__admin/ns/gone-${i}`, fetch)
+      expect((await c.createOrder(orderBody())).ok).toBe(true)
+      const deleted = await fetch(
+        new Request(`${BASE}/__admin/namespaces/gone-${i}`, { method: "DELETE" }),
+      )
+      expect(deleted.status).toBe(200)
+    }
+    expect(runtime.resources().records).toBe(before)
+  })
+
+  test("a reset namespace still serves the seeded client and settings", async () => {
+    const { runtime, client } = boot({ settings: { catalog: "production", intake: null } })
+    expect((await client.call("GET", "/ping")).ok).toBe(true)
+    await runtime.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    const fresh = consumer(BASE, (r) => runtime.fetch(r))
+    expect((await fresh.call("GET", "/ping")).ok).toBe(true)
+    expect((await admin(runtime, "GET", "/settings")).json).toMatchObject({ catalog: "production" })
+    expect(((await admin(runtime, "GET", "/api-users")).json.apiUsers as unknown[]).length).toBe(1)
+  })
+})
