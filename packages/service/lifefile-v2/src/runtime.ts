@@ -6,9 +6,11 @@ import {
   createWebhookHub,
   type FaultPreset,
   type MockControls,
+  matchNamespacePath,
   NAMESPACE_HEADER,
   opaqueToken,
   type RequestLog,
+  resolveAdminPrefix,
   type ServiceRuntime,
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
@@ -393,17 +395,20 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
     admin: (rt) => adminRoutes(rt, syncPush),
   })
   const inner = runtime.fetch
+  const adminPrefix = resolveAdminPrefix(options.adminPrefix)
   return Object.assign(runtime, {
     webhooks: hub,
     fetch: async (request: Request): Promise<Response> => {
+      const path = new URL(request.url).pathname
       if (
         request.method === "POST" &&
         !request.headers.has(NAMESPACE_HEADER) &&
         !request.headers.has("authorization") &&
-        new URL(request.url).pathname.endsWith("/api/v2/auth/token")
+        !matchNamespacePath(path, adminPrefix) &&
+        path.endsWith("/api/v2/auth/token")
       ) {
         const text = await request.clone().text()
-        const clientId = new URLSearchParams(text).get("client_id")
+        const clientId = bodyClientId(request.headers.get("content-type"), text)
         const namespace = clientId ? runtime.credentials.get(clientId) : undefined
         if (namespace !== undefined) {
           const headers = new Headers(request.headers)
@@ -414,6 +419,18 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
       return inner(request)
     },
   })
+}
+
+const bodyClientId = (contentType: string | null, text: string): string | undefined => {
+  if (!contentType?.toLowerCase().includes("json")) {
+    return new URLSearchParams(text).get("client_id") ?? undefined
+  }
+  try {
+    const value: unknown = JSON.parse(text)
+    return isRecord(value) && typeof value.client_id === "string" ? value.client_id : undefined
+  } catch {
+    return undefined
+  }
 }
 
 const seeded = (runtime: ServiceRuntime<LifeFileV2API>, namespace: string) => {
