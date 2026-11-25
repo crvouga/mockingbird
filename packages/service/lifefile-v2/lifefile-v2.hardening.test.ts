@@ -191,7 +191,9 @@ describe("serve limits for a long-lived local stack", () => {
   test("a revoked token stays dead after later sign-ins prune the token rows", async () => {
     const { runtime, clock } = boot()
     const fetch = (r: Request) => runtime.fetch(r)
-    const issued = (await (await token(BASE, fetch, "lifefile-client", "lifefile-secret")).json()) as {
+    const issued = (await (
+      await token(BASE, fetch, "lifefile-client", "lifefile-secret")
+    ).json()) as {
       access_token: string
     }
     const call = (method: string, path: string) =>

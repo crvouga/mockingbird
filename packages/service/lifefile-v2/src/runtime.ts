@@ -10,7 +10,13 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import { CATALOGS, CORPUS_VERSION, DEFAULT_SETTINGS, RECORDED_LATENCY_MS } from "./corpus.js"
+import {
+  CATALOG_DATA,
+  CATALOGS,
+  CORPUS_VERSION,
+  DEFAULT_SETTINGS,
+  RECORDED_LATENCY_MS,
+} from "./corpus.js"
 import { document } from "./generated/openapi.js"
 import { LIFEFILE_V2_NAMESPACE, LifeFileV2API, tokenCredential } from "./index.js"
 import type { ApiUser, Catalog, PushTarget, Settings, TrackingRecord } from "./types.js"
@@ -103,6 +109,7 @@ export type LifeFileV2RuntimeOptions = {
   namespaceIdleMs?: number
   maxRecords?: number
   maxSnapshots?: number
+  checkpointMutations?: boolean
   push?: PushTarget & {
     retryDelaysMs?: readonly number[]
     fetch?: (request: Request) => Promise<Response>
@@ -124,6 +131,18 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const SETTING_KEYS = new Set<keyof Settings>(Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[])
 
+const isWhole = (value: unknown, min: number): value is number =>
+  typeof value === "number" && Number.isInteger(value) && value >= min
+
+const isTimeZone = (value: string) => {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value })
+    return true
+  } catch {
+    return false
+  }
+}
+
 const parseSettings = (
   body: Record<string, unknown>,
   current: Settings,
@@ -132,11 +151,12 @@ const parseSettings = (
   for (const key of Object.keys(body)) {
     if (!SETTING_KEYS.has(key as keyof Settings)) return `unknown setting ${key}`
   }
-  const number = (key: keyof Settings, min = 0) => {
+  const number = (key: keyof Settings, min: number, whole: boolean) => {
     const value = body[key]
     if (value === undefined) return undefined
     if (typeof value !== "number" || !Number.isFinite(value) || value < min)
       return `${key}: number >= ${min}`
+    if (whole && !Number.isInteger(value)) return `${key}: whole number >= ${min}`
     ;(patch as Record<string, unknown>)[key] = value
     return undefined
   }
@@ -148,12 +168,12 @@ const parseSettings = (
     return undefined
   }
   const problem =
-    number("vendorId", 1) ??
-    number("tokenTtlSeconds", 1) ??
-    number("tokenIdleSeconds", 1) ??
-    number("secretTtlDays", 0) ??
-    number("fastTrackWindowMs", 0) ??
-    number("tokenGeneration", 0) ??
+    number("vendorId", 1, true) ??
+    number("tokenTtlSeconds", 1, true) ??
+    number("tokenIdleSeconds", 1, true) ??
+    number("secretTtlDays", 0, false) ??
+    number("fastTrackWindowMs", 0, true) ??
+    number("tokenGeneration", 0, true) ??
     bool("enforceVendorId") ??
     bool("openEnrollment")
   if (problem) return problem
@@ -165,13 +185,17 @@ const parseSettings = (
       patch.intake = body.catalog === "sandbox" ? DEFAULT_SETTINGS.intake : null
     }
   }
+  const codes = new Set(CATALOG_DATA[patch.catalog ?? current.catalog].statuses.map((s) => s.id))
   if (body.intake !== undefined) {
     const intake = body.intake
     if (
       intake !== null &&
-      (!isRecord(intake) || typeof intake.status !== "string" || typeof intake.afterMs !== "number")
+      (!isRecord(intake) || typeof intake.status !== "string" || !isWhole(intake.afterMs, 0))
     ) {
-      return 'intake: null or {"status": "<code>", "afterMs": <ms>}'
+      return 'intake: null or {"status": "<code>", "afterMs": <whole ms >= 0>}'
+    }
+    if (intake !== null && !codes.has(intake.status as string)) {
+      return `intake: ${String(intake.status)} is not a status of the ${patch.catalog ?? current.catalog} catalog`
     }
     patch.intake =
       intake === null
@@ -183,23 +207,25 @@ const parseSettings = (
     if (typeof body[key] !== "string" || !body[key]) return `${key}: non-empty string`
     patch[key] = body[key] as string
   }
+  if (patch.timeZone !== undefined && !isTimeZone(patch.timeZone)) {
+    return `timeZone: ${patch.timeZone} is not an IANA time zone`
+  }
+  if (patch.fastTrackStatus !== undefined && !codes.has(patch.fastTrackStatus)) {
+    return `fastTrackStatus: ${patch.fastTrackStatus} is not a status of the ${patch.catalog ?? current.catalog} catalog`
+  }
   if (body.practice !== undefined) {
     const practice = body.practice
-    if (
-      !isRecord(practice) ||
-      typeof practice.id !== "number" ||
-      typeof practice.name !== "string"
-    ) {
-      return 'practice: {"id": <number>, "name": "<name>"}'
+    if (!isRecord(practice) || !isWhole(practice.id, 1) || typeof practice.name !== "string") {
+      return 'practice: {"id": <whole number >= 1>, "name": "<name>"}'
     }
     patch.practice = { id: practice.id, name: practice.name }
   }
   if (body.rateLimits !== undefined) {
     const limits = body.rateLimits
-    if (!isRecord(limits) || typeof limits.api !== "number" || typeof limits.token !== "number") {
-      return 'rateLimits: {"api": <n>, "token": <n>}'
-    }
-    patch.rateLimits = { api: limits.api, token: limits.token }
+    if (limits === null) patch.rateLimits = null
+    else if (!isRecord(limits) || !isWhole(limits.api, 1) || !isWhole(limits.token, 1)) {
+      return 'rateLimits: null or {"api": <whole number >= 1>, "token": <whole number >= 1>}'
+    } else patch.rateLimits = { api: limits.api, token: limits.token }
   }
   if (body.push !== undefined) {
     const push = parsePush(body.push)
@@ -208,6 +234,11 @@ const parseSettings = (
   }
   return patch
 }
+
+const shownSettings = (settings: Settings) => ({
+  ...settings,
+  push: settings.push ? { url: settings.push.url, username: settings.push.username } : null,
+})
 
 const parsePush = (value: unknown): PushTarget | null | string => {
   if (value === null) return null
@@ -313,6 +344,9 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
     ...(options.namespaceIdleMs !== undefined ? { namespaceIdleMs: options.namespaceIdleMs } : {}),
     ...(options.maxRecords !== undefined ? { maxRecords: options.maxRecords } : {}),
     ...(options.maxSnapshots !== undefined ? { maxSnapshots: options.maxSnapshots } : {}),
+    ...(options.checkpointMutations !== undefined
+      ? { checkpointMutations: options.checkpointMutations }
+      : {}),
     credential: tokenCredential,
     presets: LIFEFILE_V2_PRESETS,
     webhooks: hub,
@@ -412,7 +446,8 @@ const adminRoutes = (
     const { secret: _secret, ...shown } = user
     return json(200, shown)
   },
-  "GET /settings": ({ namespace }) => json(200, runtime.instance(namespace).state.current()),
+  "GET /settings": ({ namespace }) =>
+    json(200, shownSettings(runtime.instance(namespace).state.current())),
   "PUT /settings": ({ namespace, body }) => {
     if (!isRecord(body)) return adminError(400, "expected a JSON object")
     const api = runtime.instance(namespace)
@@ -420,7 +455,7 @@ const adminRoutes = (
     if (typeof patch === "string") return adminError(400, patch)
     const next = api.state.update(patch)
     syncPush(namespace, api)
-    return json(200, next)
+    return json(200, shownSettings(next))
   },
   "PUT /push": ({ namespace, body }) => {
     const push = parsePush(body ?? null)

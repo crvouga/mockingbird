@@ -59,7 +59,7 @@ export type Settings = {
   intake: Intake | null
   timeZone: string
   practice: { id: number; name: string }
-  rateLimits: RateLimits
+  rateLimits: RateLimits | null
   push: PushTarget | null
   tokenGeneration: number
 }

@@ -30,7 +30,9 @@ bun add -d @crvouga/mockingbird-service-lifefile-v2
 Point the application's LifeFile base URL at `<server.url>/api/v2` and its token URL at
 `<server.url>/api/v2/auth/token`. The default API user is `lifefile-client` /
 `lifefile-secret` with vendor id `10001`; any other client id signs in too (open enrollment), so a
-suite can give every test its own credentials.
+suite can give every test its own credentials. `serve --client-id` closes open enrollment, so a
+mistyped client id fails with `401 invalid_client` as it would against LifeFile; add
+`--open-enrollment` to keep it open. `settings.openEnrollment: false` does the same per namespace.
 
 ```ts
 import { createServer } from "@crvouga/mockingbird-service-lifefile-v2/server"
@@ -118,7 +120,7 @@ All under `/api/v2`, every one but the token endpoint behind `Authorization: Bea
 | `GET /orders` | Newest first; `page`, `perPage` (5–50), `sortField`, `sortType`; strict `filter[...]` deep objects; `filter[rx][uuid]` is case-insensitive and read from an index. Envelope `{data, total, perPage, currentPage, lastPage}`. |
 | `GET /orders/{id}`, `/status`, `/shipping` | The recorded shapes, null-filled. Missing: `404 Record not found`; not an integer: `422 {"orderId":["The order id must be an integer."]}`. |
 | `PUT /orders/{id}/status` | Any code in the catalog, in any order (even back to `new` after `del`); unknown code `404 Order Status ID '<code>' does not exist`. See [fast track](#fast-track-cancel-and-intake). |
-| `PUT /orders/{id}/shipping` | `{"shipping": {...}}` merges into the order's shipping. A bare object answers the sandbox's `500` PHP TypeError and changes nothing. |
+| `PUT /orders/{id}/shipping` | `{"shipping": {...}}` merges into the order's shipping. A bare object answers `500` and changes nothing, as the sandbox does; the vendor's own crash text is replaced with a generic one. |
 | `GET /statuses`, `/locations`, `/locations/{id}`, `/shipping-services` | The catalog's reference lists, paginated. |
 | `GET /practices/{id}/shipping-services`, `/locations/{id}/shipping-configurations` | `403 The authenticated API user does not have the required privilege '<id>'.` unless the user is granted it (then an empty page). |
 | `GET /ping` | `{http_method, ssl_client_verify: null}`. |
@@ -149,7 +151,10 @@ The sandbox does two things to a new order that the contract does not mention:
 
 `settings.catalog` picks the status codes, locations and shipping services: `sandbox` (89 codes,
 three locations `100001`–`100003`, 11 services) or `production` (one pharmacy's 55 codes, location
-`100101`, 7 services). Account ids are synthetic; labels that named people are neutralised. The
+`100101`, 7 services). Account ids are synthetic. The production catalog keeps the account's real
+status codes, but a label is kept only where the sandbox has the same code with the same label
+(`new`, `del`, `pro`, …); every other label is `Production Status P-nn`, and the shipping services
+are `Production Shipping S-n` with synthetic ids (`60001`…) and prices. The
 sandbox listed 91 statuses during the probe and 89 in that day's export; the emulator seeds the
 89 it knows.
 
@@ -186,7 +191,7 @@ at 0, 5 s and 30 s, then give up. Replace this shape when a real push is recorde
 | `POST /__admin/tokens/revoke` | | Every token in the namespace dies. |
 | `GET` / `PUT /__admin/api-users` | `{clientId, secret?, privileges?, practiceId?, vendorId?, userGroup?}` | List or upsert API users (secrets never listed). |
 | `POST /__admin/api-users/:clientId/expire-secret` | | The secret is past its 30 days: no new tokens. |
-| `GET` / `PUT /__admin/settings` | any of `catalog`, `vendorId`, `enforceVendorId`, `openEnrollment`, `tokenTtlSeconds`, `tokenIdleSeconds`, `secretTtlDays`, `fastTrackWindowMs`, `fastTrackStatus`, `intake`, `timeZone`, `practice`, `rateLimits`, `push` | Per-namespace settings; unknown keys are refused. |
+| `GET` / `PUT /__admin/settings` | any of `catalog`, `vendorId`, `enforceVendorId`, `openEnrollment`, `tokenTtlSeconds`, `tokenIdleSeconds`, `secretTtlDays`, `fastTrackWindowMs`, `fastTrackStatus`, `intake`, `timeZone`, `practice`, `rateLimits`, `push` | Per-namespace settings. Unknown keys, an unknown IANA `timeZone`, a status code outside the catalog (`intake.status`, `fastTrackStatus`), ids and limits that are not whole numbers >= 1 are refused with `400`. `rateLimits: null` turns limiting off. The push password is never returned. |
 | `PUT /__admin/push` | `{url, username, password}` or `null` | Where this namespace's pushes go. |
 
 ### Presets
@@ -218,11 +223,26 @@ recorded without slowing a suite.
 Namespaces by `x-mockingbird-namespace`, by `/__admin/ns/<name>/…` (use it on both the API and
 the token URL), or by client id (`PUT /__admin/credentials`; the bearer token names its client).
 Orders, tokens, users, settings and pushes live in the namespace and go with it
-(`DELETE /__admin/namespaces/<name>`). `createRuntime` takes `namespaceIdleMs`, `maxRecords` and
-`maxSnapshots`; `serve` forgets namespaces idle for 30 minutes by default. Rx-UUID searches read an
-index, never every order. `bun run soak` drives 20 simulated tests a minute for 30 minutes
-(`soak:long` for six hours) and fails if p95 latency drifts over 10 %, heap grows over 50 MB
-after warm-up, push p95 passes 1 s or live namespaces pile up.
+(`DELETE /__admin/namespaces/<name>`). `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
+`maxSnapshots` and `checkpointMutations`. `serve` forgets namespaces idle for 30 minutes, caps each
+namespace (the never-forgotten default one included) at 100,000 records and 50 snapshots
+(`--max-records`, `--max-snapshots`; past the cap writes answer `507`), and skips the time-travel
+checkpoint after every write, which reads the whole namespace and makes writes slower as it grows
+(`--checkpoint-mutations` turns it back on). A sign-in drops token rows that are already dead
+(past their lifetime or idle hour); revoked ones stay until then. Rx-UUID searches read an index,
+never every order.
+
+Rate limits count per vendor id per minute on the namespace's mock clock: a header naming a
+vendor the namespace does not know shares one `unknown` window, and windows from past minutes are
+dropped. A frozen clock never reaches the next minute, so a suite that freezes time and makes over
+1,000 calls (or 120 sign-ins) sees `429` until it advances the clock or sets `rateLimits: null`.
+
+`bun run soak` drives 20 simulated tests a minute for 30 minutes (`soak:long` for six hours), each
+in its own namespace plus one order in the long-lived default namespace, and fails if any call
+after the warm-up window takes over 50 ms, p95 drifts over 10 % (and over 1 ms, so sub-millisecond
+jitter does not count), heap grows over 50 MB after warm-up, push p95 passes 1 s, live namespaces
+pile up, the default namespace holds over 4 records per order, or any write hits the record cap.
+The compressed soak in `bun test` checks only the resource bounds; timing is the script's job.
 
 ### Deliberately not modelled
 
@@ -249,7 +269,7 @@ after warm-up, push p95 passes 1 s or live namespaces pile up.
 | `DEFAULT_SETTINGS`, `DEFAULT_CLIENT`, `RECORDED_LATENCY_MS` | values | Default settings, the seeded API user, the recorded latency per operation. |
 | `pushBody`, `basicPushSigner`, `PUSH_EVENT`, `PUSH_SHAPE_HEADER`, `PROVISIONAL_PUSH_SHAPE`, `PUSH_RETRY_DELAYS_MS` | values / functions | The provisional push body, its Basic-auth signer and markers. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
-| `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--push-url`, `--push-username`, `--push-password`, `--catalog`, `--client-id`, `--client-secret`, `--no-latency`, `--namespace-idle-ms`); port 8932. |
+| `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--push-url`, `--push-username`, `--push-password`, `--catalog`, `--client-id`, `--client-secret`, `--open-enrollment`, `--no-latency`, `--namespace-idle-ms`, `--max-records`, `--max-snapshots`, `--checkpoint-mutations`); port 8932. |
 
 ## Development
 

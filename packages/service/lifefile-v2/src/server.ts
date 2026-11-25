@@ -1,8 +1,11 @@
 /// <reference types="node" />
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
 import { createRuntime, type LifeFileV2Runtime, type LifeFileV2RuntimeOptions } from "./runtime.js"
+import type { Settings } from "./types.js"
 
 export const DEFAULT_PORT = 8932
+
+export const SERVE_LIMITS = { maxRecords: 100_000, maxSnapshots: 50 } as const
 
 export type LifeFileV2ServerOptions = LifeFileV2RuntimeOptions & { port?: number; host?: string }
 
@@ -61,6 +64,26 @@ export const serveTarget: ServeTarget = {
       type: "boolean",
       description: "Answer at once instead of the recorded latency",
     },
+    "open-enrollment": {
+      type: "boolean",
+      description:
+        "Let any new client id sign in even with --client-id set (on by default without it)",
+    },
+    "max-records": {
+      type: "string",
+      value: "<n>",
+      description: `Records one namespace may hold before writes answer 507 (default ${SERVE_LIMITS.maxRecords})`,
+    },
+    "max-snapshots": {
+      type: "string",
+      value: "<n>",
+      description: `Snapshots one namespace may keep (default ${SERVE_LIMITS.maxSnapshots})`,
+    },
+    "checkpoint-mutations": {
+      type: "boolean",
+      description:
+        "Record a time-travel checkpoint after every write (off by default: each one reads the whole namespace)",
+    },
     "namespace-idle-ms": {
       type: "string",
       value: "<ms>",
@@ -77,8 +100,21 @@ export const serveTarget: ServeTarget = {
     const idle = Number(text(values["namespace-idle-ms"]) ?? 1_800_000)
     if (!Number.isInteger(idle) || idle < 0)
       throw new Error("--namespace-idle-ms is a whole number")
+    const count = (flag: string, fallback: number) => {
+      const raw = text(values[flag])
+      const value = raw === undefined ? fallback : Number(raw)
+      if (!Number.isInteger(value) || value < 1) throw new Error(`--${flag} is a whole number >= 1`)
+      return value
+    }
+    const maxRecords = count("max-records", SERVE_LIMITS.maxRecords)
+    const maxSnapshots = count("max-snapshots", SERVE_LIMITS.maxSnapshots)
     const clientId = text(values["client-id"])
     const clientSecret = text(values["client-secret"])
+    const seeded = clientId !== undefined || clientSecret !== undefined
+    const settings: Partial<Settings> = {
+      ...(catalog ? { catalog, ...(catalog === "production" ? { intake: null } : {}) } : {}),
+      ...(seeded && values["open-enrollment"] !== true ? { openEnrollment: false } : {}),
+    }
     return createRuntime({
       ...(url
         ? {
@@ -89,9 +125,7 @@ export const serveTarget: ServeTarget = {
             },
           }
         : {}),
-      ...(catalog
-        ? { settings: { catalog, ...(catalog === "production" ? { intake: null } : {}) } }
-        : {}),
+      ...(Object.keys(settings).length > 0 ? { settings } : {}),
       ...(clientId || clientSecret
         ? {
             apiUsers: [
@@ -104,6 +138,9 @@ export const serveTarget: ServeTarget = {
         : {}),
       ...(values["no-latency"] === true ? { latency: "none" as const } : {}),
       namespaceIdleMs: idle,
+      maxRecords,
+      maxSnapshots,
+      checkpointMutations: values["checkpoint-mutations"] === true,
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
@@ -113,7 +150,7 @@ export const serveTarget: ServeTarget = {
   },
   banner: () => [
     "api:  <url>/api/v2 (token at POST /api/v2/auth/token, form grant_type=client_credentials, X-Vendor-ID: 10001)",
-    "user: lifefile-client / lifefile-secret, or any new client id (open enrollment)",
+    "user: lifefile-client / lifefile-secret, or any new client id (open enrollment) unless --client-id is set",
     "push: --push-url with Basic auth; PUT /__admin/push sets it per namespace",
   ],
 }

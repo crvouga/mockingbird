@@ -148,10 +148,7 @@ const VALIDATION = (data: Record<string, string[]>) => failure(422, "Validation 
 const BEARER_REQUIRED = "Authorization header is expected to reference a Bearer authentication"
 const INACTIVE = "Invalid authorization token: Token is no longer active"
 const SHIPPING_CRASH = (given: string) =>
-  failure(
-    500,
-    `Server Error: shipping must be an object, ${given} given`,
-  )
+  failure(500, `Server Error: shipping must be an object, ${given} given`)
 
 const PRESCRIBER_FIELDS = [
   "id",
@@ -611,6 +608,7 @@ export class LifeFileV2API implements FetchAPI {
   private readonly onPush: ((push: PushRequest) => void) | undefined
   private readonly auth = new WeakMap<Request, Auth>()
   private readonly rateWindows = new Map<string, { window: number; count: number }>()
+  private rateMinute = -1
 
   constructor(options: LifeFileV2APIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -699,11 +697,18 @@ export class LifeFileV2API implements FetchAPI {
   } {
     const { pathname } = new URL(request.url)
     if (!pathname.includes("/api/v2/")) return {}
+    const limits = this.settings().rateLimits
+    if (!limits) return {}
     const token = pathname.endsWith("/api/v2/auth/token") && request.method === "POST"
-    const vendor = request.headers.get("x-vendor-id")
-    const limit = token ? this.settings().rateLimits.token : this.settings().rateLimits.api
+    const limit = token ? limits.token : limits.api
     const window = Math.floor(this.now() / 60_000)
-    const key = `${token ? "token" : "api"}:${vendor ?? ""}`
+    if (window !== this.rateMinute) {
+      for (const [key, entry] of this.rateWindows) {
+        if (entry.window !== window) this.rateWindows.delete(key)
+      }
+      this.rateMinute = window
+    }
+    const key = `${token ? "token" : "api"}:${this.rateVendor(request.headers.get("x-vendor-id"))}`
     const current = this.rateWindows.get(key)
     const count = current && current.window === window ? current.count + 1 : 1
     this.rateWindows.set(key, { window, count })
@@ -715,6 +720,24 @@ export class LifeFileV2API implements FetchAPI {
       : failure(429, "Too Many Attempts.")
     refused.headers.set("Retry-After", retryAfter)
     return { refused, headers }
+  }
+
+  private rateVendor(header: string | null): string {
+    const vendor = Number(header ?? "")
+    if (!Number.isInteger(vendor) || vendor <= 0) return "unknown"
+    if (vendor === this.settings().vendorId) return String(vendor)
+    const known = this.state.apiUsers
+      .list({ order: "oldest" })
+      .some(({ value }) => value.vendorId === vendor)
+    return known ? String(vendor) : "unknown"
+  }
+
+  private pruneDeadTokens(now: number, settings: Settings): void {
+    for (const { id, value } of this.state.tokens.list({ order: "oldest" })) {
+      const expired = now >= value.issuedAt + settings.tokenTtlSeconds * 1000
+      const idle = now - value.lastUsedAt >= settings.tokenIdleSeconds * 1000
+      if (expired || idle) this.state.tokens.delete(id)
+    }
   }
 
   private authenticate(context: OperationContext): Response | undefined {
@@ -808,6 +831,7 @@ export class LifeFileV2API implements FetchAPI {
     if (now >= user.secretIssuedAt + settings.secretTtlDays * 86_400_000)
       return INVALID_CREDENTIALS()
     if (settings.enforceVendorId && Number(vendor) !== user.vendorId) return INVALID_CREDENTIALS()
+    this.pruneDeadTokens(now, settings)
     const tokenId = this.state.nextTokenId()
     const claims: Claims = {
       sub: user.clientId,

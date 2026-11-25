@@ -1,4 +1,5 @@
 import { createRuntime, type LifeFileV2Runtime } from "../src/index.js"
+import { SERVE_LIMITS } from "../src/server.js"
 import { consumer, orderBody } from "./consumer.js"
 
 export type SoakOptions = {
@@ -26,6 +27,10 @@ export type SoakWindow = {
   records: number
   journalEntries: number
   webhooksPending: number
+  defaultOrders: number
+  defaultRecords: number
+  defaultTokens: number
+  recordLimitRefusals: number
 }
 
 export type SoakReport = {
@@ -35,10 +40,15 @@ export type SoakReport = {
     p95DriftPct: number
     p95DriftMs: number
     p99Ms: number
+    maxMs: number
     heapGrowthMb: number
     pushP95Ms: number
     maxNamespaces: number
+    recordsPerDefaultOrder: number
+    recordLimitRefusals: number
     pass: boolean
+    resourceReasons: string[]
+    timingReasons: string[]
     reasons: string[]
   }
 }
@@ -56,6 +66,7 @@ const heapMb = () => {
 }
 
 const BASE = "http://lifefile.soak"
+const P95_NOISE_FLOOR_MS = 1
 
 export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
   const pushSent = new Map<string, number>()
@@ -64,8 +75,9 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
   const runtime: LifeFileV2Runtime = createRuntime({
     latency: "none",
     namespaceIdleMs: options.namespaceIdleMs,
-    maxRecords: 2_000,
-    maxSnapshots: 20,
+    maxRecords: SERVE_LIMITS.maxRecords,
+    maxSnapshots: SERVE_LIMITS.maxSnapshots,
+    checkpointMutations: false,
     push: {
       url: "http://receiver.soak/push",
       username: "soak",
@@ -91,6 +103,9 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
   const intervalMs = 60_000 / options.testsPerMinute
   const windows: SoakWindow[] = []
   const started = performance.now()
+  const stack = consumer(BASE, fetch)
+  const defaultRecordsAtStart = runtime.instance().state.orders.count()
+  let defaultOrders = 0
   let testNumber = 0
   for (let w = 0; w < options.windows; w++) {
     const latencies: number[] = []
@@ -136,6 +151,13 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
         }
         if (testNumber % 7 === 0) await timed(latencies, () => client.cancel(id))
       }
+      const shared = (await timed(latencies, () =>
+        stack.createOrder(orderBody({ uuid: crypto.randomUUID() })),
+      )) as Awaited<ReturnType<typeof stack.createOrder>>
+      if (shared.ok) {
+        defaultOrders++
+        await timed(latencies, () => stack.status(shared.data.orderId))
+      }
       await runtime.webhooks.idle(namespace)
       if (testNumber % options.idleLeftoverEvery !== 0) {
         await fetch(new Request(`${BASE}/__admin/namespaces/${namespace}`, { method: "DELETE" }))
@@ -144,6 +166,7 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
       if (spent < intervalMs) await options.sleep(intervalMs - spent)
     }
     const resources = runtime.resources()
+    const defaultState = runtime.instance().state
     const windowPushLatencies = pushLatencies.slice(windowPushLatencyStart)
     const row: SoakWindow = {
       window: w + 1,
@@ -160,6 +183,16 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
       records: resources.records,
       journalEntries: resources.journalEntries,
       webhooksPending: resources.webhooksPending,
+      defaultOrders,
+      defaultRecords:
+        defaultState.orders.count() +
+        defaultState.rxIndex.count() +
+        defaultState.tokens.count() +
+        defaultState.apiUsers.count() +
+        defaultState.pendingIntake.count() -
+        defaultRecordsAtStart,
+      defaultTokens: defaultState.tokens.count(),
+      recordLimitRefusals: resources.recordLimitRefusals,
     }
     windows.push(row)
     options.log?.(JSON.stringify(row))
@@ -171,21 +204,33 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
   const p95DriftPct = baseline.p95Ms > 0 ? (p95DriftMs / baseline.p95Ms) * 100 : 0
   const heapGrowthMb = last.heapMb - baseline.heapMb
   const p99Ms = Math.max(...windows.slice(1).map((w) => w.p99Ms), 0)
+  const maxMs = Math.max(...windows.slice(1).map((w) => w.maxMs), 0)
   const pushP95Ms = Math.max(...windows.map((w) => w.pushP95Ms))
   const maxNamespaces = Math.max(...windows.map((w) => w.namespaces))
-  const reasons: string[] = []
-  if (p95DriftPct > 10 && p95DriftMs > 2)
-    reasons.push(`p95 drifted ${p95DriftPct.toFixed(1)}% (${p95DriftMs.toFixed(2)} ms)`)
-  if (p99Ms > 50) reasons.push(`p99 ${p99Ms.toFixed(1)} ms is over 50 ms`)
-  if (heapGrowthMb > 50) reasons.push(`heap grew ${heapGrowthMb.toFixed(1)} MB after warm-up`)
-  if (pushP95Ms > 1_000) reasons.push(`push p95 ${pushP95Ms.toFixed(0)} ms is over 1 s`)
+  const recordsPerDefaultOrder =
+    last.defaultOrders > 0 ? last.defaultRecords / last.defaultOrders : 0
+  const resourceReasons: string[] = []
+  const timingReasons: string[] = []
+  if (p95DriftPct > 10 && p95DriftMs > P95_NOISE_FLOOR_MS)
+    timingReasons.push(`p95 drifted ${p95DriftPct.toFixed(1)}% (${p95DriftMs.toFixed(2)} ms)`)
+  if (maxMs > 50) timingReasons.push(`a call took ${maxMs.toFixed(1)} ms after warm-up, over 50 ms`)
+  if (heapGrowthMb > 50) timingReasons.push(`heap grew ${heapGrowthMb.toFixed(1)} MB after warm-up`)
+  if (pushP95Ms > 1_000) timingReasons.push(`push p95 ${pushP95Ms.toFixed(0)} ms is over 1 s`)
   const leftoverBound =
     Math.ceil(options.namespaceIdleMs / intervalMs / options.idleLeftoverEvery) + 3
   if (maxNamespaces > leftoverBound) {
-    reasons.push(
+    resourceReasons.push(
       `${maxNamespaces} live namespaces, more than the ${leftoverBound} running or idling`,
     )
   }
+  if (recordsPerDefaultOrder > 4) {
+    resourceReasons.push(
+      `the default namespace holds ${recordsPerDefaultOrder.toFixed(1)} records per order, over 4`,
+    )
+  }
+  if (last.recordLimitRefusals > 0)
+    resourceReasons.push(`${last.recordLimitRefusals} writes refused at the record cap`)
+  const reasons = [...resourceReasons, ...timingReasons]
   return {
     options: {
       durationMs: options.durationMs,
@@ -199,10 +244,15 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
       p95DriftPct,
       p95DriftMs,
       p99Ms,
+      maxMs,
       heapGrowthMb,
       pushP95Ms,
       maxNamespaces,
+      recordsPerDefaultOrder,
+      recordLimitRefusals: last.recordLimitRefusals,
       pass: reasons.length === 0,
+      resourceReasons,
+      timingReasons,
       reasons,
     },
   }

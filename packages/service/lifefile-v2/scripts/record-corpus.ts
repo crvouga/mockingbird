@@ -33,8 +33,11 @@ const strings: [RegExp, string][] = [
 
 const remapNumber = (value: number) => numbers.get(value) ?? value
 
+const VENDOR_CRASH =
+  /\S+::\S+\(\): Argument #1 \(\$\w+\) must be of type array, (\w+) given, called in \S+ on line \d+/g
+
 const sanitizeString = (value: string) => {
-  let out = value
+  let out = value.replace(VENDOR_CRASH, "Server Error: shipping must be an object, $1 given")
   for (const [pattern, replacement] of strings) out = out.replace(pattern, replacement)
   return out.replace(/\b\d{5,9}\b/g, (digits) => String(remapNumber(Number(digits))))
 }
@@ -189,6 +192,31 @@ const LOCATION_NAMES = [
 ]
 const statusesOf = (rows: Json[]) =>
   rows.map((row) => ({ id: String(row.id), label: sanitizeString(String(row.label)) }))
+const productionStatusesOf = (rows: Json[], sandbox: readonly { id: string; label: string }[]) => {
+  const shared = new Set(sandbox.map((status) => `${status.id}\u0000${status.label}`))
+  let synthetic = 0
+  return statusesOf(rows).map((status) =>
+    shared.has(`${status.id}\u0000${status.label}`)
+      ? status
+      : { id: status.id, label: `Production Status P-${String(++synthetic).padStart(2, "0")}` },
+  )
+}
+const SYNTHETIC_PRICES = [10, 20, 30] as const
+const productionShippingOf = (rows: Json[]) =>
+  rows.map((row, index) => ({
+    id: 60_001 + index,
+    name: `Production Shipping S-${index + 1}`,
+    type: row.type,
+    price: Number(row.price) === 0 ? 0 : SYNTHETIC_PRICES[index % SYNTHETIC_PRICES.length],
+    carrier: row.carrier ?? null,
+    carrierKey: row.carrierKey ?? null,
+    serviceCode: row.serviceCode ?? null,
+    visibleToDoctors: row.visibleToDoctors,
+    visibleToPatients: row.visibleToPatients,
+    sortPosition: index + 1,
+    color: null,
+  }))
+const sandboxStatuses = statusesOf(reference["sandbox-statuses"].data)
 const locationsOf = (rows: Json[], names: readonly string[]) =>
   rows.map((row, index) => ({
     id: remapNumber(Number(row.id)),
@@ -207,14 +235,14 @@ const runtimeCorpus = {
   privileges: sanitize(mePrivileges),
   catalogs: {
     sandbox: {
-      statuses: statusesOf(reference["sandbox-statuses"].data),
+      statuses: sandboxStatuses,
       locations: locationsOf(reference["sandbox-locations"].data, LOCATION_NAMES),
       shippingServices: sanitize(reference["sandbox-shipping-services"].data),
     },
     production: {
-      statuses: statusesOf(reference["prod-statuses"].data),
+      statuses: productionStatusesOf(reference["prod-statuses"].data, sandboxStatuses),
       locations: locationsOf(reference["prod-locations"].data, ["Pharmacy Main"]),
-      shippingServices: sanitize(reference["prod-shipping-services"].data),
+      shippingServices: productionShippingOf(reference["prod-shipping-services"].data),
     },
   },
 }
@@ -235,7 +263,7 @@ await writeFile(
 )
 await writeFile(
   join(PACKAGE, "corpus", "statuses.json"),
-  `${JSON.stringify({ source: "GET /api/v2/statuses on a sandbox and a production account, 2026-11-24, labels neutralised", sandbox: runtimeCorpus.catalogs.sandbox.statuses, production: runtimeCorpus.catalogs.production.statuses }, null, 2)}\n`,
+  `${JSON.stringify({ source: "GET /api/v2/statuses on a sandbox and a production account, 2026-11-24; production labels replaced with synthetic ones unless the sandbox has the same code and label", sandbox: runtimeCorpus.catalogs.sandbox.statuses, production: runtimeCorpus.catalogs.production.statuses }, null, 2)}\n`,
 )
 await writeFile(
   join(PACKAGE, "src", "corpus", "reference.json"),
