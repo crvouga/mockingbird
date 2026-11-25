@@ -1,0 +1,583 @@
+{
+  "source": "GET /api/v2/statuses on a sandbox and a production account, 2026-11-24; production labels replaced with synthetic ones unless the sandbox has the same code and label",
+  "sandbox": [
+    {
+      "id": "be584",
+      "label": " Sandbox Status A-001"
+    },
+    {
+      "id": "be706",
+      "label": " Sandbox Status B-001"
+    },
+    {
+      "id": "bf90f",
+      "label": "Auto Invoice Expired"
+    },
+    {
+      "id": "b92c8",
+      "label": "Auto Invoice Paid"
+    },
+    {
+      "id": "bb73d",
+      "label": "Auto Payment"
+    },
+    {
+      "id": "b4ffc",
+      "label": "Auto Payment Expired"
+    },
+    {
+      "id": "b9cc1",
+      "label": "Auto Payment Failed"
+    },
+    {
+      "id": "bfe73",
+      "label": "Auto Print Manifest"
+    },
+    {
+      "id": "b335f",
+      "label": "Auto-Invoicing"
+    },
+    {
+      "id": "ba9a6",
+      "label": "AutomaticR - Temporal"
+    },
+    {
+      "id": "cmpro",
+      "label": "Complete Processing"
+    },
+    {
+      "id": "pro",
+      "label": "Completed Orders"
+    },
+    {
+      "id": "del",
+      "label": "Deleted"
+    },
+    {
+      "id": "fut",
+      "label": "Future Orders"
+    },
+    {
+      "id": "b6ea2",
+      "label": "HOUSE ACCOUNT  AUTO PAYMENT CC FAILED "
+    },
+    {
+      "id": "b1068",
+      "label": "HOUSE ACCOUNT AUTO INVOICE FAILED "
+    },
+    {
+      "id": "b98b2",
+      "label": "HOUSE ACCOUNT AUTO INVOICE PART SUCCESSFUL "
+    },
+    {
+      "id": "b18d8",
+      "label": "HOUSE ACCOUNT AUTO INVOICE PENDING "
+    },
+    {
+      "id": "ba8ab",
+      "label": "HOUSE ACCOUNT AUTO INVOICE SUCCESSFUL "
+    },
+    {
+      "id": "bf749",
+      "label": "HOUSE ACCOUNT AUTO PAYMENT FAILED "
+    },
+    {
+      "id": "b2633",
+      "label": "HOUSE ACCOUNT AUTO PAYMENT PART SUCCESSFUL "
+    },
+    {
+      "id": "bb6f0",
+      "label": "HOUSE ACCOUNT AUTO PAYMENT PENDING "
+    },
+    {
+      "id": "bf5f8",
+      "label": "HOUSE ACCOUNT AUTO PAYMENT SUCCESSFUL "
+    },
+    {
+      "id": "inc",
+      "label": "Incomp Orders"
+    },
+    {
+      "id": "bec8c",
+      "label": "Missing Sig 1"
+    },
+    {
+      "id": "bcfec",
+      "label": "New BHRT Fax"
+    },
+    {
+      "id": "b6f3e",
+      "label": "New Doctor Portal"
+    },
+    {
+      "id": "b3644",
+      "label": "New EMR interfaces"
+    },
+    {
+      "id": "pehco",
+      "label": "New eRx Pending Hard Copy"
+    },
+    {
+      "id": "new",
+      "label": "New Order"
+    },
+    {
+      "id": "b0451",
+      "label": "New SureScripts"
+    },
+    {
+      "id": "b149e",
+      "label": "New VIP Dr. Smith"
+    },
+    {
+      "id": "b06eb",
+      "label": "Online Order Confirmation Expired"
+    },
+    {
+      "id": "b6c98",
+      "label": "Online Order Confirmation Pending"
+    },
+    {
+      "id": "ba4f2",
+      "label": "Online Order Confirmation Successful"
+    },
+    {
+      "id": "b1385",
+      "label": "Patient Callback 1D"
+    },
+    {
+      "id": "b7ef6",
+      "label": "Patient Callback 3D"
+    },
+    {
+      "id": "bb73c",
+      "label": "Patient Callback 5D"
+    },
+    {
+      "id": "b3905",
+      "label": "Patient Contact"
+    },
+    {
+      "id": "b4000",
+      "label": "Patient Issue"
+    },
+    {
+      "id": "pen",
+      "label": "Pending Orders"
+    },
+    {
+      "id": "rec",
+      "label": "Reconciled"
+    },
+    {
+      "id": "b94f6",
+      "label": "Refill Req 3d Day 3"
+    },
+    {
+      "id": "refre",
+      "label": "Refill Request"
+    },
+    {
+      "id": "bfa83",
+      "label": "Sandbox Status A-10"
+    },
+    {
+      "id": "bfc49",
+      "label": "Sandbox Status A-11"
+    },
+    {
+      "id": "b1f50",
+      "label": "Sandbox Status A-12"
+    },
+    {
+      "id": "bacf4",
+      "label": "Sandbox Status A-13"
+    },
+    {
+      "id": "b6d0f",
+      "label": "Sandbox Status A-14"
+    },
+    {
+      "id": "b8d6d",
+      "label": "Sandbox Status A-15"
+    },
+    {
+      "id": "b437d",
+      "label": "Sandbox Status A-16"
+    },
+    {
+      "id": "bd79a",
+      "label": "Sandbox Status A-17"
+    },
+    {
+      "id": "ba9b7",
+      "label": "Sandbox Status A-18"
+    },
+    {
+      "id": "b65cc",
+      "label": "Sandbox Status A-19"
+    },
+    {
+      "id": "b537d",
+      "label": "Sandbox Status A-20"
+    },
+    {
+      "id": "b299a",
+      "label": "Sandbox Status A-21"
+    },
+    {
+      "id": "b731c",
+      "label": "Sandbox Status A-22"
+    },
+    {
+      "id": "b1e6e",
+      "label": "Sandbox Status A-23"
+    },
+    {
+      "id": "bc603",
+      "label": "Sandbox Status A-24"
+    },
+    {
+      "id": "b8248",
+      "label": "Sandbox Status A-25"
+    },
+    {
+      "id": "b5f2c",
+      "label": "Sandbox Status A-4"
+    },
+    {
+      "id": "bedfb",
+      "label": "Sandbox Status A-5"
+    },
+    {
+      "id": "b2ca6",
+      "label": "Sandbox Status A-6"
+    },
+    {
+      "id": "ba8e8",
+      "label": "Sandbox Status A-7"
+    },
+    {
+      "id": "b7a53",
+      "label": "Sandbox Status A-8"
+    },
+    {
+      "id": "be2a2",
+      "label": "Sandbox Status A-9"
+    },
+    {
+      "id": "b1efa",
+      "label": "Sandbox Status B-10"
+    },
+    {
+      "id": "b22fb",
+      "label": "Sandbox Status B-11"
+    },
+    {
+      "id": "b024d",
+      "label": "Sandbox Status B-12"
+    },
+    {
+      "id": "be205",
+      "label": "Sandbox Status B-13"
+    },
+    {
+      "id": "b1cc3",
+      "label": "Sandbox Status B-14"
+    },
+    {
+      "id": "ba3d6",
+      "label": "Sandbox Status B-15"
+    },
+    {
+      "id": "b89fc",
+      "label": "Sandbox Status B-16"
+    },
+    {
+      "id": "b4fac",
+      "label": "Sandbox Status B-17"
+    },
+    {
+      "id": "b1e48",
+      "label": "Sandbox Status B-18"
+    },
+    {
+      "id": "be515",
+      "label": "Sandbox Status B-19"
+    },
+    {
+      "id": "b5055",
+      "label": "Sandbox Status B-20"
+    },
+    {
+      "id": "bdc58",
+      "label": "Sandbox Status B-21"
+    },
+    {
+      "id": "b8b40",
+      "label": "Sandbox Status B-22"
+    },
+    {
+      "id": "b2cbc",
+      "label": "Sandbox Status B-23"
+    },
+    {
+      "id": "b4a21",
+      "label": "Sandbox Status B-24"
+    },
+    {
+      "id": "b2b38",
+      "label": "Sandbox Status B-25"
+    },
+    {
+      "id": "bd5cf",
+      "label": "Sandbox Status B-4"
+    },
+    {
+      "id": "bb137",
+      "label": "Sandbox Status B-5"
+    },
+    {
+      "id": "b4ea0",
+      "label": "Sandbox Status B-6"
+    },
+    {
+      "id": "b2dac",
+      "label": "Sandbox Status B-7"
+    },
+    {
+      "id": "bb6ed",
+      "label": "Sandbox Status B-8"
+    },
+    {
+      "id": "b8e82",
+      "label": "Sandbox Status B-9"
+    },
+    {
+      "id": "unf",
+      "label": "Unfillable Orders"
+    }
+  ],
+  "production": [
+    {
+      "id": "bd79a",
+      "label": "Production Status P-01"
+    },
+    {
+      "id": "b6d76",
+      "label": "Production Status P-02"
+    },
+    {
+      "id": "1ff1d",
+      "label": "Production Status P-03"
+    },
+    {
+      "id": "ba4f2",
+      "label": "Production Status P-04"
+    },
+    {
+      "id": "bc603",
+      "label": "Production Status P-05"
+    },
+    {
+      "id": "b65cc",
+      "label": "Production Status P-06"
+    },
+    {
+      "id": "b299a",
+      "label": "Production Status P-07"
+    },
+    {
+      "id": "bfe2d",
+      "label": "Production Status P-08"
+    },
+    {
+      "id": "be515",
+      "label": "Production Status P-09"
+    },
+    {
+      "id": "b1e48",
+      "label": "Production Status P-10"
+    },
+    {
+      "id": "b437d",
+      "label": "Production Status P-11"
+    },
+    {
+      "id": "bc410",
+      "label": "Production Status P-12"
+    },
+    {
+      "id": "pro",
+      "label": "Completed Orders"
+    },
+    {
+      "id": "del",
+      "label": "Deleted"
+    },
+    {
+      "id": "b17c2",
+      "label": "Production Status P-13"
+    },
+    {
+      "id": "98f13",
+      "label": "Production Status P-14"
+    },
+    {
+      "id": "b2b38",
+      "label": "Production Status P-15"
+    },
+    {
+      "id": "bfe73",
+      "label": "Production Status P-16"
+    },
+    {
+      "id": "be7b2",
+      "label": "Production Status P-17"
+    },
+    {
+      "id": "b2ca6",
+      "label": "Production Status P-18"
+    },
+    {
+      "id": "b5f2c",
+      "label": "Production Status P-19"
+    },
+    {
+      "id": "b4a21",
+      "label": "Production Status P-20"
+    },
+    {
+      "id": "ba8ab",
+      "label": "Production Status P-21"
+    },
+    {
+      "id": "bd490",
+      "label": "Production Status P-22"
+    },
+    {
+      "id": "nof1",
+      "label": "Production Status P-23"
+    },
+    {
+      "id": "nof2",
+      "label": "Production Status P-24"
+    },
+    {
+      "id": "nof14",
+      "label": "Production Status P-25"
+    },
+    {
+      "id": "newre",
+      "label": "Production Status P-26"
+    },
+    {
+      "id": "new",
+      "label": "New Order"
+    },
+    {
+      "id": "nores",
+      "label": "Production Status P-27"
+    },
+    {
+      "id": "c74d9",
+      "label": "Production Status P-28"
+    },
+    {
+      "id": "b884d",
+      "label": "Production Status P-29"
+    },
+    {
+      "id": "b4ffc",
+      "label": "Production Status P-30"
+    },
+    {
+      "id": "bb73d",
+      "label": "Production Status P-31"
+    },
+    {
+      "id": "b9cc1",
+      "label": "Production Status P-32"
+    },
+    {
+      "id": "b6826",
+      "label": "Production Status P-33"
+    },
+    {
+      "id": "3c59d",
+      "label": "Production Status P-34"
+    },
+    {
+      "id": "b2cbc",
+      "label": "Production Status P-35"
+    },
+    {
+      "id": "b18d8",
+      "label": "Production Status P-36"
+    },
+    {
+      "id": "b6ea2",
+      "label": "Production Status P-37"
+    },
+    {
+      "id": "rec",
+      "label": "Reconciled"
+    },
+    {
+      "id": "refre",
+      "label": "Refill Request"
+    },
+    {
+      "id": "b98b2",
+      "label": "Production Status P-38"
+    },
+    {
+      "id": "b2633",
+      "label": "Production Status P-39"
+    },
+    {
+      "id": "ba01a",
+      "label": "Production Status P-40"
+    },
+    {
+      "id": "b1068",
+      "label": "Production Status P-41"
+    },
+    {
+      "id": "b00ac",
+      "label": "Production Status P-42"
+    },
+    {
+      "id": "8e296",
+      "label": "Production Status P-43"
+    },
+    {
+      "id": "b8248",
+      "label": "Production Status P-44"
+    },
+    {
+      "id": "be706",
+      "label": "Production Status P-45"
+    },
+    {
+      "id": "b8b40",
+      "label": "Production Status P-46"
+    },
+    {
+      "id": "bf7ca",
+      "label": "Production Status P-47"
+    },
+    {
+      "id": "b4fac",
+      "label": "Production Status P-48"
+    },
+    {
+      "id": "ba9b7",
+      "label": "Production Status P-49"
+    },
+    {
+      "id": "unf",
+      "label": "Unfillable Orders"
+    }
+  ]
+}

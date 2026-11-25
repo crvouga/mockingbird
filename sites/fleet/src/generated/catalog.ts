@@ -548,6 +548,14 @@ export const CATALOG: readonly CatalogEntry[] = [
     "docs": "https://github.com/RevelationPharma/lifefile-example"
   },
   {
+    "target": "lifefile-v2",
+    "package": "@crvouga/mockingbird-service-lifefile-v2",
+    "displayName": "LifeFile API v2",
+    "category": "pharmacy",
+    "description": "Stateful emulator of the LifeFile pharmacy API v2, matched to recorded sandbox replies: OAuth2 client-credentials tokens with idle expiry and secret rotation, order create with field-keyed validation and no deduplication, rx-UUID search, status writes with the fast-track cancel window, shipping updates, reference lists, privileges, and Basic-auth Data Push with a provisional payload.",
+    "website": "https://www.lifefile.net"
+  },
+  {
     "target": "linear",
     "package": "@crvouga/mockingbird-service-linear",
     "displayName": "Linear",

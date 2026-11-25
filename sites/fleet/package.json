@@ -80,6 +80,7 @@
     "@crvouga/mockingbird-service-kms": "workspace:*",
     "@crvouga/mockingbird-service-lambda": "workspace:*",
     "@crvouga/mockingbird-service-lifefile": "workspace:*",
+    "@crvouga/mockingbird-service-lifefile-v2": "workspace:*",
     "@crvouga/mockingbird-service-linear": "workspace:*",
     "@crvouga/mockingbird-service-livekit": "workspace:*",
     "@crvouga/mockingbird-service-llamacloud": "workspace:*",

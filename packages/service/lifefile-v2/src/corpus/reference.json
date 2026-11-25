@@ -1,0 +1,926 @@
+{
+  "version": "lifefile-v2-2026-11-24",
+  "vendorId": 10001,
+  "practice": {
+    "id": 900001,
+    "name": "Sandbox API Practice - SBX-PRA-SYNTHETIC0001"
+  },
+  "apiUserId": 200001,
+  "privileges": [
+    {
+      "id": "auth.me",
+      "description": "View the current authenticated API user, bearer token metadata, and live API privileges."
+    },
+    {
+      "id": "auth.secret.rotate",
+      "description": "Rotate the authenticated API user secret and revoke all active bearer tokens for that user."
+    },
+    {
+      "id": "auth.token.revoke",
+      "description": "Revoke the currently authenticated bearer token."
+    },
+    {
+      "id": "locations.list",
+      "description": "List active vendor locations."
+    },
+    {
+      "id": "locations.view",
+      "description": "View one active vendor location."
+    },
+    {
+      "id": "order-statuses.list",
+      "description": "List active vendor order statuses."
+    },
+    {
+      "id": "orders.create",
+      "description": "Create new orders."
+    },
+    {
+      "id": "orders.document.pages.append",
+      "description": "Append supplemental PDF pages to an Order document."
+    },
+    {
+      "id": "orders.document.view",
+      "description": "View an Order document."
+    },
+    {
+      "id": "orders.link.update",
+      "description": "Create or update linked-order relationships."
+    },
+    {
+      "id": "orders.list",
+      "description": "List orders."
+    },
+    {
+      "id": "orders.shipping.update",
+      "description": "Update order shipping data."
+    },
+    {
+      "id": "orders.shipping.view",
+      "description": "View order shipping data."
+    },
+    {
+      "id": "orders.status.update",
+      "description": "Update order statuses."
+    },
+    {
+      "id": "orders.status.view",
+      "description": "View current order statuses."
+    },
+    {
+      "id": "orders.view",
+      "description": "View one order."
+    },
+    {
+      "id": "pricing.quote",
+      "description": "Create pricing quotes."
+    },
+    {
+      "id": "shipping-services.list",
+      "description": "List active vendor shipping and handling services."
+    },
+    {
+      "id": "utility.ping",
+      "description": "Check authenticated API connectivity."
+    }
+  ],
+  "catalogs": {
+    "sandbox": {
+      "statuses": [
+        {
+          "id": "be584",
+          "label": " Sandbox Status A-001"
+        },
+        {
+          "id": "be706",
+          "label": " Sandbox Status B-001"
+        },
+        {
+          "id": "bf90f",
+          "label": "Auto Invoice Expired"
+        },
+        {
+          "id": "b92c8",
+          "label": "Auto Invoice Paid"
+        },
+        {
+          "id": "bb73d",
+          "label": "Auto Payment"
+        },
+        {
+          "id": "b4ffc",
+          "label": "Auto Payment Expired"
+        },
+        {
+          "id": "b9cc1",
+          "label": "Auto Payment Failed"
+        },
+        {
+          "id": "bfe73",
+          "label": "Auto Print Manifest"
+        },
+        {
+          "id": "b335f",
+          "label": "Auto-Invoicing"
+        },
+        {
+          "id": "ba9a6",
+          "label": "AutomaticR - Temporal"
+        },
+        {
+          "id": "cmpro",
+          "label": "Complete Processing"
+        },
+        {
+          "id": "pro",
+          "label": "Completed Orders"
+        },
+        {
+          "id": "del",
+          "label": "Deleted"
+        },
+        {
+          "id": "fut",
+          "label": "Future Orders"
+        },
+        {
+          "id": "b6ea2",
+          "label": "HOUSE ACCOUNT  AUTO PAYMENT CC FAILED "
+        },
+        {
+          "id": "b1068",
+          "label": "HOUSE ACCOUNT AUTO INVOICE FAILED "
+        },
+        {
+          "id": "b98b2",
+          "label": "HOUSE ACCOUNT AUTO INVOICE PART SUCCESSFUL "
+        },
+        {
+          "id": "b18d8",
+          "label": "HOUSE ACCOUNT AUTO INVOICE PENDING "
+        },
+        {
+          "id": "ba8ab",
+          "label": "HOUSE ACCOUNT AUTO INVOICE SUCCESSFUL "
+        },
+        {
+          "id": "bf749",
+          "label": "HOUSE ACCOUNT AUTO PAYMENT FAILED "
+        },
+        {
+          "id": "b2633",
+          "label": "HOUSE ACCOUNT AUTO PAYMENT PART SUCCESSFUL "
+        },
+        {
+          "id": "bb6f0",
+          "label": "HOUSE ACCOUNT AUTO PAYMENT PENDING "
+        },
+        {
+          "id": "bf5f8",
+          "label": "HOUSE ACCOUNT AUTO PAYMENT SUCCESSFUL "
+        },
+        {
+          "id": "inc",
+          "label": "Incomp Orders"
+        },
+        {
+          "id": "bec8c",
+          "label": "Missing Sig 1"
+        },
+        {
+          "id": "bcfec",
+          "label": "New BHRT Fax"
+        },
+        {
+          "id": "b6f3e",
+          "label": "New Doctor Portal"
+        },
+        {
+          "id": "b3644",
+          "label": "New EMR interfaces"
+        },
+        {
+          "id": "pehco",
+          "label": "New eRx Pending Hard Copy"
+        },
+        {
+          "id": "new",
+          "label": "New Order"
+        },
+        {
+          "id": "b0451",
+          "label": "New SureScripts"
+        },
+        {
+          "id": "b149e",
+          "label": "New VIP Dr. Smith"
+        },
+        {
+          "id": "b06eb",
+          "label": "Online Order Confirmation Expired"
+        },
+        {
+          "id": "b6c98",
+          "label": "Online Order Confirmation Pending"
+        },
+        {
+          "id": "ba4f2",
+          "label": "Online Order Confirmation Successful"
+        },
+        {
+          "id": "b1385",
+          "label": "Patient Callback 1D"
+        },
+        {
+          "id": "b7ef6",
+          "label": "Patient Callback 3D"
+        },
+        {
+          "id": "bb73c",
+          "label": "Patient Callback 5D"
+        },
+        {
+          "id": "b3905",
+          "label": "Patient Contact"
+        },
+        {
+          "id": "b4000",
+          "label": "Patient Issue"
+        },
+        {
+          "id": "pen",
+          "label": "Pending Orders"
+        },
+        {
+          "id": "rec",
+          "label": "Reconciled"
+        },
+        {
+          "id": "b94f6",
+          "label": "Refill Req 3d Day 3"
+        },
+        {
+          "id": "refre",
+          "label": "Refill Request"
+        },
+        {
+          "id": "bfa83",
+          "label": "Sandbox Status A-10"
+        },
+        {
+          "id": "bfc49",
+          "label": "Sandbox Status A-11"
+        },
+        {
+          "id": "b1f50",
+          "label": "Sandbox Status A-12"
+        },
+        {
+          "id": "bacf4",
+          "label": "Sandbox Status A-13"
+        },
+        {
+          "id": "b6d0f",
+          "label": "Sandbox Status A-14"
+        },
+        {
+          "id": "b8d6d",
+          "label": "Sandbox Status A-15"
+        },
+        {
+          "id": "b437d",
+          "label": "Sandbox Status A-16"
+        },
+        {
+          "id": "bd79a",
+          "label": "Sandbox Status A-17"
+        },
+        {
+          "id": "ba9b7",
+          "label": "Sandbox Status A-18"
+        },
+        {
+          "id": "b65cc",
+          "label": "Sandbox Status A-19"
+        },
+        {
+          "id": "b537d",
+          "label": "Sandbox Status A-20"
+        },
+        {
+          "id": "b299a",
+          "label": "Sandbox Status A-21"
+        },
+        {
+          "id": "b731c",
+          "label": "Sandbox Status A-22"
+        },
+        {
+          "id": "b1e6e",
+          "label": "Sandbox Status A-23"
+        },
+        {
+          "id": "bc603",
+          "label": "Sandbox Status A-24"
+        },
+        {
+          "id": "b8248",
+          "label": "Sandbox Status A-25"
+        },
+        {
+          "id": "b5f2c",
+          "label": "Sandbox Status A-4"
+        },
+        {
+          "id": "bedfb",
+          "label": "Sandbox Status A-5"
+        },
+        {
+          "id": "b2ca6",
+          "label": "Sandbox Status A-6"
+        },
+        {
+          "id": "ba8e8",
+          "label": "Sandbox Status A-7"
+        },
+        {
+          "id": "b7a53",
+          "label": "Sandbox Status A-8"
+        },
+        {
+          "id": "be2a2",
+          "label": "Sandbox Status A-9"
+        },
+        {
+          "id": "b1efa",
+          "label": "Sandbox Status B-10"
+        },
+        {
+          "id": "b22fb",
+          "label": "Sandbox Status B-11"
+        },
+        {
+          "id": "b024d",
+          "label": "Sandbox Status B-12"
+        },
+        {
+          "id": "be205",
+          "label": "Sandbox Status B-13"
+        },
+        {
+          "id": "b1cc3",
+          "label": "Sandbox Status B-14"
+        },
+        {
+          "id": "ba3d6",
+          "label": "Sandbox Status B-15"
+        },
+        {
+          "id": "b89fc",
+          "label": "Sandbox Status B-16"
+        },
+        {
+          "id": "b4fac",
+          "label": "Sandbox Status B-17"
+        },
+        {
+          "id": "b1e48",
+          "label": "Sandbox Status B-18"
+        },
+        {
+          "id": "be515",
+          "label": "Sandbox Status B-19"
+        },
+        {
+          "id": "b5055",
+          "label": "Sandbox Status B-20"
+        },
+        {
+          "id": "bdc58",
+          "label": "Sandbox Status B-21"
+        },
+        {
+          "id": "b8b40",
+          "label": "Sandbox Status B-22"
+        },
+        {
+          "id": "b2cbc",
+          "label": "Sandbox Status B-23"
+        },
+        {
+          "id": "b4a21",
+          "label": "Sandbox Status B-24"
+        },
+        {
+          "id": "b2b38",
+          "label": "Sandbox Status B-25"
+        },
+        {
+          "id": "bd5cf",
+          "label": "Sandbox Status B-4"
+        },
+        {
+          "id": "bb137",
+          "label": "Sandbox Status B-5"
+        },
+        {
+          "id": "b4ea0",
+          "label": "Sandbox Status B-6"
+        },
+        {
+          "id": "b2dac",
+          "label": "Sandbox Status B-7"
+        },
+        {
+          "id": "bb6ed",
+          "label": "Sandbox Status B-8"
+        },
+        {
+          "id": "b8e82",
+          "label": "Sandbox Status B-9"
+        },
+        {
+          "id": "unf",
+          "label": "Unfillable Orders"
+        }
+      ],
+      "locations": [
+        {
+          "id": 100001,
+          "name": "Sandbox Pharmacy North",
+          "shortName": "LF_North"
+        },
+        {
+          "id": 100002,
+          "name": "Sandbox Pharmacy North 2",
+          "shortName": "LF_North_2"
+        },
+        {
+          "id": 100003,
+          "name": "Sandbox Pharmacy South",
+          "shortName": "LF South"
+        }
+      ],
+      "shippingServices": [
+        {
+          "id": 999,
+          "name": "Delivery",
+          "type": "shipping",
+          "price": 0,
+          "carrier": null,
+          "carrierKey": null,
+          "serviceCode": null,
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 5,
+          "color": "912121"
+        },
+        {
+          "id": 7486,
+          "name": "EASYPOST - UPS - 2ND DAY AIR",
+          "type": "shipping",
+          "price": 41.99,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-UPS",
+          "serviceCode": "2ndDayAir",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 10,
+          "color": null
+        },
+        {
+          "id": 7484,
+          "name": "EASYPOST - UPS - GROUND",
+          "type": "shipping",
+          "price": 4.15,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-UPS",
+          "serviceCode": "Ground",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 25,
+          "color": null
+        },
+        {
+          "id": 7487,
+          "name": "EASYPOST - UPS - NEXT DAY AIR",
+          "type": "shipping",
+          "price": 72.8,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-UPS",
+          "serviceCode": "NextDayAir",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 15,
+          "color": null
+        },
+        {
+          "id": 7485,
+          "name": "EASYPOST - UPS - STANDARD",
+          "type": "shipping",
+          "price": 6.99,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-UPS",
+          "serviceCode": "UPSStandard",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 30,
+          "color": null
+        },
+        {
+          "id": 7321,
+          "name": "EASYPOST - USPS - EXPRESS",
+          "type": "shipping",
+          "price": 4.99,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-USPS",
+          "serviceCode": "Express",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 20,
+          "color": null
+        },
+        {
+          "id": 7319,
+          "name": "EASYPOST - USPS - GROUND ADVANTAGE",
+          "type": "shipping",
+          "price": 5.99,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-USPS",
+          "serviceCode": "GroundAdvantage",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 45,
+          "color": null
+        },
+        {
+          "id": 9,
+          "name": "Pharmacy pickup",
+          "type": "shipping",
+          "price": 0,
+          "carrier": null,
+          "carrierKey": null,
+          "serviceCode": null,
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 0,
+          "color": null
+        },
+        {
+          "id": 7267,
+          "name": "Small Cooler + 1 ice ",
+          "type": "handling",
+          "price": 7,
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "weight": 2,
+          "sortPosition": 50
+        },
+        {
+          "id": 7268,
+          "name": "Small Cooler + 2 ice ",
+          "type": "handling",
+          "price": 14,
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "weight": 2,
+          "sortPosition": 55
+        },
+        {
+          "id": 7269,
+          "name": "Small Cooler + 3 ice ",
+          "type": "handling",
+          "price": 21,
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "weight": 2,
+          "sortPosition": 60
+        }
+      ]
+    },
+    "production": {
+      "statuses": [
+        {
+          "id": "bd79a",
+          "label": "Production Status P-01"
+        },
+        {
+          "id": "b6d76",
+          "label": "Production Status P-02"
+        },
+        {
+          "id": "1ff1d",
+          "label": "Production Status P-03"
+        },
+        {
+          "id": "ba4f2",
+          "label": "Production Status P-04"
+        },
+        {
+          "id": "bc603",
+          "label": "Production Status P-05"
+        },
+        {
+          "id": "b65cc",
+          "label": "Production Status P-06"
+        },
+        {
+          "id": "b299a",
+          "label": "Production Status P-07"
+        },
+        {
+          "id": "bfe2d",
+          "label": "Production Status P-08"
+        },
+        {
+          "id": "be515",
+          "label": "Production Status P-09"
+        },
+        {
+          "id": "b1e48",
+          "label": "Production Status P-10"
+        },
+        {
+          "id": "b437d",
+          "label": "Production Status P-11"
+        },
+        {
+          "id": "bc410",
+          "label": "Production Status P-12"
+        },
+        {
+          "id": "pro",
+          "label": "Completed Orders"
+        },
+        {
+          "id": "del",
+          "label": "Deleted"
+        },
+        {
+          "id": "b17c2",
+          "label": "Production Status P-13"
+        },
+        {
+          "id": "98f13",
+          "label": "Production Status P-14"
+        },
+        {
+          "id": "b2b38",
+          "label": "Production Status P-15"
+        },
+        {
+          "id": "bfe73",
+          "label": "Production Status P-16"
+        },
+        {
+          "id": "be7b2",
+          "label": "Production Status P-17"
+        },
+        {
+          "id": "b2ca6",
+          "label": "Production Status P-18"
+        },
+        {
+          "id": "b5f2c",
+          "label": "Production Status P-19"
+        },
+        {
+          "id": "b4a21",
+          "label": "Production Status P-20"
+        },
+        {
+          "id": "ba8ab",
+          "label": "Production Status P-21"
+        },
+        {
+          "id": "bd490",
+          "label": "Production Status P-22"
+        },
+        {
+          "id": "nof1",
+          "label": "Production Status P-23"
+        },
+        {
+          "id": "nof2",
+          "label": "Production Status P-24"
+        },
+        {
+          "id": "nof14",
+          "label": "Production Status P-25"
+        },
+        {
+          "id": "newre",
+          "label": "Production Status P-26"
+        },
+        {
+          "id": "new",
+          "label": "New Order"
+        },
+        {
+          "id": "nores",
+          "label": "Production Status P-27"
+        },
+        {
+          "id": "c74d9",
+          "label": "Production Status P-28"
+        },
+        {
+          "id": "b884d",
+          "label": "Production Status P-29"
+        },
+        {
+          "id": "b4ffc",
+          "label": "Production Status P-30"
+        },
+        {
+          "id": "bb73d",
+          "label": "Production Status P-31"
+        },
+        {
+          "id": "b9cc1",
+          "label": "Production Status P-32"
+        },
+        {
+          "id": "b6826",
+          "label": "Production Status P-33"
+        },
+        {
+          "id": "3c59d",
+          "label": "Production Status P-34"
+        },
+        {
+          "id": "b2cbc",
+          "label": "Production Status P-35"
+        },
+        {
+          "id": "b18d8",
+          "label": "Production Status P-36"
+        },
+        {
+          "id": "b6ea2",
+          "label": "Production Status P-37"
+        },
+        {
+          "id": "rec",
+          "label": "Reconciled"
+        },
+        {
+          "id": "refre",
+          "label": "Refill Request"
+        },
+        {
+          "id": "b98b2",
+          "label": "Production Status P-38"
+        },
+        {
+          "id": "b2633",
+          "label": "Production Status P-39"
+        },
+        {
+          "id": "ba01a",
+          "label": "Production Status P-40"
+        },
+        {
+          "id": "b1068",
+          "label": "Production Status P-41"
+        },
+        {
+          "id": "b00ac",
+          "label": "Production Status P-42"
+        },
+        {
+          "id": "8e296",
+          "label": "Production Status P-43"
+        },
+        {
+          "id": "b8248",
+          "label": "Production Status P-44"
+        },
+        {
+          "id": "be706",
+          "label": "Production Status P-45"
+        },
+        {
+          "id": "b8b40",
+          "label": "Production Status P-46"
+        },
+        {
+          "id": "bf7ca",
+          "label": "Production Status P-47"
+        },
+        {
+          "id": "b4fac",
+          "label": "Production Status P-48"
+        },
+        {
+          "id": "ba9b7",
+          "label": "Production Status P-49"
+        },
+        {
+          "id": "unf",
+          "label": "Unfillable Orders"
+        }
+      ],
+      "locations": [
+        {
+          "id": 100101,
+          "name": "Pharmacy Main",
+          "shortName": "Pharmacy"
+        }
+      ],
+      "shippingServices": [
+        {
+          "id": 60001,
+          "name": "Production Shipping S-1",
+          "type": "shipping",
+          "price": 10,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-FEDEX",
+          "serviceCode": "STANDARD_OVERNIGHT",
+          "visibleToDoctors": true,
+          "visibleToPatients": true,
+          "sortPosition": 1,
+          "color": null
+        },
+        {
+          "id": 60002,
+          "name": "Production Shipping S-2",
+          "type": "shipping",
+          "price": 20,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-FEDEX",
+          "serviceCode": "STANDARD_OVERNIGHT",
+          "visibleToDoctors": true,
+          "visibleToPatients": false,
+          "sortPosition": 2,
+          "color": null
+        },
+        {
+          "id": 60003,
+          "name": "Production Shipping S-3",
+          "type": "shipping",
+          "price": 30,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-FEDEX",
+          "serviceCode": "STANDARD_OVERNIGHT",
+          "visibleToDoctors": true,
+          "visibleToPatients": false,
+          "sortPosition": 3,
+          "color": null
+        },
+        {
+          "id": 60004,
+          "name": "Production Shipping S-4",
+          "type": "shipping",
+          "price": 0,
+          "carrier": null,
+          "carrierKey": null,
+          "serviceCode": null,
+          "visibleToDoctors": true,
+          "visibleToPatients": false,
+          "sortPosition": 4,
+          "color": null
+        },
+        {
+          "id": 60005,
+          "name": "Production Shipping S-5",
+          "type": "shipping",
+          "price": 0,
+          "carrier": null,
+          "carrierKey": null,
+          "serviceCode": null,
+          "visibleToDoctors": true,
+          "visibleToPatients": false,
+          "sortPosition": 5,
+          "color": null
+        },
+        {
+          "id": 60006,
+          "name": "Production Shipping S-6",
+          "type": "shipping",
+          "price": 30,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-USPS",
+          "serviceCode": "GroundAdvantage",
+          "visibleToDoctors": true,
+          "visibleToPatients": false,
+          "sortPosition": 6,
+          "color": null
+        },
+        {
+          "id": 60007,
+          "name": "Production Shipping S-7",
+          "type": "shipping",
+          "price": 10,
+          "carrier": "EASYPOST",
+          "carrierKey": "EASYPOST-USPS",
+          "serviceCode": "Priority",
+          "visibleToDoctors": true,
+          "visibleToPatients": false,
+          "sortPosition": 7,
+          "color": null
+        }
+      ]
+    }
+  }
+}
