@@ -135,6 +135,13 @@ describe("service contract", () => {
     expect(journal).not.toContain("lifefile-secret")
   })
 
+  test("with the default rate limits the journal still names the created order", async () => {
+    const { runtime, client } = boot()
+    const id = await placed(client)
+    const [entry] = runtime.journal.list({ operationId: "CreateOrder" })
+    expect(entry?.ids).toEqual({ orderId: String(id) })
+  })
+
   test("default latency is the recorded one; with virtual time a create costs ~1.3 s of mock clock and no wall time", async () => {
     const clock = createClock()
     clock.set(T0)
@@ -243,6 +250,30 @@ describe("intake on a real clock", () => {
     await new Promise((resolve) => setTimeout(resolve, 400))
     await runtime.webhooks.idle()
     expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toContain("b3644")
+  })
+
+  test("intake still happens on time after a frozen clock is released", async () => {
+    const pushes = sink()
+    const runtime = createRuntime({
+      latency: "none",
+      settings: { intake: { status: "b3644", afterMs: 200 } },
+      push: {
+        url: "http://receiver.local/webhooks/lifefile",
+        username: "push-user",
+        password: "push-pass",
+        retryDelaysMs: [0],
+        fetch: pushes.fetch,
+      },
+    })
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    runtime.namespaceClock().freeze()
+    const id = await placed(client)
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    runtime.namespaceClock().unfreeze()
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    await runtime.webhooks.idle()
+    expect(runtime.instance().state.order(id)?.statusId).toBe("b3644")
+    expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toEqual(["b3644"])
   })
 })
 

@@ -444,6 +444,40 @@ describe("serve bounds a namespace without making every write slower", () => {
     expect(median(late)).toBeLessThan(Math.max(3 * median(early), 2))
   }, 120_000)
 
+  test("a 20-row order list costs about the same at 200 and 3,000 stored orders", async () => {
+    const runtime = (await serveTarget.create({ "no-latency": true }, COMMON)) as ReturnType<
+      typeof createRuntime
+    >
+    await admin(runtime, "PUT", "/settings", { rateLimits: null })
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    expect((await client.createOrder(orderBody())).ok).toBe(true)
+    const api = runtime.instance()
+    const [template] = api.orders()
+    if (!template) throw new Error("no order")
+    const grow = (to: number) => {
+      while (api.state.orderCount() < to) {
+        const { id, sequence } = api.state.nextOrderId()
+        api.state.saveOrder({ ...template, id, sequence })
+      }
+    }
+    const timedList = async () => {
+      const started = performance.now()
+      const listed = await client.call<{ data: unknown[] }>("GET", "/orders?perPage=20")
+      expect(listed.ok && listed.data.data.length).toBe(20)
+      return performance.now() - started
+    }
+    const sample = async () => {
+      const runs: number[] = []
+      for (let i = 0; i < 15; i++) runs.push(await timedList())
+      return median(runs)
+    }
+    grow(200)
+    const small = await sample()
+    grow(3_000)
+    const large = await sample()
+    expect(large).toBeLessThan(Math.max(3 * small, 40))
+  }, 120_000)
+
   test("--max-orders refuses the next order with a 507 and writes nothing", async () => {
     const runtime = (await serveTarget.create(
       { "no-latency": true, "max-orders": "3" },
@@ -515,5 +549,46 @@ describe("namespace deletion", () => {
     expect((await fresh.call("GET", "/ping")).ok).toBe(true)
     expect((await admin(runtime, "GET", "/settings")).json).toMatchObject({ catalog: "production" })
     expect(((await admin(runtime, "GET", "/api-users")).json.apiUsers as unknown[]).length).toBe(1)
+  })
+
+  const closed = () =>
+    boot({
+      settings: { catalog: "production", intake: null, timeZone: "UTC", openEnrollment: false },
+      apiUsers: [{ clientId: "stack-client", secret: "stack-secret" }],
+    })
+
+  const keepsBoot = async (
+    runtime: ReturnType<typeof createRuntime>,
+    fetch: (r: Request) => Promise<Response>,
+  ) => {
+    expect((await admin(runtime, "GET", "/settings")).json).toMatchObject({
+      catalog: "production",
+      intake: null,
+      timeZone: "UTC",
+      openEnrollment: false,
+    })
+    expect((await token(BASE, fetch, "stack-client", "stack-secret")).status).toBe(200)
+    expect((await token(BASE, fetch, "unknown-client")).status).toBe(401)
+  }
+
+  test("restoring a snapshot taken right after a reset keeps the boot settings and API users", async () => {
+    const { runtime, fetch } = closed()
+    expect((await token(BASE, fetch, "stack-client", "stack-secret")).status).toBe(200)
+    await runtime.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    expect((await admin(runtime, "POST", "/snapshots", { name: "clean" })).status).toBeLessThan(300)
+    expect((await token(BASE, fetch, "stack-client", "stack-secret")).status).toBe(200)
+    expect((await admin(runtime, "POST", "/snapshots/clean/restore")).status).toBeLessThan(300)
+    await keepsBoot(runtime, fetch)
+  })
+
+  test("checking out the first checkpoint after a reset keeps the boot settings and API users", async () => {
+    const { runtime, fetch } = closed()
+    expect((await token(BASE, fetch, "stack-client", "stack-secret")).status).toBe(200)
+    await runtime.reset()
+    expect((await token(BASE, fetch, "stack-client", "stack-secret")).status).toBe(200)
+    const first = runtime.timeline().checkpoints()[0]
+    expect(first).toBeDefined()
+    runtime.checkout(first?.id as string)
+    await keepsBoot(runtime, fetch)
   })
 })
