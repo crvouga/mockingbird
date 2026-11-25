@@ -898,7 +898,7 @@ export class LifeFileV2API implements FetchAPI {
       lastUsedAt: now,
       revoked: false,
     }
-    home.state.tokens.insert(String(claims.jti), used)
+    if (home === this) this.state.tokens.insert(String(claims.jti), used)
     this.auth.set(context.request, { user, claims, token: used })
     return undefined
   }
