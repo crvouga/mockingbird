@@ -225,7 +225,9 @@ recorded without slowing a suite.
 Namespaces by `x-mockingbird-namespace`, by `/__admin/ns/<name>/…` (use it on both the API and
 the token URL), or by client id (`PUT /__admin/credentials`; the bearer token names its client).
 Orders, tokens, users, settings and pushes live in the namespace and go with it
-(`DELETE /__admin/namespaces/<name>`). `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
+(`DELETE /__admin/namespaces/<name>`). A token works only in the namespace that issued it and only
+while its row is there: after a reset, a namespace delete or restoring a snapshot taken before it
+was issued, it answers `401` (`Token is no longer active`) and the caller signs in again. `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
 `maxSnapshots`, `checkpointMutations`, `maxOrders` and `maxApiUsers`. `serve` forgets namespaces idle
 for 30 minutes and caps each namespace (the never-forgotten default one included) at 25,000 orders
 (`--max-orders`; the next create answers `507`), 1,000 API users added by open enrollment

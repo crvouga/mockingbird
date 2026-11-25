@@ -689,7 +689,16 @@ export class LifeFileV2API implements FetchAPI {
 
   async fetch(request: Request): Promise<Response> {
     this.state.seedIfNeeded()
-    this.runDue(this.statusWriteTarget(request))
+    const target = this.statusWriteTarget(request)
+    this.runDue(target)
+    try {
+      return await this.serve(request)
+    } finally {
+      if (target !== undefined) this.runDue()
+    }
+  }
+
+  private async serve(request: Request): Promise<Response> {
     const limited = this.rateLimit(request)
     if (limited.refused) return limited.refused
     const response = await this.service.fetch(request)
@@ -826,9 +835,10 @@ export class LifeFileV2API implements FetchAPI {
       return failure(401, INACTIVE, [])
     }
     const record = this.state.tokens.get(String(claims.jti))
-    if (record?.revoked) return failure(401, INACTIVE, [])
-    const lastUsed = record?.lastUsedAt ?? claims.iat * 1000
-    if (now - lastUsed >= settings.tokenIdleSeconds * 1000) return failure(401, INACTIVE, [])
+    if (!record || record.revoked || record.clientId !== claims.sub)
+      return failure(401, INACTIVE, [])
+    if (now - record.lastUsedAt >= settings.tokenIdleSeconds * 1000)
+      return failure(401, INACTIVE, [])
     if (settings.enforceVendorId && Number(vendor) !== user.vendorId) {
       return failure(401, "Invalid X-Vendor-ID header")
     }
@@ -842,7 +852,7 @@ export class LifeFileV2API implements FetchAPI {
     const used: TokenRecord = {
       tokenId: claims.jti,
       clientId: claims.sub,
-      issuedAt: record?.issuedAt ?? claims.iat * 1000,
+      issuedAt: record.issuedAt,
       lastUsedAt: now,
       revoked: false,
     }
