@@ -603,3 +603,115 @@ describe("namespace deletion", () => {
     await keepsBoot(runtime, fetch)
   })
 })
+
+describe("a refused status write leaves due intake on time", () => {
+  const refusedThenWait = async (
+    write: (client: ReturnType<typeof consumer>, id: number) => Promise<unknown>,
+  ) => {
+    const received: string[] = []
+    const runtime = createRuntime({
+      latency: "none",
+      settings: { intake: { status: "b3644", afterMs: 300 } },
+      push: {
+        url: "http://receiver.local/webhooks/lifefile",
+        username: "push-user",
+        password: "push-pass",
+        retryDelaysMs: [0],
+        fetch: async (request: Request) => {
+          const body = (await request.json()) as { status: { id: string } }
+          received.push(body.status.id)
+          return new Response(null, { status: 200 })
+        },
+      },
+    })
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    const created = await client.createOrder(orderBody())
+    if (!created.ok) throw new Error("create failed")
+    const id = created.data.orderId
+    const until = Date.now() + 320
+    while (Date.now() < until) {}
+    await write(client, id)
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    await runtime.webhooks.idle()
+    return { status: runtime.instance().state.order(id)?.statusId, received }
+  }
+
+  test("an unknown status code (404) is followed by intake with one push", async () => {
+    const outcome = await refusedThenWait(async (client, id) => {
+      const write = await client.setStatus(id, "no-such-code")
+      expect(write.ok).toBe(false)
+      if (!write.ok) expect(write.failure.httpStatus).toBe(404)
+    })
+    expect(outcome).toEqual({ status: "b3644", received: ["b3644"] })
+  })
+
+  test("a missing status (422) is followed by intake with one push", async () => {
+    const outcome = await refusedThenWait(async (client, id) => {
+      const write = await client.call("PUT", `/orders/${id}/status`, {})
+      expect(write.ok).toBe(false)
+      if (!write.ok) expect(write.failure.httpStatus).toBe(422)
+    })
+    expect(outcome).toEqual({ status: "b3644", received: ["b3644"] })
+  })
+})
+
+describe("a bearer token lives only in the namespace state that issued it", () => {
+  const signIn = async (fetch: (r: Request) => Promise<Response>, base = BASE) =>
+    (
+      (await (await token(base, fetch, "lifefile-client", "lifefile-secret")).json()) as {
+        access_token: string
+      }
+    ).access_token
+
+  const ping = (fetch: (r: Request) => Promise<Response>, bearer: string, namespace?: string) =>
+    fetch(
+      new Request(`${BASE}/api/v2/ping`, {
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          "x-vendor-id": "10001",
+          ...(namespace ? { "x-mockingbird-namespace": namespace } : {}),
+        },
+      }),
+    ).then((r) => r.status)
+
+  const revoke = (fetch: (r: Request) => Promise<Response>, bearer: string, namespace?: string) =>
+    fetch(
+      new Request(`${BASE}/api/v2/auth/token`, {
+        method: "DELETE",
+        headers: {
+          authorization: `Bearer ${bearer}`,
+          "x-vendor-id": "10001",
+          ...(namespace ? { "x-mockingbird-namespace": namespace } : {}),
+        },
+      }),
+    ).then((r) => r.status)
+
+  test("a revoked token stays dead after a reset, and a new sign-in works", async () => {
+    const { fetch } = boot()
+    const old = await signIn(fetch)
+    expect(await revoke(fetch, old)).toBe(200)
+    expect(await ping(fetch, old)).toBe(401)
+    await fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    expect(await ping(fetch, old)).toBe(401)
+    expect(await ping(fetch, await signIn(fetch))).toBe(200)
+  })
+
+  test("a revoked token stays dead after its namespace is deleted", async () => {
+    const { fetch } = boot()
+    const base = `${BASE}/__admin/ns/ns-delete`
+    const old = await signIn(fetch, base)
+    expect(await revoke(fetch, old, "ns-delete")).toBe(200)
+    expect(
+      (await fetch(new Request(`${BASE}/__admin/namespaces/ns-delete`, { method: "DELETE" })))
+        .status,
+    ).toBe(200)
+    expect(await ping(fetch, old, "ns-delete")).toBe(401)
+  })
+
+  test("a token from one namespace is refused in another", async () => {
+    const { fetch } = boot()
+    const bearer = await signIn(fetch)
+    expect(await ping(fetch, bearer)).toBe(200)
+    expect(await ping(fetch, bearer, "other-ns")).toBe(401)
+  })
+})
