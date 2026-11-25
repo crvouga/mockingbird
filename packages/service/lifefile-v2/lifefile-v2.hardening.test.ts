@@ -775,6 +775,34 @@ describe("a bearer token lives only in the namespace state that issued it", () =
     expect(await ping(fetch, old)).toBe(401)
   })
 
+  test("two runtimes with the same seed and frozen clock return byte-equal token replies", async () => {
+    const replies = async () => {
+      const { fetch } = boot({ seed: 7 })
+      const first = await (await token(BASE, fetch, "lifefile-client", "lifefile-secret")).text()
+      await fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+      const second = await (await token(BASE, fetch, "lifefile-client", "lifefile-secret")).text()
+      return [first, second]
+    }
+    const [one, two] = [await replies(), await replies()]
+    expect(one).toEqual(two)
+    expect(one[0]).not.toBe(one[1])
+  })
+
+  test("a token issued after a checked-out checkpoint stays dead after the same client signs in again", async () => {
+    const { runtime, fetch } = boot()
+    await ping(fetch, "x.y.z")
+    const first = runtime.timeline().checkpoints()[0]
+    expect(first).toBeDefined()
+    const old = await signIn(fetch)
+    expect(await ping(fetch, old)).toBe(200)
+    runtime.checkout(first?.id as string)
+    expect(await ping(fetch, old)).toBe(401)
+    const fresh = await signIn(fetch)
+    expect(fresh).not.toBe(old)
+    expect(await ping(fetch, fresh)).toBe(200)
+    expect(await ping(fetch, old)).toBe(401)
+  })
+
   test("a token from one namespace stays refused in another after that one signs in the same client", async () => {
     const { fetch } = boot()
     const bearer = await signIn(fetch)

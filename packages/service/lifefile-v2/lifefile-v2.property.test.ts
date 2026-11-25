@@ -25,6 +25,24 @@ const WALKED = supportedOperationIds.filter(
   (id) => id !== "RotateCurrentSecret" && id !== "RevokeCurrentToken",
 )
 
+const KEY_OPERATIONS = [
+  ["ListOrders", "GET", /^\/api\/v2\/orders$/],
+  ["CurrentApiUser", "GET", /^\/api\/v2\/auth\/me$/],
+  ["ListLocations", "GET", /^\/api\/v2\/locations$/],
+  ["ListStatuses", "GET", /^\/api\/v2\/statuses$/],
+] as const
+
+const successes: Record<string, number> = {}
+
+const record = (request: Request, response: Response) => {
+  const { pathname } = new URL(request.url)
+  const found = KEY_OPERATIONS.find(
+    ([, method, path]) => method === request.method && path.test(pathname),
+  )
+  if (found && response.status < 300) successes[found[0]] = (successes[found[0]] ?? 0) + 1
+  return response
+}
+
 const selfParity = async (
   options: Partial<ParityOptions> & { create?: () => { fetch: (r: Request) => Promise<Response> } },
 ) => {
@@ -38,7 +56,7 @@ const selfParity = async (
       baseUrl: `https://${HOST}`,
       allowedHosts: [HOST],
       headers: () => auth,
-      fetch: (request) => reference.fetch(request),
+      fetch: async (request) => record(request, await reference.fetch(request)),
     },
     mock: {
       create: create ?? (() => new LifeFileV2API({ now, settings })),
@@ -65,6 +83,8 @@ describe("self-parity", () => {
       maxCommands: 12,
     })
     expect(Object.keys(report.exercised).sort()).toEqual([...WALKED].sort())
+    for (const [id] of KEY_OPERATIONS)
+      expect({ id, ok: (successes[id] ?? 0) > 0 }).toEqual({ id, ok: true })
   }, 60_000)
 
   test("a deliberately divergent create is caught", async () => {
