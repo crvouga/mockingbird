@@ -110,6 +110,8 @@ export type LifeFileV2RuntimeOptions = {
   maxRecords?: number
   maxSnapshots?: number
   checkpointMutations?: boolean
+  maxOrders?: number
+  maxApiUsers?: number
   push?: PushTarget & {
     retryDelaysMs?: readonly number[]
     fetch?: (request: Request) => Promise<Response>
@@ -360,6 +362,8 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
         now: clock.now,
         settings: { ...(bootPush ? { push: bootPush } : {}), ...(options.settings ?? {}) },
         ...(options.apiUsers ? { apiUsers: options.apiUsers } : {}),
+        ...(options.maxOrders !== undefined ? { maxOrders: options.maxOrders } : {}),
+        ...(options.maxApiUsers !== undefined ? { maxApiUsers: options.maxApiUsers } : {}),
         onPush: ({ body, badCredentials }) => {
           syncPush(publicNamespace, api)
           hub.publish({

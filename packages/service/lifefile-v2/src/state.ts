@@ -105,6 +105,10 @@ export class LifeFileState {
     return (idBaseOf(this.sqlite) % 10_000) * 100_000
   }
 
+  orderCount(): number {
+    return this.counters.get("order")?.value ?? 0
+  }
+
   nextOrderId(): { id: number; sequence: number } {
     const sequence = this.next("order")
     return { id: ORDER_BASE + this.base() + sequence, sequence }

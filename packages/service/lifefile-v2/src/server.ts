@@ -5,7 +5,7 @@ import type { Settings } from "./types.js"
 
 export const DEFAULT_PORT = 8932
 
-export const SERVE_LIMITS = { maxRecords: 100_000, maxSnapshots: 50 } as const
+export const SERVE_LIMITS = { maxOrders: 25_000, maxApiUsers: 1_000, maxSnapshots: 50 } as const
 
 export type LifeFileV2ServerOptions = LifeFileV2RuntimeOptions & { port?: number; host?: string }
 
@@ -69,10 +69,21 @@ export const serveTarget: ServeTarget = {
       description:
         "Let any new client id sign in even with --client-id set (on by default without it)",
     },
+    "max-orders": {
+      type: "string",
+      value: "<n>",
+      description: `Orders one namespace may hold before creates answer 507 (default ${SERVE_LIMITS.maxOrders})`,
+    },
+    "max-api-users": {
+      type: "string",
+      value: "<n>",
+      description: `API users open enrollment may add to one namespace (default ${SERVE_LIMITS.maxApiUsers})`,
+    },
     "max-records": {
       type: "string",
       value: "<n>",
-      description: `Records one namespace may hold before writes answer 507 (default ${SERVE_LIMITS.maxRecords})`,
+      description:
+        "Hard cap on every record of a namespace (off by default: each insert then counts the namespace)",
     },
     "max-snapshots": {
       type: "string",
@@ -100,14 +111,17 @@ export const serveTarget: ServeTarget = {
     const idle = Number(text(values["namespace-idle-ms"]) ?? 1_800_000)
     if (!Number.isInteger(idle) || idle < 0)
       throw new Error("--namespace-idle-ms is a whole number")
-    const count = (flag: string, fallback: number) => {
+    const count = (flag: string, fallback?: number) => {
       const raw = text(values[flag])
-      const value = raw === undefined ? fallback : Number(raw)
+      if (raw === undefined) return fallback
+      const value = Number(raw)
       if (!Number.isInteger(value) || value < 1) throw new Error(`--${flag} is a whole number >= 1`)
       return value
     }
-    const maxRecords = count("max-records", SERVE_LIMITS.maxRecords)
+    const maxRecords = count("max-records")
     const maxSnapshots = count("max-snapshots", SERVE_LIMITS.maxSnapshots)
+    const maxOrders = count("max-orders", SERVE_LIMITS.maxOrders)
+    const maxApiUsers = count("max-api-users", SERVE_LIMITS.maxApiUsers)
     const clientId = text(values["client-id"])
     const clientSecret = text(values["client-secret"])
     const seeded = clientId !== undefined || clientSecret !== undefined
@@ -138,8 +152,10 @@ export const serveTarget: ServeTarget = {
         : {}),
       ...(values["no-latency"] === true ? { latency: "none" as const } : {}),
       namespaceIdleMs: idle,
-      maxRecords,
-      maxSnapshots,
+      ...(maxRecords !== undefined ? { maxRecords } : {}),
+      ...(maxSnapshots !== undefined ? { maxSnapshots } : {}),
+      ...(maxOrders !== undefined ? { maxOrders } : {}),
+      ...(maxApiUsers !== undefined ? { maxApiUsers } : {}),
       checkpointMutations: values["checkpoint-mutations"] === true,
       ...(common.adminPrefix !== undefined ? { adminPrefix: common.adminPrefix } : {}),
       ...(common.adminKey !== undefined ? { adminKey: common.adminKey } : {}),

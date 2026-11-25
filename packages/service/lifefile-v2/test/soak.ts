@@ -75,7 +75,8 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
   const runtime: LifeFileV2Runtime = createRuntime({
     latency: "none",
     namespaceIdleMs: options.namespaceIdleMs,
-    maxRecords: SERVE_LIMITS.maxRecords,
+    maxOrders: SERVE_LIMITS.maxOrders,
+    maxApiUsers: SERVE_LIMITS.maxApiUsers,
     maxSnapshots: SERVE_LIMITS.maxSnapshots,
     checkpointMutations: false,
     push: {

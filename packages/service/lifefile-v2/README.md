@@ -224,11 +224,14 @@ Namespaces by `x-mockingbird-namespace`, by `/__admin/ns/<name>/…` (use it on 
 the token URL), or by client id (`PUT /__admin/credentials`; the bearer token names its client).
 Orders, tokens, users, settings and pushes live in the namespace and go with it
 (`DELETE /__admin/namespaces/<name>`). `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
-`maxSnapshots` and `checkpointMutations`. `serve` forgets namespaces idle for 30 minutes, caps each
-namespace (the never-forgotten default one included) at 100,000 records and 50 snapshots
-(`--max-records`, `--max-snapshots`; past the cap writes answer `507`), and skips the time-travel
-checkpoint after every write, which reads the whole namespace and makes writes slower as it grows
-(`--checkpoint-mutations` turns it back on). A sign-in drops token rows that are already dead
+`maxSnapshots`, `checkpointMutations`, `maxOrders` and `maxApiUsers`. `serve` forgets namespaces idle
+for 30 minutes and caps each namespace (the never-forgotten default one included) at 25,000 orders
+(`--max-orders`; the next create answers `507`), 1,000 API users added by open enrollment
+(`--max-api-users`) and 50 snapshots (`--max-snapshots`). Both caps cost nothing per write. The
+generic record cap (`--max-records`) is off by default, because each insert under it counts the
+whole namespace, so writes slow down as the namespace grows. `serve` also skips the time-travel
+checkpoint after every write, which reads the whole namespace (`--checkpoint-mutations` turns it
+back on); snapshots taken on request still work. A sign-in drops token rows that are already dead
 (past their lifetime or idle hour); revoked ones stay until then. Rx-UUID searches read an index,
 never every order.
 
@@ -241,7 +244,7 @@ dropped. A frozen clock never reaches the next minute, so a suite that freezes t
 in its own namespace plus one order in the long-lived default namespace, and fails if any call
 after the warm-up window takes over 50 ms, p95 drifts over 10 % (and over 1 ms, so sub-millisecond
 jitter does not count), heap grows over 50 MB after warm-up, push p95 passes 1 s, live namespaces
-pile up, the default namespace holds over 4 records per order, or any write hits the record cap.
+pile up, or the default namespace holds over 4 records per order.
 The compressed soak in `bun test` checks only the resource bounds; timing is the script's job.
 
 ### Deliberately not modelled
@@ -269,7 +272,7 @@ The compressed soak in `bun test` checks only the resource bounds; timing is the
 | `DEFAULT_SETTINGS`, `DEFAULT_CLIENT`, `RECORDED_LATENCY_MS` | values | Default settings, the seeded API user, the recorded latency per operation. |
 | `pushBody`, `basicPushSigner`, `PUSH_EVENT`, `PUSH_SHAPE_HEADER`, `PROVISIONAL_PUSH_SHAPE`, `PUSH_RETRY_DELAYS_MS` | values / functions | The provisional push body, its Basic-auth signer and markers. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |
-| `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--push-url`, `--push-username`, `--push-password`, `--catalog`, `--client-id`, `--client-secret`, `--open-enrollment`, `--no-latency`, `--namespace-idle-ms`, `--max-records`, `--max-snapshots`, `--checkpoint-mutations`); port 8932. |
+| `createServer`, `serveTarget`, `DEFAULT_PORT` (`./server`) | Node | Serve over `node:http`; the `serve` CLI target (`--push-url`, `--push-username`, `--push-password`, `--catalog`, `--client-id`, `--client-secret`, `--open-enrollment`, `--no-latency`, `--namespace-idle-ms`, `--max-orders`, `--max-api-users`, `--max-records`, `--max-snapshots`, `--checkpoint-mutations`); port 8932. |
 
 ## Development
 

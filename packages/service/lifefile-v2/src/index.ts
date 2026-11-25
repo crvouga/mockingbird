@@ -76,6 +76,8 @@ export type LifeFileV2APIOptions = APIOptions & {
   settings?: Partial<Settings>
   apiUsers?: readonly Partial<ApiUser>[]
   onPush?: (push: PushRequest) => void
+  maxOrders?: number
+  maxApiUsers?: number
 }
 
 type Json = Record<string, unknown>
@@ -144,6 +146,13 @@ const oauthError = (status: number, error: string, description: string) =>
 const INVALID_CREDENTIALS = () => oauthError(401, "invalid_client", "Invalid Credentials")
 const INVALID_REQUEST = () => oauthError(422, "invalid_request", "Validation Error")
 const NOT_FOUND = () => failure(404, "Record not found")
+const ORDER_LIMIT = (limit: number) =>
+  jsonRes(507, {
+    error: {
+      type: "mockingbird_admin",
+      message: `this namespace already holds ${limit} orders, the most maxOrders allows; reset or delete the namespace to free them`,
+    },
+  })
 const VALIDATION = (data: Record<string, string[]>) => failure(422, "Validation Error", data)
 const BEARER_REQUIRED = "Authorization header is expected to reference a Bearer authentication"
 const INACTIVE = "Invalid authorization token: Token is no longer active"
@@ -609,12 +618,16 @@ export class LifeFileV2API implements FetchAPI {
   private readonly auth = new WeakMap<Request, Auth>()
   private readonly rateWindows = new Map<string, { window: number; count: number }>()
   private rateMinute = -1
+  private readonly maxOrders: number | undefined
+  private readonly maxApiUsers: number | undefined
 
   constructor(options: LifeFileV2APIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? LIFEFILE_V2_NAMESPACE
     this.now = options.now ?? (() => Date.now())
     this.onPush = options.onPush
+    this.maxOrders = options.maxOrders
+    this.maxApiUsers = options.maxApiUsers
     this.state = new LifeFileState(
       sqlite,
       namespace,
@@ -825,6 +838,8 @@ export class LifeFileV2API implements FetchAPI {
     let user = this.state.user(clientId)
     if (!user) {
       if (!settings.openEnrollment) return INVALID_CREDENTIALS()
+      if (this.maxApiUsers !== undefined && this.state.apiUsers.count() >= this.maxApiUsers)
+        return INVALID_CREDENTIALS()
       user = this.state.registerUser({ clientId, secret, secretIssuedAt: now })
     }
     if (user.secret !== secret) return INVALID_CREDENTIALS()
@@ -956,6 +971,9 @@ export class LifeFileV2API implements FetchAPI {
     }
     const errors = validateOrder(body)
     if (Object.keys(errors).length > 0) return VALIDATION(sortedErrors(errors))
+    if (this.maxOrders !== undefined && this.state.orderCount() >= this.maxOrders) {
+      return ORDER_LIMIT(this.maxOrders)
+    }
     const now = this.now()
     const { id, sequence } = this.state.nextOrderId()
     const settings = this.settings()
