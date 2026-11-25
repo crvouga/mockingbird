@@ -709,4 +709,33 @@ describe("time-travel reads (x-mockingbird-at)", () => {
     expect((await api(fetch, token, "DELETE", "/auth/token")).status).toBeLessThan(300)
     expect((await statusAt(fetch, token, id, checkpoint)).status).toBe(401)
   })
+
+  test("a token killed by a reset of main does not read at a checkpoint from before it", async () => {
+    const { runtime, fetch } = boot()
+    const token = await signIn(fetch)
+    const { id, checkpoint } = await create(fetch, token)
+    await runtime.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    expect((await api(fetch, token, "GET", `/orders/${id}`)).status).toBe(401)
+    expect((await statusAt(fetch, token, id, checkpoint)).status).not.toBe(200)
+  })
+
+  test("a branch forked before intake still runs its own intake", async () => {
+    const { runtime, clock, fetch } = boot()
+    const token = await signIn(fetch)
+    const { id, checkpoint } = await create(fetch, token)
+    clock.advance(1_000)
+    const response = await fetch(
+      new Request(`${BASE}/api/v2/orders/${id}/status`, {
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-vendor-id": "10001",
+          "x-mockingbird-branch": "replay",
+          "x-mockingbird-at": checkpoint,
+        },
+      }),
+    )
+    expect(response.status).toBe(200)
+    expect(((await response.json()) as { data: { id: string } }).data.id).toBe("b3644")
+    expect(runtime.instance().state.order(id)?.statusId).toBe("new")
+  })
 })
