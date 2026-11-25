@@ -610,3 +610,103 @@ describe("long-running limits (M1 namespace lifecycle)", () => {
     expect(scans).toBe(0)
   })
 })
+
+describe("time-travel reads (x-mockingbird-at)", () => {
+  const signIn = async (fetch: (r: Request) => Promise<Response>) => {
+    const response = await fetch(
+      new Request(`${BASE}/api/v2/auth/token`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/x-www-form-urlencoded",
+          "x-vendor-id": "10001",
+        },
+        body: new URLSearchParams({
+          grant_type: "client_credentials",
+          client_id: "lifefile-client",
+          client_secret: "lifefile-secret",
+        }).toString(),
+      }),
+    )
+    return ((await response.json()) as { access_token: string }).access_token
+  }
+  const api = (
+    fetch: (r: Request) => Promise<Response>,
+    token: string,
+    method: string,
+    path: string,
+    options: { body?: unknown; at?: string } = {},
+  ) =>
+    fetch(
+      new Request(`${BASE}/api/v2${path}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${token}`,
+          "x-vendor-id": "10001",
+          "content-type": "application/json",
+          ...(options.at ? { "x-mockingbird-at": options.at } : {}),
+        },
+        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+      }),
+    )
+  const create = async (fetch: (r: Request) => Promise<Response>, token: string) => {
+    const response = await api(fetch, token, "POST", "/orders", { body: orderBody() })
+    const checkpoint = response.headers.get("x-mockingbird-checkpoint")
+    const body = (await response.json()) as { data: { orderId: number } }
+    if (!checkpoint) throw new Error("create reply carries no checkpoint")
+    return { id: body.data.orderId, checkpoint }
+  }
+  const statusAt = async (
+    fetch: (r: Request) => Promise<Response>,
+    token: string,
+    id: number,
+    at: string,
+  ) => {
+    const response = await api(fetch, token, "GET", `/orders/${id}/status`, { at })
+    const body = (await response.json()) as { data?: { id: string } }
+    return { status: response.status, statusId: body.data?.id }
+  }
+
+  test("reading at a checkpoint taken before intake neither re-runs intake nor pushes again", async () => {
+    const { runtime, clock, fetch, pushes } = boot()
+    const token = await signIn(fetch)
+    const { id, checkpoint } = await create(fetch, token)
+    clock.advance(1_000)
+    expect((await api(fetch, token, "GET", `/orders/${id}`)).status).toBe(200)
+    await runtime.webhooks.idle()
+    expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toEqual(["b3644"])
+    const reads = [
+      await statusAt(fetch, token, id, checkpoint),
+      await statusAt(fetch, token, id, checkpoint),
+    ]
+    await runtime.webhooks.idle()
+    expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toEqual(["b3644"])
+    expect(reads).toEqual([
+      { status: 200, statusId: "new" },
+      { status: 200, statusId: "new" },
+    ])
+    expect(runtime.instance().state.order(id)?.statusId).toBe("b3644")
+  })
+
+  test("a token valid on the live namespace reads at a checkpoint: refreshed, and kept alive past the idle window", async () => {
+    const { clock, fetch } = boot()
+    const old = await signIn(fetch)
+    const { id, checkpoint } = await create(fetch, old)
+    clock.advance(2_000)
+    const fresh = await signIn(fetch)
+    expect((await api(fetch, fresh, "GET", `/orders/${id}`)).status).toBe(200)
+    expect(await statusAt(fetch, fresh, id, checkpoint)).toEqual({ status: 200, statusId: "new" })
+    for (let minute = 20; minute <= 80; minute += 20) {
+      clock.advance(20 * 60_000)
+      expect((await api(fetch, old, "GET", `/orders/${id}`)).status).toBe(200)
+    }
+    expect(await statusAt(fetch, old, id, checkpoint)).toEqual({ status: 200, statusId: "new" })
+  })
+
+  test("a token revoked on the live namespace is refused at a checkpoint that still holds it", async () => {
+    const { fetch } = boot()
+    const token = await signIn(fetch)
+    const { id, checkpoint } = await create(fetch, token)
+    expect((await api(fetch, token, "DELETE", "/auth/token")).status).toBeLessThan(300)
+    expect((await statusAt(fetch, token, id, checkpoint)).status).toBe(401)
+  })
+})
