@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { DEFAULT_CLIENT } from "../src/corpus.js"
 
 type Json = Record<string, unknown>
 
@@ -22,10 +23,21 @@ type Overlay = {
   privilege: string
   unsafe?: string
   add?: Record<string, Json>
+  formExample?: Record<string, string>
 }
 
 const OPERATIONS: readonly Overlay[] = [
-  { method: "post", path: "/auth/token", id: "IssueToken", privilege: "" },
+  {
+    method: "post",
+    path: "/auth/token",
+    id: "IssueToken",
+    privilege: "",
+    formExample: {
+      grant_type: "client_credentials",
+      client_id: DEFAULT_CLIENT.clientId,
+      client_secret: DEFAULT_CLIENT.secret,
+    },
+  },
   {
     method: "delete",
     path: "/auth/token",
@@ -171,6 +183,12 @@ for (const overlay of OPERATIONS) {
   cleaned.tags = [overlay.path.split("/")[1] ?? "api"]
   if (overlay.privilege) cleaned["x-lifefile-privilege"] = overlay.privilege
   if (overlay.unsafe) cleaned["x-mockingbird"] = { parity: { safe: false, reason: overlay.unsafe } }
+  if (overlay.formExample !== undefined) {
+    const content = (cleaned.requestBody as { content?: Record<string, Json> } | undefined)?.content
+    const form = content?.["application/x-www-form-urlencoded"]
+    if (!form) throw new Error(`${overlay.id} has no form body to carry its example`)
+    form.example = overlay.formExample
+  }
   const key = `/api/v2${overlay.path}`
   paths[key] = { ...(paths[key] ?? {}), [overlay.method]: cleaned }
   refsIn(cleaned, wanted)
