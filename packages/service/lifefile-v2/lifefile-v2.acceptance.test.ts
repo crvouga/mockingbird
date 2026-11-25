@@ -219,22 +219,52 @@ describe("sign-in (OAuth2 client credentials)", () => {
     expect(client.tokens.tokenRequests).toBe(2)
   })
 
-  test("a secret expires 30 days after it was issued: no new tokens, invalid_client", async () => {
-    const { fetch, clock } = boot()
-    await tokenFor(fetch)
-    clock.advance(30 * 86_400_000 + 1_000)
-    const issued = await raw(fetch, "POST", "/auth/token", {
-      form: {
-        grant_type: "client_credentials",
-        client_id: "lifefile-client",
-        client_secret: "lifefile-secret",
-      },
+  const signInWith = (fetch: (r: Request) => Promise<Response>, clientId: string, secret: string) =>
+    raw(fetch, "POST", "/auth/token", {
+      form: { grant_type: "client_credentials", client_id: clientId, client_secret: secret },
     })
+
+  test("a rotated secret expires 30 days after the rotation: no new tokens, invalid_client", async () => {
+    const { fetch, clock } = boot()
+    const rotated = await raw(fetch, "POST", "/auth/secret/rotate", {
+      token: await tokenFor(fetch),
+    })
+    const secret = (rotated.json.data as { secret: string }).secret
+    clock.advance(30 * 86_400_000 - 1_000)
+    expect((await signInWith(fetch, "lifefile-client", secret)).status).toBe(200)
+    clock.advance(2_000)
+    const issued = await signInWith(fetch, "lifefile-client", secret)
     expect(issued.status).toBe(401)
     expect(issued.json).toEqual({
       error: "invalid_client",
       error_description: "Invalid Credentials",
     })
+  })
+
+  test("seeded, enrolled and admin-set secrets never expire on a long-lived instance", async () => {
+    const { fetch, clock, runtime } = boot()
+    expect((await signInWith(fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
+    expect((await signInWith(fetch, "early-client", "early-secret")).status).toBe(200)
+    await runtime.fetch(
+      new Request(`${BASE}/__admin/api-users`, {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ clientId: "stack-client", secret: "stack-secret" }),
+      }),
+    )
+    clock.advance(31 * 86_400_000)
+    expect((await signInWith(fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
+    expect((await signInWith(fetch, "early-client", "early-secret")).status).toBe(200)
+    expect((await signInWith(fetch, "stack-client", "stack-secret")).status).toBe(200)
+  })
+
+  test("a seeded secret with an explicit issue time still expires 30 days after it", async () => {
+    const { fetch } = boot({
+      apiUsers: [
+        { clientId: "aged-client", secret: "aged-secret", secretIssuedAt: T0 - 31 * 86_400_000 },
+      ],
+    })
+    expect((await signInWith(fetch, "aged-client", "aged-secret")).status).toBe(401)
   })
 
   test("rotating the secret revokes every token and only the new secret signs in", async () => {

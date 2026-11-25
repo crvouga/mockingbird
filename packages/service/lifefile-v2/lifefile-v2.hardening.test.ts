@@ -741,4 +741,48 @@ describe("a bearer token lives only in the namespace state that issued it", () =
     expect(await ping(fetch, bearer)).toBe(200)
     expect(await ping(fetch, bearer, "other-ns")).toBe(401)
   })
+
+  test("a token from before a reset stays dead after the same client signs in again", async () => {
+    const { fetch, clock } = boot()
+    const old = await signIn(fetch)
+    await fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    expect(await ping(fetch, old)).toBe(401)
+    clock.advance(1_000)
+    const fresh = await signIn(fetch)
+    expect(await ping(fetch, fresh)).toBe(200)
+    expect(await ping(fetch, old)).toBe(401)
+  })
+
+  test("a token from before a reset stays dead even when the new sign-in lands in the same second", async () => {
+    const { fetch } = boot()
+    const old = await signIn(fetch)
+    await fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    const fresh = await signIn(fetch)
+    expect(fresh).not.toBe(old)
+    expect(await ping(fetch, fresh)).toBe(200)
+    expect(await ping(fetch, old)).toBe(401)
+  })
+
+  test("a token issued after a restored snapshot stays dead after the same client signs in again", async () => {
+    const { runtime, fetch, clock } = boot()
+    expect((await admin(runtime, "POST", "/snapshots", { name: "before" })).status).toBe(201)
+    const old = await signIn(fetch)
+    expect((await admin(runtime, "POST", "/snapshots/before/restore")).status).toBeLessThan(300)
+    expect(await ping(fetch, old)).toBe(401)
+    clock.advance(1_000)
+    const fresh = await signIn(fetch)
+    expect(await ping(fetch, fresh)).toBe(200)
+    expect(await ping(fetch, old)).toBe(401)
+  })
+
+  test("a token from one namespace stays refused in another after that one signs in the same client", async () => {
+    const { fetch } = boot()
+    const bearer = await signIn(fetch)
+    expect(await ping(fetch, bearer, "other-ns")).toBe(401)
+    const theirs = await signIn(fetch, `${BASE}/__admin/ns/other-ns`)
+    expect(await ping(fetch, theirs, "other-ns")).toBe(200)
+    expect(await ping(fetch, bearer, "other-ns")).toBe(401)
+    expect(await ping(fetch, theirs)).toBe(401)
+    expect(await ping(fetch, bearer)).toBe(200)
+  })
 })
