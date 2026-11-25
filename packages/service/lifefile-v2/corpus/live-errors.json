@@ -1,0 +1,291 @@
+{
+  "source": "apitest.lifefile.net (LifeFile API v2 sandbox), 2026-11-24, four sequential probe runs",
+  "note": "Every error reply the sandbox gave, sanitized; the acceptance suite asserts the emulator gives the same status and body.",
+  "errors": [
+    {
+      "case": "token-bad-secret",
+      "method": "POST",
+      "path": "/auth/token",
+      "status": 401,
+      "body": {
+        "error": "invalid_client",
+        "error_description": "Invalid Credentials"
+      }
+    },
+    {
+      "case": "token-no-vendor",
+      "method": "POST",
+      "path": "/auth/token",
+      "status": 422,
+      "body": {
+        "error": "invalid_request",
+        "error_description": "Validation Error"
+      }
+    },
+    {
+      "case": "token-bad-grant",
+      "method": "POST",
+      "path": "/auth/token",
+      "status": 422,
+      "body": {
+        "error": "invalid_request",
+        "error_description": "Validation Error"
+      }
+    },
+    {
+      "case": "bad-bearer",
+      "method": "GET",
+      "path": "/ping",
+      "status": 401,
+      "body": {
+        "type": "error",
+        "message": "Invalid authorization token: Wrong number of segments",
+        "data": []
+      }
+    },
+    {
+      "case": "no-bearer",
+      "method": "GET",
+      "path": "/ping",
+      "status": 401,
+      "body": {
+        "type": "error",
+        "message": "Authorization header is expected to reference a Bearer authentication",
+        "data": null
+      }
+    },
+    {
+      "case": "bearer-no-vendor",
+      "method": "GET",
+      "path": "/ping",
+      "status": 401,
+      "body": {
+        "type": "error",
+        "message": "X-Vendor-ID header is required",
+        "data": null
+      }
+    },
+    {
+      "case": "dup-uuid-within-order",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.rxs.0.uuid": [
+            "Each RX UUID must be unique within the order (case-insensitive)."
+          ],
+          "order.rxs.1.uuid": [
+            "Each RX UUID must be unique within the order (case-insensitive)."
+          ]
+        }
+      }
+    },
+    {
+      "case": "schedule-code-missing",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.rxs.0.scheduleCode": [
+            "The order.rxs.0.scheduleCode field is required."
+          ]
+        }
+      }
+    },
+    {
+      "case": "missing-location",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.location.id": [
+            "The order location id field is required."
+          ]
+        }
+      }
+    },
+    {
+      "case": "wrong-location",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Invalid order location id received: '999999'",
+        "data": null
+      }
+    },
+    {
+      "case": "wrong-practice",
+      "method": "POST",
+      "path": "/orders",
+      "status": 403,
+      "body": {
+        "type": "error",
+        "message": "This API user is not allowed to create an order for Practice ID 1.",
+        "data": null
+      }
+    },
+    {
+      "case": "name-31-chars",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.patient.lastName": [
+            "The order.patient.last name may not be greater than 30 characters."
+          ]
+        }
+      }
+    },
+    {
+      "case": "address-61-chars",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.shipping.addressLine1": [
+            "The order.shipping.address line1 may not be greater than 60 characters."
+          ]
+        }
+      }
+    },
+    {
+      "case": "bad-uuid",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.rxs.0.uuid": [
+            "The order.rxs.0.uuid must be a valid UUID."
+          ]
+        }
+      }
+    },
+    {
+      "case": "empty-body",
+      "method": "POST",
+      "path": "/orders",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "order.location.id": [
+            "The order location id field is required."
+          ]
+        }
+      }
+    },
+    {
+      "case": "put-status-3c59d",
+      "method": "PUT",
+      "path": "/orders/50000015/status",
+      "status": 404,
+      "body": {
+        "type": "error",
+        "message": "Order Status ID '3c59d' does not exist",
+        "data": null
+      }
+    },
+    {
+      "case": "put-status-unknown-code",
+      "method": "PUT",
+      "path": "/orders/50000015/status",
+      "status": 404,
+      "body": {
+        "type": "error",
+        "message": "Order Status ID 'zzzzz' does not exist",
+        "data": null
+      }
+    },
+    {
+      "case": "get-status-missing-order",
+      "method": "GET",
+      "path": "/orders/1/status",
+      "status": 404,
+      "body": {
+        "type": "error",
+        "message": "Record not found",
+        "data": null
+      }
+    },
+    {
+      "case": "get-order-missing",
+      "method": "GET",
+      "path": "/orders/1",
+      "status": 404,
+      "body": {
+        "type": "error",
+        "message": "Record not found",
+        "data": null
+      }
+    },
+    {
+      "case": "get-order-non-numeric",
+      "method": "GET",
+      "path": "/orders/abc",
+      "status": 422,
+      "body": {
+        "type": "error",
+        "message": "Validation Error",
+        "data": {
+          "orderId": [
+            "The order id must be an integer."
+          ]
+        }
+      }
+    },
+    {
+      "case": "put-shipping",
+      "method": "PUT",
+      "path": "/orders/50000001/shipping",
+      "status": 500,
+      "body": {
+        "type": "error",
+        "message": "Server Error: shipping must be an object, null given",
+        "data": null
+      }
+    },
+    {
+      "case": "practice-shipping",
+      "method": "GET",
+      "path": "/practices/900001/shipping-services?perPage=50",
+      "status": 403,
+      "body": {
+        "type": "error",
+        "message": "The authenticated API user does not have the required privilege 'practices.shipping-services.list'.",
+        "data": null
+      }
+    },
+    {
+      "case": "location-shipping-configs",
+      "method": "GET",
+      "path": "/locations/100001/shipping-configurations",
+      "status": 403,
+      "body": {
+        "type": "error",
+        "message": "The authenticated API user does not have the required privilege 'locations.shipping-configurations.list'.",
+        "data": null
+      }
+    }
+  ]
+}
