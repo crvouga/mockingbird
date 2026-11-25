@@ -643,6 +643,7 @@ export const createRuntime = <T extends ServiceInstance>(
 
   const controls = createNamespaceControls({
     seed,
+    onStart: (namespace) => touch(namespace),
     clock: namespaceClock,
     boot,
     ...(options.presets ? { presets: options.presets } : {}),
@@ -1441,9 +1442,10 @@ export const createRuntime = <T extends ServiceInstance>(
         const mapped = credential !== undefined ? credentials.get(credential) : undefined
         if (mapped !== undefined) namespace = mapped
       }
-      await expiring.get(namespace)
-      if (publicNamespaces.has(namespace)) touch(namespace)
+      for (let dropping = expiring.get(namespace); dropping; dropping = expiring.get(namespace))
+        await dropping
       inFlight.set(namespace, (inFlight.get(namespace) ?? 0) + 1)
+      if (publicNamespaces.has(namespace)) touch(namespace)
       try {
         await forgetIdle(namespace)
         const selectedBranch = request.headers.get(BRANCH_HEADER) ?? "main"

@@ -246,6 +246,62 @@ describe("risk checks around clean-up", () => {
     expect(await (await send(runtime, "GET", "/rows", { headers: ns("old") })).text()).toBe("1")
   })
 
+  test("a write sent in the same tick as the request that sweeps its namespace is kept", async () => {
+    const wall = wallClock()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let gated = false
+    const runtime = bare(
+      { namespaceIdleMs: MINUTE, wallNow: wall.now },
+      async (context, request) => {
+        const rows = new Collection<string>(context.sqlite, context.namespace, "rows")
+        if (request.method === "POST") rows.insert(`r${rows.count()}`, "x")
+        return new Response(String(rows.count()))
+      },
+      async (context) => {
+        if (context.publicNamespace === "old" && !gated) {
+          gated = true
+          await gate
+        }
+        const rows = new Collection<string>(context.sqlite, context.namespace, "rows")
+        for (const row of rows.list()) rows.delete(row.id)
+      },
+    )
+    await send(runtime, "POST", "/rows", { headers: ns("old") })
+    wall.advance(2 * MINUTE)
+    const sweeping = send(runtime, "GET", "/rows", { headers: ns("other") })
+    const writing = send(runtime, "POST", "/rows", { headers: ns("old") })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release()
+    await sweeping
+    const written = await (await writing).text()
+    const read = await (await send(runtime, "GET", "/rows", { headers: ns("old") })).text()
+    expect(read).toBe(written)
+    expect(read).toBe("1")
+  })
+
+  test("a namespace that only ever received controls is expired once idle", async () => {
+    const wall = wallClock()
+    const runtime = bare(
+      { namespaceIdleMs: MINUTE, wallNow: wall.now },
+      async () => new Response("ok"),
+    )
+    const set = await admin(runtime, "PUT", "/controls", { seed: 7 }, ns("controls-only"))
+    expect(set.status).toBe(200)
+    wall.advance(2 * MINUTE)
+    await send(runtime, "GET", "/__admin/health")
+    const after = await admin<{ seed: number | string }>(
+      runtime,
+      "GET",
+      "/controls",
+      undefined,
+      ns("controls-only"),
+    )
+    expect(after.body.seed).not.toBe(7)
+  })
+
   test("after a refusal the next accepted write is kept and the namespace is not stuck at the cap", async () => {
     const runtime = bare({ maxRecords: 2 }, async (context, request) => {
       const rows = new Collection<string>(context.sqlite, context.namespace, "rows")

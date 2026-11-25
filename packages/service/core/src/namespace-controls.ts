@@ -118,6 +118,8 @@ export type NamespaceControlsOptions = {
   onPreset?(preset: FaultPreset, namespace: string, overrides: Partial<FaultRule>): void
   /** Put a snapshot document into a namespace: the boot `snapshot` control. */
   restoreDocument?(namespace: string, document: SnapshotDocument, scope: BootScope): void
+  /** A namespace was given controls for the first time: it now holds state of its own. */
+  onStart?(namespace: string): void
 }
 
 const NO_BOOT: BootPlan = { shared: {}, namespaces: {}, credentials: {} }
@@ -316,6 +318,7 @@ export const createNamespaceControls = (options: NamespaceControlsOptions): Name
 
   const start = (namespace: string, scope: BootScope): void => {
     ensured.add(namespace)
+    options.onStart?.(namespace)
     const { snapshot, ...plan } = bootPlan(namespace)
     // Rules a caller added in process before the namespace's first use are kept, after the
     // rules it boots with.
