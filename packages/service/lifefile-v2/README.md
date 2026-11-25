@@ -223,11 +223,12 @@ recorded without slowing a suite.
 ### Namespaces and long runs
 
 Namespaces by `x-mockingbird-namespace`, by `/__admin/ns/<name>/…` (use it on both the API and
-the token URL), or by client id (`PUT /__admin/credentials`; the bearer token names its client).
+the token URL), or by client id (`PUT /__admin/credentials`; sign-in routes by the Basic username or the form
+`client_id`, and the bearer token names its client).
 Orders, tokens, users, settings and pushes live in the namespace and go with it
 (`DELETE /__admin/namespaces/<name>`). A token works only in the namespace that issued it and only
 while its row is there, even if the same client signs in again: after a reset, a namespace delete or restoring a snapshot taken before it
-was issued, it answers `401` (`Token is no longer active`) and the caller signs in again. So that a token never comes back to life, token bytes after a reset, restore or checkout deliberately differ from a fresh run's: each namespace keeps its own issue count, which nothing rewinds, and sign-ins in one namespace never shift another's tokens. `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
+was issued, it answers `401` (`Token is no longer active`) and the caller signs in again. So that a token never comes back to life, token bytes after a reset, restore or checkout deliberately differ from a fresh run's: each namespace keeps its own issue count in the shared SQLite store, outside namespace state, which nothing rewinds, and sign-ins in one namespace never shift another's tokens. That count is one small row per namespace that ever signed in, kept for the life of the store. `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
 `maxSnapshots`, `checkpointMutations`, `maxOrders` and `maxApiUsers`. `serve` forgets namespaces idle
 for 30 minutes and caps each namespace (the never-forgotten default one included) at 25,000 orders
 (`--max-orders`; the next create answers `507`), 1,000 API users added by open enrollment

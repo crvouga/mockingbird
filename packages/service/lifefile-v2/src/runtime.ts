@@ -1,10 +1,12 @@
 import {
   type AdminRoutes,
   type Clock,
+  Collection,
   createRuntime as createServiceRuntime,
   createWebhookHub,
   type FaultPreset,
   type MockControls,
+  NAMESPACE_HEADER,
   opaqueToken,
   type RequestLog,
   type ServiceRuntime,
@@ -334,10 +336,11 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
       ? options.adminControls
       : { ...(options.adminControls ?? {}), latency: RECORDED_LATENCY_CONTROL }
 
-  const issued = new Map<string, number>()
+  let issued: Collection<number> | undefined
   const tokenNonce = (namespace: string) => () => {
+    issued ??= new Collection<number>(runtime.sqlite, `${LIFEFILE_V2_NAMESPACE}#nonces`, "issued")
     const count = (issued.get(namespace) ?? 0) + 1
-    issued.set(namespace, count)
+    issued.insert(namespace, count)
     return opaqueToken(`lifefile-v2:nonce:${options.seed ?? ""}:${namespace}:${count}`, 22)
   }
 
@@ -389,7 +392,28 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
     describe: () => ({ corpus: CORPUS_VERSION, push: bootPush ? "on" : "off" }),
     admin: (rt) => adminRoutes(rt, syncPush),
   })
-  return Object.assign(runtime, { webhooks: hub })
+  const inner = runtime.fetch
+  return Object.assign(runtime, {
+    webhooks: hub,
+    fetch: async (request: Request): Promise<Response> => {
+      if (
+        request.method === "POST" &&
+        !request.headers.has(NAMESPACE_HEADER) &&
+        !request.headers.has("authorization") &&
+        new URL(request.url).pathname.endsWith("/api/v2/auth/token")
+      ) {
+        const text = await request.clone().text()
+        const clientId = new URLSearchParams(text).get("client_id")
+        const namespace = clientId ? runtime.credentials.get(clientId) : undefined
+        if (namespace !== undefined) {
+          const headers = new Headers(request.headers)
+          headers.set(NAMESPACE_HEADER, namespace)
+          return inner(new Request(request.url, { method: "POST", headers, body: text }))
+        }
+      }
+      return inner(request)
+    },
+  })
 }
 
 const seeded = (runtime: ServiceRuntime<LifeFileV2API>, namespace: string) => {
