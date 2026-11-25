@@ -736,6 +736,19 @@ describe("a bearer token lives only in the namespace state that issued it", () =
     expect(await ping(fetch, old, "ns-delete")).toBe(401)
   })
 
+  test("a token stays dead after its namespace is deleted and the same client signs in again", async () => {
+    const { fetch } = boot()
+    const base = `${BASE}/__admin/ns/ns-recreate`
+    const old = await signIn(fetch, base)
+    expect(
+      (await fetch(new Request(`${BASE}/__admin/namespaces/ns-recreate`, { method: "DELETE" })))
+        .status,
+    ).toBe(200)
+    const fresh = await signIn(fetch, base)
+    expect(await ping(fetch, fresh, "ns-recreate")).toBe(200)
+    expect(await ping(fetch, old, "ns-recreate")).toBe(401)
+  })
+
   test("a token from one namespace is refused in another", async () => {
     const { fetch } = boot()
     const bearer = await signIn(fetch)
