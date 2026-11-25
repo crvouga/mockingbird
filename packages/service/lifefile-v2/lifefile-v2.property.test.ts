@@ -10,8 +10,8 @@ const HOST = "mock.lifefile.local"
 const now = () => Date.parse("2026-11-24T22:57:51.000Z")
 const settings = { enforceVendorId: false }
 
-const token = async () => {
-  const response = await new LifeFileV2API({ now, settings }).fetch(
+const token = async (api: LifeFileV2API) => {
+  const response = await api.fetch(
     new Request(`https://${HOST}/api/v2/auth/token`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded", "x-vendor-id": "10001" },
@@ -46,8 +46,13 @@ const record = (request: Request, response: Response) => {
 const selfParity = async (
   options: Partial<ParityOptions> & { create?: () => { fetch: (r: Request) => Promise<Response> } },
 ) => {
-  const auth = { authorization: `Bearer ${await token()}`, "x-vendor-id": "10001" }
   const reference = new LifeFileV2API({ now, settings })
+  const auth = async (api: LifeFileV2API) => ({
+    authorization: `Bearer ${await token(api)}`,
+    "x-vendor-id": "10001",
+  })
+  let realAuth = await auth(reference)
+  let mockAuth = realAuth
   const { create, ...rest } = options
   return parity({
     provider: "lifefile-v2",
@@ -55,16 +60,23 @@ const selfParity = async (
     real: {
       baseUrl: `https://${HOST}`,
       allowedHosts: [HOST],
-      headers: () => auth,
+      headers: () => realAuth,
       fetch: async (request) => record(request, await reference.fetch(request)),
     },
     mock: {
-      create: create ?? (() => new LifeFileV2API({ now, settings })),
+      create:
+        create ??
+        (async () => {
+          const mock = new LifeFileV2API({ now, settings })
+          mockAuth = await auth(mock)
+          return mock
+        }),
       baseUrl: `https://${HOST}`,
-      headers: () => auth,
+      headers: () => mockAuth,
     },
     cleanup: async () => {
       await reference.reset()
+      realAuth = await auth(reference)
     },
     includeUnsafe: true,
     latencyToleranceMs: 10_000,
