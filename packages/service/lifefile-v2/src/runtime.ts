@@ -10,12 +10,84 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
+import { CATALOGS, CORPUS_VERSION, DEFAULT_SETTINGS, RECORDED_LATENCY_MS } from "./corpus.js"
 import { document } from "./generated/openapi.js"
 import { LIFEFILE_V2_NAMESPACE, LifeFileV2API, tokenCredential } from "./index.js"
-import type { ApiUser, PushTarget, Settings } from "./types.js"
-import { basicPushSigner, PUSH_RETRY_DELAYS_MS } from "./webhooks.js"
+import type { ApiUser, Catalog, PushTarget, Settings, TrackingRecord } from "./types.js"
+import { basicPushSigner, PUSH_EVENT, PUSH_RETRY_DELAYS_MS } from "./webhooks.js"
 
-export const LIFEFILE_V2_PRESETS: Record<string, FaultPreset> = {}
+const envelope = (message: string) => ({ type: "error", message, data: null })
+
+export const LIFEFILE_V2_PRESETS: Record<string, FaultPreset> = {
+  create_lost_reply: {
+    description:
+      "The next order is created, then the connection drops before the reply: the caller cannot tell it exists",
+    rules: [{ operationId: "CreateOrder", effect: "create_lost_reply" }],
+  },
+  server_error: {
+    description: "API calls answer 500 in LifeFile's error envelope",
+    rules: [{ pathPrefix: "/api/v2", status: 500, body: envelope("Server Error") }],
+  },
+  unavailable: {
+    description: "API calls answer 503 with Retry-After",
+    rules: [
+      {
+        pathPrefix: "/api/v2",
+        status: 503,
+        headers: { "content-type": "application/json", "retry-after": "1" },
+        body: envelope("Service Unavailable"),
+      },
+    ],
+  },
+  rate_limited: {
+    description: "API calls answer 429 Too Many Attempts. with Retry-After: 60",
+    rules: [
+      {
+        pathPrefix: "/api/v2",
+        status: 429,
+        headers: { "content-type": "application/json", "retry-after": "60" },
+        body: envelope("Too Many Attempts."),
+      },
+    ],
+  },
+  token_rate_limited: {
+    description: "Token requests answer 429 too_many_requests",
+    rules: [
+      {
+        operationId: "IssueToken",
+        status: 429,
+        headers: { "content-type": "application/json", "retry-after": "60" },
+        body: { error: "too_many_requests", error_description: "Too Many Requests" },
+      },
+    ],
+  },
+  invalid_client: {
+    description: "Token requests answer 401 invalid_client, as for a wrong or expired secret",
+    rules: [
+      {
+        operationId: "IssueToken",
+        status: 401,
+        body: { error: "invalid_client", error_description: "Invalid Credentials" },
+      },
+    ],
+  },
+  token_revoked: {
+    description: "API calls answer 401 for an inactive token: the client must sign in again",
+    rules: [{ pathPrefix: "/api/v2", effect: "token_revoked" }],
+  },
+  push_duplicate: {
+    description: "The next Data Push is delivered twice",
+    webhook: { mode: "duplicate" },
+  },
+  push_reorder: {
+    description: "The next two Data Pushes arrive swapped",
+    webhook: { mode: "reorder" },
+  },
+  push_drop: {
+    description: "The next Data Push is never delivered",
+    webhook: { mode: "drop" },
+  },
+}
 
 export type LifeFileV2RuntimeOptions = {
   sqlite?: SqliteClient
@@ -39,7 +111,162 @@ export type LifeFileV2RuntimeOptions = {
 
 export type LifeFileV2Runtime = ServiceRuntime<LifeFileV2API> & { readonly webhooks: WebhookHub }
 
-const admin = (_runtime: ServiceRuntime<LifeFileV2API>): AdminRoutes => ({})
+export const RECORDED_LATENCY_CONTROL = {
+  operations: Object.fromEntries(Object.entries(RECORDED_LATENCY_MS)),
+}
+
+const json = (status: number, body: unknown) =>
+  new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } })
+const adminError = (status: number, message: string) =>
+  json(status, { error: { type: "mockingbird_admin", message } })
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+const SETTING_KEYS = new Set<keyof Settings>(Object.keys(DEFAULT_SETTINGS) as (keyof Settings)[])
+
+const parseSettings = (
+  body: Record<string, unknown>,
+  current: Settings,
+): Partial<Settings> | string => {
+  const patch: Partial<Settings> = {}
+  for (const key of Object.keys(body)) {
+    if (!SETTING_KEYS.has(key as keyof Settings)) return `unknown setting ${key}`
+  }
+  const number = (key: keyof Settings, min = 0) => {
+    const value = body[key]
+    if (value === undefined) return undefined
+    if (typeof value !== "number" || !Number.isFinite(value) || value < min)
+      return `${key}: number >= ${min}`
+    ;(patch as Record<string, unknown>)[key] = value
+    return undefined
+  }
+  const bool = (key: keyof Settings) => {
+    const value = body[key]
+    if (value === undefined) return undefined
+    if (typeof value !== "boolean") return `${key}: boolean`
+    ;(patch as Record<string, unknown>)[key] = value
+    return undefined
+  }
+  const problem =
+    number("vendorId", 1) ??
+    number("tokenTtlSeconds", 1) ??
+    number("tokenIdleSeconds", 1) ??
+    number("secretTtlDays", 0) ??
+    number("fastTrackWindowMs", 0) ??
+    number("tokenGeneration", 0) ??
+    bool("enforceVendorId") ??
+    bool("openEnrollment")
+  if (problem) return problem
+  if (body.catalog !== undefined) {
+    if (!CATALOGS.includes(body.catalog as Catalog))
+      return `catalog must be one of ${CATALOGS.join(", ")}`
+    patch.catalog = body.catalog as Catalog
+    if (body.intake === undefined && body.catalog !== current.catalog) {
+      patch.intake = body.catalog === "sandbox" ? DEFAULT_SETTINGS.intake : null
+    }
+  }
+  if (body.intake !== undefined) {
+    const intake = body.intake
+    if (
+      intake !== null &&
+      (!isRecord(intake) || typeof intake.status !== "string" || typeof intake.afterMs !== "number")
+    ) {
+      return 'intake: null or {"status": "<code>", "afterMs": <ms>}'
+    }
+    patch.intake =
+      intake === null
+        ? null
+        : { status: intake.status as string, afterMs: intake.afterMs as number }
+  }
+  for (const key of ["fastTrackStatus", "timeZone"] as const) {
+    if (body[key] === undefined) continue
+    if (typeof body[key] !== "string" || !body[key]) return `${key}: non-empty string`
+    patch[key] = body[key] as string
+  }
+  if (body.practice !== undefined) {
+    const practice = body.practice
+    if (
+      !isRecord(practice) ||
+      typeof practice.id !== "number" ||
+      typeof practice.name !== "string"
+    ) {
+      return 'practice: {"id": <number>, "name": "<name>"}'
+    }
+    patch.practice = { id: practice.id, name: practice.name }
+  }
+  if (body.rateLimits !== undefined) {
+    const limits = body.rateLimits
+    if (!isRecord(limits) || typeof limits.api !== "number" || typeof limits.token !== "number") {
+      return 'rateLimits: {"api": <n>, "token": <n>}'
+    }
+    patch.rateLimits = { api: limits.api, token: limits.token }
+  }
+  if (body.push !== undefined) {
+    const push = parsePush(body.push)
+    if (typeof push === "string") return push
+    patch.push = push
+  }
+  return patch
+}
+
+const parsePush = (value: unknown): PushTarget | null | string => {
+  if (value === null) return null
+  if (
+    !isRecord(value) ||
+    typeof value.url !== "string" ||
+    !/^https?:\/\//.test(value.url) ||
+    typeof value.username !== "string" ||
+    typeof value.password !== "string"
+  ) {
+    return 'push: null or {"url": "http(s)://…", "username": "…", "password": "…"}'
+  }
+  return { url: value.url, username: value.username, password: value.password }
+}
+
+const parseUser = (body: unknown): Partial<ApiUser> | string => {
+  if (!isRecord(body) || typeof body.clientId !== "string" || !body.clientId) {
+    return 'expected {"clientId", "secret"?, "privileges"?, "practiceId"?, "vendorId"?, "userGroup"?}'
+  }
+  const user: Partial<ApiUser> = { clientId: body.clientId }
+  if (body.secret !== undefined) {
+    if (typeof body.secret !== "string" || !body.secret) return "secret: non-empty string"
+    user.secret = body.secret
+  }
+  if (body.privileges !== undefined) {
+    if (!Array.isArray(body.privileges) || body.privileges.some((p) => typeof p !== "string")) {
+      return "privileges: string[]"
+    }
+    user.privileges = body.privileges as string[]
+  }
+  for (const key of ["practiceId", "vendorId", "userId"] as const) {
+    if (body[key] === undefined) continue
+    if (typeof body[key] !== "number") return `${key}: number`
+    user[key] = body[key] as number
+  }
+  if (body.userGroup !== undefined) {
+    if (body.userGroup !== "api-practice" && body.userGroup !== "api-pharmacy") {
+      return "userGroup: api-practice or api-pharmacy"
+    }
+    user.userGroup = body.userGroup
+  }
+  return user
+}
+
+const parseTracking = (value: unknown): TrackingRecord | null | string => {
+  if (value === undefined || value === null || value === false) return null
+  if (value === true) return { trackingNumber: "1Z999AA10123456784", carrier: "UPS", service: null }
+  if (!isRecord(value) || typeof value.trackingNumber !== "string" || !value.trackingNumber) {
+    return 'tracking: true or {"trackingNumber", "carrier"?, "service"?}'
+  }
+  return {
+    trackingNumber: value.trackingNumber,
+    carrier: typeof value.carrier === "string" ? value.carrier : null,
+    service: typeof value.service === "string" ? value.service : null,
+  }
+}
+
+const orderIdParam = (raw: string | undefined) =>
+  raw && /^\d+$/.test(raw) ? Number(raw) : undefined
 
 export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV2Runtime => {
   const hub = createWebhookHub({
@@ -47,7 +274,33 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
     retryDelaysMs: options.push?.retryDelaysMs ?? PUSH_RETRY_DELAYS_MS,
     ...(options.push?.fetch ? { fetch: options.push.fetch } : {}),
   })
-  const runtime = createServiceRuntime<LifeFileV2API>({
+  const bootPush: PushTarget | null = options.push
+    ? { url: options.push.url, username: options.push.username, password: options.push.password }
+    : null
+
+  const syncPush = (namespace: string, api: LifeFileV2API) => {
+    const target = api.state.current().push
+    const kept = hub.endpoints(namespace).filter((e) => e.id !== "lifefile_push")
+    hub.setEndpoints(namespace, [
+      ...kept,
+      ...(target
+        ? [
+            {
+              id: "lifefile_push",
+              url: target.url,
+              secret: `${target.username}:${target.password}`,
+            },
+          ]
+        : []),
+    ])
+  }
+
+  const adminControls: MockControls | undefined =
+    options.latency === "none" || options.adminControls?.latency !== undefined
+      ? options.adminControls
+      : { ...(options.adminControls ?? {}), latency: RECORDED_LATENCY_CONTROL }
+
+  const runtime: ServiceRuntime<LifeFileV2API> = createServiceRuntime<LifeFileV2API>({
     name: LIFEFILE_V2_NAMESPACE,
     document,
     ...(options.sqlite ? { sqlite: options.sqlite } : {}),
@@ -55,20 +308,126 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
     ...(options.seed !== undefined ? { seed: options.seed } : {}),
     ...(options.adminPrefix !== undefined ? { adminPrefix: options.adminPrefix } : {}),
     ...(options.adminKey !== undefined ? { adminKey: options.adminKey } : {}),
-    ...(options.adminControls !== undefined ? { adminControls: options.adminControls } : {}),
+    ...(adminControls !== undefined ? { adminControls } : {}),
     ...(options.onLog ? { onLog: options.onLog } : {}),
+    ...(options.namespaceIdleMs !== undefined ? { namespaceIdleMs: options.namespaceIdleMs } : {}),
+    ...(options.maxRecords !== undefined ? { maxRecords: options.maxRecords } : {}),
+    ...(options.maxSnapshots !== undefined ? { maxSnapshots: options.maxSnapshots } : {}),
     credential: tokenCredential,
     presets: LIFEFILE_V2_PRESETS,
     webhooks: hub,
-    create: ({ sqlite, namespace, clock }) =>
-      new LifeFileV2API({
+    onClockChange: (namespace) => {
+      runtime.instance(namespace).runDue()
+    },
+    create: ({ sqlite, namespace, publicNamespace, clock }) => {
+      const api: LifeFileV2API = new LifeFileV2API({
         sqlite,
         namespace,
         now: clock.now,
-        ...(options.settings ? { settings: options.settings } : {}),
+        settings: { ...(bootPush ? { push: bootPush } : {}), ...(options.settings ?? {}) },
         ...(options.apiUsers ? { apiUsers: options.apiUsers } : {}),
-      }),
-    admin,
+        onPush: ({ body, badCredentials }) => {
+          syncPush(publicNamespace, api)
+          hub.publish({
+            namespace: publicNamespace,
+            type: PUSH_EVENT,
+            body,
+            tags: { badCredentials: String(badCredentials) },
+          })
+        },
+      })
+      return api
+    },
+    describe: () => ({ corpus: CORPUS_VERSION, push: bootPush ? "on" : "off" }),
+    admin: (rt) => adminRoutes(rt, syncPush),
   })
   return Object.assign(runtime, { webhooks: hub })
 }
+
+const adminRoutes = (
+  runtime: ServiceRuntime<LifeFileV2API>,
+  syncPush: (namespace: string, api: LifeFileV2API) => void,
+): AdminRoutes => ({
+  "GET /orders": ({ namespace }) => {
+    const api = runtime.instance(namespace)
+    return json(200, { orders: api.orders().map((order) => api.orderDto(order)) })
+  },
+  "POST /orders/:id/status": ({ namespace, params, body }) => {
+    if (!isRecord(body) || typeof body.status !== "string" || !body.status) {
+      return adminError(400, 'expected {"status": "<code>", "push"?: boolean}')
+    }
+    if (body.push !== undefined && typeof body.push !== "boolean")
+      return adminError(400, "push: boolean")
+    const id = orderIdParam(params.id)
+    const api = runtime.instance(namespace)
+    if (id === undefined) return adminError(404, `no order ${params.id}`)
+    const change = api.setStatus(id, body.status, { push: body.push !== false })
+    if (typeof change === "string") return adminError(404, change)
+    return json(200, api.orderDto(change.order))
+  },
+  "POST /orders/:id/push": ({ namespace, params, body }) => {
+    const input = body === undefined || body === null ? {} : body
+    if (!isRecord(input)) return adminError(400, 'expected {"tracking"?, "badCredentials"?}')
+    const tracking = parseTracking(input.tracking)
+    if (typeof tracking === "string") return adminError(400, tracking)
+    if (input.badCredentials !== undefined && typeof input.badCredentials !== "boolean") {
+      return adminError(400, "badCredentials: boolean")
+    }
+    const id = orderIdParam(params.id)
+    const api = runtime.instance(namespace)
+    const order =
+      id === undefined ? undefined : api.emitPush(id, tracking, input.badCredentials === true)
+    if (!order) return adminError(404, `no order ${params.id}`)
+    return json(200, api.orderDto(order))
+  },
+  "POST /tokens/revoke": ({ namespace }) =>
+    json(200, { tokenGeneration: runtime.instance(namespace).revokeTokens() }),
+  "GET /api-users": ({ namespace }) =>
+    json(200, {
+      apiUsers: runtime
+        .instance(namespace)
+        .state.apiUsers.list({ order: "oldest" })
+        .map(({ value: { secret: _secret, ...user } }) => user),
+    }),
+  "PUT /api-users": ({ namespace, body }) => {
+    const parsed = parseUser(body)
+    if (typeof parsed === "string") return adminError(400, parsed)
+    const state = runtime.instance(namespace).state
+    const existing = state.user(parsed.clientId as string)
+    const user = existing
+      ? state.saveUser({
+          ...existing,
+          ...parsed,
+          ...(parsed.secret && parsed.secret !== existing.secret
+            ? { secretIssuedAt: state.clockNow() }
+            : {}),
+        })
+      : state.registerUser(parsed)
+    const { secret: _secret, ...shown } = user
+    return json(200, shown)
+  },
+  "POST /api-users/:clientId/expire-secret": ({ namespace, params }) => {
+    const user = runtime.instance(namespace).expireSecret(params.clientId ?? "")
+    if (!user) return adminError(404, `no API user ${params.clientId}`)
+    const { secret: _secret, ...shown } = user
+    return json(200, shown)
+  },
+  "GET /settings": ({ namespace }) => json(200, runtime.instance(namespace).state.current()),
+  "PUT /settings": ({ namespace, body }) => {
+    if (!isRecord(body)) return adminError(400, "expected a JSON object")
+    const api = runtime.instance(namespace)
+    const patch = parseSettings(body, api.state.current())
+    if (typeof patch === "string") return adminError(400, patch)
+    const next = api.state.update(patch)
+    syncPush(namespace, api)
+    return json(200, next)
+  },
+  "PUT /push": ({ namespace, body }) => {
+    const push = parsePush(body ?? null)
+    if (typeof push === "string") return adminError(400, push)
+    const api = runtime.instance(namespace)
+    api.state.update({ push })
+    syncPush(namespace, api)
+    return json(200, { push: push ? { url: push.url, username: push.username } : null })
+  },
+})

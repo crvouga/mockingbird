@@ -107,7 +107,11 @@ export type RxRecord = {
   uuid: string
 }
 
-export type TrackingRecord = { trackingNumber: string; carrier: string | null; service: string | null }
+export type TrackingRecord = {
+  trackingNumber: string
+  carrier: string | null
+  service: string | null
+}
 
 export type OrderRecord = {
   id: number

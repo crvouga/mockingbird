@@ -23,6 +23,7 @@ export class LifeFileState {
   readonly apiUsers: Collection<ApiUser>
   readonly settings: Collection<Settings>
   readonly counters: Collection<Counter>
+  readonly pendingIntake: Collection<{ orderId: number; dueAt: number }>
   private readonly ids: IdSequence
 
   constructor(
@@ -37,6 +38,7 @@ export class LifeFileState {
     this.apiUsers = new Collection(sqlite, namespace, "apiUsers")
     this.settings = new Collection(sqlite, namespace, "settings")
     this.counters = new Collection(sqlite, namespace, "counters")
+    this.pendingIntake = new Collection(sqlite, namespace, "pendingIntake")
     this.ids = new IdSequence(sqlite, namespace, `lifefile-v2:${namespace}`)
     this.ensureSeeded()
   }
@@ -49,6 +51,10 @@ export class LifeFileState {
       const users = this.seed.apiUsers.length > 0 ? this.seed.apiUsers : [{}]
       for (const user of users) this.registerUser(user)
     }
+  }
+
+  clockNow(): number {
+    return this.now()
   }
 
   current(): Settings {
@@ -106,6 +112,15 @@ export class LifeFileState {
 
   nextTokenId(): number {
     return TOKEN_BASE + this.next("token")
+  }
+
+  uuid(): string {
+    const raw = this.ids.next("uuid:", 32).slice("uuid:".length)
+    const hex = [...raw].map((c) => "0123456789abcdef".charAt(c.charCodeAt(0) % 16))
+    hex[12] = "4"
+    hex[16] = "89ab".charAt(raw.charCodeAt(16) % 4)
+    const h = hex.join("")
+    return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`
   }
 
   secret(): string {

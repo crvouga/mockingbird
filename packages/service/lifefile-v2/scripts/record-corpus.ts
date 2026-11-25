@@ -99,7 +99,8 @@ type Call = {
 const rawCalls: { run: string; file: string; record: Json }[] = []
 for (const run of runs) {
   const files = (await readdir(join(probeRoot, run))).filter((f) => /^\d+-.*\.json$/.test(f)).sort()
-  for (const file of files) rawCalls.push({ run, file, record: await readJson(join(probeRoot, run, file)) })
+  for (const file of files)
+    rawCalls.push({ run, file, record: await readJson(join(probeRoot, run, file)) })
 }
 
 const orderIds = new Set<number>()
@@ -171,7 +172,15 @@ const errors = calls
     body: call.response,
   }))
 
-const LOCATION_NAMES = ["Sandbox Pharmacy North", "Sandbox Pharmacy North 2", "Sandbox Pharmacy South"]
+const me = calls.find((call) => call.case === "me")
+if (!me) throw new Error("the probe has no /auth/me call")
+const mePrivileges = ((me.response as Json).data as Json).privileges
+
+const LOCATION_NAMES = [
+  "Sandbox Pharmacy North",
+  "Sandbox Pharmacy North 2",
+  "Sandbox Pharmacy South",
+]
 const statusesOf = (rows: Json[]) =>
   rows.map((row) => ({ id: String(row.id), label: sanitizeString(String(row.label)) }))
 const locationsOf = (rows: Json[], names: readonly string[]) =>
@@ -189,9 +198,7 @@ const runtimeCorpus = {
     name: "Sandbox API Practice - SBX-PRA-SYNTHETIC0001",
   },
   apiUserId: SYNTHETIC_API_USER,
-  privileges: sanitize(
-    ((calls.find((call) => call.case === "me")?.response as Json).data as Json).privileges,
-  ),
+  privileges: sanitize(mePrivileges),
   catalogs: {
     sandbox: {
       statuses: statusesOf(reference["sandbox-statuses"].data),
@@ -212,7 +219,10 @@ const probeCorpus = {
   calls,
 }
 
-await writeFile(join(PACKAGE, "corpus", "probe-calls.json"), `${JSON.stringify(probeCorpus, null, 2)}\n`)
+await writeFile(
+  join(PACKAGE, "corpus", "probe-calls.json"),
+  `${JSON.stringify(probeCorpus, null, 2)}\n`,
+)
 await writeFile(
   join(PACKAGE, "corpus", "live-errors.json"),
   `${JSON.stringify({ source: probeCorpus.source, note: "Every error reply the sandbox gave, sanitized; the acceptance suite asserts the emulator gives the same status and body.", errors }, null, 2)}\n`,
@@ -221,7 +231,10 @@ await writeFile(
   join(PACKAGE, "corpus", "statuses.json"),
   `${JSON.stringify({ source: "GET /api/v2/statuses on a sandbox and a production account, 2026-11-24, labels neutralised", sandbox: runtimeCorpus.catalogs.sandbox.statuses, production: runtimeCorpus.catalogs.production.statuses }, null, 2)}\n`,
 )
-await writeFile(join(PACKAGE, "src", "corpus", "reference.json"), `${JSON.stringify(runtimeCorpus, null, 2)}\n`)
+await writeFile(
+  join(PACKAGE, "src", "corpus", "reference.json"),
+  `${JSON.stringify(runtimeCorpus, null, 2)}\n`,
+)
 console.log(
   `wrote ${calls.length} calls, ${errors.length} errors, ${runtimeCorpus.catalogs.sandbox.statuses.length} sandbox and ${runtimeCorpus.catalogs.production.statuses.length} production statuses`,
 )

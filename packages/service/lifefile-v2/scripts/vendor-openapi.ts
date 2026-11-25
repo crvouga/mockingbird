@@ -154,6 +154,10 @@ for (const overlay of OPERATIONS) {
   const responses = (cleaned.responses ?? {}) as Record<string, Json>
   for (const [status, response] of Object.entries(responses)) {
     response.description = RESPONSE_DESCRIPTION[status] ?? "Response"
+    const media = (response.content as Record<string, Json> | undefined)?.["application/json"]
+    if (Number(status) >= 400 && overlay.id !== "IssueToken" && media?.schema) {
+      media.schema = { anyOf: [media.schema, { $ref: "#/components/schemas/RecordedErrorResult" }] }
+    }
   }
   if (overlay.id !== "IssueToken") {
     responses["429"] = { $ref: "#/components/responses/RateLimited" }
@@ -284,6 +288,8 @@ const envelopeError = {
     data: { type: ["object", "array", "null"] },
   },
 }
+
+schemas.RecordedErrorResult = envelopeError
 
 const document = {
   openapi: "3.1.0",

@@ -80,13 +80,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -119,13 +123,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -154,13 +162,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -256,19 +268,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderListQueryValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderListQueryValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -302,19 +320,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/CreateOrderValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/CreateOrderValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -348,25 +372,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderPathValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderPathValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -396,25 +428,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderPathValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderPathValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -453,25 +493,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderStatusValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderStatusValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -505,25 +553,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderPathValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderPathValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -557,25 +613,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderShippingNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderShippingNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/OrderShippingValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/OrderShippingValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -642,19 +706,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReferenceDataQueryValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ReferenceDataQueryValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -689,25 +759,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocationNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/LocationNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocationPathValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/LocationPathValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -757,25 +835,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/LocationNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/LocationNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -845,19 +931,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReferenceDataQueryValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ReferenceDataQueryValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -937,25 +1029,33 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "404":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/PracticeNotFoundErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/PracticeNotFoundErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Not found
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -1017,19 +1117,25 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "422":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ReferenceDataQueryValidationErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ReferenceDataQueryValidationErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: Validation error
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -1058,13 +1164,17 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/BearerUnauthorizedErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "Missing, malformed, expired or revoked bearer token, or no X-Vendor-ID"
         "403":
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                anyOf:
+                  - $ref: "#/components/schemas/ApiPrivilegeForbiddenErrorResult"
+                  - $ref: "#/components/schemas/RecordedErrorResult"
           description: "The API user lacks the privilege, or the order's practice is outside its scope"
         "429":
           $ref: "#/components/responses/RateLimited"
@@ -4468,3 +4578,5 @@ components:
           type: string
         process_fast_track_result:
           type: array
+    RecordedErrorResult:
+      *schema
