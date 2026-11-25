@@ -177,7 +177,8 @@ export type WebhookHub = {
     listener: (event: { namespace: string; state: string; deliveryId: string }) => void,
   ): () => void
   setTransportPolicy(policy: OwnedTransport): void
-  pending(namespace: string): number
+  /** Deliveries waiting in one namespace, or in every namespace. */
+  pending(namespace?: string): number
   snapshot(namespace: string): unknown
   exportSnapshot(handle: unknown): unknown
   importSnapshot(namespace: string, document: unknown): unknown
@@ -403,6 +404,23 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       if (state === "pending") schedule(delivery)
       else notify(delivery)
     }
+    forgetFinished(message.namespace)
+  }
+
+  /** Keep at most `keep` deliveries per namespace, oldest finished first; a waiting one is never dropped. */
+  const forgetFinished = (namespace: string) => {
+    let total = 0
+    const finished: string[] = []
+    for (const [deliveryId, delivery] of deliveries) {
+      if (delivery.namespace !== namespace) continue
+      total++
+      if (delivery.state !== "pending" && !activeDeliveries.has(deliveryId))
+        finished.push(deliveryId)
+    }
+    for (const deliveryId of finished.slice(0, Math.max(0, total - keep))) {
+      deliveries.delete(deliveryId)
+      payloads.delete(deliveryId)
+    }
   }
 
   const takeFault = (namespace: string): WebhookFault["mode"] | undefined => {
@@ -430,13 +448,16 @@ export const createWebhookHub = (options: WebhookHubOptions): WebhookHub => {
       transport = policy
     },
     pending(namespace) {
+      const inScope = (name: string) => namespace === undefined || name === namespace
       const ids = new Set(
         [...deliveries.values()]
-          .filter((d) => d.namespace === namespace && d.state === "pending")
+          .filter((d) => inScope(d.namespace) && d.state === "pending")
           .map((d) => d.id),
       )
-      for (const [id, active] of activeDeliveries) if (active.namespace === namespace) ids.add(id)
-      return ids.size + (held.get(namespace)?.length ?? 0)
+      for (const [id, active] of activeDeliveries) if (inScope(active.namespace)) ids.add(id)
+      let waiting = 0
+      for (const [name, messages] of held) if (inScope(name)) waiting += messages.length
+      return ids.size + waiting
     },
     snapshot(namespace) {
       if (hub.pending(namespace) > 0) throw new Error("webhooks are not quiescent")

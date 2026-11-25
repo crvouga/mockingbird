@@ -16,7 +16,7 @@ import {
 } from "./controls.js"
 import type { FaultPresetList } from "./faults.js"
 import type { Journal } from "./journal.js"
-import type { Metrics } from "./metrics.js"
+import type { Metrics, ResourceReport } from "./metrics.js"
 import { createNamespaceControls, type NamespaceControls } from "./namespace-controls.js"
 import { timingSafeEqual } from "./signing.js"
 import { ADMIN_ROUTE_REFERENCE } from "./surface.js"
@@ -258,6 +258,8 @@ export type ControlContext = {
   applyControls?(namespace: string, plan: ControlPlan): void
   /** Reset a namespace and forget it. Default: reset. */
   dropNamespace?(namespace: string): Promise<void>
+  /** Runtime-wide gauges, added to an unscoped `GET /metrics?resources=1`. */
+  resources?(): ResourceReport
 }
 
 export type ControlPlane = {
@@ -702,7 +704,17 @@ export const createControlPlane = (context: ControlContext): ControlPlane => {
 
     // Totals across every namespace, unless the caller names one.
     "GET /metrics": ({ request, url, namespace }) =>
-      json(200, context.metrics.report(explicitNamespace(request, url) ? namespace : undefined)),
+      json(
+        200,
+        explicitNamespace(request, url)
+          ? context.metrics.report(namespace)
+          : {
+              ...context.metrics.report(),
+              ...(context.resources && url.searchParams.get("resources") === "1"
+                ? { resources: context.resources() }
+                : {}),
+            },
+      ),
     "DELETE /metrics": ({ request, url, namespace }) => {
       context.metrics.reset(explicitNamespace(request, url) ? namespace : undefined)
       return json(200, { status: "ok" })

@@ -25,6 +25,8 @@ export type Journal = {
   readonly size: number
   record(entry: JournalEntry): void
   list(query?: JournalQuery): JournalEntry[]
+  /** Entries held for one namespace, or for every namespace. */
+  count(namespace?: string): number
   /** Forget one namespace's entries, or every namespace's. */
   clear(namespace?: string): void
 }
@@ -81,6 +83,12 @@ export const createJournal = (size: number = DEFAULT_JOURNAL_SIZE): Journal => {
       if (query.limit === undefined) return matched
       // `slice(-0)` is the whole list, so no entries has to be said outright.
       return query.limit <= 0 ? [] : matched.slice(-query.limit)
+    },
+    count(namespace) {
+      if (namespace !== undefined) return rings.get(namespace)?.entries.length ?? 0
+      let total = 0
+      for (const ring of rings.values()) total += ring.entries.length
+      return total
     },
     clear(namespace) {
       if (namespace === undefined) rings.clear()

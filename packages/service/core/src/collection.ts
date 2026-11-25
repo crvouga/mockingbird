@@ -13,6 +13,61 @@ export type ListRecordsOptions<T> = {
 
 type RecordRow = { id: string; seq: number; value: string }
 
+const RECORD_LIMITS = new WeakMap<SqliteClient, Map<string, number>>()
+
+const limitFor = (sqlite: SqliteClient, namespace: string): number | undefined => {
+  const limits = RECORD_LIMITS.get(sqlite)
+  if (!limits) return undefined
+  let owner: string | undefined
+  for (const service of limits.keys())
+    if (
+      (namespace === service || namespace.startsWith(`${service}:`)) &&
+      (owner === undefined || service.length > owner.length)
+    )
+      owner = service
+  return owner === undefined ? undefined : limits.get(owner)
+}
+
+/** A write that would store more records in one namespace than the runtime's `maxRecords`. */
+export class RecordLimitError extends RangeError {
+  constructor(readonly limit: number) {
+    super(
+      `this namespace already holds ${limit} records, the most maxRecords allows; reset or delete the namespace to free them`,
+    )
+    this.name = "RecordLimitError"
+  }
+}
+
+/** How a request that hit the record cap is answered: `507`, in the admin error shape. */
+export const recordLimitResponse = (error: RecordLimitError): Response =>
+  new Response(JSON.stringify({ error: { type: "mockingbird_admin", message: error.message } }), {
+    status: 507,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  })
+
+/**
+ * Cap the records each namespace of `service` may hold in `sqlite`, or lift the cap with
+ * `undefined`. Storage namespaces are `service` and `service:<name>`; another service sharing
+ * the database is not capped. Inserting a new id past it throws {@link RecordLimitError};
+ * replacing a record never does.
+ */
+export const setRecordLimit = (
+  sqlite: SqliteClient,
+  service: string,
+  limit: number | undefined,
+): void => {
+  let limits = RECORD_LIMITS.get(sqlite)
+  if (limit === undefined) {
+    limits?.delete(service)
+    return
+  }
+  if (!limits) {
+    limits = new Map()
+    RECORD_LIMITS.set(sqlite, limits)
+  }
+  limits.set(service, limit)
+}
+
 /**
  * A SQLite-backed table of JSON records addressed by id. Ordering is by insertion
  * sequence, never by id lexicographic order, so list semantics stay stable.
@@ -94,9 +149,23 @@ export class Collection<T> {
     return row !== undefined
   }
 
+  private assertRoom(id: string): void {
+    const limit = limitFor(this.sqlite, this.namespace)
+    if (limit === undefined || this.has(id)) return
+    const row = this.prepare(
+      "SELECT COUNT(*) AS n FROM mockingbird_records WHERE namespace = ?",
+    ).get<{ n: number }>(this.namespace)
+    if (Number(row?.n ?? 0) < limit) return
+    const error = new RecordLimitError(limit)
+    for (const journal of openJournals(this.sqlite, this.namespace) ?? [])
+      journal.limitHit ??= error
+    throw error
+  }
+
   /** Insert a new record, assigning it the next sequence number. */
   insert(id: string, value: T): Stored<T> {
     return this.sqlite.transaction(() => {
+      this.assertRoom(id)
       this.journalRecord(id)
       const seq = this.bumpCollectionSeq()
       const stored = { seq, value }

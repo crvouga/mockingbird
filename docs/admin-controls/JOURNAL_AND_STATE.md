@@ -117,6 +117,44 @@ curl localhost:8787/__admin/metrics
 | `unmatched` | `{method, path, count}` for each path no operation matched: what the emulator does not cover |
 | `faults` | Requests a fault rule answered or shaped |
 | `totalDurationMs` | The sum of every request's `durationMs` |
+| `resources` | Only with `?resources=1` and no namespace: what the runtime holds now, across every namespace |
+
+`resources` is what a long-running mock is watched by. The first six fields are gauges, not totals since boot, so they fall when a namespace is dropped or [forgotten for being idle](NAMESPACES.md#long-running-mocks). It is left out unless asked for, so the plain report stays the same bytes for the same requests.
+
+```bash
+curl 'localhost:8787/__admin/metrics?resources=1'
+```
+
+```jsonc
+{
+  "requests": 0,
+  "resources": {
+    "namespaces": 3,
+    "records": 42,
+    "journalEntries": 120,
+    "snapshots": 1,
+    "webhooksPending": 0,
+    "heapUsedBytes": 48234496,
+    "namespacesExpired": 297,
+    "idleExpiryFailures": 0,
+    "recordLimitRefusals": 0,
+    "snapshotLimitRefusals": 0
+  }
+}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `namespaces` | Namespaces that hold state, as `GET /__admin/namespaces` lists them |
+| `records` | Rows in the shared record table, every collection and branch included; state a service keeps in tables of its own is not counted |
+| `journalEntries` | Journal entries held |
+| `snapshots` | Named snapshots held |
+| `webhooksPending` | Webhook deliveries waiting for an attempt or a retry |
+| `heapUsedBytes` | Heap in use, or `null` where the host cannot say |
+| `namespacesExpired` | Namespaces forgotten for being idle since boot |
+| `idleExpiryFailures` | Idle namespaces whose drop failed since boot; each is retried |
+| `recordLimitRefusals` | Requests answered `507` for `maxRecords` since boot |
+| `snapshotLimitRefusals` | Snapshots refused for `maxSnapshots` since boot |
 
 ### `DELETE /__admin/metrics`
 

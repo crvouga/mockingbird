@@ -16,7 +16,7 @@ export { awsParseXml, awsXml, awsXmlEscape } from "./aws-xml.js"
 export type { Clock, ClockState, DerivedClock } from "./clock.js"
 export { createClock, deriveClock, restoreClock } from "./clock.js"
 export type { ListRecordsOptions, Stored } from "./collection.js"
-export { Collection } from "./collection.js"
+export { Collection, RecordLimitError, setRecordLimit } from "./collection.js"
 export type {
   AdminRequest,
   AdminRoute,
@@ -110,7 +110,13 @@ export {
 } from "./journal.js"
 export type { LatencyRegistry } from "./latency.js"
 export { createLatencyRegistry } from "./latency.js"
-export type { Metrics, MetricsReport, RejectedRequest, RequestLog } from "./metrics.js"
+export type {
+  Metrics,
+  MetricsReport,
+  RejectedRequest,
+  RequestLog,
+  ResourceReport,
+} from "./metrics.js"
 export { createMetrics } from "./metrics.js"
 export type {
   ControlClock,
