@@ -334,8 +334,12 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
       ? options.adminControls
       : { ...(options.adminControls ?? {}), latency: RECORDED_LATENCY_CONTROL }
 
-  let issued = 0
-  const tokenNonce = () => opaqueToken(`lifefile-v2:nonce:${options.seed ?? ""}:${++issued}`, 22)
+  const issued = new Map<string, number>()
+  const tokenNonce = (namespace: string) => () => {
+    const count = (issued.get(namespace) ?? 0) + 1
+    issued.set(namespace, count)
+    return opaqueToken(`lifefile-v2:nonce:${options.seed ?? ""}:${namespace}:${count}`, 22)
+  }
 
   const runtime: ServiceRuntime<LifeFileV2API> = createServiceRuntime<LifeFileV2API>({
     name: LIFEFILE_V2_NAMESPACE,
@@ -364,7 +368,7 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
         sqlite,
         namespace,
         now: clock.now,
-        tokenNonce,
+        tokenNonce: tokenNonce(namespace),
         settings: { ...(bootPush ? { push: bootPush } : {}), ...(options.settings ?? {}) },
         ...(options.apiUsers ? { apiUsers: options.apiUsers } : {}),
         ...(options.maxOrders !== undefined ? { maxOrders: options.maxOrders } : {}),
