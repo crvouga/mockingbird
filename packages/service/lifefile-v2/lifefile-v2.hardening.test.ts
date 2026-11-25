@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 import { createClock } from "@crvouga/mockingbird-service"
 import { CATALOG_DATA, createRuntime, PRODUCTION_STATUSES, SANDBOX_STATUSES } from "./src/index.js"
-import { serveTarget } from "./src/server.js"
+import { SERVE_LIMITS, serveTarget } from "./src/server.js"
 import { consumer, orderBody } from "./test/consumer.js"
 
 const BASE = "http://lifefile.local"
@@ -416,5 +416,60 @@ describe("risk: what the review fixes must not break", () => {
     if (created.ok) expect((await client.setStatus(created.data.orderId, "3c59d")).ok).toBe(true)
     expect(PRODUCTION_STATUSES.map((s) => s.id)).toContain("b4ffc")
     expect(new Set(PRODUCTION_STATUSES.map((s) => s.id)).size).toBe(55)
+  })
+})
+
+describe("serve bounds a namespace without making every write slower", () => {
+  const median = (values: number[]) =>
+    [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] as number
+
+  test("serve's default write cost does not grow with the namespace", async () => {
+    const runtime = (await serveTarget.create({ "no-latency": true }, COMMON)) as ReturnType<
+      typeof createRuntime
+    >
+    await admin(runtime, "PUT", "/settings", { rateLimits: null })
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    const timedCreate = async () => {
+      const started = performance.now()
+      const created = await client.createOrder(orderBody({ uuid: crypto.randomUUID() }))
+      expect(created.ok).toBe(true)
+      return performance.now() - started
+    }
+    const early: number[] = []
+    for (let i = 0; i < 40; i++) early.push(await timedCreate())
+    for (let i = 0; i < 1_000; i++)
+      await client.createOrder(orderBody({ uuid: crypto.randomUUID() }))
+    const late: number[] = []
+    for (let i = 0; i < 40; i++) late.push(await timedCreate())
+    expect(median(late)).toBeLessThan(Math.max(3 * median(early), 2))
+  }, 120_000)
+
+  test("--max-orders refuses the next order with a 507 and writes nothing", async () => {
+    const runtime = (await serveTarget.create(
+      { "no-latency": true, "max-orders": "3" },
+      COMMON,
+    )) as ReturnType<typeof createRuntime>
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    for (let i = 0; i < 3; i++) expect((await client.createOrder(orderBody())).ok).toBe(true)
+    const refused = await client.createOrder(orderBody())
+    expect(refused.ok).toBe(false)
+    if (!refused.ok) expect(refused.failure.httpStatus).toBe(507)
+    expect(runtime.instance().orders()).toHaveLength(3)
+    await runtime.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    expect((await client.createOrder(orderBody())).ok).toBe(true)
+  })
+
+  test("serve caps orders at 25,000 by default", () => {
+    expect(SERVE_LIMITS.maxOrders).toBe(25_000)
+    expect(() => serveTarget.create({ "max-orders": "0" }, COMMON)).toThrow("--max-orders")
+  })
+
+  test("open enrollment stops adding API users past maxApiUsers", async () => {
+    const { runtime } = boot({ maxApiUsers: 3 })
+    const fetch = (r: Request) => runtime.fetch(r)
+    const statuses: number[] = []
+    for (let i = 0; i < 4; i++) statuses.push((await token(BASE, fetch, `new-${i}`)).status)
+    expect(statuses).toEqual([200, 200, 401, 401])
+    expect((await token(BASE, fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
   })
 })
