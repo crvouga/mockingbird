@@ -9,6 +9,8 @@ type RecordImage = { seq: number; value: string } | null
 export class WriteJournal {
   readonly records = new Map<string, { collection: string; id: string; before: RecordImage }>()
   readonly sequences = new Map<string, number | null>()
+  /** The first write in this scope refused for the record cap, if one was. */
+  limitHit: RangeError | undefined = undefined
 
   restore(sqlite: SqliteClient, namespace: string): void {
     sqlite.transaction(() => {

@@ -168,7 +168,7 @@ describe("per-namespace caps", () => {
   test("the record cap counts records, not writes: replacing one is always allowed", () => {
     const sqlite = new Database()
     migrateCore(sqlite)
-    setRecordLimit(sqlite, 1)
+    setRecordLimit(sqlite, "svc", 1)
     const rows = new Collection<number>(sqlite, "svc:w", "rows")
     rows.insert("a", 1)
     rows.insert("a", 2)
@@ -177,7 +177,7 @@ describe("per-namespace caps", () => {
     expect(() => rows.insert("b", 1)).toThrow(RecordLimitError)
     expect(rows.count()).toBe(1)
     expect(() => new Collection<number>(sqlite, "svc:v", "rows").insert("b", 1)).not.toThrow()
-    setRecordLimit(sqlite, undefined)
+    setRecordLimit(sqlite, "svc", undefined)
     expect(() => rows.insert("b", 1)).not.toThrow()
   })
 
@@ -247,6 +247,10 @@ describe("GET /__admin/metrics reports what the mock holds", () => {
       snapshots: 1,
       webhooksPending: 0,
       heapUsedBytes: 12_345,
+      namespacesExpired: 0,
+      idleExpiryFailures: 0,
+      recordLimitRefusals: 0,
+      snapshotLimitRefusals: 0,
     })
     expect(runtime.resources()).toEqual(await resources(runtime))
   })

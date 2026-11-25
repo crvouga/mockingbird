@@ -103,6 +103,7 @@ import {
 } from "./upstream.js"
 import { PACKAGE_VERSION } from "./version.js"
 import { type WebhookHub, webhookAdminRoutes } from "./webhooks.js"
+import { closeJournal, openJournal } from "./write-journal.js"
 
 /**
  * Stamped on every response the runtime returns — vendor, fault, admin and health alike —
@@ -214,12 +215,14 @@ export type RuntimeOptions<T extends ServiceInstance> = {
   /**
    * Forget a namespace (as `DELETE /__admin/namespaces/<key>` does) once no request has named
    * it for this many wall-clock milliseconds. `default` is never forgotten, nor is a namespace
-   * with a webhook delivery still waiting. Default 0: namespaces are kept until dropped.
+   * with a webhook delivery still waiting or a request still running. Default 0: namespaces are
+   * kept until dropped.
    */
   namespaceIdleMs?: number
   /**
-   * Records each namespace may hold; a write that would store another answers `507`. The cap
-   * belongs to the SQLite database, so runtimes sharing one share it. Default: no cap.
+   * Records each namespace may hold; a request that would store another answers `507` with
+   * every write it made rolled back. The cap is this runtime's own: another service sharing the
+   * SQLite database is not capped by it. Default: no cap.
    */
   maxRecords?: number
   /** Named snapshots each namespace may hold; another is refused with `400`. Default: no cap. */
@@ -583,11 +586,21 @@ export const createRuntime = <T extends ServiceInstance>(
   const idleMs = optionalCount(options.namespaceIdleMs, "namespaceIdleMs", 0) ?? 0
   const maxSnapshots = optionalCount(options.maxSnapshots, "maxSnapshots", 1)
   const maxRecords = optionalCount(options.maxRecords, "maxRecords", 1)
-  if (maxRecords !== undefined) setRecordLimit(sqlite, maxRecords)
+  if (maxRecords !== undefined) setRecordLimit(sqlite, options.name, maxRecords)
   /** When each namespace was last named, on the wall clock, while idle expiry is on. */
   const lastSeen = new Map<string, number>()
   const touch = (name: string): void => {
     if (idleMs > 0 && name !== DEFAULT_NAMESPACE) lastSeen.set(name, wallNow())
+  }
+  /** Requests still running, by namespace: expiry never drops a namespace under one. */
+  const inFlight = new Map<string, number>()
+  /** Namespaces being dropped for idleness; a request naming one waits for it to finish. */
+  const expiring = new Map<string, Promise<void>>()
+  const cleanup = {
+    namespacesExpired: 0,
+    idleExpiryFailures: 0,
+    recordLimitRefusals: 0,
+    snapshotLimitRefusals: 0,
   }
   const metrics = createMetrics()
   const upstreamModes = new Map<string, UpstreamState>()
@@ -699,7 +712,11 @@ export const createRuntime = <T extends ServiceInstance>(
     return created
   }
 
-  const instance = (name: string = DEFAULT_NAMESPACE): T => instanceFor(name)
+  const instance = (name: string = DEFAULT_NAMESPACE): T => {
+    const found = instanceFor(name)
+    touch(name)
+    return found
+  }
 
   /** A namespace's clock as a checkpoint keeps it, and how one is put back. */
   const clockOf = (namespace: string): ServiceTimelineState["clock"] => {
@@ -924,14 +941,27 @@ export const createRuntime = <T extends ServiceInstance>(
     lastSeen.delete(name)
   }
 
+  const expire = async (name: string, seen: number): Promise<void> => {
+    try {
+      await dropNamespace(name)
+      cleanup.namespacesExpired++
+    } catch {
+      cleanup.idleExpiryFailures++
+      if (publicNamespaces.has(name) && !lastSeen.has(name)) lastSeen.set(name, seen)
+    }
+  }
+
   const forgetIdle = async (current: string): Promise<void> => {
     if (idleMs === 0) return
     const now = wallNow()
     for (const [name, seen] of [...lastSeen]) {
-      if (name === current || now - seen <= idleMs) continue
+      if (name === current || now - seen <= idleMs || expiring.has(name)) continue
+      if ((inFlight.get(name) ?? 0) > 0) continue
       if ((options.webhooks?.pending(name) ?? 0) > 0) continue
       lastSeen.delete(name)
-      await dropNamespace(name)
+      const dropping = expire(name, seen).finally(() => expiring.delete(name))
+      expiring.set(name, dropping)
+      await dropping
     }
   }
 
@@ -948,6 +978,7 @@ export const createRuntime = <T extends ServiceInstance>(
     snapshots: [...kept.values()].reduce((total, each) => total + each.size, 0),
     webhooksPending: options.webhooks?.pending() ?? 0,
     heapUsedBytes: heapUsedBytes() ?? null,
+    ...cleanup,
   })
 
   /** Everything a namespace is: records, clock, random streams, faults, latency, webhooks. */
@@ -1161,6 +1192,7 @@ export const createRuntime = <T extends ServiceInstance>(
     const store = kept.get(namespace)
     if (maxSnapshots === undefined || !store || store.size < maxSnapshots) return
     if (id !== undefined && store.has(id)) return
+    cleanup.snapshotLimitRefusals++
     throw new ControlError(
       `namespace ${namespace} already holds ${maxSnapshots} snapshots, the most maxSnapshots allows; delete one or reuse its name`,
     )
@@ -1409,328 +1441,344 @@ export const createRuntime = <T extends ServiceInstance>(
         const mapped = credential !== undefined ? credentials.get(credential) : undefined
         if (mapped !== undefined) namespace = mapped
       }
-      if (KEY_PATTERN.test(namespace)) touch(namespace)
-      await forgetIdle(namespace)
-      const selectedBranch = request.headers.get(BRANCH_HEADER) ?? "main"
-      const at = request.headers.get(AT_HEADER) ?? undefined
-      const stamp = (response: Response): Response => {
-        // An invalid namespace is not echoed back.
-        const value = KEY_PATTERN.test(namespace)
-          ? `${options.name}@${version}; ns=${namespace}`
-          : `${options.name}@${version}`
-        try {
-          response.headers.set(MOCKINGBIRD_HEADER, value)
-          return response
-        } catch {
-          // Immutable headers (a response passed through from `fetch`): copy it.
-          const copy = new Response(response.body, response)
-          copy.headers.set(MOCKINGBIRD_HEADER, value)
-          return copy
+      await expiring.get(namespace)
+      if (publicNamespaces.has(namespace)) touch(namespace)
+      inFlight.set(namespace, (inFlight.get(namespace) ?? 0) + 1)
+      try {
+        await forgetIdle(namespace)
+        const selectedBranch = request.headers.get(BRANCH_HEADER) ?? "main"
+        const at = request.headers.get(AT_HEADER) ?? undefined
+        const stamp = (response: Response): Response => {
+          // An invalid namespace is not echoed back.
+          const value = KEY_PATTERN.test(namespace)
+            ? `${options.name}@${version}; ns=${namespace}`
+            : `${options.name}@${version}`
+          try {
+            response.headers.set(MOCKINGBIRD_HEADER, value)
+            return response
+          } catch {
+            // Immutable headers (a response passed through from `fetch`): copy it.
+            const copy = new Response(response.body, response)
+            copy.headers.set(MOCKINGBIRD_HEADER, value)
+            return copy
+          }
         }
-      }
-      if (obsoleteInternalPath)
-        return stamp(adminFail(404, "internal transport is only available under adminPrefix"))
-      const handled = internal ? undefined : await control.handle(request)
-      if (handled) return stamp(handled)
-      const started = monotonicNow()
-      const url = new URL(request.url)
-      const operationId = operationIdFor(request, url.pathname)
-      let forwarded = false
-      let accepted: ServiceCheckpoint | undefined
-      let acceptedNotes: ResponseNotes | undefined
-      // Injected wait this request spent: latency, fault delays, a timeout.
-      let waitedMs = 0
-      // With virtual time the wait is the whole duration, so a journal replays byte for byte.
-      let virtualTime = false
-      let requestClock = clock
-      // What a rejection records about the body. The runtime never reads the request stream —
-      // consuming it would break a streaming request (e.g. a bidirectional model stream) — so the
-      // byte count comes from `content-length` when the client sent it, and is null otherwise.
-      const contentLength = request.headers.get("content-length")
-      const received: RejectedRequest = {
-        contentType: request.headers.get("content-type"),
-        bodyBytes:
-          contentLength !== null && /^\d+$/.test(contentLength) ? Number(contentLength) : null,
-        transferEncoding: request.headers.get("transfer-encoding"),
-      }
-      const log = (status: number, faultId?: string, response?: Response) => {
-        const noted = { ...acceptedNotes, ...(response ? responseNotes(response) : {}) }
-        const rejected = status >= 400 && faultId === undefined
-        const entry: RequestLog = {
-          service: options.name,
-          ...(forwarded ? { upstream: true } : {}),
-          namespace,
+        if (obsoleteInternalPath)
+          return stamp(adminFail(404, "internal transport is only available under adminPrefix"))
+        const handled = internal ? undefined : await control.handle(request)
+        if (handled) return stamp(handled)
+        const started = monotonicNow()
+        const url = new URL(request.url)
+        const operationId = operationIdFor(request, url.pathname)
+        let forwarded = false
+        let accepted: ServiceCheckpoint | undefined
+        let acceptedNotes: ResponseNotes | undefined
+        // Injected wait this request spent: latency, fault delays, a timeout.
+        let waitedMs = 0
+        // With virtual time the wait is the whole duration, so a journal replays byte for byte.
+        let virtualTime = false
+        let requestClock = clock
+        // What a rejection records about the body. The runtime never reads the request stream —
+        // consuming it would break a streaming request (e.g. a bidirectional model stream) — so the
+        // byte count comes from `content-length` when the client sent it, and is null otherwise.
+        const contentLength = request.headers.get("content-length")
+        const received: RejectedRequest = {
+          contentType: request.headers.get("content-type"),
+          bodyBytes:
+            contentLength !== null && /^\d+$/.test(contentLength) ? Number(contentLength) : null,
+          transferEncoding: request.headers.get("transfer-encoding"),
+        }
+        const log = (status: number, faultId?: string, response?: Response) => {
+          const noted = { ...acceptedNotes, ...(response ? responseNotes(response) : {}) }
+          const rejected = status >= 400 && faultId === undefined
+          const entry: RequestLog = {
+            service: options.name,
+            ...(forwarded ? { upstream: true } : {}),
+            namespace,
+            operationId,
+            method: request.method,
+            path: url.pathname,
+            status,
+            durationMs: virtualTime ? waitedMs : Math.round((monotonicNow() - started) * 100) / 100,
+            unmatched: options.document !== undefined && operationId === undefined,
+            ...(faultId !== undefined ? { faultId } : {}),
+            ...(waitedMs > 0 ? { delayMs: waitedMs } : {}),
+            ...(noted?.ids && Object.keys(noted.ids).length > 0 ? { ids: noted.ids } : {}),
+            ...(noted?.adopted ? { adopted: true } : {}),
+            ...(accepted ? { accepted: true, checkpoint: accepted.id } : {}),
+            ...(rejected ? { request: { ...received } } : {}),
+            ...(rejected && noted?.issues && noted.issues.length > 0
+              ? { issues: noted.issues.map((issue) => ({ ...issue })) }
+              : {}),
+          }
+          metrics.record(entry)
+          journal.record({ ...entry, at: new Date(requestClock.now()).toISOString() })
+          options.onLog?.(entry)
+        }
+        if (!KEY_PATTERN.test(namespace)) {
+          log(400)
+          return stamp(
+            new Response(
+              JSON.stringify({
+                error: {
+                  type: "mockingbird_admin",
+                  message: `${NAMESPACE_HEADER} must match ${KEY_PATTERN}`,
+                },
+              }),
+              { status: 400, headers: { "content-type": "application/json; charset=utf-8" } },
+            ),
+          )
+        }
+        if (!KEY_PATTERN.test(selectedBranch)) {
+          log(400)
+          return stamp(adminFail(400, `${BRANCH_HEADER} must match ${KEY_PATTERN}`))
+        }
+        requestClock = namespaceClock(namespace)
+        const refuse = (status: number, message: string): Response => {
+          log(status)
+          return stamp(adminFail(status, message))
+        }
+        // Controls carried by this request. Whatever could refuse the request is checked before
+        // anything is applied, so a request that is refused has changed nothing.
+        let requested: RequestControls | undefined
+        let scripted: FaultRule[] = []
+        try {
+          requested = parseControlHeaders(request.headers)
+          if (requested)
+            scripted = controls.scriptFaults(namespace, {
+              ...(requested.fault ? { fault: requested.fault } : {}),
+              ...(requested.timeout !== undefined ? { timeoutMs: requested.timeout } : {}),
+            })
+          const lost = requested?.restore !== undefined ? CONTROL_HEADERS.restore : at && AT_HEADER
+          if (requested?.snapshot !== undefined && !requested.reset)
+            assertSnapshotRoom(namespace, requested.snapshot)
+          if (requested?.reset && lost)
+            throw new ControlError(
+              `${CONTROL_HEADERS.reset}: a reset discards snapshots and history, so ${lost} cannot follow it`,
+            )
+        } catch (error) {
+          if (error instanceof ControlError) return refuse(400, error.message)
+          throw error
+        }
+        // A write that names a checkpoint on `main` first moves `main` back to it. That changes
+        // the namespace, so it is guarded like the headers that say so outright.
+        const rewinds =
+          at !== undefined && selectedBranch === "main" && MUTATING_METHODS.has(request.method)
+        if (
+          (requested || rewinds) &&
+          options.adminKey !== undefined &&
+          !hasAdminKey(request.headers, options.adminKey)
+        )
+          return refuse(401, `control headers need ${ADMIN_KEY_HEADER}`)
+        controls.ensure(namespace)
+        if (requested?.restore !== undefined && !snapshotStore.get(namespace, requested.restore))
+          return refuse(404, `no snapshot ${requested.restore} in namespace ${namespace}`)
+        if (at !== undefined) {
+          try {
+            timeline(namespace).get(at)
+          } catch (error) {
+            return refuse(409, error instanceof Error ? error.message : String(error))
+          }
+        }
+        if (requested) {
+          // The order the guide lists them in: reset, restore, seed, time, advance, virtual time.
+          if (requested.reset) await reset(namespace)
+          if (requested.restore !== undefined) snapshotStore.restore(namespace, requested.restore)
+          if (requested.seed !== undefined) controls.reseed(namespace, requested.seed)
+          if (requested.time !== undefined)
+            controls.changeClock(namespace, { frozen: true, now: requested.time })
+          if (requested.advance !== undefined)
+            controls.changeClock(namespace, { advanceMs: requested.advance })
+          if (requested.virtualTime !== undefined)
+            controls.apply(namespace, { virtualTime: requested.virtualTime })
+        }
+        let storage: string
+        try {
+          if (
+            at !== undefined &&
+            selectedBranch === "main" &&
+            !MUTATING_METHODS.has(request.method)
+          ) {
+            const point = timeline(namespace).get(at)
+            storage = physicalBranch(namespace, `at_${at}`)
+            let viewRng = rngs.get(storage)
+            if (!viewRng) {
+              viewRng = createRng(seedOf(namespace))
+              instanceFor(storage, namespace, viewRng)
+            }
+            viewRng.setState(point.value.rngState)
+            restoreStorage(storage, point.value.snapshot)
+            captured.set(storage, point.value.snapshot)
+          } else {
+            storage = ensureBranch(namespace, selectedBranch, at)
+          }
+        } catch (error) {
+          log(409)
+          return stamp(adminFail(409, error instanceof Error ? error.message : String(error)))
+        }
+        const settings = controls.settings(namespace)
+        virtualTime = settings.virtualTime
+        if (settings.autoAdvanceMs > 0) requestClock.advance(settings.autoAdvanceMs)
+        const wait = async (ms: number): Promise<void> => {
+          if (!(ms > 0)) return
+          waitedMs += ms
+          // Virtual: the mock clock pays for the wait and the request carries on at once.
+          if (virtualTime) requestClock.advance(ms)
+          else await sleepUnlessAborted(ms, request.signal)
+        }
+        const candidate = {
           operationId,
           method: request.method,
           path: url.pathname,
-          status,
-          durationMs: virtualTime ? waitedMs : Math.round((monotonicNow() - started) * 100) / 100,
-          unmatched: options.document !== undefined && operationId === undefined,
-          ...(faultId !== undefined ? { faultId } : {}),
-          ...(waitedMs > 0 ? { delayMs: waitedMs } : {}),
-          ...(noted?.ids && Object.keys(noted.ids).length > 0 ? { ids: noted.ids } : {}),
-          ...(noted?.adopted ? { adopted: true } : {}),
-          ...(accepted ? { accepted: true, checkpoint: accepted.id } : {}),
-          ...(rejected ? { request: { ...received } } : {}),
-          ...(rejected && noted?.issues && noted.issues.length > 0
-            ? { issues: noted.issues.map((issue) => ({ ...issue })) }
-            : {}),
+          namespace,
+          headers: request.headers,
+          query: url.searchParams,
+          // Read from a copy, so the service still gets the body. Not JSON: nothing to match.
+          readJson: async (): Promise<unknown> => {
+            try {
+              return JSON.parse(await request.clone().text())
+            } catch {
+              return undefined
+            }
+          },
+          wait,
         }
-        metrics.record(entry)
-        journal.record({ ...entry, at: new Date(requestClock.now()).toISOString() })
-        options.onLog?.(entry)
-      }
-      if (!KEY_PATTERN.test(namespace)) {
-        log(400)
-        return stamp(
-          new Response(
-            JSON.stringify({
-              error: {
-                type: "mockingbird_admin",
-                message: `${NAMESPACE_HEADER} must match ${KEY_PATTERN}`,
-              },
-            }),
-            { status: 400, headers: { "content-type": "application/json; charset=utf-8" } },
-          ),
-        )
-      }
-      if (!KEY_PATTERN.test(selectedBranch)) {
-        log(400)
-        return stamp(adminFail(400, `${BRANCH_HEADER} must match ${KEY_PATTERN}`))
-      }
-      requestClock = namespaceClock(namespace)
-      const refuse = (status: number, message: string): Response => {
-        log(status)
-        return stamp(adminFail(status, message))
-      }
-      // Controls carried by this request. Whatever could refuse the request is checked before
-      // anything is applied, so a request that is refused has changed nothing.
-      let requested: RequestControls | undefined
-      let scripted: FaultRule[] = []
-      try {
-        requested = parseControlHeaders(request.headers)
-        if (requested)
-          scripted = controls.scriptFaults(namespace, {
-            ...(requested.fault ? { fault: requested.fault } : {}),
-            ...(requested.timeout !== undefined ? { timeoutMs: requested.timeout } : {}),
-          })
-        const lost = requested?.restore !== undefined ? CONTROL_HEADERS.restore : at && AT_HEADER
-        if (requested?.snapshot !== undefined && !requested.reset)
-          assertSnapshotRoom(namespace, requested.snapshot)
-        if (requested?.reset && lost)
-          throw new ControlError(
-            `${CONTROL_HEADERS.reset}: a reset discards snapshots and history, so ${lost} cannot follow it`,
-          )
-      } catch (error) {
-        if (error instanceof ControlError) return refuse(400, error.message)
-        throw error
-      }
-      // A write that names a checkpoint on `main` first moves `main` back to it. That changes
-      // the namespace, so it is guarded like the headers that say so outright.
-      const rewinds =
-        at !== undefined && selectedBranch === "main" && MUTATING_METHODS.has(request.method)
-      if (
-        (requested || rewinds) &&
-        options.adminKey !== undefined &&
-        !hasAdminKey(request.headers, options.adminKey)
-      )
-        return refuse(401, `control headers need ${ADMIN_KEY_HEADER}`)
-      controls.ensure(namespace)
-      if (requested?.restore !== undefined && !snapshotStore.get(namespace, requested.restore))
-        return refuse(404, `no snapshot ${requested.restore} in namespace ${namespace}`)
-      if (at !== undefined) {
+        let hits: FaultHit[]
         try {
-          timeline(namespace).get(at)
+          await wait(latency.take(namespace, operationId) + (requested?.delay ?? 0))
+          hits = scripted.length > 0 ? await faults.fire(scripted, candidate) : []
+          if (!hits.some((hit) => hit.drop || hit.response))
+            hits.push(...(await faults.take({ ...candidate, now: requestClock.now() })))
         } catch (error) {
-          return refuse(409, error instanceof Error ? error.message : String(error))
+          // The client gave up while the request was being held.
+          log(0)
+          throw error
         }
-      }
-      if (requested) {
-        // The order the guide lists them in: reset, restore, seed, time, advance, virtual time.
-        if (requested.reset) await reset(namespace)
-        if (requested.restore !== undefined) snapshotStore.restore(namespace, requested.restore)
-        if (requested.seed !== undefined) controls.reseed(namespace, requested.seed)
-        if (requested.time !== undefined)
-          controls.changeClock(namespace, { frozen: true, now: requested.time })
-        if (requested.advance !== undefined)
-          controls.changeClock(namespace, { advanceMs: requested.advance })
-        if (requested.virtualTime !== undefined)
-          controls.apply(namespace, { virtualTime: requested.virtualTime })
-      }
-      let storage: string
-      try {
-        if (
-          at !== undefined &&
-          selectedBranch === "main" &&
-          !MUTATING_METHODS.has(request.method)
-        ) {
-          const point = timeline(namespace).get(at)
-          storage = physicalBranch(namespace, `at_${at}`)
-          let viewRng = rngs.get(storage)
-          if (!viewRng) {
-            viewRng = createRng(seedOf(namespace))
-            instanceFor(storage, namespace, viewRng)
+        const final = hits.find((hit) => hit.drop || hit.response)
+        /** A response is done: cut it short if asked to, name the fault, take the snapshot. */
+        const finish = (response: Response): Response => {
+          let out = response
+          const truncate = hits.find((hit) => hit.truncate !== undefined)?.truncate
+          if (truncate !== undefined) out = truncateResponse(out, truncate)
+          // The rule the journal names: the one that answered, or the first that shaped it.
+          const shaped = final ?? hits[0]
+          if (shaped) {
+            out = mutableResponse(out)
+            out.headers.set(FAULT_HEADER, shaped.id)
           }
-          viewRng.setState(point.value.rngState)
-          restoreStorage(storage, point.value.snapshot)
-          captured.set(storage, point.value.snapshot)
-        } else {
-          storage = ensureBranch(namespace, selectedBranch, at)
+          if (requested?.snapshot !== undefined) {
+            out = mutableResponse(out)
+            out.headers.set(SNAPSHOT_HEADER, snapshotStore.create(namespace, requested.snapshot).id)
+          }
+          return stamp(out)
         }
-      } catch (error) {
-        log(409)
-        return stamp(adminFail(409, error instanceof Error ? error.message : String(error)))
-      }
-      const settings = controls.settings(namespace)
-      virtualTime = settings.virtualTime
-      if (settings.autoAdvanceMs > 0) requestClock.advance(settings.autoAdvanceMs)
-      const wait = async (ms: number): Promise<void> => {
-        if (!(ms > 0)) return
-        waitedMs += ms
-        // Virtual: the mock clock pays for the wait and the request carries on at once.
-        if (virtualTime) requestClock.advance(ms)
-        else await sleepUnlessAborted(ms, request.signal)
-      }
-      const candidate = {
-        operationId,
-        method: request.method,
-        path: url.pathname,
-        namespace,
-        headers: request.headers,
-        query: url.searchParams,
-        // Read from a copy, so the service still gets the body. Not JSON: nothing to match.
-        readJson: async (): Promise<unknown> => {
+        if (final?.drop) {
+          log(0, final.id)
+          throw new DroppedConnectionError(final.timeout ? "timeout" : "drop")
+        }
+        if (final?.response) {
+          log(final.response.status, final.id)
+          return finish(final.response)
+        }
+        const upstream = getUpstream(namespace)
+        const wantsForward = (requested?.upstream ?? upstream?.mode) === "forward"
+        if (wantsForward) {
+          if (!options.upstream || !upstream)
+            return refuse(409, "an upstream fetch and baseUrl are required")
+          if (options.canForward && !options.canForward(request))
+            return refuse(501, "forwarding this operation is not supported")
+          const captureRequest = options.onForwardResponse ? request.clone() : undefined
+          forwarded = true
+          let response: Response
           try {
-            return JSON.parse(await request.clone().text())
+            let outgoing = (options.upstreamRequest ?? upstreamRequest)(request, upstream.baseUrl)
+            if (options.upstream.rewriteAuth)
+              outgoing = await options.upstream.rewriteAuth(outgoing)
+            response = await options.upstream.fetch(outgoing)
           } catch {
-            return undefined
+            log(0, hits[0]?.id)
+            throw new DroppedConnectionError("drop")
           }
-        },
-        wait,
-      }
-      let hits: FaultHit[]
-      try {
-        await wait(latency.take(namespace, operationId) + (requested?.delay ?? 0))
-        hits = scripted.length > 0 ? await faults.fire(scripted, candidate) : []
-        if (!hits.some((hit) => hit.drop || hit.response))
-          hits.push(...(await faults.take({ ...candidate, now: requestClock.now() })))
-      } catch (error) {
-        // The client gave up while the request was being held.
-        log(0)
-        throw error
-      }
-      const final = hits.find((hit) => hit.drop || hit.response)
-      /** A response is done: cut it short if asked to, name the fault, take the snapshot. */
-      const finish = (response: Response): Response => {
-        let out = response
-        const truncate = hits.find((hit) => hit.truncate !== undefined)?.truncate
-        if (truncate !== undefined) out = truncateResponse(out, truncate)
-        // The rule the journal names: the one that answered, or the first that shaped it.
-        const shaped = final ?? hits[0]
-        if (shaped) {
-          out = mutableResponse(out)
-          out.headers.set(FAULT_HEADER, shaped.id)
+          if (captureRequest && response.ok && options.onForwardResponse) {
+            await options.onForwardResponse(
+              instanceFor(storage, namespace),
+              captureRequest,
+              response.clone(),
+            )
+          }
+          log(response.status, hits[0]?.id, response)
+          return finish(response)
         }
-        if (requested?.snapshot !== undefined) {
-          out = mutableResponse(out)
-          out.headers.set(SNAPSHOT_HEADER, snapshotStore.create(namespace, requested.snapshot).id)
-        }
-        return stamp(out)
-      }
-      if (final?.drop) {
-        log(0, final.id)
-        throw new DroppedConnectionError(final.timeout ? "timeout" : "drop")
-      }
-      if (final?.response) {
-        log(final.response.status, final.id)
-        return finish(final.response)
-      }
-      const upstream = getUpstream(namespace)
-      const wantsForward = (requested?.upstream ?? upstream?.mode) === "forward"
-      if (wantsForward) {
-        if (!options.upstream || !upstream)
-          return refuse(409, "an upstream fetch and baseUrl are required")
-        if (options.canForward && !options.canForward(request))
-          return refuse(501, "forwarding this operation is not supported")
-        const captureRequest = options.onForwardResponse ? request.clone() : undefined
-        forwarded = true
-        let response: Response
-        try {
-          let outgoing = (options.upstreamRequest ?? upstreamRequest)(request, upstream.baseUrl)
-          if (options.upstream.rewriteAuth) outgoing = await options.upstream.rewriteAuth(outgoing)
-          response = await options.upstream.fetch(outgoing)
-        } catch {
-          log(0, hits[0]?.id)
-          throw new DroppedConnectionError("drop")
-        }
-        if (captureRequest && response.ok && options.onForwardResponse) {
-          await options.onForwardResponse(
-            instanceFor(storage, namespace),
-            captureRequest,
-            response.clone(),
+        const fired = hits.filter((hit) => hit.effect !== undefined)
+        if (fired.length > 0)
+          effects.set(
+            request,
+            fired.map((hit) => hit.effect),
           )
-        }
-        log(response.status, hits[0]?.id, response)
-        return finish(response)
-      }
-      const fired = hits.filter((hit) => hit.effect !== undefined)
-      if (fired.length > 0)
-        effects.set(
-          request,
-          fired.map((hit) => hit.effect),
-        )
-      let active = true
-      acceptance.set(request, (notes) => {
-        if (!checkpointMutations || !active || accepted || !MUTATING_METHODS.has(request.method))
-          return
-        accepted = timeline(namespace).commit(capture(storage), { branch: selectedBranch })
-        acceptedNotes = notes
-      })
-      let response: Response
-      try {
-        response = await instanceFor(storage, namespace).fetch(request)
-      } catch (error) {
-        if (error instanceof RecordLimitError) {
+        let active = true
+        acceptance.set(request, (notes) => {
+          if (!checkpointMutations || !active || accepted || !MUTATING_METHODS.has(request.method))
+            return
+          accepted = timeline(namespace).commit(capture(storage), { branch: selectedBranch })
+          acceptedNotes = notes
+        })
+        let response: Response
+        const writes =
+          maxRecords !== undefined ? openJournal(sqlite, storageNamespace(storage)) : undefined
+        const refuseAtCap = (error: RecordLimitError): Response => {
+          writes?.restore(sqlite, storageNamespace(storage))
+          cleanup.recordLimitRefusals++
           log(507, hits[0]?.id)
           return finish(recordLimitResponse(error))
         }
-        log(error instanceof DroppedConnectionError ? 0 : 500, hits[0]?.id)
-        throw error
+        try {
+          response = await instanceFor(storage, namespace).fetch(request)
+        } catch (error) {
+          if (error instanceof RecordLimitError) return refuseAtCap(error)
+          log(error instanceof DroppedConnectionError ? 0 : 500, hits[0]?.id)
+          throw error
+        } finally {
+          active = false
+          acceptance.delete(request)
+          if (writes) closeJournal(sqlite, storageNamespace(storage), writes)
+        }
+        if (writes?.limitHit instanceof RecordLimitError) return refuseAtCap(writes.limitHit)
+        const wireStatus = responseNotes(response)?.wireStatus ?? response.status
+        if (
+          checkpointMutations &&
+          MUTATING_METHODS.has(request.method) &&
+          wireStatus >= 200 &&
+          wireStatus < 400
+        ) {
+          const current = capture(storage)
+          const unchanged =
+            accepted &&
+            timeline(namespace).head(selectedBranch)?.id === accepted.id &&
+            current.snapshot.records === accepted.value.snapshot.records &&
+            current.snapshot.sequences === accepted.value.snapshot.sequences &&
+            current.rngState === accepted.value.rngState
+          const point =
+            unchanged && accepted
+              ? accepted
+              : timeline(namespace).commit(current, { branch: selectedBranch })
+          response = mutableResponse(response)
+          response.headers.set(CHECKPOINT_HEADER, point.id)
+        }
+        if (selectedBranch !== "main") {
+          response = mutableResponse(response)
+          response.headers.set(BRANCH_HEADER, selectedBranch)
+        }
+        if (at !== undefined) {
+          response = mutableResponse(response)
+          response.headers.set(AT_HEADER, at)
+        }
+        log(wireStatus, hits[0]?.id, response)
+        return finish(response)
       } finally {
-        active = false
-        acceptance.delete(request)
+        const left = (inFlight.get(namespace) ?? 1) - 1
+        if (left > 0) inFlight.set(namespace, left)
+        else inFlight.delete(namespace)
       }
-      const wireStatus = responseNotes(response)?.wireStatus ?? response.status
-      if (
-        checkpointMutations &&
-        MUTATING_METHODS.has(request.method) &&
-        wireStatus >= 200 &&
-        wireStatus < 400
-      ) {
-        const current = capture(storage)
-        const unchanged =
-          accepted &&
-          timeline(namespace).head(selectedBranch)?.id === accepted.id &&
-          current.snapshot.records === accepted.value.snapshot.records &&
-          current.snapshot.sequences === accepted.value.snapshot.sequences &&
-          current.rngState === accepted.value.rngState
-        const point =
-          unchanged && accepted
-            ? accepted
-            : timeline(namespace).commit(current, { branch: selectedBranch })
-        response = mutableResponse(response)
-        response.headers.set(CHECKPOINT_HEADER, point.id)
-      }
-      if (selectedBranch !== "main") {
-        response = mutableResponse(response)
-        response.headers.set(BRANCH_HEADER, selectedBranch)
-      }
-      if (at !== undefined) {
-        response = mutableResponse(response)
-        response.headers.set(AT_HEADER, at)
-      }
-      log(wireStatus, hits[0]?.id, response)
-      return finish(response)
     },
   }
 

@@ -13,7 +13,20 @@ export type ListRecordsOptions<T> = {
 
 type RecordRow = { id: string; seq: number; value: string }
 
-const RECORD_LIMITS = new WeakMap<SqliteClient, number>()
+const RECORD_LIMITS = new WeakMap<SqliteClient, Map<string, number>>()
+
+const limitFor = (sqlite: SqliteClient, namespace: string): number | undefined => {
+  const limits = RECORD_LIMITS.get(sqlite)
+  if (!limits) return undefined
+  let owner: string | undefined
+  for (const service of limits.keys())
+    if (
+      (namespace === service || namespace.startsWith(`${service}:`)) &&
+      (owner === undefined || service.length > owner.length)
+    )
+      owner = service
+  return owner === undefined ? undefined : limits.get(owner)
+}
 
 /** A write that would store more records in one namespace than the runtime's `maxRecords`. */
 export class RecordLimitError extends RangeError {
@@ -33,12 +46,26 @@ export const recordLimitResponse = (error: RecordLimitError): Response =>
   })
 
 /**
- * Cap the records each namespace may hold in `sqlite`, or lift the cap with `undefined`.
- * Inserting a new id past it throws {@link RecordLimitError}; replacing a record never does.
+ * Cap the records each namespace of `service` may hold in `sqlite`, or lift the cap with
+ * `undefined`. Storage namespaces are `service` and `service:<name>`; another service sharing
+ * the database is not capped. Inserting a new id past it throws {@link RecordLimitError};
+ * replacing a record never does.
  */
-export const setRecordLimit = (sqlite: SqliteClient, limit: number | undefined): void => {
-  if (limit === undefined) RECORD_LIMITS.delete(sqlite)
-  else RECORD_LIMITS.set(sqlite, limit)
+export const setRecordLimit = (
+  sqlite: SqliteClient,
+  service: string,
+  limit: number | undefined,
+): void => {
+  let limits = RECORD_LIMITS.get(sqlite)
+  if (limit === undefined) {
+    limits?.delete(service)
+    return
+  }
+  if (!limits) {
+    limits = new Map()
+    RECORD_LIMITS.set(sqlite, limits)
+  }
+  limits.set(service, limit)
 }
 
 /**
@@ -123,12 +150,16 @@ export class Collection<T> {
   }
 
   private assertRoom(id: string): void {
-    const limit = RECORD_LIMITS.get(this.sqlite)
+    const limit = limitFor(this.sqlite, this.namespace)
     if (limit === undefined || this.has(id)) return
     const row = this.prepare(
       "SELECT COUNT(*) AS n FROM mockingbird_records WHERE namespace = ?",
     ).get<{ n: number }>(this.namespace)
-    if (Number(row?.n ?? 0) >= limit) throw new RecordLimitError(limit)
+    if (Number(row?.n ?? 0) < limit) return
+    const error = new RecordLimitError(limit)
+    for (const journal of openJournals(this.sqlite, this.namespace) ?? [])
+      journal.limitHit ??= error
+    throw error
   }
 
   /** Insert a new record, assigning it the next sequence number. */

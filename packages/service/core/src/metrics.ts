@@ -72,6 +72,14 @@ export type ResourceReport = {
   webhooksPending: number
   /** Heap in use, or `null` where the host cannot say. */
   heapUsedBytes: number | null
+  /** Namespaces forgotten for being idle since the runtime started. */
+  namespacesExpired: number
+  /** Idle namespaces whose drop failed; each is retried on a later request. */
+  idleExpiryFailures: number
+  /** Requests answered `507` for the record cap, their writes rolled back. */
+  recordLimitRefusals: number
+  /** Snapshots refused for the snapshot cap. */
+  snapshotLimitRefusals: number
 }
 
 export type Metrics = {
