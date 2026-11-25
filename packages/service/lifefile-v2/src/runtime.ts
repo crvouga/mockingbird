@@ -382,12 +382,18 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
   return Object.assign(runtime, { webhooks: hub })
 }
 
+const seeded = (runtime: ServiceRuntime<LifeFileV2API>, namespace: string) => {
+  const api = runtime.instance(namespace)
+  api.state.seedIfNeeded()
+  return api
+}
+
 const adminRoutes = (
   runtime: ServiceRuntime<LifeFileV2API>,
   syncPush: (namespace: string, api: LifeFileV2API) => void,
 ): AdminRoutes => ({
   "GET /orders": ({ namespace }) => {
-    const api = runtime.instance(namespace)
+    const api = seeded(runtime, namespace)
     return json(200, { orders: api.orders().map((order) => api.orderDto(order)) })
   },
   "POST /orders/:id/status": ({ namespace, params, body }) => {
@@ -397,7 +403,7 @@ const adminRoutes = (
     if (body.push !== undefined && typeof body.push !== "boolean")
       return adminError(400, "push: boolean")
     const id = orderIdParam(params.id)
-    const api = runtime.instance(namespace)
+    const api = seeded(runtime, namespace)
     if (id === undefined) return adminError(404, `no order ${params.id}`)
     const change = api.setStatus(id, body.status, { push: body.push !== false })
     if (typeof change === "string") return adminError(404, change)
@@ -412,14 +418,14 @@ const adminRoutes = (
       return adminError(400, "badCredentials: boolean")
     }
     const id = orderIdParam(params.id)
-    const api = runtime.instance(namespace)
+    const api = seeded(runtime, namespace)
     const order =
       id === undefined ? undefined : api.emitPush(id, tracking, input.badCredentials === true)
     if (!order) return adminError(404, `no order ${params.id}`)
     return json(200, api.orderDto(order))
   },
   "POST /tokens/revoke": ({ namespace }) =>
-    json(200, { tokenGeneration: runtime.instance(namespace).revokeTokens() }),
+    json(200, { tokenGeneration: seeded(runtime, namespace).revokeTokens() }),
   "GET /api-users": ({ namespace }) =>
     json(200, {
       apiUsers: runtime
@@ -430,7 +436,7 @@ const adminRoutes = (
   "PUT /api-users": ({ namespace, body }) => {
     const parsed = parseUser(body)
     if (typeof parsed === "string") return adminError(400, parsed)
-    const state = runtime.instance(namespace).state
+    const state = seeded(runtime, namespace).state
     const existing = state.user(parsed.clientId as string)
     const user = existing
       ? state.saveUser({
@@ -445,16 +451,16 @@ const adminRoutes = (
     return json(200, shown)
   },
   "POST /api-users/:clientId/expire-secret": ({ namespace, params }) => {
-    const user = runtime.instance(namespace).expireSecret(params.clientId ?? "")
+    const user = seeded(runtime, namespace).expireSecret(params.clientId ?? "")
     if (!user) return adminError(404, `no API user ${params.clientId}`)
     const { secret: _secret, ...shown } = user
     return json(200, shown)
   },
   "GET /settings": ({ namespace }) =>
-    json(200, shownSettings(runtime.instance(namespace).state.current())),
+    json(200, shownSettings(seeded(runtime, namespace).state.current())),
   "PUT /settings": ({ namespace, body }) => {
     if (!isRecord(body)) return adminError(400, "expected a JSON object")
-    const api = runtime.instance(namespace)
+    const api = seeded(runtime, namespace)
     const patch = parseSettings(body, api.state.current())
     if (typeof patch === "string") return adminError(400, patch)
     const next = api.state.update(patch)
@@ -464,7 +470,7 @@ const adminRoutes = (
   "PUT /push": ({ namespace, body }) => {
     const push = parsePush(body ?? null)
     if (typeof push === "string") return adminError(400, push)
-    const api = runtime.instance(namespace)
+    const api = seeded(runtime, namespace)
     api.state.update({ push })
     syncPush(namespace, api)
     return json(200, { push: push ? { url: push.url, username: push.username } : null })

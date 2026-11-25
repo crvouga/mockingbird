@@ -671,6 +671,7 @@ export class LifeFileV2API implements FetchAPI {
   }
 
   async fetch(request: Request): Promise<Response> {
+    this.state.seedIfNeeded()
     this.runDue(this.statusWriteTarget(request))
     const limited = this.rateLimit(request)
     if (limited.refused) return limited.refused
@@ -685,7 +686,7 @@ export class LifeFileV2API implements FetchAPI {
   async reset(): Promise<void> {
     await this.service.reset()
     this.rateWindows.clear()
-    this.state.ensureSeeded()
+    this.state.unseed()
   }
 
   private settings(): Settings {
