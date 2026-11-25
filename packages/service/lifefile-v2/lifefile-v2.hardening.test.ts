@@ -789,6 +789,19 @@ describe("a bearer token lives only in the namespace state that issued it", () =
     expect(one[0]).not.toBe(one[1])
   })
 
+  test("a sign-in in one namespace does not shift the token bytes another namespace gets", async () => {
+    const inWorker = (fetch: (r: Request) => Promise<Response>, namespace: string) =>
+      token(`${BASE}/__admin/ns/${namespace}`, fetch, "lifefile-client", "lifefile-secret")
+    const alone = boot({ seed: 7 })
+    const shared = boot({ seed: 7 })
+    await inWorker(shared.fetch, "worker-1")
+    const [one, two] = [
+      await (await inWorker(alone.fetch, "worker-7")).text(),
+      await (await inWorker(shared.fetch, "worker-7")).text(),
+    ]
+    expect(two).toBe(one)
+  })
+
   test("a token from before a restart on a kept store stays dead after a reset and a new sign-in", async () => {
     const sqlite = createDefaultSqlite()
     const first = boot({ sqlite })
