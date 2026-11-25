@@ -339,3 +339,82 @@ describe("fast track on the recorded latency and a real clock", () => {
     expect(first).toMatchObject({ ok: true, data: { current_order_status: "b3644" } })
   }, 20_000)
 })
+
+describe("risk: what the review fixes must not break", () => {
+  test("serve without per-write checkpoints still snapshots and restores on request", async () => {
+    const runtime = (await serveTarget.create({ "no-latency": true }, COMMON)) as ReturnType<
+      typeof createRuntime
+    >
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    const created = await client.createOrder(orderBody())
+    expect(created.ok).toBe(true)
+    expect((await admin(runtime, "POST", "/snapshots", { name: "one" })).status).toBe(201)
+    await client.createOrder(orderBody())
+    expect(runtime.instance().orders()).toHaveLength(2)
+    const restored = await admin(runtime, "POST", "/snapshots/one/restore")
+    expect(restored.status).toBeLessThan(300)
+    expect(runtime.instance().orders()).toHaveLength(1)
+  })
+
+  test("a token in use survives the pruning a later sign-in does", async () => {
+    const { runtime, clock } = boot()
+    const fetch = (r: Request) => runtime.fetch(r)
+    const issued = (await (
+      await token(BASE, fetch, "lifefile-client", "lifefile-secret")
+    ).json()) as { access_token: string }
+    const ping = () =>
+      fetch(
+        new Request(`${BASE}/api/v2/ping`, {
+          headers: { authorization: `Bearer ${issued.access_token}`, "x-vendor-id": "10001" },
+        }),
+      )
+    for (let i = 0; i < 3; i++) {
+      clock.advance(50 * 60_000)
+      expect((await ping()).status).toBe(200)
+      expect((await token(BASE, fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
+    }
+    expect((await ping()).status).toBe(200)
+  })
+
+  test("a flood of unknown vendor ids never uses up the real vendor's window", async () => {
+    const { runtime, client } = boot()
+    await admin(runtime, "PUT", "/settings", { rateLimits: { api: 5, token: 120 } })
+    for (let i = 0; i < 20; i++) {
+      await runtime.fetch(
+        new Request(`${BASE}/api/v2/ping`, { headers: { "x-vendor-id": String(80_000 + i) } }),
+      )
+    }
+    expect((await client.call("GET", "/ping")).ok).toBe(true)
+  })
+
+  test("a vendor known only from an API user keeps its own window", async () => {
+    const { runtime } = boot()
+    await admin(runtime, "PUT", "/settings", { rateLimits: { api: 3, token: 120 } })
+    await admin(runtime, "PUT", "/api-users", {
+      clientId: "other-vendor",
+      secret: "s",
+      vendorId: 10002,
+    })
+    for (let i = 0; i < 5; i++) {
+      await runtime.fetch(
+        new Request(`${BASE}/api/v2/ping`, { headers: { "x-vendor-id": String(90_000 + i) } }),
+      )
+    }
+    const other = consumer(BASE, (r) => runtime.fetch(r), {
+      clientId: "other-vendor",
+      clientSecret: "s",
+      vendorId: "10002",
+    })
+    expect((await other.call("GET", "/ping")).ok).toBe(true)
+  })
+
+  test("switching to the production catalog alone still works, and its codes are the real ones", async () => {
+    const { runtime, client } = boot()
+    expect((await admin(runtime, "PUT", "/settings", { catalog: "production" })).status).toBe(200)
+    const created = await client.createOrder(orderBody({ locationId: 100101 }))
+    expect(created.ok).toBe(true)
+    if (created.ok) expect((await client.setStatus(created.data.orderId, "3c59d")).ok).toBe(true)
+    expect(PRODUCTION_STATUSES.map((s) => s.id)).toContain("b4ffc")
+    expect(new Set(PRODUCTION_STATUSES.map((s) => s.id)).size).toBe(55)
+  })
+})
