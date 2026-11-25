@@ -1,7 +1,9 @@
 import type { FetchAPI } from "@crvouga/mockingbird-core"
 import {
   type APIOptions,
+  AT_HEADER,
   annotateResponse,
+  BRANCH_HEADER,
   basicAuth,
   bearerToken,
   bootSqlite,
@@ -81,6 +83,7 @@ export type LifeFileV2APIOptions = APIOptions & {
   maxOrders?: number
   maxApiUsers?: number
   tokenNonce?: () => string
+  live?: () => LifeFileV2API
 }
 
 type Json = Record<string, unknown>
@@ -633,6 +636,13 @@ const flatten = (value: unknown, prefix = ""): [string, string][] => {
 
 const STALLED_CLOCK_POLL_MS = 250
 
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"])
+
+const isCheckpointRead = (request: Request) =>
+  request.headers.has(AT_HEADER) &&
+  (request.headers.get(BRANCH_HEADER) ?? "main") === "main" &&
+  !WRITE_METHODS.has(request.method)
+
 const issueNonces = (scope: string) => {
   let issued = 0
   return () => opaqueToken(`lifefile-v2:nonce:${scope}:${++issued}`, 22)
@@ -653,6 +663,7 @@ export class LifeFileV2API implements FetchAPI {
   private readonly maxOrders: number | undefined
   private readonly maxApiUsers: number | undefined
   private readonly tokenNonce: () => string
+  private readonly live: (() => LifeFileV2API) | undefined
 
   constructor(options: LifeFileV2APIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -662,6 +673,7 @@ export class LifeFileV2API implements FetchAPI {
     this.maxOrders = options.maxOrders
     this.maxApiUsers = options.maxApiUsers
     this.tokenNonce = options.tokenNonce ?? issueNonces(namespace)
+    this.live = options.live
     this.state = new LifeFileState(
       sqlite,
       namespace,
@@ -706,6 +718,7 @@ export class LifeFileV2API implements FetchAPI {
 
   async fetch(request: Request): Promise<Response> {
     this.state.seedIfNeeded()
+    if (this.homeOf(request) !== this) return this.serve(request)
     const target = this.statusWriteTarget(request)
     this.runDue(target)
     try {
@@ -713,6 +726,10 @@ export class LifeFileV2API implements FetchAPI {
     } finally {
       if (target !== undefined) this.runDue()
     }
+  }
+
+  private homeOf(request: Request): LifeFileV2API {
+    return this.live && isCheckpointRead(request) ? this.live() : this
   }
 
   private async serve(request: Request): Promise<Response> {
@@ -836,22 +853,23 @@ export class LifeFileV2API implements FetchAPI {
     const vendor = context.request.headers.get("x-vendor-id")
     if (vendor === null || vendor.trim() === "")
       return failure(401, "X-Vendor-ID header is required")
+    const home = this.homeOf(context.request)
     const claims = decodeClaims(token)
-    if (!claims || parts[2] !== this.state.signature(`${parts[0]}.${parts[1]}`)) {
+    if (!claims || parts[2] !== home.state.signature(`${parts[0]}.${parts[1]}`)) {
       return failure(401, "Invalid authorization token: Signature verification failed", [])
     }
-    const settings = this.settings()
+    const settings = home.settings()
     const now = this.now()
     if (faultEffect(context.request, "token_revoked") !== undefined)
       return failure(401, INACTIVE, [])
     if (now >= (claims.iat + settings.tokenTtlSeconds) * 1000) {
       return failure(401, "Invalid authorization token: Expired token", [])
     }
-    const user = this.state.user(claims.sub)
+    const user = home.state.user(claims.sub)
     if (!user || user.generation !== claims.gen || settings.tokenGeneration !== claims.rev) {
       return failure(401, INACTIVE, [])
     }
-    const record = this.state.tokens.get(String(claims.jti))
+    const record = home.state.tokens.get(String(claims.jti))
     if (
       !record ||
       record.revoked ||
@@ -880,7 +898,7 @@ export class LifeFileV2API implements FetchAPI {
       lastUsedAt: now,
       revoked: false,
     }
-    this.state.tokens.insert(String(claims.jti), used)
+    home.state.tokens.insert(String(claims.jti), used)
     this.auth.set(context.request, { user, claims, token: used })
     return undefined
   }

@@ -369,6 +369,7 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
         namespace,
         now: clock.now,
         tokenNonce: tokenNonce(namespace),
+        live: () => runtime.instance(publicNamespace),
         settings: { ...(bootPush ? { push: bootPush } : {}), ...(options.settings ?? {}) },
         ...(options.apiUsers ? { apiUsers: options.apiUsers } : {}),
         ...(options.maxOrders !== undefined ? { maxOrders: options.maxOrders } : {}),

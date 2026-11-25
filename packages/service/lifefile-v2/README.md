@@ -237,7 +237,9 @@ whole namespace, so writes slow down as the namespace grows. `serve` also skips 
 checkpoint after every write, which reads the whole namespace (`--checkpoint-mutations` turns it
 back on); snapshots taken on request still work. A sign-in drops token rows that are already dead
 (past their lifetime or idle hour); revoked ones stay until then. Rx-UUID searches read an index,
-never every order.
+never every order. A read at a checkpoint (`x-mockingbird-at` on main) shows the namespace as it
+was there and changes nothing: no intake runs and no Data Push is sent, and the bearer token is
+checked against the live namespace, so any token that works live reads history.
 
 Rate limits count per vendor id per minute on the namespace's mock clock: a header naming a
 vendor the namespace does not know shares one `unknown` window, and windows from past minutes are
