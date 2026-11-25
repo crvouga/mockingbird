@@ -61,6 +61,7 @@ export const LOADERS: Record<string, () => Promise<{ serveTarget?: unknown }>> =
   "kms": () => import("@crvouga/mockingbird-service-kms/server"),
   "lambda": () => import("@crvouga/mockingbird-service-lambda/server"),
   "lifefile": () => import("@crvouga/mockingbird-service-lifefile/server"),
+  "lifefile-v2": () => import("@crvouga/mockingbird-service-lifefile-v2/server"),
   "linear": () => import("@crvouga/mockingbird-service-linear/server"),
   "livekit": () => import("@crvouga/mockingbird-service-livekit/server"),
   "llamacloud": () => import("@crvouga/mockingbird-service-llamacloud/server"),
