@@ -354,9 +354,7 @@ const fieldRules = (schema: Schema, prefix: string, depth = 0, parent?: string):
       ...(parent ? { parent } : {}),
       required: (resolved.required ?? []).includes(name),
       ...(value.maxLength !== undefined ? { maxLength: value.maxLength } : {}),
-      ...(value.enum && value.enum.every((e) => typeof e === "string")
-        ? { enum: value.enum as string[] }
-        : {}),
+      ...(value.enum?.every((e) => typeof e === "string") ? { enum: value.enum as string[] } : {}),
       ...(value.format === "uuid" ? { uuid: true } : {}),
     })
   }

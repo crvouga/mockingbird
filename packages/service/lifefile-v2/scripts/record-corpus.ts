@@ -3,13 +3,17 @@ import { basename, join } from "node:path"
 
 type Json = Record<string, unknown>
 
-const [probeRoot, referenceRoot] = process.argv.slice(2)
+const [probeRoot, referenceRoot, ...flags] = process.argv.slice(2)
 if (!probeRoot || !referenceRoot) {
   console.error(
-    "usage: bun scripts/record-corpus.ts <sandbox-probe dir of runs> <reference dir of list replies>",
+    "usage: bun scripts/record-corpus.ts <sandbox-probe dir of runs> <reference dir of list replies> [--neutralize Name,Other]",
   )
   process.exit(2)
 }
+const neutralize = (flags[flags.indexOf("--neutralize") + 1] ?? "")
+  .split(",")
+  .map((word) => word.trim())
+  .filter((word) => flags.includes("--neutralize") && word.length > 0)
 
 const PACKAGE = join(import.meta.dir, "..")
 const SYNTHETIC_VENDOR = 10001
@@ -18,11 +22,13 @@ const SYNTHETIC_API_USER = 200001
 const ORDER_BASE = 50_000_000
 
 const numbers = new Map<number, number>()
+const literal = (word: string) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
 const strings: [RegExp, string][] = [
-  [/GEVITI/g, "SYNTHETIC"],
-  [/Geviti/g, "Synthetic"],
-  [/geviti/g, "synthetic"],
   [/SBX-PRA-[0-9A-Z]+/g, "SBX-PRA-SYNTHETIC0001"],
+  ...neutralize.flatMap((word): [RegExp, string][] => [
+    [new RegExp(literal(word.toUpperCase()), "g"), "SYNTHETIC"],
+    [new RegExp(literal(word), "gi"), "Synthetic"],
+  ]),
 ]
 
 const remapNumber = (value: number) => numbers.get(value) ?? value
@@ -187,7 +193,7 @@ const locationsOf = (rows: Json[], names: readonly string[]) =>
   rows.map((row, index) => ({
     id: remapNumber(Number(row.id)),
     name: names[index] ?? `Pharmacy Location ${index + 1}`,
-    shortName: String(row.shortName).replace(/medivera/i, "Pharmacy"),
+    shortName: sanitizeString(String(row.shortName)).replace(/Synthetic/g, "Pharmacy"),
   }))
 
 const runtimeCorpus = {

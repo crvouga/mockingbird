@@ -11,6 +11,7 @@ import { createServer, DEFAULT_PORT, serveTarget } from "./src/server.js"
 import { consumer, orderBody } from "./test/consumer.js"
 
 const BASE = "http://lifefile.local"
+const COMMON = { adminKey: undefined, seed: undefined, onLog: undefined }
 const T0 = Date.parse("2026-11-24T22:57:51.000Z")
 
 type Received = { headers: Headers; body: Record<string, unknown> }
@@ -43,7 +44,7 @@ const boot = (options: Parameters<typeof createRuntime>[0] = {}) => {
     latency: "none",
     clock,
     push: {
-      url: "http://receiver.local/prescriptions/webhooks/medivera",
+      url: "http://receiver.local/webhooks/lifefile",
       username: "push-user",
       password: "push-pass",
       retryDelaysMs: [0],
@@ -187,6 +188,37 @@ describe("service contract", () => {
   test("serveTarget and DEFAULT_PORT", () => {
     expect(serveTarget.name).toBe("lifefile-v2")
     expect(DEFAULT_PORT).toBe(8932)
+  })
+
+  test("serve flags: push target, catalog, seeded client, no latency", async () => {
+    const runtime = (await serveTarget.create(
+      {
+        "push-url": "http://127.0.0.1:1/push",
+        "push-username": "u",
+        "push-password": "p",
+        catalog: "production",
+        "client-id": "stack-client",
+        "client-secret": "stack-secret",
+        "no-latency": true,
+      },
+      COMMON,
+    )) as ReturnType<typeof createRuntime>
+    const settings = await admin(runtime, "GET", "/settings")
+    expect(settings.json).toMatchObject({
+      catalog: "production",
+      intake: null,
+      push: { url: "http://127.0.0.1:1/push" },
+    })
+    const client = consumer(BASE, (r) => runtime.fetch(r), {
+      clientId: "stack-client",
+      clientSecret: "stack-secret",
+    })
+    const started = performance.now()
+    expect((await client.call("GET", "/ping")).ok).toBe(true)
+    expect(performance.now() - started).toBeLessThan(150)
+    expect(() => serveTarget.create({ catalog: "staging" }, COMMON)).toThrow(
+      "--catalog is sandbox or production",
+    )
   })
 })
 

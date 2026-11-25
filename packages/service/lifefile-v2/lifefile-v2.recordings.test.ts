@@ -21,9 +21,9 @@ test("every recorded sandbox call replays with the same status and body (corpus/
   expect(tolerated).toEqual(KNOWN_DEVIATIONS.map((d) => `${d.case}:${d.path}`))
 }, 60_000)
 
-test("the corpus is sanitized: no tokens, no real account ids, no vendor names", async () => {
+test("the corpus is sanitized: no tokens, no real account ids, no credentials", async () => {
   const text = await Bun.file(new URL("./corpus/probe-calls.json", import.meta.url)).text()
   expect(text).not.toMatch(/eyJ[A-Za-z0-9_-]{10,}/)
-  expect(text.toLowerCase()).not.toContain("geviti")
-  expect(text.toLowerCase()).not.toContain("medivera")
+  expect(text).not.toContain("<pii>")
+  expect(text).not.toMatch(/client_secret"\s*:\s*"(?!<)/)
 })
