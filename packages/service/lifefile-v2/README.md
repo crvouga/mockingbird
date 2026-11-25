@@ -117,7 +117,7 @@ All under `/api/v2`, every one but the token endpoint behind `Authorization: Bea
 | `GET /auth/me` | API user, token times in Pacific offset (`2026-11-24T14:57:52-08:00`), live privileges. |
 | `POST /auth/secret/rotate` | New secret, valid 30 days; every token of the user dies; `revokedTokenCount`. |
 | `POST /orders` | Checked in the sandbox's order: `order.location.id` (only that error, even for an empty body), then the location (`422 Invalid order location id received: '<id>'`), then the practice (`403 This API user is not allowed to create an order for Practice ID <id>.`), then field-keyed `422 Validation Error` (required fields, the contract's length limits and enums, rx uuid format, rx uuid unique within the order ignoring case). Reply `{orderId}` only. Same message id, same rx uuid and byte-identical bodies each make a new order. Not checked: phones, California, unknown shipping service ids, unknown `lfProductID`, text message ids. |
-| `GET /orders` | Newest first; `page`, `perPage` (5–50), `sortField`, `sortType`; strict `filter[...]` deep objects; `filter[rx][uuid]` is case-insensitive and read from an index. Envelope `{data, total, perPage, currentPage, lastPage}`. |
+| `GET /orders` | Newest first; `page`, `perPage` (5–50), `sortField`, `sortType`; strict `filter[...]` deep objects (an array form such as `filter[rx][uuid][]` is refused with `422`, never ignored); `filter[rx][uuid]` is case-insensitive and read from an index. Envelope `{data, total, perPage, currentPage, lastPage}`. |
 | `GET /orders/{id}`, `/status`, `/shipping` | The recorded shapes, null-filled. Missing: `404 Record not found`; not an integer: `422 {"orderId":["The order id must be an integer."]}`. |
 | `PUT /orders/{id}/status` | Any code in the catalog, in any order (even back to `new` after `del`); unknown code `404 Order Status ID '<code>' does not exist`. See [fast track](#fast-track-cancel-and-intake). |
 | `PUT /orders/{id}/shipping` | `{"shipping": {...}}` merges into the order's shipping. A bare object answers `500` and changes nothing, as the sandbox does; the vendor's own crash text is replaced with a generic one. |
@@ -144,7 +144,9 @@ The sandbox does two things to a new order that the contract does not mention:
   after the window, `del` works, and a second `del` is harmless. A client should read the status
   back after cancelling and send `del` again if it did not stick.
 - **Intake.** An order whose status nobody wrote moves itself to `b3644` about half a second after
-  creation (`intake: {status, afterMs}`), without changing `lastUpdatedOn`. Only in the sandbox
+  creation (`intake: {status, afterMs}`), without changing `lastUpdatedOn`. On the wall clock it
+  happens on time with no further request (a timer), and its Data Push goes out then; on a frozen
+  mock clock it happens at the first request or clock advance after it is due. Only in the sandbox
   catalog; the production catalog has no such status and sets `intake: null`.
 
 ### Catalogs

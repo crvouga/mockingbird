@@ -602,6 +602,7 @@ for (const [section, child] of Object.entries(filterSchema.properties ?? {})) {
 
 const flatten = (value: unknown, prefix = ""): [string, string][] => {
   if (typeof value === "string") return [[prefix, value]]
+  if (Array.isArray(value)) return [[`${prefix}[]`, ""]]
   if (!isRecord(value)) return []
   return Object.entries(value).flatMap(([key, entry]) =>
     flatten(entry, prefix ? `${prefix}.${key}` : key),
@@ -617,6 +618,8 @@ export class LifeFileV2API implements FetchAPI {
   private readonly onPush: ((push: PushRequest) => void) | undefined
   private readonly auth = new WeakMap<Request, Auth>()
   private readonly rateWindows = new Map<string, { window: number; count: number }>()
+  private readonly dueTimers = new Set<ReturnType<typeof setTimeout>>()
+  readonly dueFailures: string[] = []
   private rateMinute = -1
   private readonly maxOrders: number | undefined
   private readonly maxApiUsers: number | undefined
@@ -683,7 +686,26 @@ export class LifeFileV2API implements FetchAPI {
     return out
   }
 
+  private wakeAt(dueAt: number): void {
+    const timer = setTimeout(
+      () => {
+        this.dueTimers.delete(timer)
+        try {
+          this.runDue()
+        } catch (error) {
+          if (this.dueFailures.length < 20)
+            this.dueFailures.push(error instanceof Error ? error.message : String(error))
+        }
+      },
+      Math.max(0, dueAt - this.now()) + 1,
+    )
+    if (typeof timer === "object" && timer !== null && "unref" in timer) timer.unref()
+    this.dueTimers.add(timer)
+  }
+
   async reset(): Promise<void> {
+    for (const timer of this.dueTimers) clearTimeout(timer)
+    this.dueTimers.clear()
     await this.service.reset()
     this.rateWindows.clear()
     this.state.unseed()
@@ -839,9 +861,9 @@ export class LifeFileV2API implements FetchAPI {
     let user = this.state.user(clientId)
     if (!user) {
       if (!settings.openEnrollment) return INVALID_CREDENTIALS()
-      if (this.maxApiUsers !== undefined && this.state.apiUsers.count() >= this.maxApiUsers)
+      if (this.maxApiUsers !== undefined && this.state.enrolledCount() >= this.maxApiUsers)
         return INVALID_CREDENTIALS()
-      user = this.state.registerUser({ clientId, secret, secretIssuedAt: now })
+      user = this.state.registerUser({ clientId, secret, secretIssuedAt: now }, { enrolled: true })
     }
     if (user.secret !== secret) return INVALID_CREDENTIALS()
     if (now >= user.secretIssuedAt + settings.secretTtlDays * 86_400_000)
@@ -1022,6 +1044,7 @@ export class LifeFileV2API implements FetchAPI {
         orderId: id,
         dueAt: now + settings.intake.afterMs,
       })
+      this.wakeAt(now + settings.intake.afterMs)
     }
     const response = annotateResponse(success({ orderId: id }), { ids: { orderId: String(id) } })
     if (faultEffect(context.request, "create_lost_reply") !== undefined) {

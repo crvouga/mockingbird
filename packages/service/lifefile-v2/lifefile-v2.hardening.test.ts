@@ -469,7 +469,7 @@ describe("serve bounds a namespace without making every write slower", () => {
     const fetch = (r: Request) => runtime.fetch(r)
     const statuses: number[] = []
     for (let i = 0; i < 4; i++) statuses.push((await token(BASE, fetch, `new-${i}`)).status)
-    expect(statuses).toEqual([200, 200, 401, 401])
+    expect(statuses).toEqual([200, 200, 200, 401])
     expect((await token(BASE, fetch, "lifefile-client", "lifefile-secret")).status).toBe(200)
   })
 })

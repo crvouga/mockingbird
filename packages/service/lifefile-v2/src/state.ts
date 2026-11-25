@@ -77,7 +77,7 @@ export class LifeFileState {
     return next
   }
 
-  registerUser(input: Partial<ApiUser>): ApiUser {
+  registerUser(input: Partial<ApiUser>, origin: { enrolled?: boolean } = {}): ApiUser {
     const settings = this.current()
     const user: ApiUser = {
       clientId: input.clientId ?? DEFAULT_CLIENT.clientId,
@@ -93,6 +93,7 @@ export class LifeFileState {
       privileges: input.privileges ?? [...DEFAULT_PRIVILEGE_IDS],
     }
     this.apiUsers.insert(user.clientId, user)
+    if (origin.enrolled) this.next("enrolled")
     return user
   }
 
@@ -113,6 +114,10 @@ export class LifeFileState {
 
   private base(): number {
     return (idBaseOf(this.sqlite) % 10_000) * 100_000
+  }
+
+  enrolledCount(): number {
+    return this.counters.get("enrolled")?.value ?? 0
   }
 
   orderCount(): number {
