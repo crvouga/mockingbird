@@ -450,6 +450,30 @@ describe("failure controls", () => {
     })
   })
 
+  test("rate limits: the 1001st API call in a minute is 429 with Retry-After, the next minute is fresh", async () => {
+    const { client, clock, runtime } = boot()
+    await admin(runtime, "PUT", "/settings", { rateLimits: { api: 5, token: 120 } })
+    const results = []
+    for (let i = 0; i < 6; i++) results.push(await client.call("GET", "/ping"))
+    expect(results.slice(0, 5).every((r) => r.ok)).toBe(true)
+    const limited = results[5]
+    expect(limited?.ok).toBe(false)
+    if (limited && !limited.ok) {
+      expect(limited.failure).toMatchObject({ httpStatus: 429, category: "rate_limited" })
+      expect(limited.failure.retryAfterMs).toBeGreaterThan(0)
+    }
+    clock.advance(60_000)
+    expect((await client.call("GET", "/ping")).ok).toBe(true)
+  })
+
+  test("an admin status change is never overwritten by intake", async () => {
+    const { client, runtime, clock } = boot()
+    const id = await placed(client)
+    await admin(runtime, "POST", `/orders/${id}/status`, { status: "pen", push: false })
+    clock.advance(60_000)
+    expect(await client.status(id)).toMatchObject({ data: { id: "pen" } })
+  })
+
   test("admin order list shows what the namespace holds", async () => {
     const { client, runtime } = boot()
     const id = await placed(client)
