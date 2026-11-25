@@ -145,6 +145,31 @@ describe("serve limits for a long-lived local stack", () => {
     expect((await admin(two, "POST", "/snapshots", { name: "c" })).status).toBe(400)
   })
 
+  test("serve skips the per-write checkpoint by default, so a write never reads the whole namespace", async () => {
+    const created = async (values: Record<string, string | boolean>) => {
+      const runtime = (await serveTarget.create(values, COMMON)) as ReturnType<typeof createRuntime>
+      const fetch = (r: Request) => runtime.fetch(r)
+      const issued = (await (
+        await token(BASE, fetch, "lifefile-client", "lifefile-secret")
+      ).json()) as { access_token: string }
+      const response = await fetch(
+        new Request(`${BASE}/api/v2/orders`, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${issued.access_token}`,
+            "x-vendor-id": "10001",
+            "content-type": "application/json",
+          },
+          body: JSON.stringify(orderBody()),
+        }),
+      )
+      expect(response.status).toBe(200)
+      return response.headers.get("x-mockingbird-checkpoint")
+    }
+    expect(await created({ "no-latency": true })).toBeNull()
+    expect(await created({ "no-latency": true, "checkpoint-mutations": true })).not.toBeNull()
+  })
+
   test.each([
     ["max-records", "0"],
     ["max-records", "abc"],
