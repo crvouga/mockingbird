@@ -76,7 +76,7 @@ export class LifeFileState {
     const user: ApiUser = {
       clientId: input.clientId ?? DEFAULT_CLIENT.clientId,
       secret: input.secret ?? DEFAULT_CLIENT.secret,
-      secretIssuedAt: input.secretIssuedAt ?? this.now(),
+      secretIssuedAt: input.secretIssuedAt ?? null,
       generation: input.generation ?? 0,
       userId:
         input.userId ??
@@ -125,6 +125,10 @@ export class LifeFileState {
 
   nextTokenId(): number {
     return TOKEN_BASE + this.next("token")
+  }
+
+  tokenNonce(): string {
+    return crypto.randomUUID()
   }
 
   uuid(): string {

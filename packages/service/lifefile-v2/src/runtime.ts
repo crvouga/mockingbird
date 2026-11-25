@@ -441,9 +441,7 @@ const adminRoutes = (
       ? state.saveUser({
           ...existing,
           ...parsed,
-          ...(parsed.secret && parsed.secret !== existing.secret
-            ? { secretIssuedAt: state.clockNow() }
-            : {}),
+          ...(parsed.secret && parsed.secret !== existing.secret ? { secretIssuedAt: null } : {}),
         })
       : state.registerUser(parsed)
     const { secret: _secret, ...shown } = user

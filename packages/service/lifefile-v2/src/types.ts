@@ -23,7 +23,7 @@ export type Privilege = { id: string; description: string }
 export type ApiUser = {
   clientId: string
   secret: string
-  secretIssuedAt: number
+  secretIssuedAt: number | null
   generation: number
   userId: number
   vendorId: number
@@ -34,6 +34,7 @@ export type ApiUser = {
 
 export type TokenRecord = {
   tokenId: number
+  nonce: string
   clientId: string
   issuedAt: number
   lastUsedAt: number

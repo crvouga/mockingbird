@@ -104,7 +104,7 @@ const fromBase64url = (value: string): string | undefined => {
 
 const JWT_HEADER = base64url(JSON.stringify({ typ: "JWT", alg: "HS256" }))
 
-type Claims = { sub: string; jti: number; iat: number; gen: number; rev: number }
+type Claims = { sub: string; jti: number; nonce: string; iat: number; gen: number; rev: number }
 
 const decodeClaims = (token: string): Claims | undefined => {
   const [, payload] = token.split(".")
@@ -117,13 +117,21 @@ const decodeClaims = (token: string): Claims | undefined => {
       !isRecord(value) ||
       typeof value.sub !== "string" ||
       typeof value.jti !== "number" ||
+      typeof value.nonce !== "string" ||
       typeof value.iat !== "number" ||
       typeof value.gen !== "number" ||
       typeof value.rev !== "number"
     ) {
       return undefined
     }
-    return { sub: value.sub, jti: value.jti, iat: value.iat, gen: value.gen, rev: value.rev }
+    return {
+      sub: value.sub,
+      jti: value.jti,
+      nonce: value.nonce,
+      iat: value.iat,
+      gen: value.gen,
+      rev: value.rev,
+    }
   } catch {
     return undefined
   }
@@ -835,7 +843,12 @@ export class LifeFileV2API implements FetchAPI {
       return failure(401, INACTIVE, [])
     }
     const record = this.state.tokens.get(String(claims.jti))
-    if (!record || record.revoked || record.clientId !== claims.sub)
+    if (
+      !record ||
+      record.revoked ||
+      record.clientId !== claims.sub ||
+      record.nonce !== claims.nonce
+    )
       return failure(401, INACTIVE, [])
     if (now - record.lastUsedAt >= settings.tokenIdleSeconds * 1000)
       return failure(401, INACTIVE, [])
@@ -851,6 +864,7 @@ export class LifeFileV2API implements FetchAPI {
     }
     const used: TokenRecord = {
       tokenId: claims.jti,
+      nonce: record.nonce,
       clientId: claims.sub,
       issuedAt: record.issuedAt,
       lastUsedAt: now,
@@ -894,10 +908,13 @@ export class LifeFileV2API implements FetchAPI {
       if (!settings.openEnrollment) return INVALID_CREDENTIALS()
       if (this.maxApiUsers !== undefined && this.state.enrolledCount() >= this.maxApiUsers)
         return INVALID_CREDENTIALS()
-      user = this.state.registerUser({ clientId, secret, secretIssuedAt: now }, { enrolled: true })
+      user = this.state.registerUser({ clientId, secret }, { enrolled: true })
     }
     if (user.secret !== secret) return INVALID_CREDENTIALS()
-    if (now >= user.secretIssuedAt + settings.secretTtlDays * 86_400_000)
+    if (
+      user.secretIssuedAt !== null &&
+      now >= user.secretIssuedAt + settings.secretTtlDays * 86_400_000
+    )
       return INVALID_CREDENTIALS()
     if (settings.enforceVendorId && Number(vendor) !== user.vendorId) return INVALID_CREDENTIALS()
     this.pruneDeadTokens(now, settings)
@@ -905,6 +922,7 @@ export class LifeFileV2API implements FetchAPI {
     const claims: Claims = {
       sub: user.clientId,
       jti: tokenId,
+      nonce: this.state.tokenNonce(),
       iat: Math.floor(now / 1000),
       gen: user.generation,
       rev: settings.tokenGeneration,
@@ -913,6 +931,7 @@ export class LifeFileV2API implements FetchAPI {
     const signature = this.state.signature(`${JWT_HEADER}.${payload}`)
     this.state.tokens.insert(String(tokenId), {
       tokenId,
+      nonce: claims.nonce,
       clientId: user.clientId,
       issuedAt: claims.iat * 1000,
       lastUsedAt: claims.iat * 1000,
@@ -930,6 +949,7 @@ export class LifeFileV2API implements FetchAPI {
     const { claims, token } = this.authOf(context)
     this.state.tokens.insert(String(claims.jti), {
       tokenId: claims.jti,
+      nonce: claims.nonce,
       clientId: claims.sub,
       issuedAt: token?.issuedAt ?? claims.iat * 1000,
       lastUsedAt: this.now(),

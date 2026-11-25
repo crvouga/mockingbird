@@ -111,19 +111,25 @@ describe("service contract", () => {
     const b = consumer(`${BASE}/__admin/ns/b`, fetch, { clientId: "client-b", clientSecret: "s" })
     expect((await b.order(id)).ok).toBe(false)
     await admin(runtime, "PUT", "/credentials", { credentials: { "client-c": "a" } })
-    const c = consumer(BASE, fetch, { clientId: "client-c", clientSecret: "s" })
-    await runtime.fetch(
-      new Request(`${BASE}/api/v2/auth/token`, {
-        method: "POST",
-        headers: {
-          "x-vendor-id": "10001",
-          "content-type": "application/x-www-form-urlencoded",
-          "x-mockingbird-namespace": "a",
-        },
-        body: "grant_type=client_credentials&client_id=client-c&client_secret=s",
+    const issued = (await (
+      await runtime.fetch(
+        new Request(`${BASE}/api/v2/auth/token`, {
+          method: "POST",
+          headers: {
+            "x-vendor-id": "10001",
+            "content-type": "application/x-www-form-urlencoded",
+            "x-mockingbird-namespace": "a",
+          },
+          body: "grant_type=client_credentials&client_id=client-c&client_secret=s",
+        }),
+      )
+    ).json()) as { access_token: string }
+    const read = await runtime.fetch(
+      new Request(`${BASE}/api/v2/orders/${id}`, {
+        headers: { authorization: `Bearer ${issued.access_token}`, "x-vendor-id": "10001" },
       }),
     )
-    expect((await c.order(id)).ok).toBe(true)
+    expect(read.status).toBe(200)
   })
 
   test("the journal keeps no request bodies (patient data never lands in it)", async () => {

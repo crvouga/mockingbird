@@ -115,7 +115,7 @@ All under `/api/v2`, every one but the token endpoint behind `Authorization: Bea
 | `POST /auth/token` | Form or Basic credentials. No `X-Vendor-ID`, or `grant_type` other than `client_credentials`: `422 {"error":"invalid_request","error_description":"Validation Error"}`. Wrong secret, other vendor, or an expired secret (*guess*): `401 {"error":"invalid_client","error_description":"Invalid Credentials"}`. Success: `{access_token, token_type:"Bearer", expires_in:86400, scope:"*"}` (the contract says 172800; the sandbox answers 86400). |
 | `DELETE /auth/token` | Revokes the calling token. |
 | `GET /auth/me` | API user, token times in Pacific offset (`2026-11-24T14:57:52-08:00`), live privileges. |
-| `POST /auth/secret/rotate` | New secret, valid 30 days; every token of the user dies; `revokedTokenCount`. |
+| `POST /auth/secret/rotate` | New secret, valid 30 days; every token of the user dies; `revokedTokenCount`. Seeded, open-enrollment and admin-set secrets never expire, so a long-lived stack keeps signing in; only a rotated secret (or `expire-secret`) does. |
 | `POST /orders` | Checked in the sandbox's order: `order.location.id` (only that error, even for an empty body), then the location (`422 Invalid order location id received: '<id>'`), then the practice (`403 This API user is not allowed to create an order for Practice ID <id>.`), then field-keyed `422 Validation Error` (required fields, the contract's length limits and enums, rx uuid format, rx uuid unique within the order ignoring case). Reply `{orderId}` only. Same message id, same rx uuid and byte-identical bodies each make a new order. Not checked: phones, California, unknown shipping service ids, unknown `lfProductID`, text message ids. |
 | `GET /orders` | Newest first; `page`, `perPage` (5–50), `sortField`, `sortType`; strict `filter[...]` deep objects (an array form such as `filter[rx][uuid][]` is refused with `422`, never ignored); `filter[rx][uuid]` is case-insensitive and read from an index. Envelope `{data, total, perPage, currentPage, lastPage}`. |
 | `GET /orders/{id}`, `/status`, `/shipping` | The recorded shapes, null-filled. Missing: `404 Record not found`; not an integer: `422 {"orderId":["The order id must be an integer."]}`. |
@@ -226,7 +226,7 @@ Namespaces by `x-mockingbird-namespace`, by `/__admin/ns/<name>/…` (use it on 
 the token URL), or by client id (`PUT /__admin/credentials`; the bearer token names its client).
 Orders, tokens, users, settings and pushes live in the namespace and go with it
 (`DELETE /__admin/namespaces/<name>`). A token works only in the namespace that issued it and only
-while its row is there: after a reset, a namespace delete or restoring a snapshot taken before it
+while its row is there, even if the same client signs in again: after a reset, a namespace delete or restoring a snapshot taken before it
 was issued, it answers `401` (`Token is no longer active`) and the caller signs in again. `createRuntime` takes `namespaceIdleMs`, `maxRecords`,
 `maxSnapshots`, `checkpointMutations`, `maxOrders` and `maxApiUsers`. `serve` forgets namespaces idle
 for 30 minutes and caps each namespace (the never-forgotten default one included) at 25,000 orders
