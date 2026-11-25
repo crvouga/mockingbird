@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 import { createClock } from "@crvouga/mockingbird-service"
+import { createDefaultSqlite } from "@crvouga/mockingbird-sqlite"
 import { CATALOG_DATA, createRuntime, PRODUCTION_STATUSES, SANDBOX_STATUSES } from "./src/index.js"
 import { SERVE_LIMITS, serveTarget } from "./src/server.js"
 import { consumer, orderBody } from "./test/consumer.js"
@@ -786,6 +787,18 @@ describe("a bearer token lives only in the namespace state that issued it", () =
     const [one, two] = [await replies(), await replies()]
     expect(one).toEqual(two)
     expect(one[0]).not.toBe(one[1])
+  })
+
+  test("a token from before a restart on a kept store stays dead after a reset and a new sign-in", async () => {
+    const sqlite = createDefaultSqlite()
+    const first = boot({ sqlite })
+    const old = await signIn(first.fetch)
+    expect(await ping(first.fetch, old)).toBe(200)
+    const second = boot({ sqlite })
+    second.clock.set(T0 + 10_000)
+    await second.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    expect(await ping(second.fetch, await signIn(second.fetch))).toBe(200)
+    expect(await ping(second.fetch, old)).toBe(401)
   })
 
   test("a token issued after a checked-out checkpoint stays dead after the same client signs in again", async () => {
