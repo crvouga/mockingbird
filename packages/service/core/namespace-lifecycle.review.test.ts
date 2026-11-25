@@ -6,7 +6,14 @@
 import { describe, expect, test } from "bun:test"
 import { Database } from "@crvouga/mockingbird-service-sqlite"
 import { admin, create, list, mock, ns, send } from "./controls.fixture.js"
-import { Collection, createRuntime, type InstanceContext } from "./src/index.js"
+import {
+  Collection,
+  createRuntime,
+  createWebhookHub,
+  type InstanceContext,
+  signers,
+  withNamespaceRollback,
+} from "./src/index.js"
 
 const MINUTE = 60_000
 
@@ -187,5 +194,120 @@ describe("clean-up is counted", () => {
       recordLimitRefusals: 0,
       idleExpiryFailures: 0,
     })
+  })
+})
+
+describe("risk checks around clean-up", () => {
+  test("a namespace idle for exactly namespaceIdleMs is kept; one millisecond more is not", async () => {
+    const wall = wallClock()
+    const runtime = mock({ namespaceIdleMs: MINUTE, io: { wallNow: wall.now } })
+    await create(runtime, "a", ns("edge"))
+    wall.advance(MINUTE)
+    await send(runtime, "GET", "/__admin/health")
+    expect(runtime.namespaces()).toContain("edge")
+    wall.advance(1)
+    await send(runtime, "GET", "/__admin/health")
+    expect(runtime.namespaces()).not.toContain("edge")
+  })
+
+  test("a request naming a namespace while it is being forgotten starts it fresh and keeps its write", async () => {
+    const wall = wallClock()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let gated = false
+    const runtime = bare(
+      { namespaceIdleMs: MINUTE, wallNow: wall.now },
+      async (context, request) => {
+        const rows = new Collection<string>(context.sqlite, context.namespace, "rows")
+        if (request.method === "POST") rows.insert(`r${rows.count()}`, "x")
+        return new Response(String(rows.count()))
+      },
+      async (context) => {
+        if (context.publicNamespace === "old" && !gated) {
+          gated = true
+          await gate
+        }
+        const rows = new Collection<string>(context.sqlite, context.namespace, "rows")
+        for (const row of rows.list()) rows.delete(row.id)
+      },
+    )
+    await send(runtime, "POST", "/rows", { headers: ns("old") })
+    wall.advance(2 * MINUTE)
+    const sweeping = send(runtime, "GET", "/rows", { headers: ns("other") })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const writing = send(runtime, "POST", "/rows", { headers: ns("old") })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    release()
+    await sweeping
+    await writing
+    expect(runtime.namespaces()).toContain("old")
+    expect(await (await send(runtime, "GET", "/rows", { headers: ns("old") })).text()).toBe("1")
+  })
+
+  test("after a refusal the next accepted write is kept and the namespace is not stuck at the cap", async () => {
+    const runtime = bare({ maxRecords: 2 }, async (context, request) => {
+      const rows = new Collection<string>(context.sqlite, context.namespace, "rows")
+      const path = new URL(request.url).pathname
+      if (path === "/two") {
+        rows.insert(`a${rows.count()}`, "x")
+        rows.insert(`b${rows.count()}`, "x")
+      }
+      if (path === "/one") rows.insert(`c${rows.count()}`, "x")
+      if (path === "/drop") rows.delete(rows.list()[0]?.id ?? "")
+      return new Response(String(rows.count()))
+    })
+    await send(runtime, "POST", "/one", { headers: ns("w") })
+    expect((await send(runtime, "POST", "/two", { headers: ns("w") })).status).toBe(507)
+    expect(runtime.resources().records).toBe(1)
+    expect((await send(runtime, "POST", "/one", { headers: ns("w") })).status).toBe(200)
+    expect(runtime.resources().records).toBe(2)
+  })
+
+  test("a handler using its own withNamespaceRollback still answers 507 with nothing kept", async () => {
+    const runtime = bare({ maxRecords: 1 }, async (context) => {
+      await withNamespaceRollback(context.sqlite, context.namespace, async () => {
+        new Collection<string>(context.sqlite, context.namespace, "a").insert("1", "x")
+        new Collection<string>(context.sqlite, context.namespace, "b").insert("2", "x")
+      })
+      return new Response("ok")
+    })
+    expect((await send(runtime, "POST", "/x", { headers: ns("w") })).status).toBe(507)
+    expect(runtime.resources().records).toBe(0)
+  })
+
+  test("with every option off a mock reports zero clean-up and never expires anything", async () => {
+    const wall = wallClock()
+    const runtime = mock({ io: { wallNow: wall.now, heapUsedBytes: () => 0 } })
+    for (let i = 0; i < 5; i++) await create(runtime, `n${i}`, ns(`n${i}`))
+    wall.advance(365 * 24 * 60 * MINUTE)
+    await send(runtime, "GET", "/__admin/health")
+    expect(runtime.resources()).toMatchObject({
+      records: 5,
+      namespacesExpired: 0,
+      idleExpiryFailures: 0,
+      recordLimitRefusals: 0,
+      snapshotLimitRefusals: 0,
+    })
+  })
+
+  test("trimming finished deliveries in one namespace leaves another namespace's alone", async () => {
+    const hub = createWebhookHub({
+      signer: signers.none(),
+      endpoints: [{ url: "http://receiver.example.test/hook" }],
+      keep: 2,
+      fetch: async () => new Response("ok"),
+    })
+    for (let i = 0; i < 3; i++) {
+      hub.publish({ namespace: "b", type: "note.created", body: { i } })
+      await hub.idle()
+    }
+    for (let i = 0; i < 6; i++) {
+      hub.publish({ namespace: "a", type: "note.created", body: { i } })
+      await hub.idle()
+    }
+    expect(hub.deliveries("a")).toHaveLength(2)
+    expect(hub.deliveries("b")).toHaveLength(2)
   })
 })
