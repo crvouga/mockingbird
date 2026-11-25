@@ -702,6 +702,20 @@ describe("time-travel reads (x-mockingbird-at)", () => {
     expect(await statusAt(fetch, old, id, checkpoint)).toEqual({ status: 200, statusId: "new" })
   })
 
+  test("checkpoint reads do not keep a live token alive past its idle hour", async () => {
+    const { clock, fetch } = boot()
+    const token = await signIn(fetch)
+    const { id, checkpoint } = await create(fetch, token)
+    const reads: number[] = []
+    for (let read = 0; read < 3; read += 1) {
+      clock.advance(50 * 60_000)
+      reads.push((await statusAt(fetch, token, id, checkpoint)).status)
+    }
+    clock.advance(50 * 60_000)
+    expect((await api(fetch, token, "GET", `/orders/${id}`)).status).toBe(401)
+    expect(reads).toEqual([200, 401, 401])
+  })
+
   test("a token revoked on the live namespace is refused at a checkpoint that still holds it", async () => {
     const { fetch } = boot()
     const token = await signIn(fetch)
