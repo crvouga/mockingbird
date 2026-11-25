@@ -105,9 +105,9 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
       const namespace = `soak-${testNumber}`
       const client = consumer(`${BASE}/__admin/ns/${namespace}`, fetch)
       const uuid = crypto.randomUUID()
-      const created = (await timed(latencies, () => client.createOrder(orderBody({ uuid })))) as Awaited<
-        ReturnType<typeof client.createOrder>
-      >
+      const created = (await timed(latencies, () =>
+        client.createOrder(orderBody({ uuid })),
+      )) as Awaited<ReturnType<typeof client.createOrder>>
       if (created.ok) {
         const id = created.data.orderId
         await timed(latencies, () => client.findByRxUuid(uuid))
@@ -174,14 +174,17 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
   const pushP95Ms = Math.max(...windows.map((w) => w.pushP95Ms))
   const maxNamespaces = Math.max(...windows.map((w) => w.namespaces))
   const reasons: string[] = []
-  if (p95DriftPct > 10 && p95DriftMs > 2) reasons.push(`p95 drifted ${p95DriftPct.toFixed(1)}% (${p95DriftMs.toFixed(2)} ms)`)
+  if (p95DriftPct > 10 && p95DriftMs > 2)
+    reasons.push(`p95 drifted ${p95DriftPct.toFixed(1)}% (${p95DriftMs.toFixed(2)} ms)`)
   if (p99Ms > 50) reasons.push(`p99 ${p99Ms.toFixed(1)} ms is over 50 ms`)
   if (heapGrowthMb > 50) reasons.push(`heap grew ${heapGrowthMb.toFixed(1)} MB after warm-up`)
   if (pushP95Ms > 1_000) reasons.push(`push p95 ${pushP95Ms.toFixed(0)} ms is over 1 s`)
   const leftoverBound =
-    Math.ceil((options.namespaceIdleMs / intervalMs) / options.idleLeftoverEvery) + 3
+    Math.ceil(options.namespaceIdleMs / intervalMs / options.idleLeftoverEvery) + 3
   if (maxNamespaces > leftoverBound) {
-    reasons.push(`${maxNamespaces} live namespaces, more than the ${leftoverBound} running or idling`)
+    reasons.push(
+      `${maxNamespaces} live namespaces, more than the ${leftoverBound} running or idling`,
+    )
   }
   return {
     options: {
@@ -192,6 +195,15 @@ export const runSoak = async (options: SoakOptions): Promise<SoakReport> => {
       namespaceIdleMs: options.namespaceIdleMs,
     },
     windows,
-    verdict: { p95DriftPct, p95DriftMs, p99Ms, heapGrowthMb, pushP95Ms, maxNamespaces, pass: reasons.length === 0, reasons },
+    verdict: {
+      p95DriftPct,
+      p95DriftMs,
+      p99Ms,
+      heapGrowthMb,
+      pushP95Ms,
+      maxNamespaces,
+      pass: reasons.length === 0,
+      reasons,
+    },
   }
 }

@@ -25,7 +25,9 @@ const WALKED = supportedOperationIds.filter(
   (id) => id !== "RotateCurrentSecret" && id !== "RevokeCurrentToken",
 )
 
-const selfParity = async (options: Partial<ParityOptions> & { create?: () => { fetch: (r: Request) => Promise<Response> } }) => {
+const selfParity = async (
+  options: Partial<ParityOptions> & { create?: () => { fetch: (r: Request) => Promise<Response> } },
+) => {
   const auth = { authorization: `Bearer ${await token()}`, "x-vendor-id": "10001" }
   const reference = new LifeFileV2API({ now, settings })
   const { create, ...rest } = options
@@ -48,7 +50,7 @@ const selfParity = async (options: Partial<ParityOptions> & { create?: () => { f
     },
     includeUnsafe: true,
     latencyToleranceMs: 10_000,
-    ...(params.seed === undefined ? {} : { seed: params.seed }),
+    seed: params.seed ?? 20_261_124,
     sleep: async () => {},
     log: () => {},
     ...rest,
@@ -57,7 +59,11 @@ const selfParity = async (options: Partial<ParityOptions> & { create?: () => { f
 
 describe("self-parity", () => {
   test("two independent instances agree across every walked operation, and every reply conforms to the contract", async () => {
-    const report = await selfParity({ only: WALKED, numRuns: params.numRuns ?? 20, maxCommands: 12 })
+    const report = await selfParity({
+      only: WALKED,
+      numRuns: params.numRuns ?? 30,
+      maxCommands: 12,
+    })
     expect(Object.keys(report.exercised).sort()).toEqual([...WALKED].sort())
   }, 60_000)
 
@@ -96,11 +102,18 @@ const create = async (api: LifeFileV2API, body: unknown) => {
   const response = await api.fetch(
     new Request(`https://${HOST}/api/v2/orders`, {
       method: "POST",
-      headers: { authorization: `Bearer ${access_token}`, "x-vendor-id": "10001", "content-type": "application/json" },
+      headers: {
+        authorization: `Bearer ${access_token}`,
+        "x-vendor-id": "10001",
+        "content-type": "application/json",
+      },
       body: JSON.stringify(body),
     }),
   )
-  return { status: response.status, body: (await response.json()) as { data: Record<string, unknown> | null } }
+  return {
+    status: response.status,
+    body: (await response.json()) as { data: Record<string, unknown> | null },
+  }
 }
 
 describe("field limits (decisions over inputs)", () => {
@@ -120,13 +133,17 @@ describe("field limits (decisions over inputs)", () => {
         fc.integer({ min: -3, max: 3 }),
         async ([section, field, limit, words], delta) => {
           const length = Math.max(1, limit + delta)
-          const body = orderBody({ uuid: crypto.randomUUID() }) as unknown as { order: Record<string, Record<string, unknown>> }
+          const body = orderBody({ uuid: crypto.randomUUID() }) as unknown as {
+            order: Record<string, Record<string, unknown>>
+          }
           ;(body.order[section] as Record<string, unknown>)[field] = "x".repeat(length)
           const reply = await create(new LifeFileV2API({ now }), body)
           if (length > limit) {
             expect(reply.status).toBe(422)
             expect(reply.body.data).toEqual({
-              [`order.${section}.${field}`]: [`The order.${section}.${words} may not be greater than ${limit} characters.`],
+              [`order.${section}.${field}`]: [
+                `The order.${section}.${words} may not be greater than ${limit} characters.`,
+              ],
             })
           } else {
             expect(reply.status).toBe(200)
@@ -147,7 +164,10 @@ describe("field limits (decisions over inputs)", () => {
         const reply = await create(new LifeFileV2API({ now }), body)
         if (duplicate && lines > 1) {
           expect(reply.status).toBe(422)
-          expect(Object.keys(reply.body.data ?? {}).sort()).toEqual([`order.rxs.0.uuid`, `order.rxs.${lines - 1}.uuid`])
+          expect(Object.keys(reply.body.data ?? {}).sort()).toEqual([
+            `order.rxs.0.uuid`,
+            `order.rxs.${lines - 1}.uuid`,
+          ])
         } else expect(reply.status).toBe(200)
       }),
       { ...params, numRuns: params.numRuns ?? 30 },

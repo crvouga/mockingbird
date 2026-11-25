@@ -129,8 +129,7 @@ export const replay = async (target: ReplayTarget): Promise<ReplayOutcome[]> => 
       body = new URLSearchParams({
         grant_type: String((call.body as { grant_type?: string }).grant_type ?? ""),
         client_id: REPLAY_CLIENT.clientId,
-        client_secret:
-          call.auth === "token-wrong-secret" ? "not-the-secret" : REPLAY_CLIENT.secret,
+        client_secret: call.auth === "token-wrong-secret" ? "not-the-secret" : REPLAY_CLIENT.secret,
       }).toString()
     } else {
       const bearer = bearerFor(call, token)
@@ -168,7 +167,10 @@ export const replay = async (target: ReplayTarget): Promise<ReplayOutcome[]> => 
       path: call.path,
       expectedStatus: call.status,
       actualStatus: response.status,
-      rateLimit: { expected: call.rateLimit?.limit ?? null, actual: limit === null ? null : Number(limit) },
+      rateLimit: {
+        expected: call.rateLimit?.limit ?? null,
+        actual: limit === null ? null : Number(limit),
+      },
       differences: all.filter((d) => !tolerated.includes(d)),
       tolerated,
     })

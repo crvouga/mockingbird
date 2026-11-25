@@ -12,8 +12,12 @@ const testsPerMinute = Number(argument("--tests-per-minute") ?? 20)
 const windowMinutes = Number(argument("--window-minutes") ?? 5)
 const idleMinutes = Number(argument("--idle-minutes") ?? 5)
 const out = resolve(argument("--out") ?? `.soak/lifefile-v2-${minutes}m.json`)
-if (![minutes, testsPerMinute, windowMinutes, idleMinutes].every((n) => Number.isFinite(n) && n > 0)) {
-  console.error("usage: bun scripts/soak.ts --minutes <n> [--tests-per-minute 20] [--window-minutes 5] [--idle-minutes 5] [--out <file>]")
+if (
+  ![minutes, testsPerMinute, windowMinutes, idleMinutes].every((n) => Number.isFinite(n) && n > 0)
+) {
+  console.error(
+    "usage: bun scripts/soak.ts --minutes <n> [--tests-per-minute 20] [--window-minutes 5] [--idle-minutes 5] [--out <file>]",
+  )
   process.exit(2)
 }
 

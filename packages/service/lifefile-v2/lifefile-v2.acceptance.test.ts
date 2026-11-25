@@ -22,7 +22,12 @@ const raw = async (
   fetch: (r: Request) => Promise<Response>,
   method: string,
   path: string,
-  init: { token?: string | null; vendor?: string | null; body?: unknown; form?: Record<string, string> } = {},
+  init: {
+    token?: string | null
+    vendor?: string | null
+    body?: unknown
+    form?: Record<string, string>
+  } = {},
 ) => {
   const headers = new Headers({ accept: "application/json" })
   if (init.vendor !== null) headers.set("x-vendor-id", init.vendor ?? "10001")
@@ -36,19 +41,31 @@ const raw = async (
     body = typeof init.body === "string" ? init.body : JSON.stringify(init.body)
   }
   const response = await fetch(
-    new Request(`${BASE}/api/v2${path}`, { method, headers, ...(body === undefined ? {} : { body }) }),
+    new Request(`${BASE}/api/v2${path}`, {
+      method,
+      headers,
+      ...(body === undefined ? {} : { body }),
+    }),
   )
   const text = await response.text()
   let json: unknown = text
   try {
     json = JSON.parse(text)
   } catch {}
-  return { status: response.status, headers: response.headers, json: json as Record<string, unknown> }
+  return {
+    status: response.status,
+    headers: response.headers,
+    json: json as Record<string, unknown>,
+  }
 }
 
 const tokenFor = async (fetch: (r: Request) => Promise<Response>) => {
   const issued = await raw(fetch, "POST", "/auth/token", {
-    form: { grant_type: "client_credentials", client_id: "lifefile-client", client_secret: "lifefile-secret" },
+    form: {
+      grant_type: "client_credentials",
+      client_id: "lifefile-client",
+      client_secret: "lifefile-secret",
+    },
   })
   return issued.json.access_token as string
 }
@@ -60,7 +77,11 @@ describe("sign-in (OAuth2 client credentials)", () => {
   test("a token answers 200 with the recorded shape: one day, scope *, Bearer", async () => {
     const { fetch } = boot()
     const issued = await raw(fetch, "POST", "/auth/token", {
-      form: { grant_type: "client_credentials", client_id: "lifefile-client", client_secret: "lifefile-secret" },
+      form: {
+        grant_type: "client_credentials",
+        client_id: "lifefile-client",
+        client_secret: "lifefile-secret",
+      },
     })
     expect(issued.status).toBe(200)
     expect(issued.json).toEqual({
@@ -90,11 +111,41 @@ describe("sign-in (OAuth2 client credentials)", () => {
   })
 
   test.each([
-    ["wrong secret", { client_secret: "nope" }, "10001", 401, { error: "invalid_client", error_description: "Invalid Credentials" }],
-    ["no X-Vendor-ID", {}, null, 422, { error: "invalid_request", error_description: "Validation Error" }],
-    ["grant_type password", { grant_type: "password" }, "10001", 422, { error: "invalid_request", error_description: "Validation Error" }],
-    ["missing grant_type", { grant_type: "" }, "10001", 422, { error: "invalid_request", error_description: "Validation Error" }],
-    ["another vendor", {}, "99999", 401, { error: "invalid_client", error_description: "Invalid Credentials" }],
+    [
+      "wrong secret",
+      { client_secret: "nope" },
+      "10001",
+      401,
+      { error: "invalid_client", error_description: "Invalid Credentials" },
+    ],
+    [
+      "no X-Vendor-ID",
+      {},
+      null,
+      422,
+      { error: "invalid_request", error_description: "Validation Error" },
+    ],
+    [
+      "grant_type password",
+      { grant_type: "password" },
+      "10001",
+      422,
+      { error: "invalid_request", error_description: "Validation Error" },
+    ],
+    [
+      "missing grant_type",
+      { grant_type: "" },
+      "10001",
+      422,
+      { error: "invalid_request", error_description: "Validation Error" },
+    ],
+    [
+      "another vendor",
+      {},
+      "99999",
+      401,
+      { error: "invalid_client", error_description: "Invalid Credentials" },
+    ],
   ] as const)("%s → %i", async (_name, override, vendor, status, body) => {
     const { fetch } = boot()
     const form: Record<string, string> = {
@@ -126,7 +177,11 @@ describe("sign-in (OAuth2 client credentials)", () => {
     })
     const noVendor = await raw(fetch, "GET", "/ping", { token, vendor: null })
     expect(noVendor.status).toBe(401)
-    expect(noVendor.json).toEqual({ type: "error", message: "X-Vendor-ID header is required", data: null })
+    expect(noVendor.json).toEqual({
+      type: "error",
+      message: "X-Vendor-ID header is required",
+      data: null,
+    })
     const forged = await raw(fetch, "GET", "/ping", { token: `${token.slice(0, -4)}AAAA` })
     expect(forged.status).toBe(401)
   })
@@ -166,12 +221,20 @@ describe("sign-in (OAuth2 client credentials)", () => {
 
   test("a secret expires 30 days after it was issued: no new tokens, invalid_client", async () => {
     const { fetch, clock } = boot()
+    await tokenFor(fetch)
     clock.advance(30 * 86_400_000 + 1_000)
     const issued = await raw(fetch, "POST", "/auth/token", {
-      form: { grant_type: "client_credentials", client_id: "lifefile-client", client_secret: "lifefile-secret" },
+      form: {
+        grant_type: "client_credentials",
+        client_id: "lifefile-client",
+        client_secret: "lifefile-secret",
+      },
     })
     expect(issued.status).toBe(401)
-    expect(issued.json).toEqual({ error: "invalid_client", error_description: "Invalid Credentials" })
+    expect(issued.json).toEqual({
+      error: "invalid_client",
+      error_description: "Invalid Credentials",
+    })
   })
 
   test("rotating the secret revokes every token and only the new secret signs in", async () => {
@@ -180,6 +243,8 @@ describe("sign-in (OAuth2 client credentials)", () => {
     const second = await tokenFor(fetch)
     const rotated = await raw(fetch, "POST", "/auth/secret/rotate", { token: first })
     expect(rotated.status).toBe(200)
+    const secret = (rotated.json.data as { secret: string }).secret
+    expect(typeof secret).toBe("string")
     expect(rotated.json).toMatchObject({
       type: "success",
       message: "API user secret rotated successfully.",
@@ -187,10 +252,23 @@ describe("sign-in (OAuth2 client credentials)", () => {
     })
     expect((await raw(fetch, "GET", "/ping", { token: first })).status).toBe(401)
     expect((await raw(fetch, "GET", "/ping", { token: second })).status).toBe(401)
-    expect((await raw(fetch, "POST", "/auth/token", { form: { grant_type: "client_credentials", client_id: "lifefile-client", client_secret: "lifefile-secret" } })).status).toBe(401)
-    const secret = (rotated.json.data as { secret: string }).secret
+    expect(
+      (
+        await raw(fetch, "POST", "/auth/token", {
+          form: {
+            grant_type: "client_credentials",
+            client_id: "lifefile-client",
+            client_secret: "lifefile-secret",
+          },
+        })
+      ).status,
+    ).toBe(401)
     const fresh = await raw(fetch, "POST", "/auth/token", {
-      form: { grant_type: "client_credentials", client_id: "lifefile-client", client_secret: secret },
+      form: {
+        grant_type: "client_credentials",
+        client_id: "lifefile-client",
+        client_secret: secret,
+      },
     })
     expect(fresh.status).toBe(200)
   })
@@ -200,7 +278,11 @@ describe("sign-in (OAuth2 client credentials)", () => {
     const first = await tokenFor(fetch)
     const second = await tokenFor(fetch)
     const revoked = await raw(fetch, "DELETE", "/auth/token", { token: first })
-    expect(revoked.json).toEqual({ type: "success", message: "API token revoked successfully.", data: [] })
+    expect(revoked.json).toEqual({
+      type: "success",
+      message: "API token revoked successfully.",
+      data: [],
+    })
     expect((await raw(fetch, "GET", "/ping", { token: first })).status).toBe(401)
     expect((await raw(fetch, "GET", "/ping", { token: second })).status).toBe(200)
   })
@@ -214,7 +296,12 @@ describe("sign-in (OAuth2 client credentials)", () => {
       type: "success",
       message: "Success.",
       data: {
-        apiUser: { id: 200001, userName: "lifefile-client", vendorId: 10001, userGroup: "api-practice" },
+        apiUser: {
+          id: 200001,
+          userName: "lifefile-client",
+          vendorId: 10001,
+          userGroup: "api-practice",
+        },
         token: {
           authType: "api_user_v2_jwt",
           issuedAt: "2026-11-24T14:57:51-08:00",
@@ -223,7 +310,9 @@ describe("sign-in (OAuth2 client credentials)", () => {
         },
       },
     })
-    const privileges = (me.json.data as { privileges: { id: string }[] }).privileges.map((p) => p.id)
+    const privileges = (me.json.data as { privileges: { id: string }[] }).privileges.map(
+      (p) => p.id,
+    )
     expect(privileges).toContain("orders.create")
     expect(privileges).not.toContain("practices.shipping-services.list")
     expect(privileges).toHaveLength(19)
@@ -253,20 +342,32 @@ describe("creating orders", () => {
     const sameMessage = await client.createOrder(orderBody({ uuid: UUID_B }))
     const sameRx = await client.createOrder(orderBody({ uuid: UUID_A, messageId: 805892245 }))
     const identical = await client.createOrder(orderBody({ uuid: UUID_A }))
-    const ids: number[] = [first, sameMessage, sameRx, identical].map((r) => (r.ok ? r.data.orderId : 0))
+    const ids: number[] = [first, sameMessage, sameRx, identical].map((r) =>
+      r.ok ? r.data.orderId : 0,
+    )
     expect(new Set(ids).size).toBe(4)
     const found = await client.findByRxUuid(UUID_A)
     const expected = [ids[3], ids[2], ids[0]] as number[]
     expect(found.ok && found.data.data.map((o) => o.id)).toEqual(expected)
     const upper = await client.findByRxUuid(UUID_A.toUpperCase())
     expect(upper.ok && upper.data.data.map((o) => o.id)).toEqual(expected)
-    expect(found.ok && found.data).toMatchObject({ total: 3, perPage: 20, currentPage: 1, lastPage: 1 })
+    expect(found.ok && found.data).toMatchObject({
+      total: 3,
+      perPage: 20,
+      currentPage: 1,
+      lastPage: 1,
+    })
   })
 
   test.each([
     [
       "two lines with one uuid",
-      orderBody({ rxs: [{ ...orderBody().order.rxs[0], uuid: UUID_A }, { ...orderBody().order.rxs[0], uuid: UUID_A.toUpperCase() }] }),
+      orderBody({
+        rxs: [
+          { ...orderBody().order.rxs[0], uuid: UUID_A },
+          { ...orderBody().order.rxs[0], uuid: UUID_A.toUpperCase() },
+        ],
+      }),
       {
         "order.rxs.0.uuid": ["Each RX UUID must be unique within the order (case-insensitive)."],
         "order.rxs.1.uuid": ["Each RX UUID must be unique within the order (case-insensitive)."],
@@ -280,20 +381,36 @@ describe("creating orders", () => {
     [
       "patient last name of 31 characters",
       orderBody({ lastName: "G".repeat(31) }),
-      { "order.patient.lastName": ["The order.patient.last name may not be greater than 30 characters."] },
+      {
+        "order.patient.lastName": [
+          "The order.patient.last name may not be greater than 30 characters.",
+        ],
+      },
     ],
     [
       "shipping address line of 61 characters",
       orderBody({ addressLine1: "A".repeat(61) }),
-      { "order.shipping.addressLine1": ["The order.shipping.address line1 may not be greater than 60 characters."] },
+      {
+        "order.shipping.addressLine1": [
+          "The order.shipping.address line1 may not be greater than 60 characters.",
+        ],
+      },
     ],
-    ["a uuid that is not one", orderBody({ uuid: "not-a-uuid" }), { "order.rxs.0.uuid": ["The order.rxs.0.uuid must be a valid UUID."] }],
+    [
+      "a uuid that is not one",
+      orderBody({ uuid: "not-a-uuid" }),
+      { "order.rxs.0.uuid": ["The order.rxs.0.uuid must be a valid UUID."] },
+    ],
   ])("%s → 422 keyed by field", async (_name, body, data) => {
     const { client, runtime } = boot()
     const result = await client.createOrder(body)
     expect(result.ok).toBe(false)
     if (result.ok) return
-    expect(result.failure).toMatchObject({ category: "validation", httpStatus: 422, fields: Object.keys(data).sort() })
+    expect(result.failure).toMatchObject({
+      category: "validation",
+      httpStatus: 422,
+      fields: Object.keys(data).sort(),
+    })
     const { fetch } = boot()
     const token = await tokenFor(fetch)
     const reply = await raw(fetch, "POST", "/orders", { token, body })
@@ -320,10 +437,20 @@ describe("creating orders", () => {
   test("an unknown location is 422 with its id; another practice is 403 with its id", async () => {
     const { fetch } = boot()
     const token = await tokenFor(fetch)
-    const location = await raw(fetch, "POST", "/orders", { token, body: orderBody({ locationId: 999999 }) })
+    const location = await raw(fetch, "POST", "/orders", {
+      token,
+      body: orderBody({ locationId: 999999 }),
+    })
     expect(location.status).toBe(422)
-    expect(location.json).toEqual({ type: "error", message: "Invalid order location id received: '999999'", data: null })
-    const practice = await raw(fetch, "POST", "/orders", { token, body: orderBody({ practiceId: 1 }) })
+    expect(location.json).toEqual({
+      type: "error",
+      message: "Invalid order location id received: '999999'",
+      data: null,
+    })
+    const practice = await raw(fetch, "POST", "/orders", {
+      token,
+      body: orderBody({ practiceId: 1 }),
+    })
     expect(practice.status).toBe(403)
     expect(practice.json).toEqual({
       type: "error",
@@ -333,21 +460,69 @@ describe("creating orders", () => {
   })
 
   test.each([
-    ["schedule code L", (b: ReturnType<typeof orderBody>) => ({ ...b, order: { ...b.order, rxs: [{ ...b.order.rxs[0], scheduleCode: "L" }] } })],
-    ["an unformatted phone", (b: ReturnType<typeof orderBody>) => ({ ...b, order: { ...b.order, patient: { ...b.order.patient, phoneHome: "5125550111" } } })],
-    ["no patient phones", (b: ReturnType<typeof orderBody>) => {
-      const { phoneHome: _h, phoneMobile: _m, ...patient } = b.order.patient
-      return { ...b, order: { ...b.order, patient } }
-    }],
-    ["no shipping block", (b: ReturnType<typeof orderBody>) => {
-      const { shipping: _s, ...order } = b.order
-      return { ...b, order }
-    }],
-    ["a California address", (b: ReturnType<typeof orderBody>) => ({ ...b, order: { ...b.order, shipping: { ...b.order.shipping, state: "CA", city: "Sacramento", zipCode: "95814" } } })],
-    ["a text message id", (b: ReturnType<typeof orderBody>) => ({ ...b, message: { ...b.message, id: "abc" } })],
-    ["an unknown shipping service", (b: ReturnType<typeof orderBody>) => ({ ...b, order: { ...b.order, shipping: { ...b.order.shipping, service: 123456 } } })],
-    ["an unknown lfProductID", (b: ReturnType<typeof orderBody>) => ({ ...b, order: { ...b.order, rxs: [{ ...b.order.rxs[0], lfProductID: 1 }] } })],
-    ["payor pat", (b: ReturnType<typeof orderBody>) => ({ ...b, order: { ...b.order, billing: { payorType: "pat" } } })],
+    [
+      "schedule code L",
+      (b: ReturnType<typeof orderBody>) => ({
+        ...b,
+        order: { ...b.order, rxs: [{ ...b.order.rxs[0], scheduleCode: "L" }] },
+      }),
+    ],
+    [
+      "an unformatted phone",
+      (b: ReturnType<typeof orderBody>) => ({
+        ...b,
+        order: { ...b.order, patient: { ...b.order.patient, phoneHome: "5125550111" } },
+      }),
+    ],
+    [
+      "no patient phones",
+      (b: ReturnType<typeof orderBody>) => {
+        const { phoneHome: _h, phoneMobile: _m, ...patient } = b.order.patient
+        return { ...b, order: { ...b.order, patient } }
+      },
+    ],
+    [
+      "no shipping block",
+      (b: ReturnType<typeof orderBody>) => {
+        const { shipping: _s, ...order } = b.order
+        return { ...b, order }
+      },
+    ],
+    [
+      "a California address",
+      (b: ReturnType<typeof orderBody>) => ({
+        ...b,
+        order: {
+          ...b.order,
+          shipping: { ...b.order.shipping, state: "CA", city: "Sacramento", zipCode: "95814" },
+        },
+      }),
+    ],
+    [
+      "a text message id",
+      (b: ReturnType<typeof orderBody>) => ({ ...b, message: { ...b.message, id: "abc" } }),
+    ],
+    [
+      "an unknown shipping service",
+      (b: ReturnType<typeof orderBody>) => ({
+        ...b,
+        order: { ...b.order, shipping: { ...b.order.shipping, service: 123456 } },
+      }),
+    ],
+    [
+      "an unknown lfProductID",
+      (b: ReturnType<typeof orderBody>) => ({
+        ...b,
+        order: { ...b.order, rxs: [{ ...b.order.rxs[0], lfProductID: 1 }] },
+      }),
+    ],
+    [
+      "payor pat",
+      (b: ReturnType<typeof orderBody>) => ({
+        ...b,
+        order: { ...b.order, billing: { payorType: "pat" } },
+      }),
+    ],
   ])("the API does not check %s", async (_name, change) => {
     const { client } = boot()
     const created = await client.createOrder(change(orderBody()))
@@ -367,17 +542,34 @@ describe("reading orders", () => {
       id,
       createdOn: "2026-11-24 14:57:51",
       lastUpdatedOn: "2026-11-24 14:57:51",
-      general: { memo: "SYNTHETIC TEST - not a real patient", referenceId: "ref-0001", statusId: "new" },
+      general: {
+        memo: "SYNTHETIC TEST - not a real patient",
+        referenceId: "ref-0001",
+        statusId: "new",
+      },
       location: { id: 100001 },
-      prescriber: { id: null, npi: "1234567893", dea: null, middleName: null, address2: null, fax: null },
+      prescriber: {
+        id: null,
+        npi: "1234567893",
+        dea: null,
+        middleName: null,
+        address2: null,
+        fax: null,
+      },
       practice: { id: 900001, name: "Sandbox API Practice - SBX-PRA-SYNTHETIC0001" },
       patient: { id: null, middleName: null, address2: null, address3: null, phoneWork: null },
       shipping: { addressLine2: null, addressLine3: null, service: null, handlingService: null },
       billing: { payorType: "doc" },
     })
-    expect(Object.keys(order.data.shipping as object)).toHaveLength(15)
+    expect(Object.keys(order.data.shipping as object)).toHaveLength(14)
     const rx = (order.data.rxs as Record<string, unknown>[])[0]
-    expect(rx).toMatchObject({ fillId: null, rxNumber: null, note: null, uuid: UUID_A, scheduleCode: "O" })
+    expect(rx).toMatchObject({
+      fillId: null,
+      rxNumber: null,
+      note: null,
+      uuid: UUID_A,
+      scheduleCode: "O",
+    })
     expect(rx).not.toHaveProperty("dateWritten")
     const status = await client.status(id)
     expect(status).toEqual({ ok: true, status: 200, data: { id: "new", label: "New Order" } })
@@ -395,7 +587,11 @@ describe("reading orders", () => {
     }
     const text = await raw(fetch, "GET", "/orders/abc", { token })
     expect(text.status).toBe(422)
-    expect(text.json).toEqual({ type: "error", message: "Validation Error", data: { orderId: ["The order id must be an integer."] } })
+    expect(text.json).toEqual({
+      type: "error",
+      message: "Validation Error",
+      data: { orderId: ["The order id must be an integer."] },
+    })
   })
 
   test("the list is newest first, paginates with the recorded shape and filters by memo and status", async () => {
@@ -408,17 +604,30 @@ describe("reading orders", () => {
     const token = await tokenFor(fetch)
     const page = await raw(fetch, "GET", "/orders?perPage=5&page=2", { token })
     expect(page.json.data).toMatchObject({ total: 7, perPage: 5, currentPage: 2, lastPage: 2 })
-    expect(((page.json.data as { data: { id: number }[] }).data).map((o) => o.id)).toEqual([ids[1], ids[0]] as number[])
-    const memo = await raw(fetch, "GET", `/orders?${new URLSearchParams({ "filter[general][memo]": "synthetic test", perPage: "50" })}`, { token })
+    expect((page.json.data as { data: { id: number }[] }).data.map((o) => o.id)).toEqual([
+      ids[1],
+      ids[0],
+    ] as number[])
+    const memo = await raw(
+      fetch,
+      "GET",
+      `/orders?${new URLSearchParams({ "filter[general][memo]": "synthetic test", perPage: "50" })}`,
+      { token },
+    )
     expect((memo.json.data as { total: number }).total).toBe(7)
-    const none = await raw(fetch, "GET", `/orders?${new URLSearchParams({ "filter[general][statusId]": "del", perPage: "5" })}`, { token })
+    const none = await raw(
+      fetch,
+      "GET",
+      `/orders?${new URLSearchParams({ "filter[general][statusId]": "del", perPage: "5" })}`,
+      { token },
+    )
     expect(none.json.data).toEqual({ data: [], total: 0, perPage: 5, currentPage: 1, lastPage: 1 })
   })
 })
 
 describe("status writes", () => {
-  const created = async (client: ReturnType<typeof consumer>) => {
-    const r = await client.createOrder(orderBody({ uuid: crypto.randomUUID() }))
+  const created = async (client: ReturnType<typeof consumer>, locationId = 100001) => {
+    const r = await client.createOrder(orderBody({ uuid: crypto.randomUUID(), locationId }))
     return r.ok ? r.data.orderId : 0
   }
 
@@ -427,8 +636,14 @@ describe("status writes", () => {
     const id = await created(client)
     clock.advance(5_000)
     for (const status of ["pen", "b18d8", "pro", "cmpro", "rec", "new", "del", "pen"]) {
-      expect(await client.setStatus(id, status)).toEqual({ ok: true, status: 200, data: { status } })
-      expect((await client.status(id)).ok && (await client.status(id))).toMatchObject({ data: { id: status } })
+      expect(await client.setStatus(id, status)).toEqual({
+        ok: true,
+        status: 200,
+        data: { status },
+      })
+      expect((await client.status(id)).ok && (await client.status(id))).toMatchObject({
+        data: { id: status },
+      })
     }
   })
 
@@ -439,16 +654,23 @@ describe("status writes", () => {
     await client.setStatus(id, "pen")
     const token = await tokenFor(fetch)
     for (const code of ["zzzzz", "3c59d"]) {
-      const reply = await raw(fetch, "PUT", `/orders/${id}/status`, { token, body: { status: code } })
+      const reply = await raw(fetch, "PUT", `/orders/${id}/status`, {
+        token,
+        body: { status: code },
+      })
       expect(reply.status).toBe(404)
-      expect(reply.json).toEqual({ type: "error", message: `Order Status ID '${code}' does not exist`, data: null })
+      expect(reply.json).toEqual({
+        type: "error",
+        message: `Order Status ID '${code}' does not exist`,
+        data: null,
+      })
     }
     expect(await client.status(id)).toMatchObject({ data: { id: "pen", label: "Pending Orders" } })
   })
 
   test("the production catalog accepts its own codes (3c59d) and refuses sandbox-only ones", async () => {
     const { client, clock } = boot({ settings: { catalog: "production" } })
-    const id = await created(client)
+    const id = await created(client, 100101)
     clock.advance(5_000)
     expect((await client.setStatus(id, "3c59d")).ok).toBe(true)
     expect((await client.setStatus(id, "b3644")).ok).toBe(false)
@@ -468,7 +690,9 @@ describe("status writes", () => {
         process_fast_track_result: [],
       },
     })
-    expect(await client.status(id)).toMatchObject({ data: { id: "b3644", label: "New EMR interfaces" } })
+    expect(await client.status(id)).toMatchObject({
+      data: { id: "b3644", label: "New EMR interfaces" },
+    })
     expect(await client.setStatus(id, "del")).toMatchObject({ data: { status: "del" } })
   })
 
@@ -479,20 +703,45 @@ describe("status writes", () => {
   })
 
   test.each([
-    ["after one status read", async (c: ReturnType<typeof consumer>, id: number, _clock: ReturnType<typeof createClock>) => {
-      await c.status(id)
-    }],
-    ["after 5 s", async (_c: ReturnType<typeof consumer>, _id: number, clock: ReturnType<typeof createClock>) => {
-      clock.advance(5_000)
-    }],
-    ["after 20 s", async (_c: ReturnType<typeof consumer>, _id: number, clock: ReturnType<typeof createClock>) => {
-      clock.advance(20_000)
-    }],
+    [
+      "after one status read",
+      async (
+        c: ReturnType<typeof consumer>,
+        id: number,
+        _clock: ReturnType<typeof createClock>,
+      ) => {
+        await c.status(id)
+      },
+    ],
+    [
+      "after 5 s",
+      async (
+        _c: ReturnType<typeof consumer>,
+        _id: number,
+        clock: ReturnType<typeof createClock>,
+      ) => {
+        clock.advance(5_000)
+      },
+    ],
+    [
+      "after 20 s",
+      async (
+        _c: ReturnType<typeof consumer>,
+        _id: number,
+        clock: ReturnType<typeof createClock>,
+      ) => {
+        clock.advance(20_000)
+      },
+    ],
   ])("del %s is a plain del", async (_name, gap) => {
     const { client, clock } = boot()
     const id = await created(client)
     await gap(client, id, clock)
-    expect(await client.setStatus(id, "del")).toEqual({ ok: true, status: 200, data: { status: "del" } })
+    expect(await client.setStatus(id, "del")).toEqual({
+      ok: true,
+      status: 200,
+      data: { status: "del" },
+    })
     expect(await client.status(id)).toMatchObject({ data: { id: "del", label: "Deleted" } })
     expect(await client.setStatus(id, "del")).toMatchObject({ data: { status: "del" } })
   })
@@ -504,7 +753,7 @@ describe("status writes", () => {
     sandbox.clock.advance(600)
     expect(await sandbox.client.status(id)).toMatchObject({ data: { id: "b3644" } })
     const production = boot({ settings: { catalog: "production" } })
-    const other = await created(production.client)
+    const other = await created(production.client, 100101)
     production.clock.advance(60_000)
     expect(await production.client.status(other)).toMatchObject({ data: { id: "new" } })
   })
@@ -524,7 +773,11 @@ describe("shipping changes", () => {
     const { client } = boot()
     const created = await client.createOrder(orderBody())
     const id = created.ok ? created.data.orderId : 0
-    const put = await client.setShipping(id, { addressLine1: "300 Fake St", zipCode: "78702", recipientPhone: "(512) 555-0112" })
+    const put = await client.setShipping(id, {
+      addressLine1: "300 Fake St",
+      zipCode: "78702",
+      recipientPhone: "(512) 555-0112",
+    })
     expect(put).toEqual({ ok: true, status: 200, data: null })
     const shipping = await client.shipping(id)
     expect(shipping.ok && shipping.data).toMatchObject({
@@ -540,11 +793,16 @@ describe("shipping changes", () => {
     const created = await client.createOrder(orderBody())
     const id = created.ok ? created.data.orderId : 0
     const token = await tokenFor(fetch)
-    const bare = await raw(fetch, "PUT", `/orders/${id}/shipping`, { token, body: { addressLine1: "300 Fake St" } })
+    const bare = await raw(fetch, "PUT", `/orders/${id}/shipping`, {
+      token,
+      body: { addressLine1: "300 Fake St" },
+    })
     expect(bare.status).toBe(500)
     expect(bare.json.type).toBe("error")
     expect(bare.json.message).toBe("Server Error: shipping must be an object, null given")
-    expect((await client.shipping(id)).ok && (await client.shipping(id))).toMatchObject({ data: { addressLine1: "200 Fake St" } })
+    expect((await client.shipping(id)).ok && (await client.shipping(id))).toMatchObject({
+      data: { addressLine1: "200 Fake St" },
+    })
   })
 })
 
@@ -563,9 +821,16 @@ describe("reference lists and privileges", () => {
     const { fetch } = boot()
     const token = await tokenFor(fetch)
     const services = await raw(fetch, "GET", "/shipping-services?perPage=50", { token })
-    expect(services.json.data).toMatchObject({ total: 11, perPage: 50, currentPage: 1, lastPage: 1 })
+    expect(services.json.data).toMatchObject({
+      total: 11,
+      perPage: 50,
+      currentPage: 1,
+      lastPage: 1,
+    })
     const locations = await raw(fetch, "GET", "/locations", { token })
-    expect((locations.json.data as { data: { id: number }[] }).data.map((l) => l.id)).toEqual([100001, 100002, 100003])
+    expect((locations.json.data as { data: { id: number }[] }).data.map((l) => l.id)).toEqual([
+      100001, 100002, 100003,
+    ])
     const one = await raw(fetch, "GET", "/locations/100002", { token })
     expect(one.json.data).toMatchObject({ id: 100002, shortName: "LF_North_2" })
   })
@@ -573,11 +838,14 @@ describe("reference lists and privileges", () => {
   test("privileges the account lacks answer the recorded 403s, and granting one opens it", async () => {
     const { fetch, runtime } = boot()
     const token = await tokenFor(fetch)
-    const practice = await raw(fetch, "GET", "/practices/900001/shipping-services?perPage=50", { token })
+    const practice = await raw(fetch, "GET", "/practices/900001/shipping-services?perPage=50", {
+      token,
+    })
     expect(practice.status).toBe(403)
     expect(practice.json).toEqual({
       type: "error",
-      message: "The authenticated API user does not have the required privilege 'practices.shipping-services.list'.",
+      message:
+        "The authenticated API user does not have the required privilege 'practices.shipping-services.list'.",
       data: null,
     })
     const configs = await raw(fetch, "GET", "/locations/100001/shipping-configurations", { token })
@@ -589,10 +857,16 @@ describe("reference lists and privileges", () => {
       new Request(`${BASE}/__admin/api-users`, {
         method: "PUT",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ clientId: "lifefile-client", secret: "lifefile-secret", privileges: ["practices.shipping-services.list"] }),
+        body: JSON.stringify({
+          clientId: "lifefile-client",
+          secret: "lifefile-secret",
+          privileges: ["practices.shipping-services.list"],
+        }),
       }),
     )
-    const granted = await raw(fetch, "GET", "/practices/900001/shipping-services", { token: await tokenFor(fetch) })
+    const granted = await raw(fetch, "GET", "/practices/900001/shipping-services", {
+      token: await tokenFor(fetch),
+    })
     expect(granted.status).toBe(200)
     expect((await raw(fetch, "GET", "/orders", { token: await tokenFor(fetch) })).json).toEqual({
       type: "error",

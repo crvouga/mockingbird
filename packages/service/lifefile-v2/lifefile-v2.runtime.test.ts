@@ -19,7 +19,10 @@ const sink = () => {
   const received: Received[] = []
   let status = 200
   const fetch = async (request: Request) => {
-    received.push({ headers: request.headers, body: (await request.json()) as Record<string, unknown> })
+    received.push({
+      headers: request.headers,
+      body: (await request.json()) as Record<string, unknown>,
+    })
     return new Response(null, { status })
   }
   return {
@@ -70,7 +73,10 @@ const admin = async (
     }),
   )
   const text = await response.text()
-  return { status: response.status, json: (text ? JSON.parse(text) : null) as Record<string, unknown> }
+  return {
+    status: response.status,
+    json: (text ? JSON.parse(text) : null) as Record<string, unknown>,
+  }
 }
 
 const placed = async (client: ReturnType<typeof consumer>, uuid = crypto.randomUUID()) => {
@@ -84,8 +90,14 @@ describe("service contract", () => {
     const { runtime } = boot()
     const health = await runtime.fetch(new Request(`${BASE}/__admin/health`))
     expect(health.status).toBe(200)
-    expect(await health.json()).toMatchObject({ status: "ok", service: "lifefile-v2", corpus: "lifefile-v2-2026-11-24" })
-    const vendor = await runtime.fetch(new Request(`${BASE}/api/v2/ping`, { headers: { "x-vendor-id": "10001" } }))
+    expect(await health.json()).toMatchObject({
+      status: "ok",
+      service: "lifefile-v2",
+      corpus: "lifefile-v2-2026-11-24",
+    })
+    const vendor = await runtime.fetch(
+      new Request(`${BASE}/api/v2/ping`, { headers: { "x-vendor-id": "10001" } }),
+    )
     expect(vendor.status).toBe(401)
   })
 
@@ -102,7 +114,11 @@ describe("service contract", () => {
     await runtime.fetch(
       new Request(`${BASE}/api/v2/auth/token`, {
         method: "POST",
-        headers: { "x-vendor-id": "10001", "content-type": "application/x-www-form-urlencoded", "x-mockingbird-namespace": "a" },
+        headers: {
+          "x-vendor-id": "10001",
+          "content-type": "application/x-www-form-urlencoded",
+          "x-mockingbird-namespace": "a",
+        },
         body: "grant_type=client_credentials&client_id=client-c&client_secret=s",
       }),
     )
@@ -138,7 +154,10 @@ describe("service contract", () => {
     const receiver = Bun.serve({
       port: 0,
       fetch: async (request) => {
-        received.push({ headers: request.headers, body: (await request.json()) as Record<string, unknown> })
+        received.push({
+          headers: request.headers,
+          body: (await request.json()) as Record<string, unknown>,
+        })
         return new Response("ok")
       },
     })
@@ -198,10 +217,14 @@ describe("Data Push (provisional shape)", () => {
     const id = await placed(client)
     const advanced = await admin(runtime, "POST", `/orders/${id}/status`, { status: "pro" })
     expect(advanced.status).toBe(200)
-    expect(await client.status(id)).toMatchObject({ data: { id: "pro", label: "Completed Orders" } })
+    expect(await client.status(id)).toMatchObject({
+      data: { id: "pro", label: "Completed Orders" },
+    })
     await runtime.webhooks.idle()
     expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toContain("pro")
-    expect((await admin(runtime, "POST", `/orders/${id}/status`, { status: "zzzzz" })).status).toBe(404)
+    expect((await admin(runtime, "POST", `/orders/${id}/status`, { status: "zzzzz" })).status).toBe(
+      404,
+    )
     expect((await admin(runtime, "POST", "/orders/1/status", { status: "pro" })).status).toBe(404)
     expect((await admin(runtime, "POST", `/orders/${id}/status`, {})).status).toBe(400)
   })
@@ -210,11 +233,21 @@ describe("Data Push (provisional shape)", () => {
     const { client, runtime, pushes } = boot()
     const id = await placed(client)
     await admin(runtime, "POST", `/orders/${id}/status`, { status: "pro", push: false })
-    expect((await admin(runtime, "POST", `/orders/${id}/push`, { tracking: { trackingNumber: "1Z999AA10123456784", carrier: "UPS" } })).status).toBe(200)
+    expect(
+      (
+        await admin(runtime, "POST", `/orders/${id}/push`, {
+          tracking: { trackingNumber: "1Z999AA10123456784", carrier: "UPS" },
+        })
+      ).status,
+    ).toBe(200)
     expect((await admin(runtime, "POST", `/orders/${id}/push`, {})).status).toBe(200)
     await runtime.webhooks.idle()
     const [withTracking, without] = pushes.received
-    expect(withTracking?.body.shipping).toEqual({ trackingNumber: "1Z999AA10123456784", carrier: "UPS", service: null })
+    expect(withTracking?.body.shipping).toEqual({
+      trackingNumber: "1Z999AA10123456784",
+      carrier: "UPS",
+      service: null,
+    })
     expect(without?.body).not.toHaveProperty("shipping")
     expect((await admin(runtime, "POST", "/orders/1/push", {})).status).toBe(404)
   })
@@ -254,7 +287,9 @@ describe("Data Push (provisional shape)", () => {
     await runtime.webhooks.idle()
     await admin(runtime, "POST", `/orders/${id}/push`, { badCredentials: true })
     await runtime.webhooks.idle()
-    expect(pushes.received.at(-1)?.headers.get("authorization")).toBe(`Basic ${btoa("invalid:invalid")}`)
+    expect(pushes.received.at(-1)?.headers.get("authorization")).toBe(
+      `Basic ${btoa("invalid:invalid")}`,
+    )
   })
 
   test("a push to a dead receiver gives up after its retries instead of queueing forever", async () => {
@@ -271,9 +306,15 @@ describe("Data Push (provisional shape)", () => {
   test("the push target can be set per namespace at runtime", async () => {
     const clock = createClock()
     const runtime = createRuntime({ latency: "none", clock })
-    const configured = await admin(runtime, "PUT", "/push", { url: "http://elsewhere.local/push", username: "a", password: "b" })
+    const configured = await admin(runtime, "PUT", "/push", {
+      url: "http://elsewhere.local/push",
+      username: "a",
+      password: "b",
+    })
     expect(configured.status).toBe(200)
-    expect(runtime.webhooks.endpoints("default").map((e) => e.url)).toContain("http://elsewhere.local/push")
+    expect(runtime.webhooks.endpoints("default").map((e) => e.url)).toContain(
+      "http://elsewhere.local/push",
+    )
   })
 })
 
@@ -285,7 +326,8 @@ describe("failure controls", () => {
     const uuid = crypto.randomUUID()
     const created = await client.createOrder(orderBody({ uuid }))
     expect(created.ok).toBe(false)
-    if (!created.ok) expect(created.failure).toMatchObject({ certainty: "unknown", category: "network" })
+    if (!created.ok)
+      expect(created.failure).toMatchObject({ certainty: "unknown", category: "network" })
     const found = await client.findByRxUuid(uuid)
     expect(found.ok && found.data.total).toBe(1)
   })
@@ -294,16 +336,19 @@ describe("failure controls", () => {
     ["server_error", 500, "unknown"],
     ["unavailable", 503, "unknown"],
     ["rate_limited", 429, "definite"],
-  ] as const)("preset %s answers %i (%s) without creating an order", async (preset, status, certainty) => {
-    const { client, runtime } = boot()
-    expect(LIFEFILE_V2_PRESETS[preset]).toBeDefined()
-    expect((await client.call("GET", "/ping")).ok).toBe(true)
-    await admin(runtime, "POST", "/faults", { preset, count: 1 })
-    const created = await client.createOrder(orderBody())
-    expect(created.ok).toBe(false)
-    if (!created.ok) expect(created.failure).toMatchObject({ httpStatus: status, certainty })
-    expect(runtime.instance().orders()).toHaveLength(0)
-  })
+  ] as const)(
+    "preset %s answers %i (%s) without creating an order",
+    async (preset, status, certainty) => {
+      const { client, runtime } = boot()
+      expect(LIFEFILE_V2_PRESETS[preset]).toBeDefined()
+      expect((await client.call("GET", "/ping")).ok).toBe(true)
+      await admin(runtime, "POST", "/faults", { preset, count: 1 })
+      const created = await client.createOrder(orderBody())
+      expect(created.ok).toBe(false)
+      if (!created.ok) expect(created.failure).toMatchObject({ httpStatus: status, certainty })
+      expect(runtime.instance().orders()).toHaveLength(0)
+    },
+  )
 
   test("rate_limited carries Retry-After, which the consumer reads", async () => {
     const { client, runtime } = boot()
@@ -327,12 +372,15 @@ describe("failure controls", () => {
   test("admin expire secret: tokens still work until they die, but no new token is issued", async () => {
     const { client, runtime, clock } = boot()
     expect((await client.call("GET", "/ping")).ok).toBe(true)
-    expect((await admin(runtime, "POST", "/api-users/lifefile-client/expire-secret", {})).status).toBe(200)
+    expect(
+      (await admin(runtime, "POST", "/api-users/lifefile-client/expire-secret", {})).status,
+    ).toBe(200)
     expect((await client.call("GET", "/ping")).ok).toBe(true)
     clock.advance(61 * 60_000)
     const after = await client.call("GET", "/ping")
     expect(after.ok).toBe(false)
-    if (!after.ok) expect(after.failure).toMatchObject({ category: "auth", vendorCode: "invalid_client" })
+    if (!after.ok)
+      expect(after.failure).toMatchObject({ category: "auth", vendorCode: "invalid_client" })
     expect((await admin(runtime, "POST", "/api-users/nobody/expire-secret", {})).status).toBe(404)
   })
 
@@ -356,11 +404,18 @@ describe("failure controls", () => {
   test("settings: GET and PUT validate, unknown keys refused", async () => {
     const { runtime } = boot()
     const current = await admin(runtime, "GET", "/settings")
-    expect(current.json).toMatchObject({ catalog: "sandbox", fastTrackWindowMs: 2000, tokenTtlSeconds: 86400 })
+    expect(current.json).toMatchObject({
+      catalog: "sandbox",
+      fastTrackWindowMs: 2000,
+      tokenTtlSeconds: 86400,
+    })
     expect((await admin(runtime, "PUT", "/settings", { catalog: "production" })).status).toBe(200)
     expect((await admin(runtime, "PUT", "/settings", { catalog: "nope" })).status).toBe(400)
     expect((await admin(runtime, "PUT", "/settings", { bogus: 1 })).status).toBe(400)
-    expect((await admin(runtime, "GET", "/settings")).json).toMatchObject({ catalog: "production", intake: null })
+    expect((await admin(runtime, "GET", "/settings")).json).toMatchObject({
+      catalog: "production",
+      intake: null,
+    })
   })
 
   test("admin order list shows what the namespace holds", async () => {
@@ -381,7 +436,13 @@ describe("long-running limits (M1 namespace lifecycle)", () => {
     }
     expect(runtime.resources().namespaces).toBeGreaterThanOrEqual(3)
     for (let i = 0; i < 3; i++) {
-      expect((await runtime.fetch(new Request(`${BASE}/__admin/namespaces/test-${i}`, { method: "DELETE" }))).status).toBeLessThan(300)
+      expect(
+        (
+          await runtime.fetch(
+            new Request(`${BASE}/__admin/namespaces/test-${i}`, { method: "DELETE" }),
+          )
+        ).status,
+      ).toBeLessThan(300)
     }
     expect(runtime.resources().namespaces).toBeLessThanOrEqual(1)
   })

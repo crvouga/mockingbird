@@ -30,7 +30,9 @@ export type LifefileFailure = {
 
 export class LifefileError extends Error {
   constructor(readonly failure: LifefileFailure) {
-    super(`LifeFile ${failure.category}${failure.httpStatus ? ` (HTTP ${failure.httpStatus})` : ""}`)
+    super(
+      `LifeFile ${failure.category}${failure.httpStatus ? ` (HTTP ${failure.httpStatus})` : ""}`,
+    )
     this.name = "LifefileError"
   }
 }
@@ -209,7 +211,9 @@ export class TokenService {
 
 export type Envelope<T> = { type: string; message: string; data: T }
 
-export type Result<T> = { ok: true; status: number; data: T } | { ok: false; failure: LifefileFailure }
+export type Result<T> =
+  | { ok: true; status: number; data: T }
+  | { ok: false; failure: LifefileFailure }
 
 export class LifefileClient {
   retries = 0
