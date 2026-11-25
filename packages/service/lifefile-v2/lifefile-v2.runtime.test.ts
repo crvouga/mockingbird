@@ -132,6 +132,32 @@ describe("service contract", () => {
     expect(read.status).toBe(200)
   })
 
+  test("a client mapped to a namespace signs in with a form body and reads that namespace's orders", async () => {
+    const { runtime } = boot()
+    const fetch = (r: Request) => runtime.fetch(r)
+    const a = consumer(`${BASE}/__admin/ns/a`, fetch, { clientId: "client-a", clientSecret: "s" })
+    const id = await placed(a)
+    await admin(runtime, "PUT", "/credentials", { credentials: { "client-c": "a" } })
+    const issued = await runtime.fetch(
+      new Request(`${BASE}/api/v2/auth/token`, {
+        method: "POST",
+        headers: {
+          "x-vendor-id": "10001",
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: "grant_type=client_credentials&client_id=client-c&client_secret=s",
+      }),
+    )
+    expect(issued.headers.get("x-mockingbird")).toContain("ns=a")
+    const { access_token } = (await issued.json()) as { access_token: string }
+    const read = await runtime.fetch(
+      new Request(`${BASE}/api/v2/orders/${id}`, {
+        headers: { authorization: `Bearer ${access_token}`, "x-vendor-id": "10001" },
+      }),
+    )
+    expect(read.status).toBe(200)
+  })
+
   test("the journal keeps no request bodies (patient data never lands in it)", async () => {
     const { runtime, client } = boot()
     await placed(client)

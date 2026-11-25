@@ -827,6 +827,19 @@ describe("a bearer token lives only in the namespace state that issued it", () =
     expect(await ping(second.fetch, old)).toBe(401)
   })
 
+  test("a token from before a restart on a kept store stays dead after a reset and a sign-in in the same second", async () => {
+    const sqlite = createDefaultSqlite()
+    const first = boot({ sqlite })
+    const old = await signIn(first.fetch)
+    expect(await ping(first.fetch, old)).toBe(200)
+    const second = boot({ sqlite })
+    await second.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    const fresh = await signIn(second.fetch)
+    expect(fresh).not.toBe(old)
+    expect(await ping(second.fetch, fresh)).toBe(200)
+    expect(await ping(second.fetch, old)).toBe(401)
+  })
+
   test("a token issued after a checked-out checkpoint stays dead after the same client signs in again", async () => {
     const { runtime, fetch } = boot()
     await ping(fetch, "x.y.z")
