@@ -581,6 +581,17 @@ describe("namespace deletion", () => {
     await keepsBoot(runtime, fetch)
   })
 
+  test("the API user list right after a reset shows the seeded client", async () => {
+    const { runtime } = closed()
+    expect((await admin(runtime, "GET", "/api-users")).json.apiUsers).toHaveLength(1)
+    await runtime.fetch(new Request(`${BASE}/__admin/reset`, { method: "POST" }))
+    const listed = (await admin(runtime, "GET", "/api-users")).json.apiUsers as {
+      clientId: string
+    }[]
+    expect(listed.map((user) => user.clientId)).toEqual(["stack-client"])
+    expect(listed[0]).not.toHaveProperty("secret")
+  })
+
   test("checking out the first checkpoint after a reset keeps the boot settings and API users", async () => {
     const { runtime, fetch } = closed()
     expect((await token(BASE, fetch, "stack-client", "stack-secret")).status).toBe(200)
