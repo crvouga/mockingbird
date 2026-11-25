@@ -13,6 +13,7 @@ import {
   jsonRes,
   markMutationAccepted,
   type OperationContext,
+  responseNotes,
   type Service,
   toBase64,
 } from "@crvouga/mockingbird-service"
@@ -464,9 +465,12 @@ const sortedErrors = (errors: Record<string, string[]>) => {
   >
 }
 
-const zoned = (ms: number, timeZone: string) => {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
+const zoneFormats = new Map<string, Intl.DateTimeFormat>()
+
+const zoneFormat = (timeZone: string) => {
+  let format = zoneFormats.get(timeZone)
+  if (!format) {
+    format = new Intl.DateTimeFormat("en-US", {
       timeZone,
       hourCycle: "h23",
       year: "numeric",
@@ -476,6 +480,14 @@ const zoned = (ms: number, timeZone: string) => {
       minute: "2-digit",
       second: "2-digit",
     })
+    zoneFormats.set(timeZone, format)
+  }
+  return format
+}
+
+const zoned = (ms: number, timeZone: string) => {
+  const parts = Object.fromEntries(
+    zoneFormat(timeZone)
       .formatToParts(new Date(ms))
       .map((p) => [p.type, p.value]),
   ) as Record<string, string>
@@ -609,6 +621,8 @@ const flatten = (value: unknown, prefix = ""): [string, string][] => {
   )
 }
 
+const STALLED_CLOCK_POLL_MS = 250
+
 export class LifeFileV2API implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
@@ -618,7 +632,7 @@ export class LifeFileV2API implements FetchAPI {
   private readonly onPush: ((push: PushRequest) => void) | undefined
   private readonly auth = new WeakMap<Request, Auth>()
   private readonly rateWindows = new Map<string, { window: number; count: number }>()
-  private readonly dueTimers = new Set<ReturnType<typeof setTimeout>>()
+  private dueTimer: { timer: ReturnType<typeof setTimeout>; at: number } | undefined
   readonly dueFailures: string[] = []
   private rateMinute = -1
   private readonly maxOrders: number | undefined
@@ -680,35 +694,42 @@ export class LifeFileV2API implements FetchAPI {
     if (limited.refused) return limited.refused
     const response = await this.service.fetch(request)
     if (!limited.headers) return response
-    const out = new Response(response.body, response)
+    const out = annotateResponse(
+      new Response(response.body, response),
+      responseNotes(response) ?? {},
+    )
     out.headers.set("X-RateLimit-Limit", String(limited.headers.limit))
     out.headers.set("X-RateLimit-Remaining", String(limited.headers.remaining))
     return out
   }
 
-  private wakeAt(dueAt: number): void {
+  private wakeAt(dueAt: number | undefined, minWaitMs = 0): void {
+    if (this.dueTimer) clearTimeout(this.dueTimer.timer)
+    this.dueTimer = undefined
+    if (dueAt === undefined) return
+    const armedAt = this.now()
     const timer = setTimeout(
       () => {
-        this.dueTimers.delete(timer)
+        if (this.dueTimer?.timer === timer) this.dueTimer = undefined
         try {
+          const stalled = this.now() === armedAt
           this.runDue()
+          if (stalled && this.dueTimer) this.wakeAt(this.dueTimer.at, STALLED_CLOCK_POLL_MS)
         } catch (error) {
           if (this.dueFailures.length < 20)
             this.dueFailures.push(error instanceof Error ? error.message : String(error))
         }
       },
-      Math.max(0, dueAt - this.now()) + 1,
+      Math.max(dueAt - armedAt + 1, 1, minWaitMs),
     )
     if (typeof timer === "object" && timer !== null && "unref" in timer) timer.unref()
-    this.dueTimers.add(timer)
+    this.dueTimer = { timer, at: dueAt }
   }
 
   async reset(): Promise<void> {
-    for (const timer of this.dueTimers) clearTimeout(timer)
-    this.dueTimers.clear()
+    this.wakeAt(undefined)
     await this.service.reset()
     this.rateWindows.clear()
-    this.state.unseed()
   }
 
   private settings(): Settings {
@@ -1044,7 +1065,8 @@ export class LifeFileV2API implements FetchAPI {
         orderId: id,
         dueAt: now + settings.intake.afterMs,
       })
-      this.wakeAt(now + settings.intake.afterMs)
+      const dueAt = now + settings.intake.afterMs
+      if (!this.dueTimer || dueAt < this.dueTimer.at) this.wakeAt(dueAt)
     }
     const response = annotateResponse(success({ orderId: id }), { ids: { orderId: String(id) } })
     if (faultEffect(context.request, "create_lost_reply") !== undefined) {
@@ -1059,6 +1081,12 @@ export class LifeFileV2API implements FetchAPI {
       id: order.id,
       createdOn: this.local(order.createdAt).local,
       lastUpdatedOn: this.local(order.lastUpdatedAt).local,
+      ...this.orderFields(order),
+    }
+  }
+
+  private orderFields(order: OrderRecord) {
+    return {
       general: { ...order.general, statusId: order.statusId },
       location: { id: order.locationId },
       prescriber: { ...order.prescriber },
@@ -1107,8 +1135,13 @@ export class LifeFileV2API implements FetchAPI {
   runDue(except?: number): void {
     const now = this.now()
     const settings = this.settings()
+    let next: number | undefined
     for (const row of this.state.pendingIntake.list({ order: "oldest" })) {
-      if (row.value.dueAt > now || row.value.orderId === except) continue
+      if (row.value.dueAt > now) {
+        if (next === undefined || row.value.dueAt < next) next = row.value.dueAt
+        continue
+      }
+      if (row.value.orderId === except) continue
       this.state.pendingIntake.delete(row.id)
       const order = this.state.order(row.value.orderId)
       if (!order || order.statusWritten || order.statusId !== NEW_STATUS || !settings.intake)
@@ -1116,6 +1149,7 @@ export class LifeFileV2API implements FetchAPI {
       if (!this.catalog().statuses.some((s) => s.id === settings.intake?.status)) continue
       this.changeStatus(order, settings.intake.status, "intake", { touchUpdated: false })
     }
+    this.wakeAt(next)
   }
 
   private changeStatus(
@@ -1274,18 +1308,33 @@ export class LifeFileV2API implements FetchAPI {
     }
     const rxUuid = filters.find(([key]) => key === "rx.uuid")?.[1]
     const candidates = rxUuid !== undefined ? this.state.ordersByRx(rxUuid) : this.orders()
+    if (filters.length === 0 && page.sortField === "id") {
+      const listed = paginate(page.sortType === "asc" ? candidates.reverse() : candidates, page)
+      return success({ ...listed, data: listed.data.map((order) => this.orderDto(order)) })
+    }
+    const timed = [page.sortField, ...filters.map(([key]) => key)].some((key) =>
+      /createdOn|lastUpdatedOn/.test(key),
+    )
     const rows = candidates
-      .map((order) => this.orderDto(order))
-      .filter((dto) => filters.every(([key, value]) => this.matches(dto, key, value)))
+      .map((order) => ({
+        order,
+        view: timed ? this.orderDto(order) : { id: order.id, ...this.orderFields(order) },
+      }))
+      .filter(({ view }) => filters.every(([key, value]) => this.matches(view, key, value)))
     const direction = page.sortType === "asc" ? 1 : -1
     rows.sort((a, b) => {
-      const primary = compare(at(a, page.sortField), at(b, page.sortField)) * direction
-      return primary !== 0 ? primary : b.id - a.id
+      const primary = compare(at(a.view, page.sortField), at(b.view, page.sortField)) * direction
+      return primary !== 0 ? primary : b.order.id - a.order.id
     })
-    return success(paginate(rows, page))
+    const listed = paginate(rows, page)
+    return success({ ...listed, data: listed.data.map(({ order }) => this.orderDto(order)) })
   }
 
-  private matches(dto: ReturnType<LifeFileV2API["orderDto"]>, key: string, value: string): boolean {
+  private matches(
+    dto: { id: number } & ReturnType<LifeFileV2API["orderFields"]>,
+    key: string,
+    value: string,
+  ): boolean {
     const wanted = value.toLowerCase()
     const [section, field, bound] = key.split(".")
     if (section === "rx") {

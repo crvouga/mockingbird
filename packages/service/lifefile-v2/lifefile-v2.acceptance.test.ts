@@ -623,6 +623,44 @@ describe("reading orders", () => {
     )
     expect(none.json.data).toEqual({ data: [], total: 0, perPage: 5, currentPage: 1, lastPage: 1 })
   })
+
+  test("the list sorts ascending, by time and by name, and filters on a time range", async () => {
+    const { client, clock, fetch } = boot()
+    const ids: number[] = []
+    for (const lastName of ["Moss", "Avery", "Zane", "Kerr", "Lane", "Ford"]) {
+      const r = await client.createOrder(orderBody({ uuid: crypto.randomUUID(), lastName }))
+      ids.push(r.ok ? r.data.orderId : 0)
+      clock.advance(60_000)
+    }
+    const token = await tokenFor(fetch)
+    const list = async (query: Record<string, string>) => {
+      const page = await raw(fetch, "GET", `/orders?${new URLSearchParams(query)}`, { token })
+      const data = page.json.data as { total: number; data: { id: number; createdOn: string }[] }
+      return { total: data.total, ids: data.data.map((o) => o.id), rows: data.data }
+    }
+    const [moss, avery, zane, kerr, lane, ford] = ids as [
+      number,
+      number,
+      number,
+      number,
+      number,
+      number,
+    ]
+    expect((await list({ sortType: "asc", perPage: "5", page: "2" })).ids).toEqual([ford])
+    expect((await list({ sortField: "createdOn", sortType: "asc" })).ids).toEqual(ids)
+    expect((await list({ sortField: "patient.lastName", sortType: "asc" })).ids).toEqual([
+      avery,
+      ford,
+      kerr,
+      lane,
+      moss,
+      zane,
+    ])
+    const all = await list({ sortType: "asc" })
+    const from = all.rows[4]?.createdOn as string
+    const ranged = await list({ "filter[general][createdOn][from]": from })
+    expect(ranged).toMatchObject({ total: 2, ids: [ford, lane] })
+  })
 })
 
 describe("status writes", () => {

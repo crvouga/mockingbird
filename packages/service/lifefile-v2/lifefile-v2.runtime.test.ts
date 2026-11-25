@@ -275,6 +275,26 @@ describe("intake on a real clock", () => {
     expect(runtime.instance().state.order(id)?.statusId).toBe("b3644")
     expect(pushes.received.map((p) => (p.body.status as { id: string }).id)).toEqual(["b3644"])
   })
+
+  test("a frozen clock with intake pending wakes the instance only a few times a second", async () => {
+    const runtime = createRuntime({
+      latency: "none",
+      settings: { intake: { status: "b3644", afterMs: 1 } },
+    })
+    const client = consumer(BASE, (r) => runtime.fetch(r))
+    runtime.namespaceClock().freeze()
+    const id = await placed(client)
+    const api = runtime.instance()
+    let wakes = 0
+    const runDue = api.runDue.bind(api)
+    api.runDue = (except?: number) => {
+      wakes++
+      runDue(except)
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000))
+    expect(wakes).toBeLessThanOrEqual(6)
+    expect(api.state.order(id)?.statusId).toBe("new")
+  })
 })
 
 describe("Data Push (provisional shape)", () => {

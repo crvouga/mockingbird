@@ -25,7 +25,6 @@ export class LifeFileState {
   readonly counters: Collection<Counter>
   readonly pendingIntake: Collection<{ orderId: number; dueAt: number }>
   private readonly ids: IdSequence
-  private seeded = false
 
   constructor(
     private readonly sqlite: SqliteClient,
@@ -44,16 +43,11 @@ export class LifeFileState {
     this.ensureSeeded()
   }
 
-  unseed(): void {
-    this.seeded = false
-  }
-
   seedIfNeeded(): void {
-    if (!this.seeded) this.ensureSeeded()
+    if (!this.settings.has("settings") || this.apiUsers.count() === 0) this.ensureSeeded()
   }
 
   ensureSeeded(): void {
-    this.seeded = true
     if (!this.settings.has("settings")) {
       this.settings.insert("settings", { ...DEFAULT_SETTINGS, ...this.seed.settings })
     }
