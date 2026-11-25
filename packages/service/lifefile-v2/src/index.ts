@@ -13,6 +13,7 @@ import {
   jsonRes,
   markMutationAccepted,
   type OperationContext,
+  opaqueToken,
   responseNotes,
   type Service,
   toBase64,
@@ -79,6 +80,7 @@ export type LifeFileV2APIOptions = APIOptions & {
   onPush?: (push: PushRequest) => void
   maxOrders?: number
   maxApiUsers?: number
+  tokenNonce?: () => string
 }
 
 type Json = Record<string, unknown>
@@ -631,6 +633,11 @@ const flatten = (value: unknown, prefix = ""): [string, string][] => {
 
 const STALLED_CLOCK_POLL_MS = 250
 
+const issueNonces = (scope: string) => {
+  let issued = 0
+  return () => opaqueToken(`lifefile-v2:nonce:${scope}:${++issued}`, 22)
+}
+
 export class LifeFileV2API implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
@@ -645,6 +652,7 @@ export class LifeFileV2API implements FetchAPI {
   private rateMinute = -1
   private readonly maxOrders: number | undefined
   private readonly maxApiUsers: number | undefined
+  private readonly tokenNonce: () => string
 
   constructor(options: LifeFileV2APIOptions = {}) {
     const sqlite = bootSqlite(options.sqlite)
@@ -653,6 +661,7 @@ export class LifeFileV2API implements FetchAPI {
     this.onPush = options.onPush
     this.maxOrders = options.maxOrders
     this.maxApiUsers = options.maxApiUsers
+    this.tokenNonce = options.tokenNonce ?? issueNonces(namespace)
     this.state = new LifeFileState(
       sqlite,
       namespace,
@@ -922,7 +931,7 @@ export class LifeFileV2API implements FetchAPI {
     const claims: Claims = {
       sub: user.clientId,
       jti: tokenId,
-      nonce: this.state.tokenNonce(),
+      nonce: this.tokenNonce(),
       iat: Math.floor(now / 1000),
       gen: user.generation,
       rev: settings.tokenGeneration,

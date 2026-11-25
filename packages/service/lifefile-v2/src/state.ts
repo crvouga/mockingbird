@@ -127,10 +127,6 @@ export class LifeFileState {
     return TOKEN_BASE + this.next("token")
   }
 
-  tokenNonce(): string {
-    return crypto.randomUUID()
-  }
-
   uuid(): string {
     const raw = this.ids.next("uuid:", 32).slice("uuid:".length)
     const hex = [...raw].map((c) => "0123456789abcdef".charAt(c.charCodeAt(0) % 16))

@@ -5,6 +5,7 @@ import {
   createWebhookHub,
   type FaultPreset,
   type MockControls,
+  opaqueToken,
   type RequestLog,
   type ServiceRuntime,
   type WebhookHub,
@@ -333,6 +334,9 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
       ? options.adminControls
       : { ...(options.adminControls ?? {}), latency: RECORDED_LATENCY_CONTROL }
 
+  let issued = 0
+  const tokenNonce = () => opaqueToken(`lifefile-v2:nonce:${options.seed ?? ""}:${++issued}`, 22)
+
   const runtime: ServiceRuntime<LifeFileV2API> = createServiceRuntime<LifeFileV2API>({
     name: LIFEFILE_V2_NAMESPACE,
     document,
@@ -360,6 +364,7 @@ export const createRuntime = (options: LifeFileV2RuntimeOptions = {}): LifeFileV
         sqlite,
         namespace,
         now: clock.now,
+        tokenNonce,
         settings: { ...(bootPush ? { push: bootPush } : {}), ...(options.settings ?? {}) },
         ...(options.apiUsers ? { apiUsers: options.apiUsers } : {}),
         ...(options.maxOrders !== undefined ? { maxOrders: options.maxOrders } : {}),
