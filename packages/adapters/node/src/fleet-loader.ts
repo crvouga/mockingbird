@@ -1,3 +1,4 @@
+import { existsSync, readFileSync } from "node:fs"
 import { createRequire } from "node:module"
 import { resolve } from "node:path"
 import { pathToFileURL } from "node:url"
@@ -15,18 +16,29 @@ export function createInstalledServiceLoader(options: {
   if (!options.projectRoot) throw new Error("consumer projectRoot required")
   const allowed = new Set(options.services)
   for (const name of allowed) if (!suffix.test(name)) throw new Error("invalid service suffix")
-  const require = createRequire(resolve(options.projectRoot, "package.json"))
+  const manifest = resolve(options.projectRoot, "package.json")
+  const require = createRequire(manifest)
+  const imports = existsSync(manifest)
+    ? JSON.parse(readFileSync(manifest, "utf8")).imports
+    : undefined
   const targets = new Map((options.targets ?? []).map((target) => [target.name, target]))
   return async (name) => {
     if (!suffix.test(name) || !allowed.has(name))
       throw new Error("service is not declared in loader allowlist")
     const own = targets.get(name)
     if (own) return own
-    const specifier = `@crvouga/mockingbird-service-${name}/server`
+    const alias = `#mockingbird/${name}/server`
+    const registered = imports && Object.hasOwn(imports, alias)
+    const specifier = registered ? alias : `@crvouga/mockingbird-service-${name}/server`
     let location: string
     try {
       location = require.resolve(specifier)
-    } catch {
+    } catch (cause) {
+      if (registered)
+        throw new Error(
+          `cannot resolve registered service "${name}" from ${alias} in ${manifest}`,
+          { cause },
+        )
       throw new Error(
         `cannot load service "${name}": install @crvouga/mockingbird-service-${name} in the consumer project; its /server export is required`,
       )

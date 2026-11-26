@@ -11,11 +11,11 @@ const run = async (args: string[], cwd: string) => {
     new Response(proc.stderr).text(),
     proc.exited,
   ])
-  if (code) throw new Error(`${args[0]} failed (${code}): ${err.slice(-2000)}`)
+  if (code) throw new Error(`${args[0]} failed (${code}): ${(err || out).slice(-2000)}`)
   return out
 }
 
-test("packed neutral package boots Postgres/Redis/Cognito outside monorepo without Stripe or private workspaces (#453)", async () => {
+test("packed fleet composes an external TypeScript service with Postgres, Redis and Cognito", async () => {
   const work = await mkdtemp(join(tmpdir(), "mockingbird-neutral-consumer-"))
   try {
     const tarballs = new Map<string, string>()
@@ -61,11 +61,56 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
     }
     const app = join(work, "app")
     await mkdir(app)
-    await writeFile(join(app, "package.json"), JSON.stringify({ private: true, type: "module" }))
+    await writeFile(
+      join(app, "package.json"),
+      JSON.stringify({
+        private: true,
+        type: "module",
+        imports: { "#mockingbird/jobs/server": "./jobs.js" },
+      }),
+    )
     await run(
       ["npm", "install", "--ignore-scripts", "--no-audit", "--no-fund", ...tarballs.values()],
       app,
     )
+    await cp(resolve(import.meta.dir, "../../runtime/examples/jobs.ts"), join(app, "jobs.ts"))
+    await writeFile(
+      join(app, "local.ts"),
+      `
+      import { createFleet } from '@crvouga/mockingbird-fleet/in-process';
+      import { createRuntime, serveTarget } from './jobs.js';
+      import { createRuntime as cognito } from '@crvouga/mockingbird-service-cognito';
+      const local = createFleet({ services: {
+        jobs: { version: serveTarget.packageVersion, create: () => createRuntime() },
+        identity: { version: 'fixture', create: () => cognito() },
+      } });
+      try {
+        const write = await local.fetch('jobs', new Request('https://jobs.example/jobs', {method: 'POST'}));
+        if (write.status !== 201) throw new Error('in-process custom write failed');
+        await write.text();
+        const read = await local.fetch('identity', new Request('https://identity.example/__admin/health'));
+        if (!read.ok) throw new Error('in-process built-in health failed');
+        await read.text();
+      } finally { await local.dispose(); }
+    `,
+    )
+    await run(
+      [
+        resolve(import.meta.dir, "../../../node_modules/.bin/tsc"),
+        "--module",
+        "NodeNext",
+        "--target",
+        "ES2022",
+        "--strict",
+        "--exactOptionalPropertyTypes",
+        "--skipLibCheck",
+        "--declaration",
+        "jobs.ts",
+        "local.ts",
+      ],
+      app,
+    )
+    await run(["node", "local.js"], app)
     await writeFile(
       join(app, "smoke.mjs"),
       `
@@ -73,15 +118,22 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       import { createInstalledServiceLoader, FleetClient, startFleet } from '@crvouga/mockingbird-fleet';
       for (const name of ['mockingbird-service-stripe', 'mockingbird-adapter-node', 'mockingbird-core'])
         if (existsSync('node_modules/@crvouga/' + name)) throw new Error('unexpected private/billing dependency');
-      const config = { services: { database: { target:'postgres', port:0 }, cache: { target:'redis', port:0 }, identity: { target:'cognito', port:0 } } };
-      const fleet = await startFleet(config, { load: createInstalledServiceLoader({ projectRoot: process.cwd(), services:['postgres','redis','cognito'] }) });
+      const config = { services: { database: { target:'postgres', port:0 }, cache: { target:'redis', port:0 }, identity: { target:'cognito', port:0 }, queue: { target:'jobs', port:0 } } };
+      const fleet = await startFleet(config, { load: createInstalledServiceLoader({ projectRoot: process.cwd(), services:['postgres','redis','cognito','jobs'] }) });
       try {
         const client = new FleetClient(fleet.manifest.adminBase);
         await client.createNamespace('synthetic');
         const discovery = await client.discover();
-        if (Object.keys(discovery.manifest.services).sort().join(',') !== 'cache,database,identity') throw new Error('instance discovery mismatch');
+        if (Object.keys(discovery.manifest.services).sort().join(',') !== 'cache,database,identity,queue') throw new Error('instance discovery mismatch');
+        const url = fleet.manifest.services.queue.url + '/jobs';
+        const headers = { 'x-mockingbird-namespace': 'synthetic' };
+        const enqueue = () => fetch(url, { method: 'POST', headers });
+        if ((await enqueue()).status !== 201) throw new Error('custom POST failed');
         const archive = await client.exportArchive('synthetic');
+        if ((await enqueue()).status !== 201) throw new Error('second POST failed');
         await client.importArchive(archive, 'synthetic');
+        if ((await (await fetch(url, { headers })).json()).count !== 1) throw new Error('custom archive restore failed');
+        if ((await (await fetch(url)).json()).count !== 0) throw new Error('custom namespace isolation failed');
         console.log('neutral consumer passed');
       } finally { await fleet.close(); }
     `,
@@ -97,7 +149,11 @@ test("packed neutral package boots Postgres/Redis/Cognito outside monorepo witho
       join(app, "mockingbird.json"),
       JSON.stringify({
         dashboard: { port: 0 },
-        services: { cache: { target: "redis", port: 0 }, identity: { target: "cognito", port: 0 } },
+        services: {
+          cache: { target: "redis", port: 0 },
+          identity: { target: "cognito", port: 0 },
+          queue: { target: "jobs", port: 0 },
+        },
       }),
     )
     const report = JSON.parse(

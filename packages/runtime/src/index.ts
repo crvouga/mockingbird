@@ -7,6 +7,7 @@
 
 /** Every subpath this package exports, in `package.json` order. */
 export const RUNTIME_SUBPATHS = [
+  "authoring",
   "core",
   "openapi",
   "openapi-metadata",
