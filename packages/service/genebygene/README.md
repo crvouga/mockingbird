@@ -3,7 +3,7 @@
 > Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of **Gene by Gene's Nucleus API v2** (and its OAuth auth host) for test suites:
-client-credentials tokens with the credential-blocking failures, both recorded product catalogs,
+client-credentials tokens with the credential-blocking failures, synthetic production and staging catalogs,
 zone-priced shipping quotes, the production split between a quote that succeeds and a place that
 answers `Address Not Found`, order placement (shipped and quantity-only, plus orders for existing
 kits), order lines, fulfillments and address edits, kits and their demographics attributes, the
@@ -27,7 +27,7 @@ slot with 15 s sleeps and 300 s waits resolve in milliseconds.
 - Status: **ready**. Live parity (`bun run parity`, or `bun run parity:remote -- genebygene`) passes
   against `staging-api.genebygene.com`: the catalog, the 35-address corpus
   (`corpus/address-parity.json`), the recorded error shapes and query validation
-  (`corpus/live-errors.json`), the recorded catalogs (`src/corpus/live-catalogs.json`), and 25
+  (`corpus/live-errors.json`), catalog reads, and 25
   random walks over the safe operations. The acceptance suite replays those recordings, so CI
   holds the emulator to them without credentials.
 
@@ -87,7 +87,7 @@ const placed = await fetch(`${baseUrl}/api/v2/orders`, {
   method: "POST",
   headers: { authorization: `Bearer ${access_token}`, "content-type": "application/json" },
   body: JSON.stringify({
-    items: [{ productId: "a5190f53-01c8-4966-aead-adbf20f0dbf6", placerOrderNumber: "PO-1", quantity: 1 }],
+    items: [{ productId: "00000000-0000-4000-8000-000000000011", placerOrderNumber: "PO-1", quantity: 1 }],
   }),
 })
 // orderLines[].kitNumbers carry the new kit (Order.Created + KitNumbersGenerated are sent).
@@ -107,7 +107,7 @@ await server.close()
 | Route | Behaviour |
 | --- | --- |
 | `POST /connect/token` | Form `grant_type=client_credentials, client_id, client_secret` → `{access_token, expires_in: 3600, token_type: "Bearer"}`. Blocked clients (`PUT /__admin/settings {blockedClients}`) get 400 `{"error":"invalid_client"}`, 401 or 403; a mismatch against pinned `clients` is 400 `invalid_client`. |
-| `GET /api/v2/products[?productId\|productCode\|productType]` | The recorded catalog `settings.catalog` selects, byte for byte (`preassembly`, null `shippingQualified`, nested `components`). A GUID `productId` lists the product with that id or the bundles that contain it as a component (unknown → `[]`; a non-GUID is ignored); `productType` is a case-insensitive substring of the listed product's type. |
+| `GET /api/v2/products[?productId\|productCode\|productType]` | The catalog `settings.catalog` selects, byte for byte (`preassembly`, null `shippingQualified`, nested `components`). A GUID `productId` lists the product with that id or the bundles that contain it as a component (unknown → `[]`; a non-GUID is ignored); `productType` is a case-insensitive substring of the listed product's type. |
 | `POST /api/v2/fulfillments/actions/getShippingOptions` | `{shippingAddress, quantity, productId}` → `{dutiesAndTaxesIncluded, errorMessages, shippingOptions[…]}`: the destination's menu, a 400 problem-details refusal, HTTP **200** `errorMessages`, or the carrier's 500 (see [Shipping and addresses](#shipping-and-addresses)). Nothing to ship or an unknown id → 400 "This product Id is not valid for shipping options."; a staging-only id against the production catalog → empty 500. |
 | `POST /api/v2/orders` | Shipped form `{items:[{productId, placerOrderNumber, shipments:[{quantity, address, courierServiceCode, referenceId}]}], notes}` runs the place-time USPS check; quantity-only `{items:[{productId, placerOrderNumber, quantity}]}` skips it and never creates a fulfillment. Bundles expand into one order line per component (same `placerOrderNumber`, `bundleProductId`); the kit-material line carries one fulfillment (`Ordered`) with an outbound shipment and a return label, `courier`/`courierService`/`trackingNumber` null until ship; every line carries the kit number (`WB` + 6). `placerOrderNumber` is never deduped. |
 | `POST /api/v2/orders/actions/createOrderForExistingKits` | `{items:[{productId, kitNumbers, samples[{kitNumber, attributes}]}]}`: a lab order on existing kits (`Order.Created` with `OrderType: 3`, no new kit, no `KitNumbersGenerated`); unknown kits → 400. |
@@ -115,11 +115,11 @@ await server.close()
 | `GET /api/v2/orderLines/{id}` | The order-line detail with `kitStatusSummary` and sibling lines. |
 | `GET /api/v2/kits`, `/api/v2/kits/{kitNumber}`, `/api/v2/kitorderlines[?kitNumbers\|orderId\|attributeTerm…]`, `/api/v2/kitorderlines/kits` | `KitDto{kitNumber, gender, currentStatuses[{status, errors, errorMessage, orderLineId, orderId, fulfillment, results, history}], attributes}` and the kit-order-line rows (`currentStatus, currentErrorMessage, cancelCodeId, kitReceivedDate, kitEffectiveDate`). |
 | `GET /api/v2/fulfillments[?orderId]`, `POST …/actions/updateShipmentAddress` | Shipments with `isReturnShipment, address, trackingNumber, reference1, courier: null, courierService: null`. The edit replaces the address (no merge), re-runs the place check, echoes the command, and is visible on the next GET; an instruction-only edit always goes through; after tracking (or once `Shipped`/`Canceled`/`Error`) it is 400 "The shipment address can not be updated". |
-| `PATCH /api/v2/kits/{kitNumber}/attributes` | `{kitNumber, attributes:[{name, value}]}` (names matched case-insensitively against the recorded attribute catalog, stored lowercase: our consumer sends `firstname, lastname, dateofbirth, gender, race, ethnicity`). Unknown name → 400; bad `dateofbirth` (not `YYYYMMDD`) or `gender` (not `M/F/Unknown`) → 422; returns every attribute. |
+| `PATCH /api/v2/kits/{kitNumber}/attributes` | `{kitNumber, attributes:[{name, value}]}` (names matched case-insensitively against the configured attribute catalog, stored lowercase: our consumer sends `firstname, lastname, dateofbirth, gender, race, ethnicity`). Unknown name → 400; bad `dateofbirth` (not `YYYYMMDD`) or `gender` (not `M/F/Unknown`) → 422; returns every attribute. |
 | `DELETE /api/v2/fulfillments/{id}`, `/api/v2/kits/{kit}/orderLines`, `/api/v2/orderLines/{id}` | The three cancel layers: 204; a shipped or already-canceled fulfillment, or a kit/line already with the lab, is 400 "… not in a cancellable status"; unknown or already-canceled kits/lines are 404 `Resource not found.` (`Kit <kit> not found` for a kit). Canceling a fulfillment or a kit sends `Kit.KitOrderLine.Canceled`. |
 | `GET /api/v2/results[?kitNumber]`, `/api/v2/kits/{kit}/results`, `/api/v2/results/search` | An unknown `kitNumber` filter is an empty page. `{resultPayload: "s3://<bucket>/<namespace>/<kit>.<json\|csv\|pdf>", resultType, resultDisplayName, resultDate, orderLineId, orderId, kitNumber, resultId}`. |
 | `GET /api/v2/results/results/presignedUrl?resultId&kitNumber&resultType` | Needs a `resultId`, or a `kitNumber` with a `resultType` (400 `'Result Id' must not be empty.` …); none matching is 404 "There is no report assoicated with that result" (staging's spelling). `{presignedUrl, resultId, kitNumber, resultType, expiresAt}`; the URL is `GET {emulator}/__admin/blobs/<key>?X-Amz-…` and answers the bytes, or 403 `AccessDenied` (bad signature, expired on the emulator clock, or the `presigned_access_denied` preset). |
-| `GET /api/v2/attributes[?entityType]`, `/api/v2/eventTypes[?name]` | The recorded live catalogs (`src/corpus/live-catalogs.json`): 240 attribute definitions and 12 event types `{name, payloadStructure, subscriptionTypes}`. A blank `name` lists them all. |
+| `GET /api/v2/attributes[?entityType]`, `/api/v2/eventTypes[?name]` | The configured attribute definitions and event types `{name, payloadStructure, subscriptionTypes}`. A blank `name` lists them all. |
 | `GET/POST /api/v2/notificationSubscriptions`, `GET/PATCH/DELETE …/{id}` | `{id, endPoint, events, secret, active, …}`. `secret` is returned **only** by POST. Accepts `application/json-patch+json`. `Kit.KitOrderLine.Canceled` (or any name the event-type list lacks) in `events` is 400 "Valid event type is required."; a second subscription for the same endpoint is 400; an unknown id is 404 `Invalid Id <id>` (the empty GUID: 400 `Valid Notification Subscription Id required.`) |
 
 Every API route needs `Authorization: Bearer <token>`; a missing, expired (on the emulator clock),
@@ -219,10 +219,10 @@ call's `trackingNumber` / `returnTrackingNumber` override them.
 
 ### Catalogs and kit association
 
-`PUT /__admin/settings {"catalog": …}` picks what `GET /api/v2/products` answers: `production`
-(the recorded production catalog: the deluxe bundle `789af544-…` our consumer places, with its
-kit component `b1949749-…` `shippingQualified: true, preassembly: true`), `staging` (the recorded
-staging catalog), or `both` (default: production rows, then the staging rows production lacks).
+Use `--corpus <file>` with the CLI or set `corpus` in the fleet service flags to read the same JSON object from disk. Pass `{ corpus }` to `createRuntime`, `createServer`, or `GeneByGeneAPI` to use a private `GeneByGeneCorpus`. Supply `productionProducts` and `stagingProducts` in vendor order. Optional fields include `productCodes`, `defaultProductId` (the scenario bundle), `reportProductId`, `rawDataProductId`, `attributes`, `eventTypes` and `tenantId`. The package defaults to synthetic data.
+
+`PUT /__admin/settings {"catalog": "production"}` selects the production rows. The other settings are `staging` and `both`. The latter starts with production rows and appends staging rows with new IDs.
+
 `{"kitAssociation": "deferred"}` withholds a shipped place's kit numbers until
 `POST /__admin/orders/:id/kit-numbers` (the production shape: the shipping desk associates a kit
 within a business day or so); `immediate` (default) mints them in the create response.
@@ -333,11 +333,9 @@ bun test                           # self-parity (incl. the address walk), accep
 bun scripts/vendor-openapi.ts <gxg-openapi.json>  # re-vendor openapi.yaml, then bun run generate
 bun run parity                     # live parity against GxG staging; exits 2 without
                                    # GENEBYGENE_CLIENT_ID / _CLIENT_SECRET (env / .env.local);
-                                   # compares and records corpus/address-parity.json, corpus/live-errors.json
-                                   # and src/corpus/live-catalogs.json; GENEBYGENE_UNSAFE=1
-                                   # also places (and cancels) one real order on demo/staging
-bun run parity:remote -- genebygene  # the same on GitHub Actions with the repo's secrets; download the
-                                   # recordings with gh run download <run-id> -n parity-corpus
+                                   # optional GENEBYGENE_CORPUS_FILE selects a private JSON baseline
+                                   # GENEBYGENE_RECORD_DIR optionally writes captures to a private directory
+                                   # GENEBYGENE_UNSAFE=1 also places and cancels a real staging order
 ```
 
 Part of [mockingbird](https://github.com/crvouga/mockingbird).

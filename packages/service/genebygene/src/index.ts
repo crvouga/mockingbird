@@ -23,15 +23,12 @@ import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
 import type { Hono } from "hono"
 import {
   ATTRIBUTE_DEFINITIONS,
-  attributeDefinition,
   type Catalog,
   catalogProducts,
-  DELUXE_BUNDLE_ID,
+  DEFAULT_CORPUS,
   EVENT_TYPES,
+  type GeneByGeneCorpus,
   LAB_RETURN_ADDRESS,
-  PRODUCT_CODES,
-  STAGING_ONLY_IDS,
-  SUBSCRIBABLE_EVENTS,
   TENANT_ID,
 } from "./corpus.js"
 import {
@@ -193,7 +190,8 @@ const WITH_LAB = new Set<string>([
 ])
 
 export type GeneByGeneAPIOptions = APIOptions & {
-  /** A custom catalog. Default: the recorded catalogs, picked by `settings.catalog`. */
+  corpus?: GeneByGeneCorpus
+  /** Optional namespace product seed. */
   products?: readonly ProductDto[]
   /** Initial per-namespace settings. */
   settings?: Partial<Settings>
@@ -667,6 +665,7 @@ export class GeneByGeneAPI implements FetchAPI {
   readonly app: Hono
   readonly sqlite: SqliteClient
   readonly state: GeneByGeneState
+  private readonly corpus: GeneByGeneCorpus
   private readonly service: Service
   private readonly now: () => number
   private readonly onWebhook: ((event: GxgWebhook) => void) | undefined
@@ -675,6 +674,7 @@ export class GeneByGeneAPI implements FetchAPI {
   private readonly publicNamespace: string | undefined
 
   constructor(options: GeneByGeneAPIOptions = {}) {
+    this.corpus = options.corpus ?? DEFAULT_CORPUS
     const sqlite = bootSqlite(options.sqlite)
     const namespace = options.namespace ?? GENEBYGENE_NAMESPACE
     this.now = options.now ?? (() => Date.now())
@@ -714,13 +714,16 @@ export class GeneByGeneAPI implements FetchAPI {
       GetResultPresignedUrl: (c) => this.presignedUrl(c),
       GetResultBlob: (c) => this.blob(c),
       ListAttributeDefinitions: (c) =>
-        queryProblem(c, { entityType: "entityType" }) ?? jsonRes(200, ATTRIBUTE_DEFINITIONS),
+        queryProblem(c, { entityType: "entityType" }) ??
+        jsonRes(200, this.corpus.attributes ?? ATTRIBUTE_DEFINITIONS),
       ListEventTypes: (c) => {
         // A blank name is no filter on staging.
         const name = query(c, "name")?.trim()
         return jsonRes(
           200,
-          EVENT_TYPES.filter((e) => !name || e.name.toLowerCase().includes(name.toLowerCase())),
+          (this.corpus.eventTypes ?? EVENT_TYPES).filter(
+            (e) => !name || e.name.toLowerCase().includes(name.toLowerCase()),
+          ),
         )
       },
       ListNotificationSubscriptions: (c) => this.listSubscriptions(c),
@@ -830,11 +833,17 @@ export class GeneByGeneAPI implements FetchAPI {
 
   // --- catalog -------------------------------------------------------------------------------
 
+  private attributeDefinition(name: string) {
+    return (this.corpus.attributes ?? ATTRIBUTE_DEFINITIONS).find(
+      (d) => d.name.toLowerCase() === name.toLowerCase(),
+    )
+  }
+
   private products(): readonly ProductDto[] {
     if (this.state.products.count() > 0) {
       return this.state.products.list({ order: "oldest" }).map((row) => row.value)
     }
-    return catalogProducts(this.catalog())
+    return catalogProducts(this.catalog(), this.corpus)
   }
 
   private catalog(): Catalog {
@@ -852,7 +861,7 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private productCode(product: ProductDto): string {
-    return PRODUCT_CODES[product.id] ?? slug(product.name)
+    return this.corpus.productCodes?.[product.id] ?? slug(product.name)
   }
 
   private listProducts(context: OperationContext): Response {
@@ -889,7 +898,12 @@ export class GeneByGeneAPI implements FetchAPI {
    * to ship).
    */
   private quotable(productId: string): ProductDto | "http500" | "http400" {
-    if (this.catalog() === "production" && STAGING_ONLY_IDS.has(productId)) return "http500"
+    if (
+      this.catalog() === "production" &&
+      this.corpus.stagingProducts.some((p) => p.id === productId) &&
+      !this.corpus.productionProducts.some((p) => p.id === productId)
+    )
+      return "http500"
     const product = this.findProduct(productId)
     if (!product || !expand(product).some((e) => isShippable(e.product))) return "http400"
     return product
@@ -961,7 +975,7 @@ export class GeneByGeneAPI implements FetchAPI {
    * quote answers, what a shipped place answers, and the zone's codes and prices.
    */
   classify(input: { address: AddressDto; productId?: string; courierServiceCode?: string }) {
-    const quote = this.quote(input.productId ?? DELUXE_BUNDLE_ID, input.address)
+    const quote = this.quote(input.productId ?? this.corpus.defaultProductId ?? "", input.address)
     const place = placeCheck(input.address, this.extraCorpus())
     const menu = quote.kind === "options" ? quote.options : []
     const code = input.courierServiceCode
@@ -1626,7 +1640,7 @@ export class GeneByGeneAPI implements FetchAPI {
   }
 
   private attributeDto(attribute: { name: string; value: string }) {
-    const definition = attributeDefinition(attribute.name)
+    const definition = this.attributeDefinition(attribute.name)
     return {
       name: attribute.name,
       displayName: definition?.displayName ?? attribute.name,
@@ -1650,7 +1664,7 @@ export class GeneByGeneAPI implements FetchAPI {
     return {
       kitNumber: kit.kitNumber,
       gender: kit.gender,
-      tenantId: TENANT_ID,
+      tenantId: this.corpus.tenantId ?? TENANT_ID,
       currentStatuses: this.kitLines(kit).map((line) => {
         const order = this.state.orders.get(line.orderId)
         const fulfillment = line.fulfillmentIds[0]
@@ -1772,7 +1786,7 @@ export class GeneByGeneAPI implements FetchAPI {
     const pairs: { name: string; value: string }[] = []
     for (const [index, attribute] of attributes.entries()) {
       const name = typeof attribute.name === "string" ? attribute.name.trim().toLowerCase() : ""
-      if (!attributeDefinition(name)) {
+      if (!this.attributeDefinition(name)) {
         return errorDto(400, `Attribute '${String(attribute.name)}' is not defined.`, "Validation")
       }
       const value = typeof attribute.value === "string" ? attribute.value.trim() : ""
@@ -2112,7 +2126,7 @@ export class GeneByGeneAPI implements FetchAPI {
     return {
       id: sub.id,
       displayName: sub.displayName,
-      tenantId: TENANT_ID,
+      tenantId: this.corpus.tenantId ?? TENANT_ID,
       type: sub.type,
       endPoint: sub.endPoint,
       // The secret is returned only by the create call.
@@ -2129,7 +2143,11 @@ export class GeneByGeneAPI implements FetchAPI {
   private eventsProblem(events: unknown): Response | undefined {
     if (!Array.isArray(events) || events.length === 0)
       return errorDto(400, "Valid event type is required.")
-    return events.every((e) => typeof e === "string" && SUBSCRIBABLE_EVENTS.has(e))
+    return events.every(
+      (e) =>
+        typeof e === "string" &&
+        (this.corpus.eventTypes ?? EVENT_TYPES).some((event) => event.name === e),
+    )
       ? undefined
       : errorDto(400, "Valid event type is required.")
   }
@@ -2558,11 +2576,11 @@ export class GeneByGeneAPI implements FetchAPI {
     const files = resultFiles(kit.kitNumber, source, reportDate, { pdf })
     const live = lines.filter((l) => l.currentStatus !== "Canceled")
     const reportLine =
-      live.find((l) => l.productCode === "ngx_report_comprehensive_json") ??
+      live.find((l) => l.productId === this.corpus.reportProductId) ??
       live.find((l) => !l.ships) ??
       live[0] ??
       lines[0]
-    const rawLine = live.find((l) => l.productCode === "ngx_raw_data") ?? reportLine
+    const rawLine = live.find((l) => l.productId === this.corpus.rawDataProductId) ?? reportLine
     if (!reportLine || !rawLine) return `kit ${kit.kitNumber} has no order lines`
     const bucket = this.resultsS3?.bucket ?? this.state.current().resultsBucket
     const published: ResultRecord[] = []
@@ -2643,5 +2661,6 @@ const attributePairs = (
       : [],
   )
 
+export type { GeneByGeneCorpus } from "./corpus.js"
 export type { GeneByGeneRuntime, GeneByGeneRuntimeOptions } from "./runtime.js"
 export { createRuntime, GENEBYGENE_PRESETS } from "./runtime.js"

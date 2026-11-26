@@ -26,9 +26,9 @@ import {
 const params = fcParameters(process.env)
 const API = "http://gxg.mock"
 const CALLBACK = "http://backend.local/webhooks/gene-by-gene"
-const BUNDLE = "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
-const LAB_ONLY_BUNDLE = "16c26d93-f4f4-4ea1-8f2e-9991d0ef938a"
-const CLIENT_ID = "febc7057-2904-4747-a076-55467fcece6f"
+const BUNDLE = "00000000-0000-4000-8000-000000000013"
+const LAB_ONLY_BUNDLE = "00000000-0000-4000-8000-000000000012"
+const CLIENT_ID = "00000000-0000-4000-8000-000000000015"
 const ADDRESS = {
   isCommercial: false,
   recipientName: "Ada Lovelace",
@@ -290,7 +290,7 @@ describe("S2.9 acceptance: our consumer's logic against the mock", () => {
           "ProductCode",
         ].sort(),
       )
-      expect(event.body.ProductCode).toBe("nt_custom_agena_panel")
+      expect(event.body.ProductCode).toBe("example_lab")
       expect(event.body.PlacerOrderNumber).toBe("acme:238307:478b5ca52b7c91fb")
     }
     const kitDto = (await admin("/kits")).body.kits as { status: string; errors: string[] }[]
@@ -592,10 +592,10 @@ describe("S2.9 acceptance: our consumer's logic against the mock", () => {
 // Issue #122: the production-parity drop-in, behaviour by behaviour (B1–B52).
 // ---------------------------------------------------------------------------------------------
 
-const DELUXE = "789af544-270c-40ff-9677-c492a87262cd"
-const KIT_COMPONENT = "b1949749-19b0-4f72-a5c5-8f2414656607"
-const REPORT_PRODUCT = "8dee4da8-5103-4209-bb91-b8beba6ee7e5"
-const LAB_SERVICE = "a7c9c265-6d31-4391-8e93-342d9617fef5"
+const DELUXE = "00000000-0000-4000-8000-000000000010"
+const KIT_COMPONENT = "00000000-0000-4000-8000-000000000008"
+const REPORT_PRODUCT = "00000000-0000-4000-8000-000000000002"
+const LAB_SERVICE = "00000000-0000-4000-8000-000000000001"
 const MISSING_ID = "00000000-0000-4000-8000-000000000000"
 /** The domestic menu in the order staging lists it (corpus/address-parity.json). */
 const CODES = [

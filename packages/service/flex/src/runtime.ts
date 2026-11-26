@@ -128,7 +128,7 @@ export type FlexRuntimeOptions = {
   /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
   adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
-  /** Products every namespace starts with. Default: the recorded corpus. */
+  /** Products every namespace starts with. Default: the synthetic corpus. */
   products?: readonly ProductRecord[]
   settings?: Partial<Settings>
   /**
@@ -369,9 +369,7 @@ export const createRuntime = (options: FlexRuntimeOptions = {}): FlexRuntime => 
           }),
       }),
     describe: () => ({
-      corpus: options.products
-        ? `custom (${options.products.length} products)`
-        : "flexCatalogMappings",
+      corpus: options.products ? `custom (${options.products.length} products)` : "synthetic",
       webhooks: hub.endpoints("default").length > 0 ? "on" : "off",
     }),
     admin: adminRoutes,

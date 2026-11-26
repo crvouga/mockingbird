@@ -2,7 +2,7 @@
   "source": "staging-api.genebygene.com",
   "recorded": true,
   "note": "Recorded by `bun run parity` (scripts/parity.ts) against the host in `source`: each synthetic address quoted live, with its status, errorMessages, courier menu (codes and names, never prices or dates) and, for a refusal, the body. The acceptance suite replays it. Synthetic streets only: no personal data.",
-  "productId": "789af544-270c-40ff-9677-c492a87262cd",
+  "productId": "00000000-0000-4000-8000-000000000010",
   "cases": [
     {
       "name": "line1 longer than 35 characters",

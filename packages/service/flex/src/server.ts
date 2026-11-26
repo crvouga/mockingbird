@@ -1,6 +1,8 @@
 /// <reference types="node" />
+import { readFileSync } from "node:fs"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
 import { createRuntime, type FlexRuntime, type FlexRuntimeOptions } from "./runtime.js"
+import type { ProductRecord } from "./state.js"
 
 /** Port `mockingbird-flex serve` listens on when none is given. */
 export const DEFAULT_PORT = 8792
@@ -35,11 +37,27 @@ export const createServer = async (options: FlexServerOptions = {}): Promise<Fle
 const text = (value: string | boolean | undefined) =>
   typeof value === "string" ? value : undefined
 
+function readCorpus(path: string): ProductRecord[] {
+  const data = JSON.parse(readFileSync(path, "utf8"))
+  if (
+    !Array.isArray(data) ||
+    !data.every((p) => p && typeof p.product_id === "string" && typeof p.name === "string")
+  ) {
+    throw new Error("Invalid --corpus file: expected an array of Flex product records")
+  }
+  return data
+}
+
 /** How `serve` (and `serve --config`) builds the Flex mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "flex",
   defaultPort: DEFAULT_PORT,
   options: {
+    corpus: {
+      type: "string",
+      value: "<file>",
+      description: "Serve a private ProductRecord array from JSON",
+    },
     "webhook-url": {
       type: "string",
       value: "<url>",
@@ -62,6 +80,7 @@ export const serveTarget: ServeTarget = {
     },
   },
   create: (values, common) => {
+    const path = text(values.corpus)
     const url = text(values["webhook-url"])
     const secret = text(values["webhook-secret"])
     const publicUrl = text(values["public-url"])
@@ -70,6 +89,7 @@ export const serveTarget: ServeTarget = {
       throw new Error("--event-naming must be dotted or underscored")
     }
     return createRuntime({
+      ...(path ? { products: readCorpus(path) } : {}),
       tickMs: 100,
       ...(url ? { webhooks: { url, ...(secret ? { secret } : {}) } } : {}),
       settings: {
