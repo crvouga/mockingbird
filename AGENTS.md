@@ -3,6 +3,9 @@
 Onboarding is `bun run setup`, then `bun test` / `bun run check`. None of it needs a secret, an
 account, or any self-hosted service.
 
+- **Pull requests** — Enable auto-merge with a merge commit when opening a PR, or when marking a
+  draft ready, unless the user asks to hold it. `/pr-ready` does this automatically. When using
+  another PR tool, enable auto-merge there and verify it is on.
 - **Secrets** — GitHub Actions repo secrets are the only store ([docs/SECRETS.md](docs/SECRETS.md)).
   Never print, invent, or commit secret values; if one is missing, tell the human the key name and
   stop. Local values go in `.env.local` (gitignored, loaded by Bun).
