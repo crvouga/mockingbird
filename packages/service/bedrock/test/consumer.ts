@@ -32,7 +32,6 @@ import {
 } from "ai"
 import { z } from "zod"
 
-
 export class BedrockThrottledError extends Error {
   readonly code = "BEDROCK_THROTTLED"
   readonly retryAfterSeconds: number
@@ -226,10 +225,8 @@ export function extractRetryAfterSeconds(error: unknown, fallbackSeconds: number
   return fallbackSeconds
 }
 
-
 const supportsSamplingParameters = (modelId: string) =>
   /claude-(?:sonnet|haiku)-4-5(?:-|$)/i.test(modelId) || /amazon\.nova-/i.test(modelId)
-
 
 const ASSISTANT_INITIATED_CONTEXT =
   "Continue the assistant-initiated conversation using the available context."
@@ -499,7 +496,6 @@ export class BedrockLlmProvider {
   }
 }
 
-
 const CLASSIFIER_SYSTEM_PROMPT = `You are a message classifier. Classify the user message into exactly one category.
 Respond with ONLY a JSON object — no markdown, no explanation.
 
@@ -529,7 +525,6 @@ export const classifyIntent = async (llm: BedrockLlmProvider, message: string) =
     confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.8,
   }
 }
-
 
 export const RxSymptomInputSchema = z
   .object({
@@ -576,7 +571,6 @@ export const createChatTools = (reported: z.infer<typeof RxSymptomInputSchema>[]
       },
     }),
   }) satisfies ToolSet
-
 
 export const BEDROCK_MAX_RETRIES = 3
 export const MAX_OUTPUT_TOKENS = 8192
@@ -707,7 +701,6 @@ export const approve = (
   },
 ]
 
-
 export const nutritionDescriptionParseSchema = z
   .object({
     ingredients: z
@@ -793,7 +786,6 @@ export const parseMeal = async (
   }
 }
 
-
 /** `BedrockReportAnalyst.analyze`: a forced tool via Converse, retried once on unusable output. */
 export const analyzeWithForcedTool = async <T>(
   client: BedrockRuntimeClient,
@@ -848,7 +840,6 @@ export const analyzeWithForcedTool = async <T>(
   return null
 }
 
-
 const EMBEDDING_DIMENSIONS = 1024
 const embeddingResponseSchema = z.object({
   embedding: z.array(z.number().finite()).length(EMBEDDING_DIMENSIONS),
@@ -870,7 +861,6 @@ export const generateEmbedding = async (
   const body = JSON.parse(new TextDecoder().decode(response.body)) as unknown
   return embeddingResponseSchema.parse(body).embedding
 }
-
 
 export type ClinicalNote = { sections: { title: string; content: string }[]; summary: string }
 
@@ -910,7 +900,6 @@ export const generateNote = async (
     summary: parsed.summary ?? "",
   }
 }
-
 
 export type ErxPrescreenStatus =
   | "eligible_for_clinician_review"
