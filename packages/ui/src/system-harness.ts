@@ -321,27 +321,27 @@ export function mountSystemHarness(
   shell.style.cssText =
     "position:relative;display:flex;flex-direction:column;height:100%;min-height:240px;isolation:isolate;background:Canvas;color:CanvasText"
   // The switcher bar: a thin strip across the top, in the layout, so it never covers a surface.
-  // Shown only while there are surfaces to switch between; `setSurfaces` can change that.
+  // It is there only while there is something to switch to, which `setSurfaces` can change.
   let barHeight = 0
   const bar = doc.createElement("div")
   bar.className = "msh-bar"
   const chrome = doc.createElement("div")
   chrome.className = "msh-chrome"
-  const layoutBar = () => {
-    barHeight = specs.length > 0 ? SWITCHER_BAR_HEIGHT : 0
-    bar.style.cssText = `flex:none;height:${barHeight}px;position:relative;z-index:1001`
-    bar.hidden = barHeight === 0
-    chrome.style.cssText = `position:absolute;inset:${barHeight}px 0 0 0;pointer-events:none;z-index:1000`
-  }
-  layoutBar()
   shell.append(bar, chrome)
   host.append(shell)
   // What a full-height page inside a panel fills (`AppShell`): the panel, not the viewport.
   const fit = () =>
     shell.style.setProperty("--mb-app-height", `${Math.max(0, shell.clientHeight - barHeight)}px`)
+  const layoutBar = (count: number) => {
+    barHeight = count > 0 ? SWITCHER_BAR_HEIGHT : 0
+    bar.style.cssText = `flex:none;height:${barHeight}px;position:relative;z-index:1001`
+    bar.hidden = barHeight === 0
+    chrome.style.cssText = `position:absolute;inset:${barHeight}px 0 0 0;pointer-events:none;z-index:1000`
+    fit()
+  }
   const resize = typeof win.ResizeObserver === "function" ? new win.ResizeObserver(fit) : undefined
   resize?.observe(shell)
-  fit()
+  layoutBar(surfaces.length)
 
   let destroyed = false
   const storage = (): SystemHarnessStorage => options.storage ?? win.localStorage
@@ -742,9 +742,7 @@ export function mountSystemHarness(
     ]
     specs = list
     apps = appsOf(specs)
-    layoutBar()
-    fit()
-    fit()
+    layoutBar(specs.length)
     // As a reload would find them: an off-by-default surface is out until someone switches it on.
     defaultOff = defaultOffOf(specs)
     rotation.excluded = excludedWithDefaults(rotation, defaultOff)
