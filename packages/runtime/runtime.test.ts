@@ -22,7 +22,7 @@ describe("@crvouga/mockingbird-runtime", () => {
         default: `./dist/${subpath}.js`,
       })
       const source = readFileSync(join(import.meta.dir, "src", `${subpath}.ts`), "utf8")
-      if (subpath.startsWith("preview/")) {
+      if (subpath === "authoring" || subpath.startsWith("preview/")) {
         expect(source).toContain("export ")
         continue
       }

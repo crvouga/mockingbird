@@ -1,18 +1,3 @@
-/**
- * Ports of our Slack clients, faithful to the wire and to the status interpretation:
- *
- * - backend `postSlackWebhook` (`apps/backend/src/modules/queues/slack-webhook.ts`): only 200
- *   counts, 429/5xx retry at 0/2/8 s, other 4xx are terminal. The EMR critical-alert webhook
- *   path (`slack-alerter.ts` `postTier1CriticalAlert`) is the same loop.
- * - EMR `postSlackWebApiMessage` (`critical-alerts/slack-web-api.ts`) and the Tier-1 Web API
- *   retry loop (`slack-alerter.ts` `postViaWebApi`), plus the threaded follow-up.
- * - request-intake `SlackClient` (`apps/request-intake/src/slack/client.ts`).
- * - release-conductor `makeSlackClient` (`tooling/release-conductor/src/clients/slack.ts`).
- *
- * The originals call `https://slack.com/api/…` and `setTimeout` directly; here the base URL,
- * `fetch` and `sleep` are injected so the acceptance tests can drive the mock without waiting
- * out the real backoff (the requested delays are recorded instead).
- */
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 export type Sleep = (ms: number) => Promise<void>
 

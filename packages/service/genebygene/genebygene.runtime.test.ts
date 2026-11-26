@@ -10,7 +10,7 @@ import {
 import { createServer, DEFAULT_PORT, serveTarget } from "./src/server.js"
 import { GxgAuthService, GxgClient, GxgHttpClient, placeOrder } from "./test/consumer.js"
 
-const BUNDLE = "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
+const BUNDLE = "00000000-0000-4000-8000-000000000013"
 const ADDRESS = {
   isCommercial: false,
   recipientName: "Ada Lovelace",
@@ -47,7 +47,7 @@ describe("service contract", () => {
     expect(await health.json()).toMatchObject({
       status: "ok",
       service: "genebygene",
-      corpus: "gxg-2026-06",
+      corpus: "synthetic-v1",
     })
     expect(health.headers.get("x-mockingbird")).toMatch(/^genebygene@.*; ns=default$/)
     const vendor = await runtime.fetch(new Request("http://mock.local/api/v2/products"))
@@ -56,7 +56,40 @@ describe("service contract", () => {
     expect(await vendor.text()).toBe("")
   })
 
-  test("the corpus is the recorded catalogs, byte for byte, picked by settings.catalog", async () => {
+  test("a caller's corpus replaces both catalogs and their metadata", async () => {
+    const [template] = PRODUCTION_PRODUCTS
+    if (!template) throw new Error("Missing synthetic sample product")
+    const product = {
+      ...template,
+      id: "11111111-0000-4000-8000-000000000001",
+      name: "Private fixture",
+    }
+    const runtime = createRuntime({
+      corpus: {
+        productionProducts: [],
+        stagingProducts: [product],
+        attributes: [],
+        eventTypes: [],
+        productCodes: { [product.id]: "custom_code" },
+      },
+    })
+    const client = consumer("http://mock.local", (request) => runtime.fetch(request))
+    const get = async (path: string) => (await client.http.request("GET", path)).data
+    expect(await get("/api/v2/products?productCode=custom_code")).toEqual([product])
+    expect(await get("/api/v2/products")).toEqual([product])
+    expect(await get("/api/v2/attributes")).toEqual([])
+    expect(await get("/api/v2/eventTypes")).toEqual([])
+    await runtime.fetch(
+      new Request("http://mock.local/__admin/settings", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ catalog: "production" }),
+      }),
+    )
+    expect(await get("/api/v2/products")).toEqual([])
+  })
+
+  test("the default corpus serves the synthetic catalogs, byte for byte, picked by settings.catalog", async () => {
     const client = consumer("http://mock.local", (r) => createRuntime().fetch(r))
     const runtime = createRuntime()
     const c = consumer("http://mock.local", (r) => runtime.fetch(r))
@@ -80,13 +113,13 @@ describe("service contract", () => {
     }
     // Staging answers a component's id with the bundles that contain it; our lookup takes the
     // first row when none has the id (corpus/live-errors.json).
-    const bundle = await client.fetchProduct("49f9c987-ba0e-4801-a3b3-b446a2d4835a")
+    const bundle = await client.fetchProduct("00000000-0000-4000-8000-000000000007")
     expect(bundle).toMatchObject({ productType: "Bundle" })
     expect(
       ((bundle?.components ?? []) as { product: { id: string; name: string } }[]).find(
-        (c) => c.product.id === "49f9c987-ba0e-4801-a3b3-b446a2d4835a",
+        (c) => c.product.id === "00000000-0000-4000-8000-000000000007",
       )?.product.name,
-    ).toBe("Standard Swab Domestic Kit with DHL Return Label")
+    ).toBe("Example collection kit")
   })
 
   test("namespaces isolate orders: by header, by /__admin/ns/ prefix (API and token URL), and by client id", async () => {
@@ -258,7 +291,7 @@ describe("service contract", () => {
     const runtime = await serveTarget.create(
       {
         "no-kit-numbers": true,
-        "client-id": "febc7057-2904-4747-a076-55467fcece6f",
+        "client-id": "00000000-0000-4000-8000-000000000015",
         "client-secret": "secret",
       },
       { adminKey: undefined, seed: undefined, onLog: undefined },

@@ -57,7 +57,11 @@ export const createServer = async (
 ): Promise<JunctionServer> => {
   const { port, host, corpus: source, ...rest } = options
   const corpus = await loadCorpus(source ?? "default")
-  const runtime = createRuntime({ ...rest, ...(corpus ? { corpus } : {}) })
+  const runtime = createRuntime({
+    ...(corpus === defaultCorpus ? { geo: "corpus+synthetic" as const } : {}),
+    ...rest,
+    ...(corpus ? { corpus } : {}),
+  })
   const listening = await listen(runtime, {
     port: port ?? 0,
     ...(host !== undefined ? { host } : {}),
@@ -202,7 +206,7 @@ export const serveTarget: ServeTarget = {
     "seed-url": {
       type: "string",
       value: "<url>",
-      description: "Pull a corpus from this Junction team at boot (prefer a committed corpus)",
+      description: "Pull a corpus from this Junction team at boot",
     },
     "seed-key": {
       type: "string",
@@ -233,13 +237,13 @@ export const serveTarget: ServeTarget = {
     if (seedUrl !== undefined) {
       if (seedKey === undefined) throw new Error("--seed-url needs --seed-key")
       console.log(
-        `junction pulling a corpus from ${seedUrl} (commit one with \`corpus pull\` to skip this)`,
+        `junction pulling a corpus from ${seedUrl} (save one privately with \`corpus pull\` to skip this)`,
       )
       corpus = await pullCorpus({ baseUrl: seedUrl, apiKey: seedKey })
     } else {
       corpus = await loadCorpus(asString(values.corpus) ?? "default")
     }
-    const geo = asString(values.geo)
+    const geo = asString(values.geo) ?? (corpus === defaultCorpus ? "corpus+synthetic" : undefined)
     if (
       geo !== undefined &&
       geo !== "corpus" &&

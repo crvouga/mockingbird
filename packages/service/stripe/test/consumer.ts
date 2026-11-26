@@ -1,11 +1,3 @@
-/**
- * A port of our backend's Stripe client logic (stripe-node 16.12 at `2024-06-20`, and the
- * partner-platform's stripe-node 17.7 at `2025-02-24.acacia`): the same calls, parameters,
- * idempotency keys, error classification, field fallbacks and webhook verification as
- * `apps/backend/src/modules/{billing,prescriptions,global-services,dev-tools}`,
- * the EMR backend and `apps/partner-platform`. The acceptance tests drive the mock
- * through it, so "the mock works" means "our consumer's own logic reaches the right outcome".
- */
 import Stripe from "stripe"
 // stripe 17.x ships ambient `declare module "stripe"` typings, which cannot load under an npm
 // alias; the runtime is 17.7 and the surface we call is typed with 16.12's (same shapes here).
@@ -29,7 +21,6 @@ export const stripeClientOptions = (base: URL) => ({
   protocol: base.protocol.replace(":", "") as "http" | "https",
 })
 
-/** `B/billing/adapters/stripe.adapter.ts`: the MSO and PC clients (and the legacy one). */
 export const backendClient = (key: string, base: URL) =>
   new Stripe(key, {
     apiVersion: LEGACY_API_VERSION,
@@ -37,7 +28,6 @@ export const backendClient = (key: string, base: URL) =>
     ...stripeClientOptions(base),
   })
 
-/** `apps/partner-platform/src/payments/adapters/stripe/server-client.ts` (stripe 17.x). */
 export const partnerClient = (key: string, base: URL) =>
   new StripeV17(key, {
     apiVersion: PARTNER_API_VERSION as unknown as typeof LEGACY_API_VERSION,
@@ -124,7 +114,7 @@ export const isStripeIdempotencyConflict = (error: StripeLikeError) =>
   error.code === "idempotency_error" ||
   error.code === "idempotency_key_in_use"
 
-// --- billing adapter (B/billing/adapters/stripe.adapter.ts) --------------------------------------
+// --- billing adapter --------------------------------------
 
 const CHARGEABLE_PM_TYPES = new Set(["card", "link"])
 
@@ -303,7 +293,7 @@ export const ensureCustomerForUser = async (
   return { customerId: customer.id, created: true }
 }
 
-// --- PC checkout (B/billing/services/pc-checkout.service.ts) -------------------------------------
+// --- PC checkout -------------------------------------
 
 export class PcCardRequiresUpdateError extends Error {
   constructor(
@@ -626,7 +616,7 @@ export const replayRecentEvents = async (mso: Stripe, pc: Stripe, since: number)
   return { mso: msoEvents.data, pc: pcEvents.data }
 }
 
-// --- dev tools (B/dev-tools/lib/stripe-client.ts) -----------------------------------------------
+// --- dev tools -----------------------------------------------
 
 export const createCustomerOnTestClock = async (
   stripe: Stripe,

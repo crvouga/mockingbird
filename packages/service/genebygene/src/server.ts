@@ -1,5 +1,7 @@
 /// <reference types="node" />
+import { readFileSync } from "node:fs"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
+import type { GeneByGeneCorpus } from "./corpus.js"
 import { createRuntime, type GeneByGeneRuntime, type GeneByGeneRuntimeOptions } from "./runtime.js"
 
 /** Port `mockingbird-genebygene serve` listens on when none is given. */
@@ -30,11 +32,24 @@ export const createServer = async (
 const text = (value: string | boolean | undefined) =>
   typeof value === "string" && value.length > 0 ? value : undefined
 
+function readCorpus(path: string): GeneByGeneCorpus {
+  const data = JSON.parse(readFileSync(path, "utf8"))
+  if (!data || !Array.isArray(data.productionProducts) || !Array.isArray(data.stagingProducts)) {
+    throw new Error("Invalid --corpus file: expected productionProducts and stagingProducts arrays")
+  }
+  return data
+}
+
 /** How `serve` (and `serve --config`) builds the Gene by Gene mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "genebygene",
   defaultPort: DEFAULT_PORT,
   options: {
+    corpus: {
+      type: "string",
+      value: "<file>",
+      description: "Serve a private GeneByGeneCorpus from JSON",
+    },
     "webhook-url": {
       type: "string",
       value: "<url>",
@@ -80,6 +95,7 @@ export const serveTarget: ServeTarget = {
     },
   },
   create: (values, common) => {
+    const path = text(values.corpus)
     const url = text(values["webhook-url"])
     const secret = text(values["webhook-secret"])
     const endpoint = text(values["results-s3-endpoint"])
@@ -93,6 +109,7 @@ export const serveTarget: ServeTarget = {
     const clientId = text(values["client-id"])
     const clientSecret = text(values["client-secret"])
     return createRuntime({
+      ...(path ? { corpus: readCorpus(path) } : {}),
       ...(url ? { webhooks: { url, ...(secret ? { secret } : {}) } } : {}),
       ...(endpoint && bucket
         ? {

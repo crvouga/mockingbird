@@ -25,6 +25,25 @@ test("allowlisted resolver uses the explicit consumer root and pnpm-style linked
       'export const serveTarget = {name:"fixture", protocol:"external", defaultPort:0, start(){throw new Error("synthetic target loaded")}}',
     )
     await symlink(store, join(scope, "mockingbird-service-fixture"), "dir")
+    await writeFile(
+      join(dir, "package.json"),
+      JSON.stringify({
+        imports: {
+          "#mockingbird/fixture/server": "@example/private-fixture/server",
+          "#mockingbird/missing/server": "./missing.js",
+        },
+      }),
+    )
+    const customScope = join(dir, "node_modules", "@example")
+    await mkdir(customScope)
+    await symlink(store, join(customScope, "private-fixture"), "dir")
+    const registered = createInstalledServiceLoader({
+      projectRoot: dir,
+      services: ["fixture", "missing"],
+    })
+    expect((await registered("fixture")).name).toBe("fixture")
+    await expect(registered("missing")).rejects.toThrow("cannot resolve registered service")
+    await writeFile(join(dir, "package.json"), "{}")
     const load = createInstalledServiceLoader({ projectRoot: dir, services: ["fixture", "absent"] })
     expect((await load("fixture")).name).toBe("fixture")
     await expect(load("absent")).rejects.toThrow("install @crvouga/mockingbird-service-absent")

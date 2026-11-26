@@ -107,9 +107,11 @@ const runSchedulingScenario = async (
 ): Promise<SchedulingScenarioResult> => {
   const created = await client.user.create({ clientUserId })
   const userId = created.userId
-  const labTest = await client.labTests.getById("c533549c-1e62-4afe-9a0e-0567a9b2bcc2")
+  const walkIn = (await client.labTests.get()).find((test) => test.method === "walk_in_test")
+  if (!walkIn) throw new Error("The scheduling scenario requires a walk-in lab test")
+  const labTest = await client.labTests.getById(walkIn.id)
   const labs = await client.labTests.getLabs()
-  const markers = await client.labTests.getMarkersForLabTest("c533549c-1e62-4afe-9a0e-0567a9b2bcc2")
+  const markers = await client.labTests.getMarkersForLabTest(walkIn.id)
   const areaInfo = await client.labTests.getAreaInfo({
     zipCode: "92101",
   })
@@ -132,7 +134,7 @@ const runSchedulingScenario = async (
       zip: "92101",
       country: "US",
     },
-    orderSet: { labTestIds: ["c533549c-1e62-4afe-9a0e-0567a9b2bcc2"] },
+    orderSet: { labTestIds: [walkIn.id] },
   })
   const orderId = orderResponse.order.id
   const appointmentAvailability = await client.labTests.getPhlebotomyAppointmentAvailability({

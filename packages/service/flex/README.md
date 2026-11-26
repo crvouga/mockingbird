@@ -3,7 +3,7 @@
 > Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 Stateful emulator of the **Flex** (withflex.com) HSA/FSA payments API for test suites: products
-(answered from a recorded catalog corpus), checkout sessions in `payment` (one-time),
+(answered from a synthetic example catalog), checkout sessions in `payment` (one-time),
 `subscription`, `off_session` and `setup` modes, subscriptions, customers, setup intents,
 refunds, the **hosted checkout page**, and the Svix-signed webhooks Flex posts back. A UI checkout that drove the real
 `checkout.withflex.com` page and then waited on a 5-minute reconciler settles here in
@@ -65,7 +65,7 @@ const created = await fetch(`${baseUrl}/v1/checkout/sessions`, {
       cancel_url: "https://app.test/cart",
       client_reference_id: "attempt-1",
       line_items: [
-        { price_data: { product: "fprod_01m0tgysj4ahvf8fas60c2ef2d", unit_amount: 4500 }, quantity: 1 },
+        { price_data: { product: "fprod_00000000000000000000000002", unit_amount: 4500 }, quantity: 1 },
       ],
     },
   }),
@@ -204,13 +204,7 @@ Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?: n}`; `GET /_
 
 ### Corpus
 
-`src/corpus/products.ts` is the product side of every row of the consumer's
-`flexCatalogMappings` reference fixture (663 rows, regenerated with
-`bun scripts/corpus.ts <fixture.json>`): product id, client reference, the `acme_purpose` /
-`acme_merchant_product_id` / `acme_client_reference_id` metadata our catalog validation
-compares, eligibility and visit type. Every product is active and test-mode, so our validation
-reproduces each mapping row's own `active` flag. No sandbox recording exists (no credentials),
-so product names are synthesised.
+Pass `--corpus <file>` to the CLI or set `corpus` in the fleet service flags to load a JSON array of product records. The default catalog contains synthetic products. Pass `products` to `createRuntime`, `createServer` or `FlexAPI` to replace it. For tuple data, use `{ products: rows.map(corpusProduct) }`. An empty array starts every namespace with an empty catalog.
 
 ### Deliberately not modelled
 
@@ -240,7 +234,7 @@ so product names are synthesised.
 | `keyMode` | function | `"test"` for `fsk_test_…`, `"live"` for `fsk_…`, otherwise `undefined`. |
 | `isNextActionType` | function | Whether a string is a next-action type. |
 | `CARDS`, `classifyCard`, `substituteSessionId` | values | The hosted page's test cards, its card classifier, and the `{CHECKOUT_SESSION_ID}` substitution. |
-| `CORPUS_ROWS`, `corpusProduct` | values | The recorded product corpus and its row → product mapping. |
+| `CORPUS_ROWS`, `corpusProduct` | values | The synthetic product corpus and its row → product mapping. |
 | `DEFAULT_SETTINGS`, `ELIGIBILITIES`, `NEXT_ACTION_TYPES`, `PAYMENT_INTENT_STATUSES`, `SUBSCRIPTION_STATUSES` | values | Defaults and enums. |
 | `periodEnd` | function | `periodEnd(startMs, {interval, interval_count?})`: the end of a billing period (epoch ms). |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |

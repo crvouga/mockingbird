@@ -1,7 +1,63 @@
 # Authoring a Mockingbird service
 
-How to add a vendor emulator to this repo. The reference implementation is
-[`packages/service/rxvortex`](../packages/service/rxvortex): copy its layout and patterns.
+Build a custom HTTP emulator in your own project with the public runtime, or contribute a vendor emulator to the Mockingbird catalog.
+
+## Custom HTTP services in your own project
+
+Install `@crvouga/mockingbird-runtime` and import `defineHttpService` from its `/authoring` entry.
+The [job queue example](../packages/runtime/examples/jobs.ts) is a complete TypeScript implementation.
+It compiles against the packed npm runtime and runs alongside installed emulators in the fleet consumer test.
+
+1. Give the service a stable lowercase, hyphen-separated name and the version of the implementation.
+   Fleet archives use that version for compatibility. Set `document.info.version` to the API contract version.
+2. Declare the HTTP paths, methods, responses and operation IDs in `document`. Return one handler per
+   supported operation ID from `handlers(context)`. Dispatch checks the handler map against the contract.
+   Handlers receive a decoded request and may use `bodyIssues(context)` to return vendor-specific validation
+   errors. Override `before`, `notFound`, `unsupported` or `onError` to match the vendor's HTTP behavior.
+3. Construct collections and ID sequences inside the handler factory with its injected `sqlite` and
+   `namespace`. Use its `clock` and `rng` for timestamps and randomness. This puts service state in the
+   same reset, snapshot and restore path as built-ins. Declare collection names in `state` to make empty
+   collections discoverable. Keep private fixtures in the consuming project.
+4. Export the returned `createRuntime` and `serveTarget`. Call `createRuntime()` per isolated test.
+   It accepts the standard boot options including seed, clock, admin key and controls. To run without
+   listeners alongside another HTTP emulator, register each factory with
+   `createFleet({ services: { jobs: { version: serveTarget.packageVersion, create: () => createRuntime() } } })`
+   from `@crvouga/mockingbird-fleet/in-process`. Send requests through `fleet.fetch("jobs", request)`
+   and await `fleet.dispose()` at teardown.
+
+### Run alongside installed services
+
+Install `@crvouga/mockingbird-fleet` and the built-ins you need. Compile the example to ESM.
+In the **consuming application's** `package.json`, register an exact Node package import for its target:
+
+```json
+{ "type": "module", "imports": { "#mockingbird/jobs/server": "./dist/jobs.js" } }
+```
+
+For a workspace or private npm package, the value can instead be `"@example/jobs/server"`.
+Install that dependency in the consuming project and expose its compiled module via a
+`"./server"` default export-map condition. The module must have a **named** export `serveTarget`
+whose `name` matches the registered target. A second instance can use a different instance name.
+
+```json
+{ "services": { "queue": { "target": "jobs", "port": 0 }, "redis": { "port": 0 } } }
+```
+
+Save that as `mockingbird.json`. From the consuming application, run
+`npx mockingbird-fleet fleet doctor --config mockingbird.json --json`, then
+`npx mockingbird-fleet serve --config mockingbird.json --ready-json`.
+Use `services.queue.url` in the ready manifest as the HTTP base URL. Built-ins still resolve by
+suffix. Programmatic Node fleets can also pass the exported target directly in the loader's
+`targets` array, with its name in `services`.
+
+Exercise a write in one namespace, verify another namespace starts empty, export an archive,
+write again, then restore and read the original state. This covers composition using the same
+operations your consumers depend on.
+
+## Contributing to the built-in catalog
+
+The remaining sections describe the repository conventions. The
+[RxVortex service](../packages/service/rxvortex) shows the catalog layout.
 
 ## Layout
 

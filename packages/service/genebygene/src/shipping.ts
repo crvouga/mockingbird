@@ -719,7 +719,7 @@ export const hashDigits = (seed: string, count: number): string => {
  * eCommerce `420` + destination ZIP5 + 26 digits hashed from the shipment id, 34 digits in all
  * (the return label uses the lab's ZIP 77008), and a 12-digit FedEx number for `FEDEX_*`
  * outbound shipments. The lengths are the recorded production ones
- * (`GXG/docs/gxg-list-orders-prod.json`: 34-digit `420…` return labels, 12-digit FedEx).
+ * (34-digit `420…` return labels and 12-digit FedEx labels).
  */
 export const trackingNumberFor = (input: {
   shipmentId: string

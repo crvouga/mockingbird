@@ -1,5 +1,5 @@
 /**
- * Geviti send fidelity: outbox shape, idempotency, a response lost after acceptance,
+ * Send fidelity: outbox shape, idempotency, a response lost after acceptance,
  * and what resend@4.8.0 and resend@2.1.0 actually do with that socket.
  */
 import { describe, expect, test } from "bun:test"

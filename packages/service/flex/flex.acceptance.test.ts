@@ -43,10 +43,10 @@ const mappings = (): CatalogMapping[] =>
     metadata: row.metadata as Record<string, string>,
   }))
 
-const MEMBERSHIP = "prod_SzwJThEUVC3ZZF" // membership, auto_substantiation, active
-const SHOP = "prod_RPVGXPdPvh7eLt" // marketplace, auto_substantiation, active
-const RX = "d3d857bb-6912-45fb-b772-c37ac797c7e2" // rx, prescription, active
-const LMN_PRODUCT = "fprod_01m0w5y1eyhp3rtvt595xyga7e" // letter_of_medical_necessity, hairGrowth
+const MEMBERSHIP = "prod_demo_membership" // membership, auto_substantiation, active
+const SHOP = "prod_demo_shop" // marketplace, auto_substantiation, active
+const RX = "demo-rx" // rx, prescription, active
+const LMN_PRODUCT = "fprod_00000000000000000000000004" // letter_of_medical_necessity, hairGrowth
 
 type Delivery = { headers: Headers; body: string }
 
@@ -785,7 +785,7 @@ describe("S4.6 hosted page", () => {
         clientReferenceId: "ns-1",
         mode: "payment",
         lineItems: [
-          { flexProductId: "fprod_01m0tgysj4ahvf8fas60c2ef2d", unitAmountCents: 100, quantity: 1 },
+          { flexProductId: "fprod_00000000000000000000000002", unitAmountCents: 100, quantity: 1 },
         ],
         successUrl: "https://app.acme.example/ok",
         cancelUrl: "https://app.acme.example/no",
@@ -910,7 +910,7 @@ describe("S4.7 webhooks", () => {
 
   test("PUT /__admin/products/:id emits product.updated and our catalog refresh re-validates", async () => {
     const h = harness()
-    const product = "fprod_01m0tgysj4ahvf8fas60c2ef2d" // the SHOP mapping
+    const product = "fprod_00000000000000000000000002" // the SHOP mapping
     const row = () => h.catalog.mappings.find((m) => m.flexProductId === product) as CatalogMapping
     expect(row().active).toBe(true)
     await h.admin(`/products/${product}`, { active: false }, "PUT")
@@ -1050,7 +1050,7 @@ describe("hosted checkout: subscription and one-time modes (Flex API reference)"
   type Seen = { type: string; body: string; headers: Headers }
   type Json = Record<string, unknown>
   /** The corpus's Flex product for the membership merchant product (auto_substantiation). */
-  const MEMBERSHIP_FLEX_PRODUCT = "fprod_01kxj2bg0rvmwdejnpm6jmendp"
+  const MEMBERSHIP_FLEX_PRODUCT = "fprod_00000000000000000000000001"
   const SUCCESS = "https://app.test/membership/success?session_id={CHECKOUT_SESSION_ID}"
   const CANCEL = "https://app.test/membership"
 

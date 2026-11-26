@@ -36,7 +36,7 @@ export const consumer = (
       json("/v1/chat/completions", body, { ...(signal ? { signal } : {}) }),
   }
 }
-/** Faithful Geviti policy: network, 429 and 5xx; other 4xx never retry. */
+/** Retry network errors, 429 and 5xx responses. */
 export const retryChat = async (
   c: ReturnType<typeof consumer>,
   body: unknown,

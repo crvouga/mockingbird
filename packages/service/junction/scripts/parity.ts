@@ -526,7 +526,7 @@ const clearLastFailedSeed = async () => {
 // `lab_account_id` while several active accounts are linked for the lab (#136), and that names
 // an account with an empty `team_id_allowlist` (README open question). A control order through
 // the test's own lab account shows the body itself is orderable. Every order is cancelled and
-// the user deleted afterwards. Recorded (ids replaced) to corpus/lab-account-probes.json.
+// the user deleted afterwards. JUNCTION_RECORD_DIR optionally retains the private probe report.
 type ProbeAccount = {
   id: string
   lab: string
@@ -692,14 +692,16 @@ const probeLabAccounts = async () => {
     labs: [...new Set(orderable.map(labOf))].sort(),
     probes,
   }
-  const corpusDir = join(import.meta.dir, "..", "corpus")
-  await mkdir(corpusDir, { recursive: true })
+  const corpusDir = process.env.JUNCTION_RECORD_DIR
+  if (!corpusDir) return
+  await mkdir(corpusDir, { recursive: true, mode: 0o700 })
   await writeFile(
     join(corpusDir, "lab-account-probes.json"),
     `${JSON.stringify(recorded, null, 2)}\n`,
+    { mode: 0o600 },
   )
   console.log(
-    `junction lab-account probes: wrote corpus/lab-account-probes.json (${probes.length} probes)`,
+    `junction lab-account probes: wrote private lab-account probes (${probes.length} probes)`,
   )
 }
 const probeCall: Parameters<typeof probeBookingLifecycle>[0] = async (method, path, body) => {

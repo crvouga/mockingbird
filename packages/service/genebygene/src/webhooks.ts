@@ -10,9 +10,7 @@ import type {
 } from "./types.js"
 
 /**
- * Gene by Gene's notification events and their PascalCase bodies, shaped key for key like the
- * signed samples our consumer recorded (`GXG/docs/webhook-events.json`) and the zod schemas it
- * parses them with (`GXG/shared/gxg-zod-schemas.ts`).
+ * Gene by Gene's notification events and their PascalCase bodies.
  */
 export const GXG_EVENTS = {
   orderCreated: "GxG.Nucleus.Order.Created",
@@ -28,7 +26,7 @@ export type GxgEventType = (typeof GXG_EVENTS)[keyof typeof GXG_EVENTS]
 
 export type GxgWebhook = { type: GxgEventType; body: Record<string, unknown> }
 
-/** `gxg-signature: sha512=<hex HMAC-SHA512(secret, rawBody)>` (`GXG/webhooks/gxg-webhook-signature.ts`). */
+/** `gxg-signature: sha512=<hex HMAC-SHA512(secret, rawBody)>`. */
 export const signGxgWebhookBody = async (secret: string, rawBody: string): Promise<string> =>
   `sha512=${await hmac("SHA-512", secret, rawBody, "hex")}`
 

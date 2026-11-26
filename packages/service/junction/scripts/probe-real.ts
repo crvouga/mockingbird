@@ -37,8 +37,21 @@ const createUser = async (clientUserId: string): Promise<string> => {
 }
 
 const listResponse = await fetch(`${baseUrl}/v3/lab_test`, { headers })
-const _catalog = (await listResponse.json()) as { data: Array<Record<string, unknown>> }
-const testId = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
+const catalog = (await listResponse.json()) as {
+  data: {
+    id: string
+    markers?:
+      | { id: number; aoe?: { questions?: { id: number; answers?: { value: string }[] }[] } }[]
+      | null
+  }[]
+}
+const test = catalog.data.find((t) =>
+  t.markers?.some((m) => m.aoe?.questions?.[0]?.answers?.length),
+)
+const marker = test?.markers?.find((m) => m.aoe?.questions?.[0]?.answers?.length)
+const question = marker?.aoe?.questions?.[0]
+const answer = question?.answers?.[0]?.value
+if (!test || !marker || !question || !answer) throw new Error("No test has an AOE choice question")
 
 const userId = await createUser(`probeAoe2.${Date.now()}`)
 
@@ -59,8 +72,8 @@ const validBody = {
     zip: "94105",
     country: "US",
   },
-  order_set: { lab_test_ids: [testId] },
-  aoe_answers: [{ marker_id: 2075, question_id: 1, answer: "No" }],
+  order_set: { lab_test_ids: [test.id] },
+  aoe_answers: [{ marker_id: marker.id, question_id: question.id, answer }],
 }
 
 const ok = await createOrder(validBody)
@@ -68,19 +81,19 @@ log("valid order + valid AOE", { status: ok.status, body: ok.body.slice(0, 400) 
 
 const badAnswer = await createOrder({
   ...validBody,
-  aoe_answers: [{ marker_id: 2075, question_id: 1, answer: "totally-invalid" }],
+  aoe_answers: [{ marker_id: marker.id, question_id: question.id, answer: "totally-invalid" }],
 })
 log("valid order + bad answer", { status: badAnswer.status, body: badAnswer.body })
 
 const unknownMarker = await createOrder({
   ...validBody,
-  aoe_answers: [{ marker_id: 999999, question_id: 1, answer: "x" }],
+  aoe_answers: [{ marker_id: 999999, question_id: question.id, answer: "x" }],
 })
 log("valid order + unknown marker", { status: unknownMarker.status, body: unknownMarker.body })
 
 const knownMarkerUnknownQ = await createOrder({
   ...validBody,
-  aoe_answers: [{ marker_id: 2075, question_id: 999999, answer: "x" }],
+  aoe_answers: [{ marker_id: marker.id, question_id: 999999, answer: "x" }],
 })
 log("valid order + known marker unknown question", {
   status: knownMarkerUnknownQ.status,

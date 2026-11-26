@@ -115,7 +115,6 @@
     "@crvouga/mockingbird-openapi": "workspace:*",
     "@crvouga/mockingbird-service": "workspace:*",
     "@crvouga/mockingbird-http-codec": "workspace:*",
-    "@crvouga/mockingbird-adapter-node": "workspace:*",
-    "zod": "3.25.76"
+    "@crvouga/mockingbird-adapter-node": "workspace:*"
   }
 }

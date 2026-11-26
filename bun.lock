@@ -1427,7 +1427,6 @@
         "@crvouga/mockingbird-sqlite": "workspace:*",
         "@crvouga/mockingbird-testing": "workspace:*",
         "fast-check": "4.9.0",
-        "zod": "3.25.76",
       },
     },
     "packages/service/elasticsearch": {

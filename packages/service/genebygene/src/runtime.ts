@@ -12,7 +12,7 @@ import {
   type WebhookHub,
 } from "@crvouga/mockingbird-service"
 import type { SqliteClient } from "@crvouga/mockingbird-sqlite"
-import { CATALOGS, type Catalog, CORPUS_VERSION } from "./corpus.js"
+import { CATALOGS, type Catalog, CORPUS_VERSION, type GeneByGeneCorpus } from "./corpus.js"
 import { type CustomResults, RESULT_FIXTURES, type ResultFixture } from "./fixtures/index.js"
 import { document } from "./generated/openapi.js"
 import { GENEBYGENE_NAMESPACE, GeneByGeneAPI, tokenCredential } from "./index.js"
@@ -128,10 +128,11 @@ export const GENEBYGENE_PRESETS: Record<string, FaultPreset> = {
   },
 }
 
-/** GxG retries a failed delivery up to three times (`GXG/docs/llm/05-webhooks.md`). */
+/** GxG retries a failed delivery up to three times. */
 export const GXG_RETRY_DELAYS_MS = [0, 10_000, 60_000, 300_000] as const
 
 export type GeneByGeneRuntimeOptions = {
+  corpus?: GeneByGeneCorpus
   sqlite?: SqliteClient
   clock?: Clock
   /** Seeds every random choice the runtime makes (fault rates). */
@@ -143,7 +144,7 @@ export type GeneByGeneRuntimeOptions = {
   /** Admin controls to boot with: clock, latency, faults, seed, a starting snapshot. */
   adminControls?: MockControls
   onLog?: (entry: RequestLog) => void
-  /** Catalog every namespace starts with. Default: the recorded staging catalog. */
+  /** Optional product seed for each namespace. */
   products?: readonly ProductDto[]
   settings?: Partial<Settings>
   /**
@@ -441,6 +442,7 @@ export const createRuntime = (options: GeneByGeneRuntimeOptions = {}): GeneByGen
         publicNamespace,
         adminPrefix,
         now: clock.now,
+        ...(options.corpus ? { corpus: options.corpus } : {}),
         ...(options.products ? { products: options.products } : {}),
         ...(options.settings ? { settings: options.settings } : {}),
         ...(options.resultsS3 ? { resultsS3: options.resultsS3 } : {}),
@@ -453,7 +455,7 @@ export const createRuntime = (options: GeneByGeneRuntimeOptions = {}): GeneByGen
       return api
     },
     describe: () => ({
-      corpus: CORPUS_VERSION,
+      corpus: options.corpus ? "custom" : CORPUS_VERSION,
       webhooks: url ? "on" : "subscriptions",
       resultsS3: options.resultsS3
         ? `${options.resultsS3.endpoint}/${options.resultsS3.bucket}`

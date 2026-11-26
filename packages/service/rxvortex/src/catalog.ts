@@ -12,8 +12,8 @@ export type CatalogItem = {
   status: "active" | "inactive"
 }
 
-/** The custom-cream anchor preset id our sandbox env points at (`ERX_CUSTOM_CREAM_ANCHOR_PRESET_ID`). */
-export const CUSTOM_CREAM_ANCHOR_PRESET_ID = "e404ad76-0f82-4b04-8f25-841650e2e819"
+/** The custom-cream anchor in the synthetic catalog. */
+export const CUSTOM_CREAM_ANCHOR_PRESET_ID = "00000000-0000-4000-8000-000000000001"
 
 const ALL_STATES = [
   "AZ",

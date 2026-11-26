@@ -1,24 +1,3 @@
-/**
- * Ports of the consumer app's Bedrock code, kept as close to the originals as a test
- * harness allows. The acceptance tests drive the mock only through these, so
- * "the mock works" means "our code works against the mock".
- *
- * Sources (B/ = apps/backend/src/modules/, E/ = the EMR backend's src/):
- * - B/chatbot/services/bedrock-errors.ts                      → the error classifiers (verbatim)
- * - B/chatbot/adapters/bedrock-llm-provider.ts                → BedrockLlmProvider
- * - B/chatbot/services/ai-chat-agent.service.ts               → streamChatTurn (invokeStreamWithRetry)
- * - B/chatbot/ai-sdk-tools/report-rx-symptom.tool.ts           → the approval-gated tool
- * - B/rx-checkin/rx-checkin.types.ts                           → RxSymptomInputSchema
- * - B/chatbot/services/intent-classifier.service.ts            → classifyIntent
- * - B/bug-reports/adapters/bedrock-titan-embedding.adapter.ts  → generateEmbedding
- * - B/insight-reports/adapters/outbound/bedrock-report-analyst.ts → analyzeWithForcedTool
- * - B/metrics/adapters/outbound/bedrock-nutrition-description-parser.adapter.ts → parseMeal
- * - E/business/scribe/adapters/bedrock-note-generation.adapter.ts → generateNote
- * - E/business/prescribe/erx-prescreen-agent.ts                → invokeErxPrescreenAgent
- * - packages/health-intake-voice-gateway/src/bedrock-nova-sonic-runtime-connection.ts
- *                                                              → createNovaSonicConnection
- * - the Python AI service's clients/bedrock_client.py         → pythonConverse (Python, ported)
- */
 import type { createAmazonBedrock } from "@ai-sdk/amazon-bedrock"
 import {
   type BedrockAgentCoreClient,
@@ -52,8 +31,6 @@ import {
   tool,
 } from "ai"
 import { z } from "zod"
-
-// ── B/chatbot/services/bedrock-errors.ts (verbatim) ────────────────
 
 export class BedrockThrottledError extends Error {
   readonly code = "BEDROCK_THROTTLED"
@@ -248,12 +225,8 @@ export function extractRetryAfterSeconds(error: unknown, fallbackSeconds: number
   return fallbackSeconds
 }
 
-// ── B/chatbot/bedrock-model-capabilities.ts (sampling only) ─────────
-
 const supportsSamplingParameters = (modelId: string) =>
   /claude-(?:sonnet|haiku)-4-5(?:-|$)/i.test(modelId) || /amazon\.nova-/i.test(modelId)
-
-// ── B/chatbot/adapters/bedrock-llm-provider.ts ─────────────────────
 
 const ASSISTANT_INITIATED_CONTEXT =
   "Continue the assistant-initiated conversation using the available context."
@@ -523,8 +496,6 @@ export class BedrockLlmProvider {
   }
 }
 
-// ── B/chatbot/services/intent-classifier.service.ts ─────────────────
-
 const CLASSIFIER_SYSTEM_PROMPT = `You are a message classifier. Classify the user message into exactly one category.
 Respond with ONLY a JSON object — no markdown, no explanation.
 
@@ -555,9 +526,6 @@ export const classifyIntent = async (llm: BedrockLlmProvider, message: string) =
   }
 }
 
-// ── the chat agent's tools (B/chatbot/ai-sdk-tools/*) ───────────────
-
-/** `RxSymptomInputSchema` (B/rx-checkin/rx-checkin.types.ts). */
 export const RxSymptomInputSchema = z
   .object({
     symptoms: z
@@ -603,8 +571,6 @@ export const createChatTools = (reported: z.infer<typeof RxSymptomInputSchema>[]
       },
     }),
   }) satisfies ToolSet
-
-// ── B/chatbot/services/ai-chat-agent.service.ts (invokeStreamWithRetry) ──
 
 export const BEDROCK_MAX_RETRIES = 3
 export const MAX_OUTPUT_TOKENS = 8192
@@ -735,8 +701,6 @@ export const approve = (
   },
 ]
 
-// ── B/metrics/adapters/outbound/bedrock-nutrition-description-parser.adapter.ts ──
-
 export const nutritionDescriptionParseSchema = z
   .object({
     ingredients: z
@@ -822,8 +786,6 @@ export const parseMeal = async (
   }
 }
 
-// ── B/insight-reports/adapters/outbound/bedrock-report-analyst.ts ───
-
 /** `BedrockReportAnalyst.analyze`: a forced tool via Converse, retried once on unusable output. */
 export const analyzeWithForcedTool = async <T>(
   client: BedrockRuntimeClient,
@@ -878,8 +840,6 @@ export const analyzeWithForcedTool = async <T>(
   return null
 }
 
-// ── B/bug-reports/adapters/bedrock-titan-embedding.adapter.ts ───────
-
 const EMBEDDING_DIMENSIONS = 1024
 const embeddingResponseSchema = z.object({
   embedding: z.array(z.number().finite()).length(EMBEDDING_DIMENSIONS),
@@ -901,8 +861,6 @@ export const generateEmbedding = async (
   const body = JSON.parse(new TextDecoder().decode(response.body)) as unknown
   return embeddingResponseSchema.parse(body).embedding
 }
-
-// ── E/business/scribe/adapters/bedrock-note-generation.adapter.ts ───
 
 export type ClinicalNote = { sections: { title: string; content: string }[]; summary: string }
 
@@ -942,8 +900,6 @@ export const generateNote = async (
     summary: parsed.summary ?? "",
   }
 }
-
-// ── E/business/prescribe/erx-prescreen-agent.ts ─────────────────────
 
 export type ErxPrescreenStatus =
   | "eligible_for_clinician_review"

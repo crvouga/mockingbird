@@ -16,6 +16,10 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
+    "./authoring": {
+      "types": "./dist/authoring.d.ts",
+      "default": "./dist/authoring.js"
+    },
     "./core": {
       "types": "./dist/core.d.ts",
       "default": "./dist/core.js"

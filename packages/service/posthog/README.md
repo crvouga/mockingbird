@@ -54,20 +54,20 @@ const admin = (path: string, body: unknown, method = "PUT") =>
 // Per-worker namespaces: map each worker's project token (the SDKs cannot add headers)…
 await admin("/credentials", { credentials: { phc_worker1: "w1" } })
 // …then set flags in that namespace.
-await admin("/flags/shop-coupons?namespace=w1", { default: true })
+await admin("/flags/example-discounts?namespace=w1", { default: true })
 await admin("/flags/rx-category-intake?namespace=w1", {
   default: true,
   payload: { categories: ["trt"] },
   overrides: [{ distinct_id: "42", value: false }, { email: "qa@example.test", value: "beta" }],
 })
-await admin("/flags/mobile-smart-links?namespace=w1", undefined, "DELETE") // absent again
+await admin("/flags/example-links?namespace=w1", undefined, "DELETE") // absent again
 
 // The application's posthog-node client. Only its fetch changes: requests reach the
 // emulator in this process instead of us.i.posthog.com.
 const posthog = new PostHog("phc_worker1", {
   fetch: (url, options) => emulator.fetch(new Request(url, options)),
 })
-await posthog.getFeatureFlag("shop-coupons", "7") // true
+await posthog.getFeatureFlag("example-discounts", "7") // true
 await posthog.getFeatureFlag("rx-category-intake", "42") // false
 posthog.capture({ distinctId: "7", event: "coupon_applied" })
 await posthog.shutdown()
@@ -124,7 +124,7 @@ Every route answers with and without its trailing slash. Errors use PostHog's
 | `PUT /__admin/flags` | Bulk: `{flags: {<key>: spec}, replace?: true}` or `[{key, …spec}]`. |
 | `GET /__admin/flags`, `GET /__admin/flags/:key` | The namespace's flags. |
 | `GET /__admin/flags/evaluate?distinct_id=&email=` | What `/flags` answers for that subject, as `{flags: {key: value}}`. |
-| `POST /__admin/flags/import` | `{from: "state.json", env: "dev" \| "prod", project?: "member-app" \| "emr", replace?}` seeds from the bundled copy of the consumer app's `docs/feature-flags/state.json` (or pass `state: {flags: […]}` inline). `live` → `true` (or the largest variant), `rollout 0` / `targeted` / `ramping` → `false`, `inactive` / `missing` → absent. |
+| `POST /__admin/flags/import` | `{from: "state.json", env: "dev" \| "prod", project?: "member-app" \| "emr", replace?}` seeds from the bundled synthetic flag state (or pass `state: {flags: […]}` inline). `live` → `true` (or the largest variant), `rollout 0` / `targeted` / `ramping` → `false`, `inactive` / `missing` → absent. |
 | `POST /__admin/flags/bump` | Changes nothing server-side; returns a `generation` counter. The documented moment to clear the app's flag caches (backend `getAllFlagsAndPayloads` 60 s per user; EMR frontend server 60 s / 10 s). |
 | `GET /__admin/events?distinct_id=&event=&since=` | Captured events, oldest first (`since`: epoch ms or ISO, emulator clock). `$exception` keeps only `$lib`, `$lib_version`, `$exception_level`, `$session_id`; properties named like message/body/text/content/prompt/stack/trace/html/comment/note are dropped from every event (and from `$set`). |
 | `GET /__admin/recordings` | `{count}` of `/s/` posts. |
@@ -177,7 +177,7 @@ Send the personal key in the Authorization header on each page request.
 | `parseFlagSpec` | function | Validate an admin flag body into a `FlagSpec`. |
 | `payloadString` | function | A payload as PostHog stores it (JSON string, or `null`). |
 | `specsFromState`, `valueForState` | functions | Map a `state.json` file (or one flag state) to flag specs. |
-| `ACME_FLAG_STATE` | object | The bundled, trimmed copy of the consumer app's `docs/feature-flags/state.json`. |
+| `ACME_FLAG_STATE` | object | The synthetic flag state used by the default import. |
 | `decodePostHogBody`, `tokenFromBody` | functions | Undo PostHog body envelopes (gzip, gzip-js, base64 `data=`); find the project token in a body. |
 | `scrubProperties` | function | The event-property scrubbing applied before storage. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |

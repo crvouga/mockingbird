@@ -235,7 +235,7 @@ export const labAccountById = (
  * Whether `teamId` may use an account. An empty `team_id_allowlist` counts as linked:
  * a real team's listing returns such accounts (Junction's own Quest, Labcorp and
  * BioReference accounts carry `[]`), and the sandbox places an order that names one by id
- * (corpus/lab-account-probes.json), so the mock treats them as the team's.
+ * in sandbox probes, so the mock treats them as the team's.
  */
 export const isLinkedToTeam = (entry: LabAccountRecord, teamId: string): boolean =>
   entry.team_id_allowlist.length === 0 || entry.team_id_allowlist.includes(teamId)

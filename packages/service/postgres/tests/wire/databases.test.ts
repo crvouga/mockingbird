@@ -23,22 +23,22 @@ afterAll(async () => {
 describe("wire database cluster", () => {
   test("creates isolated databases and exposes pg_database", async () => {
     const admin = await connect("postgres");
-    await admin.query("CREATE DATABASE geviti_test");
+    await admin.query("CREATE DATABASE demo_test");
     await admin.query("CREATE DATABASE medplum_test");
 
-    const geviti = await connect("geviti_test");
+    const demo = await connect("demo_test");
     const medplum = await connect("medplum_test");
     try {
-      await geviti.query("CREATE TABLE items (id int); INSERT INTO items VALUES (1)");
+      await demo.query("CREATE TABLE items (id int); INSERT INTO items VALUES (1)");
       await medplum.query("CREATE TABLE items (id int); INSERT INTO items VALUES (2)");
-      expect((await geviti.query("SELECT * FROM items")).rows).toEqual([{ id: 1 }]);
+      expect((await demo.query("SELECT * FROM items")).rows).toEqual([{ id: 1 }]);
       expect((await medplum.query("SELECT * FROM items")).rows).toEqual([{ id: 2 }]);
-      expect((await geviti.query("SELECT current_database() AS name")).rows).toEqual([{ name: "geviti_test" }]);
+      expect((await demo.query("SELECT current_database() AS name")).rows).toEqual([{ name: "demo_test" }]);
 
       const catalog = await admin.query("SELECT datname FROM pg_database ORDER BY datname");
-      expect(catalog.rows.map((row) => row.datname)).toEqual(["geviti_test", "medplum_test", "postgres"]);
+      expect(catalog.rows.map((row) => row.datname)).toEqual(["demo_test", "medplum_test", "postgres"]);
     } finally {
-      await geviti.end();
+      await demo.end();
       await medplum.end();
       await admin.end();
     }

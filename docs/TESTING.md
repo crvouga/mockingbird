@@ -71,7 +71,7 @@ OpenAPI spec
 | `cd packages/service/oauth && bun run parity` | Google, Apple, Microsoft discovery/JWKS plus GitHub REST auth error | None; public, read-only metadata |
 | `bun run parity:service -- <name…> \| --all \| --tier=<tier>` | each service's sandbox | `<NAME>_*` in env; reports `parity`, `diverged`, or `no credentials` per service |
 | `bun run parity:remote -- <name…> \| --all \| --tier=<tier>` | each service's sandbox, on GitHub Actions | the repo's `<NAME>_*` secrets; nothing local. Dispatches the [Parity workflow](../.github/workflows/parity.yml) on the pushed branch and streams its log |
-| `bun run verify:junction` | Junction sandbox | `mockingbird-junction verify`: corpus drift plus a stateful scenario; also runs daily in the [Verify workflow](../.github/workflows/verify.yml) |
+| `bun run verify:junction` | Junction sandbox | `mockingbird-junction verify`: corpus drift plus a stateful scenario; can run manually in the [Verify workflow](../.github/workflows/verify.yml) |
 
 ### Parity tiers
 

@@ -75,30 +75,30 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
     const { admin, fetcher } = harness()
     await admin("/flags", {
       flags: {
-        "shop-coupons": { default: true },
-        "mobile-smart-links": { default: false },
-        "b2b-member-tagging": { default: "test" },
+        "example-discounts": { default: true },
+        "example-links": { default: false },
+        "example-tags": { default: "test" },
       },
     })
     const adapter = backend(fetcher)
-    expect(await adapter.getEvaluation("shop-coupons", "101")).toBe(true)
-    expect(await adapter.getEvaluation("mobile-smart-links", "101")).toBe(false)
+    expect(await adapter.getEvaluation("example-discounts", "101")).toBe(true)
+    expect(await adapter.getEvaluation("example-links", "101")).toBe(false)
     // A non-empty variant string means enabled…
-    expect(await adapter.getEvaluation("b2b-member-tagging", "101")).toBe(true)
+    expect(await adapter.getEvaluation("example-tags", "101")).toBe(true)
     // …and an absent key is "not decided by PostHog".
     expect(await adapter.getEvaluation("never-created", "101")).toBeUndefined()
     expect(await adapter.isEnabled("never-created", "101", true)).toBe(true)
 
     // The strict path (getFeatureFlag, 1 s race, uncached) only resolves real booleans.
-    expect(await adapter.resolveStrictBoolean("shop-coupons", "101")).toEqual({
+    expect(await adapter.resolveStrictBoolean("example-discounts", "101")).toEqual({
       status: "resolved",
       enabled: true,
     })
-    expect(await adapter.resolveStrictBoolean("mobile-smart-links", "101")).toEqual({
+    expect(await adapter.resolveStrictBoolean("example-links", "101")).toEqual({
       status: "resolved",
       enabled: false,
     })
-    expect(await adapter.resolveStrictBoolean("b2b-member-tagging", "101")).toEqual({
+    expect(await adapter.resolveStrictBoolean("example-tags", "101")).toEqual({
       status: "unresolved",
       reason: "not_a_boolean",
     })
@@ -112,11 +112,11 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
     const { admin, fetcher } = harness()
     const adapter = backend(fetcher)
     for (const value of [true, false, true]) {
-      await admin("/flags/shop-coupons", { default: value })
-      expect(await adapter.isStrictBooleanEnabled("shop-coupons", "7")).toBe(value)
+      await admin("/flags/example-discounts", { default: value })
+      expect(await adapter.isStrictBooleanEnabled("example-discounts", "7")).toBe(value)
     }
-    await admin("/flags/shop-coupons", undefined, "DELETE")
-    expect(await adapter.resolveStrictBoolean("shop-coupons", "7")).toEqual({
+    await admin("/flags/example-discounts", undefined, "DELETE")
+    expect(await adapter.resolveStrictBoolean("example-discounts", "7")).toEqual({
       status: "unresolved",
       reason: "not_a_boolean",
     })
@@ -144,7 +144,7 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
 
   test("targeting: by distinct_id, by person_properties.email, then the default", async () => {
     const { admin, fetcher } = harness()
-    await admin("/flags/advanced-hormone-pdfs", {
+    await admin("/flags/example-export", {
       default: false,
       overrides: [
         { distinct_id: "42", value: true, payload: { tier: "vip" } },
@@ -152,15 +152,15 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
       ],
     })
     const adapter = backend(fetcher)
-    expect(await adapter.getEvaluation("advanced-hormone-pdfs", "42")).toBe(true)
-    expect(await adapter.getConfig("advanced-hormone-pdfs", "42")).toEqual({ tier: "vip" })
-    expect(await adapter.getEvaluation("advanced-hormone-pdfs", "43")).toBe(false)
+    expect(await adapter.getEvaluation("example-export", "42")).toBe(true)
+    expect(await adapter.getConfig("example-export", "42")).toEqual({ tier: "vip" })
+    expect(await adapter.getEvaluation("example-export", "43")).toBe(false)
     // The EMR frontend sends person_properties.email; matching is case-insensitive.
     const env = { NEXT_PUBLIC_POSTHOG_KEY: TOKEN, NEXT_PUBLIC_POSTHOG_HOST: HOST }
     expect(
       await evaluatePostHogFlag(
         env,
-        "advanced-hormone-pdfs",
+        "example-export",
         { distinctId: "practitioner-9", personProperties: { email: "ops@acme.test" } },
         fetcher,
       ),
@@ -170,23 +170,23 @@ describe("S6.6 acceptance: posthog-node through the backend adapter", () => {
   test("two tokens hold different values for the same key at the same time", async () => {
     const { admin, fetcher } = harness()
     await admin("/credentials", { credentials: { phc_worker_a: "wa", phc_worker_b: "wb" } })
-    await admin("/flags/shop-coupons?namespace=wa", { default: true, payload: { pct: 10 } })
-    await admin("/flags/shop-coupons?namespace=wb", { default: false })
+    await admin("/flags/example-discounts?namespace=wa", { default: true, payload: { pct: 10 } })
+    await admin("/flags/example-discounts?namespace=wb", { default: false })
     const a = backend(fetcher, HOST, "phc_worker_a")
     const b = backend(fetcher, HOST, "phc_worker_b")
     // A third worker picks its namespace by host prefix instead.
-    await admin("/flags/shop-coupons?namespace=wc", { default: "variant-c" })
+    await admin("/flags/example-discounts?namespace=wc", { default: "variant-c" })
     const c = backend(fetcher, `${HOST}/__admin/ns/wc`, "phc_unmapped")
     const [ra, rb, rc] = await Promise.all([
-      a.resolveStrictBoolean("shop-coupons", "1"),
-      b.resolveStrictBoolean("shop-coupons", "1"),
-      c.getEvaluation("shop-coupons", "1"),
+      a.resolveStrictBoolean("example-discounts", "1"),
+      b.resolveStrictBoolean("example-discounts", "1"),
+      c.getEvaluation("example-discounts", "1"),
     ])
     expect(ra).toEqual({ status: "resolved", enabled: true })
     expect(rb).toEqual({ status: "resolved", enabled: false })
     expect(rc).toBe(true)
-    expect(await a.getConfig("shop-coupons", "1")).toEqual({ pct: 10 })
-    expect(await b.getConfig("shop-coupons", "1")).toBeUndefined()
+    expect(await a.getConfig("example-discounts", "1")).toEqual({ pct: 10 })
+    expect(await b.getConfig("example-discounts", "1")).toBeUndefined()
   })
 })
 
@@ -488,38 +488,38 @@ describe("fault presets", () => {
   test("flags_5xx / flags_429: the backend falls back, the strict path is provider_rejected", async () => {
     for (const name of ["flags_5xx", "flags_429"]) {
       const { runtime, admin, fetcher } = harness()
-      await admin("/flags/shop-coupons", { default: true })
+      await admin("/flags/example-discounts", { default: true })
       preset(runtime, name)
       const adapter = backend(fetcher)
-      expect(await adapter.isEnabled("shop-coupons", "1", false)).toBe(false)
+      expect(await adapter.isEnabled("example-discounts", "1", false)).toBe(false)
       // posthog-node swallows the HTTP error: getFeatureFlag resolves undefined.
-      expect(await adapter.resolveStrictBoolean("shop-coupons", "2")).toEqual({
+      expect(await adapter.resolveStrictBoolean("example-discounts", "2")).toEqual({
         status: "unresolved",
         reason: "not_a_boolean",
       })
       expect(
         await evaluatePostHogFlag(
           { NEXT_PUBLIC_POSTHOG_KEY: `${TOKEN}-${name}`, NEXT_PUBLIC_POSTHOG_HOST: HOST },
-          "shop-coupons",
+          "example-discounts",
           { distinctId: "3" },
           fetcher,
         ),
       ).toBeUndefined()
       expect(
-        await new PythonPostHogClient(TOKEN, HOST, fetcher).getEvaluation("shop-coupons", "4"),
+        await new PythonPostHogClient(TOKEN, HOST, fetcher).getEvaluation("example-discounts", "4"),
       ).toBeNull()
     }
   })
 
   test("flags_hang (>1 s) trips the backend strict race and the EMR 1 s race", async () => {
     const { runtime, admin, fetcher } = harness()
-    await admin("/flags/shop-coupons", { default: true })
-    await admin("/flags/b2b-member-tagging", { default: true })
+    await admin("/flags/example-discounts", { default: true })
+    await admin("/flags/example-tags", { default: true })
     preset(runtime, "flags_hang")
     const adapter = backend(fetcher)
     const emr = track(new EmrFeatureFlagsService(TOKEN, HOST, fetcher))
     const [strict, gate] = await Promise.all([
-      adapter.resolveStrictBoolean("shop-coupons", "1"),
+      adapter.resolveStrictBoolean("example-discounts", "1"),
       emr.isMemberTaggingProgramEnabled("staff"),
     ])
     // Both races fire at 1 s, before the 1.5 s answer; without the fault both would be true.
@@ -529,13 +529,13 @@ describe("fault presets", () => {
 
   test("errors_while_computing: flags still arrive with errorsWhileComputingFlags true", async () => {
     const { runtime, admin, fetcher } = harness()
-    await admin("/flags/shop-coupons", { default: true })
+    await admin("/flags/example-discounts", { default: true })
     preset(runtime, "errors_while_computing")
     const errors: unknown[] = []
     const original = console.error
     console.error = (...args: unknown[]) => errors.push(args)
     try {
-      expect(await backend(fetcher).getEvaluation("shop-coupons", "1")).toBe(true)
+      expect(await backend(fetcher).getEvaluation("example-discounts", "1")).toBe(true)
     } finally {
       console.error = original
     }
@@ -544,15 +544,15 @@ describe("fault presets", () => {
 
   test("quota_limited: posthog-node sees no flags; the member app keeps its defaults", async () => {
     const { runtime, admin, fetcher } = harness()
-    await admin("/flags/shop-coupons", { default: true })
+    await admin("/flags/example-discounts", { default: true })
     preset(runtime, "quota_limited")
-    expect(await backend(fetcher).isEnabled("shop-coupons", "1", false)).toBe(false)
+    expect(await backend(fetcher).isEnabled("example-discounts", "1", false)).toBe(false)
     const client = new ReactNativeLikeClient(TOKEN, { host: HOST }, fetcher)
     closers.push(() => client.shutdown())
     const adapter = new MemberAppFlagsAdapter(client)
     await adapter.init()
-    expect(adapter.hasFlag("shop-coupons")).toBe(false)
-    expect(adapter.isEnabled("shop-coupons", true)).toBe(true)
+    expect(adapter.hasFlag("example-discounts")).toBe(false)
+    expect(adapter.isEnabled("example-discounts", true)).toBe(true)
   })
 })
 
@@ -569,29 +569,37 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
       { from: "state.json", env: "prod" },
       "POST",
     )
-    expect(dev.body.imported).toBe(101)
-    expect(prod.body.imported).toBeGreaterThan(40)
+    expect(dev.body.imported).toBe(3)
+    expect(prod.body.imported).toBe(2)
     await admin("/credentials", { credentials: { phc_dev: "dev", phc_prod: "prod" } })
     const devAdapter = backend(fetcher, HOST, "phc_dev")
     const prodAdapter = backend(fetcher, HOST, "phc_prod")
-    // advanced-hormone-pdfs: dev "live", prod "rollout 0".
-    expect(await devAdapter.getEvaluation("advanced-hormone-pdfs", "1")).toBe(true)
-    expect(await prodAdapter.getEvaluation("advanced-hormone-pdfs", "1")).toBe(false)
-    // shop-coupons: dev "live", prod "inactive" (PostHog omits inactive flags).
-    expect(await devAdapter.getEvaluation("shop-coupons", "1")).toBe(true)
-    expect(await prodAdapter.getEvaluation("shop-coupons", "1")).toBeUndefined()
-    // mobile-smart-links: prod "targeted" → off for an untargeted user.
-    expect(await prodAdapter.getEvaluation("mobile-smart-links", "1")).toBe(false)
+    // example-export: dev "live", prod "rollout 0".
+    expect(await devAdapter.getEvaluation("example-export", "1")).toBe(true)
+    expect(await prodAdapter.getEvaluation("example-export", "1")).toBe(false)
+    // example-discounts: dev "live", prod "inactive" (PostHog omits inactive flags).
+    expect(await devAdapter.getEvaluation("example-discounts", "1")).toBe(true)
+    expect(await prodAdapter.getEvaluation("example-discounts", "1")).toBeUndefined()
+    // example-links: prod "targeted" → off for an untargeted user.
+    expect(await prodAdapter.getEvaluation("example-links", "1")).toBe(false)
   })
 
   test("feature-flags-cli pages through the management API and classifies the imported state", async () => {
     const { admin, fetcher } = harness()
     await admin("/credentials", { credentials: { phx_personal: "cli" } })
-    await admin("/flags/import?namespace=cli", { env: "dev" }, "POST")
-    const flags = await fetchProjectFlags(HOST, 338122, "phx_personal", fetcher)
+    const flagsToImport = Array.from({ length: 101 }, (_, index) => ({
+      flag: `example-page-${index}`,
+      posthog: { dev: [{ project: "member-app", state: index < 94 ? "live" : "rollout 0" }] },
+    }))
+    await admin(
+      "/flags/import?namespace=cli",
+      { env: "dev", state: { flags: flagsToImport } },
+      "POST",
+    )
+    const flags = await fetchProjectFlags(HOST, 101, "phx_personal", fetcher)
     expect(flags).toHaveLength(101)
     const states = new Map(flags.map((flag) => [flag.key, deriveState(flag)]))
-    expect(states.get("advanced-hormone-pdfs")).toBe("live")
+    expect(states.get("example-page-0")).toBe("live")
     expect([...states.values()].filter((s) => s === "live")).toHaveLength(94)
     expect([...states.values()].filter((s) => s === "rollout 0")).toHaveLength(7)
   })
@@ -601,7 +609,7 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
     const auth = { authorization: "Bearer phx_personal", "content-type": "application/json" }
     for (const flag of [...page1.results, ...page2.results]) {
       const response = await runtime.fetch(
-        new Request(`${HOST}/api/projects/338122/feature_flags/`, {
+        new Request(`${HOST}/api/projects/101/feature_flags/`, {
           method: "POST",
           headers: auth,
           body: JSON.stringify({ key: flag.key, active: flag.active, filters: flag.filters }),
@@ -616,7 +624,7 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
       "sample-staged": false,
       "sample-ramping": false,
     })
-    const listed = await fetchProjectFlags(HOST, 338122, "phx_personal", fetcher)
+    const listed = await fetchProjectFlags(HOST, 101, "phx_personal", fetcher)
     expect(listed.map((f) => [f.key, deriveState(f)])).toEqual([
       ["sample-live", "live"],
       ["sample-ramping", "rollout 0"],
@@ -624,7 +632,7 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
       ["sample-staged", "rollout 0"],
     ])
     const patched = await runtime.fetch(
-      new Request(`${HOST}/api/projects/338122/feature_flags/4/`, {
+      new Request(`${HOST}/api/projects/101/feature_flags/4/`, {
         method: "PATCH",
         headers: auth,
         body: JSON.stringify({ active: true, filters: { groups: [{ rollout_percentage: 100 }] } }),
@@ -635,7 +643,7 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
       "sample-retired": true,
     })
     const duplicate = await runtime.fetch(
-      new Request(`${HOST}/api/projects/338122/feature_flags/`, {
+      new Request(`${HOST}/api/projects/101/feature_flags/`, {
         method: "POST",
         headers: auth,
         body: JSON.stringify({ key: "sample-live" }),
@@ -643,7 +651,7 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
     )
     expect(duplicate.status).toBe(400)
     expect(((await duplicate.json()) as { code: string }).code).toBe("unique")
-    const anonymous = await runtime.fetch(new Request(`${HOST}/api/projects/338122/feature_flags/`))
+    const anonymous = await runtime.fetch(new Request(`${HOST}/api/projects/101/feature_flags/`))
     expect(anonymous.status).toBe(401)
   })
 
@@ -704,7 +712,7 @@ describe("served over HTTP", () => {
     try {
       const admin = (path: string, body: unknown, method = "PUT") =>
         fetch(`${server.url}/__admin${path}`, { method, body: JSON.stringify(body) })
-      await admin("/flags/shop-coupons?namespace=w1", { default: true })
+      await admin("/flags/example-discounts?namespace=w1", { default: true })
       const adapter = new PostHogServerAdapter({
         POSTHOG_API_KEY: TOKEN,
         POSTHOG_HOST: `${server.url}/__admin/ns/w1`,
@@ -714,7 +722,7 @@ describe("served over HTTP", () => {
         POSTHOG_HOST: `${server.url}/__admin/ns/w1`,
       })
       try {
-        expect(await adapter.isStrictBooleanEnabled("shop-coupons", "1")).toBe(true)
+        expect(await adapter.isStrictBooleanEnabled("example-discounts", "1")).toBe(true)
         tracking.track("1", "served_event")
         await tracking.flush()
         const events = (await (
@@ -724,7 +732,7 @@ describe("served over HTTP", () => {
         }
         expect(events.events.map((e) => e.event)).toContain("served_event")
         await admin("/faults?namespace=w1", { preset: "flags_hang", count: 1 }, "POST")
-        expect(await adapter.resolveStrictBoolean("shop-coupons", "2")).toEqual({
+        expect(await adapter.resolveStrictBoolean("example-discounts", "2")).toEqual({
           status: "unresolved",
           reason: "provider_timeout",
         })

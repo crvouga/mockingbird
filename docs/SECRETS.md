@@ -18,7 +18,7 @@ seeing a value (GitHub never returns a secret's value, to anyone):
 | Workflow | Secrets it reads | How to run it |
 | --- | --- | --- |
 | [Parity](../.github/workflows/parity.yml) | the `<SERVICE>_*` keys its live-parity step maps | `bun run parity:remote -- <service…>`, `-- --all` or `-- --tier=warm`; by [tier](TESTING.md#parity-tiers) also on each PR that changes a hot service ([Advisory](../.github/workflows/advisory.yml), non-blocking, not for forks) and weekly for warm services |
-| [Verify](../.github/workflows/verify.yml) | `JUNCTION_API_KEY` | daily, or `gh workflow run verify.yml` |
+| [Verify](../.github/workflows/verify.yml) | `JUNCTION_API_KEY` | manual (`gh workflow run verify.yml`) |
 | [System preview](../.github/workflows/system-preview.yml) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; for [dev resources](DEV_RESOURCES.md) also any of `STRIPE_SECRET_KEY`, `JUNCTION_API_KEY`, `RESEND_API_KEY`, `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `FCM_PROJECT_ID`, `FCM_ACCESS_TOKEN`, `SLACK_BOT_TOKEN` | optional lab PR hosting on Cloudflare Workers; same-repository PRs only; without credentials the workflow only produces a downloadable artifact. The dev resource values are copied to that PR's Worker, where only its `/__dev` proxy reads them, uses only those matching the non-production allow-list in `packages/examples/medical-testing/src/worker.ts`, and only for requests from the preview's own origin |
 
 ## Live parity
@@ -37,9 +37,7 @@ bun run parity:remote -- --tier=warm       # every service in a tier
 ```
 
 This dispatches the Parity workflow on your branch, which passes the sandbox keys its live-parity
-step maps to the run, and streams the log to your terminal. Needs `gh auth login`. The workflow
-also uploads each service's `corpus/` directory as the `parity-corpus` artifact
-(`gh run download <run-id> -n parity-corpus`), so a live recording can be committed.
+step maps to the run, and streams the log to your terminal. Needs `gh auth login`. The `parity-corpus` artifact excludes Junction, Gene by Gene, and Flex. Capture those catalogs locally or on a private runner.
 
 **Locally (your own keys).** Put sandbox keys in `.env.local` (gitignored, loaded by Bun
 automatically; `.env.example` lists every name, grouped by service), then:
