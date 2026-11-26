@@ -53,7 +53,7 @@ const RAW = `
 .mbd-status { padding: 48px; color: var(--mbd-muted); }
 .mbd-status[data-kind="error"] { color: #ff6b61; }
 @media (max-width: 640px) {
-  .mbd-bar { gap: 8px; height: 42px; padding: 0 8px; }
+  .mbd-bar { gap: 8px; height: 38px; padding: 0 8px; }
   .mbd-brand span { display: none; }
   .mbd-tabs { flex: 1; }
   .mbd-tab { flex: 1 0 auto; justify-content: center; padding: 0 10px; font-size: 13px; }

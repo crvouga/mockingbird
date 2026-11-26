@@ -214,7 +214,7 @@ describe("each emulator shows up as the recipient would see it", () => {
     expect(fanEmail?.email?.text).toStartWith("Order 1042 has shipped.")
   })
 
-  test("Customer.io transactional email and SMS", async () => {
+  test("Customer.io transactional email, SMS and push", async () => {
     await send.customerioSend(target("customerio"), "email", {
       transactional_message_id: "welcome",
       identifiers: { email: "new@example.com" },
@@ -239,6 +239,20 @@ describe("each emulator shows up as the recipient would see it", () => {
     expect(email?.email?.html).toContain("first_name")
     const [sms] = await harness.list({ service: "customerio", channel: "sms" })
     expect(sms).toMatchObject({ to: "+12025550199", sms: { body: "Your table is ready" } })
+
+    await send.customerioSend(target("customerio"), "push", {
+      transactional_message_id: "2",
+      identifiers: { id: "42" },
+      custom_device: { token: "cio-ios-token", platform: "ios" },
+      title: "Table ready",
+      message: "Head to the host stand",
+      custom_data: { table: "12" },
+    })
+    const [push] = await harness.list({ service: "customerio", channel: "push" })
+    expect(push).toMatchObject({
+      to: "cio-ios-token",
+      push: { title: "Table ready", body: "Head to the host stand", data: { table: "12" } },
+    })
   })
 
   test("Mailosaur inbox email and SMS", async () => {
