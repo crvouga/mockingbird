@@ -9,10 +9,7 @@ info:
     Hand-derived from the consumer's zod contracts (the vendor publishes no spec).
   version: "1"
   x-mockingbird-upstream:
-    note: >-
-      Hand-derived from apps/backend/src/modules/erx/clients/vpi-api.contracts.ts and the
-      client-local schemas in vpi-api.client.ts (request bodies are exactly what the client
-      sends; responses are what its zod schemas accept).
+    note: Models the clinic request and response shapes exercised by the integration tests.
 servers:
   - url: https://api.vpicompounding.net
 security:

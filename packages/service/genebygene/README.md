@@ -239,8 +239,7 @@ secret, and to `--webhook-url` (all events) signed with `--webhook-secret`:
   `.Order.KitNumbersGenerated`, `.Order.Shipped` (`CloseoutDate` as `M/D/YYYY` in Houston time),
   `.Kit.Received`, `.Kit.Completed` (one per result-bearing order line: the JSON report line and
   the raw-data line), `.Kit.Error` (`ErrorCode` 4 "10 Day Delay", 19 "New collection
-  requested"), and `.Kit.KitOrderLine.Canceled`. Bodies are PascalCase with the keys of the
-  recorded samples (`GXG/docs/webhook-events.json`).
+  requested"), and `.Kit.KitOrderLine.Canceled`. Bodies are PascalCase with event-specific keys.
 - Retries: immediately, 10 s, 1 min, 5 min (GxG retries up to three times).
   `GET /__admin/webhooks`, `…/events`, `POST …/flush`, `…/:id/replay` as usual.
 

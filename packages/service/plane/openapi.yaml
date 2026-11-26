@@ -2,14 +2,12 @@ openapi: 3.1.0
 info:
   title: Plane REST API (Mockingbird subset)
   description: 'Stateful emulator subset of Plane''s public REST API v1 for one project: work items (cursor-paginated
-    list, get, create, patch), comments, links, states, labels, cycles and work-item types. Hand-authored from Plane''s API reference
-    and the consumer''s zod schemas (plane-response.ts).
+    list, get, create, patch), comments, links, states, labels, cycles and work-item types. Hand-authored from Plane''s API reference.
 
     '
   version: '1'
   x-mockingbird-upstream:
-    note: 'Shapes from https://developers.plane.so/api-reference; consumer: apps/backend/src/modules/bug-reports/adapters/native-fetch-plane.adapter.ts,
-      plane-http-client.ts, plane-response.ts.'
+    note: https://developers.plane.so/api-reference
 servers:
 - url: https://api.plane.so
 security:

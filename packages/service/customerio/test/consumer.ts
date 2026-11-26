@@ -1,21 +1,3 @@
-/**
- * A port of our Customer.io consumers:
- *
- * - `B/customer-io/customer-io.notification-adapter.ts` (CDP identify + track through
- *   `@customerio/cdp-analytics-node`, then the App API inbox message) and
- *   `customer-io.delivery.ts` (the per-event callback wait with a 10 s timeout);
- * - `B/customer-io/customer-io.transactional-email-adapter.ts` (`/v1/send/email`, the
- *   missing-trigger-name fallback);
- * - `packages/notification-processor/src/customerio/transactional-client.ts` (`/v1/send/{email,sms}`
- *   with definite / ambiguous failure classification);
- * - `apps/notification-service/src/customerio-trigger-name-validator.ts` (`GET /v1/transactional`);
- * - `B/mobile-links/mobile-links-click-reporter.service.ts` (`POST /click/{linkId}`);
- * - `B/customer-io/customer-io.reporting.controller.ts` + `customer-io.reporting-webhook.ts`
- *   (the signed reporting webhook receiver), with an in-memory database.
- *
- * Same URLs, headers, bodies, status branches and error extraction. The hosts are parameters
- * (the app hardcodes them per region: seam G-Y1).
- */
 import { createHmac, timingSafeEqual } from "node:crypto"
 import type { Analytics } from "@customerio/cdp-analytics-node"
 

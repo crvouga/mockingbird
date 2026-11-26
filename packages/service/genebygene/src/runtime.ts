@@ -128,7 +128,7 @@ export const GENEBYGENE_PRESETS: Record<string, FaultPreset> = {
   },
 }
 
-/** GxG retries a failed delivery up to three times (`GXG/docs/llm/05-webhooks.md`). */
+/** GxG retries a failed delivery up to three times. */
 export const GXG_RETRY_DELAYS_MS = [0, 10_000, 60_000, 300_000] as const
 
 export type GeneByGeneRuntimeOptions = {

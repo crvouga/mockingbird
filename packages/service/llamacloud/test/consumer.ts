@@ -1,21 +1,3 @@
-/**
- * Ports of our two LlamaCloud consumers, driven by the acceptance tests so "the mock works"
- * means "our consumers' own logic reaches the right outcome":
- *
- * 1. `LlamaCloudKnowledgeAdapter` — `apps/backend/src/modules/chatbot/adapters/
- *    llamacloud-knowledge.adapter.ts` (chat tools `search_health_knowledge` / `search_faq`
- *    and the EMR chatbot-admin knowledge CRUD): the same requests, headers, pipeline
- *    resolution, field fallbacks and "non-2xx is logged and returns null" behaviour. The base
- *    URL is injectable (seam G-L1).
- * 2. `PythonLlamaCloudClient` — the Python chat service's `app/core/rag/llamacloud_client.py`
- *    over the HTTP calls `llama_cloud_services` 0.6.88 makes (read from
- *    the installed wheel, see README "Python chat SDK: verified call sequence"):
- *    `LlamaCloudIndex(name, project_name=…)` → `GET /api/v1/projects?project_name=` then
- *    `GET /api/v1/pipelines?project_id=&pipeline_name=&pipeline_type=MANAGED`;
- *    `.as_retriever(similarity_top_k=)` → `GET /api/v1/pipelines/{id}` then
- *    `GET /api/v1/projects/{project_id}`; `.aretrieve(q)` →
- *    `POST /api/v1/pipelines/{id}/retrieve {query, dense_similarity_top_k}`.
- */
 export type Fetch = (request: Request) => Promise<Response>
 
 const DEFAULT_TOP_K = 5

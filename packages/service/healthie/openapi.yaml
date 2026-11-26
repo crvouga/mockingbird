@@ -14,9 +14,7 @@ info:
     Healthie's schema, so selection sets, aliases, variables and errors behave like the real API.
   version: "1"
   x-mockingbird-upstream:
-    note: >-
-      Hand-authored from the selection sets in our consumer
-      (apps/backend/src/modules/global-services/services/healthie-client/healthie-client.service.ts).
+    note: Models the GraphQL selections exercised by the integration tests.
 servers:
   - url: https://staging-api.gethealthie.com
 paths:

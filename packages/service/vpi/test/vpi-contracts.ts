@@ -1,9 +1,3 @@
-/**
- * Verbatim port of our backend's VPI contracts (`apps/backend/src/modules/erx/clients/vpi-api.contracts.ts`)
- * plus the client-local schemas from `vpi-api.client.ts`. The consumer oracle parses every mock
- * response with these, exactly as the backend does, so a drifted mock fails closed the same way.
- * Only the non-null assertions were rewritten (as casts) for this repo's lint rules.
- */
 import { z } from "zod"
 
 export const vpiRequiredStringSchema = z.string().trim().min(1)

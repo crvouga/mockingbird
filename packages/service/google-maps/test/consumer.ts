@@ -1,17 +1,3 @@
-/**
- * A port of our member app's Google Maps consumers, the acceptance oracle:
- *
- * - `lib/ui/address-autocomplete/address-autocomplete-native-rest.tsx`: the URL builders, the
- *   prediction/details parsers and the consecutive-failure counter that switches the sheet to
- *   manual entry (threshold 2), minus React state.
- * - `lib/ui/address-autocomplete/parse-place-details.ts`: `parseAddressComponents`.
- * - `lib/ui/address-autocomplete/address-autocomplete-web.tsx`: the same flow over
- *   `google.maps.places` (AutocompleteService + PlacesService.getDetails + session tokens).
- * - `features/bloodwork/shared/lab-finder/use-geocoded-address.ts`: Geocoding, falling back to
- *   Find Place From Text, on native (REST) and web (`google.maps`).
- *
- * The app hardcodes `https://maps.googleapis.com` (seam G-Y1); the port takes a base URL.
- */
 export type Fetch = (request: Request) => Promise<Response>
 
 export type AddressPrediction = { placeId: string; mainText: string; secondaryText: string }

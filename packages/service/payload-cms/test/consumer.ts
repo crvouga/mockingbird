@@ -1,12 +1,3 @@
-/**
- * A port of our backend's Payload CMS client (`apps/backend/src/modules/cms/payload-cms/
- * payload-cms.service.ts`, its mapper and `ReferralContentModel.createDefault`): the same URL
- * and headers, the same fallbacks (no URL, non-2xx, empty docs, a thrown fetch or JSON parse
- * all return the default content) and the same field-by-field merge with the defaults.
- *
- * Seam note: the backend validates `PAYLOAD_CMS_API_URL` as https-only (validation.schema.ts),
- * so a plain-http mock needs that relaxed or a TLS front; the logic below is unchanged.
- */
 export type ReferralContent = {
   card: { title: string; subtitle: string; description: string }
   cta: { title: string; actionText: string }

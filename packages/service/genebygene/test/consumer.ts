@@ -1,22 +1,3 @@
-/**
- * A port of our backend's Gene by Gene transport and webhook receiver:
- *
- * - `GXG/transport/gxg-auth.service.ts`: client-credentials token, cache with a 60 s refresh
- *   skew and a 5 min default TTL, in-flight dedup, and the **permanent credential block** on a
- *   401 / 403 / 400 `invalid_client` from the token endpoint.
- * - `GXG/transport/gxg-http-client.ts`: Bearer on every call; on a 401 invalidate the cached
- *   token and retry exactly once.
- * - `GXG/transport/gxg-client.ts`: the calls, their query params, and `404 → null / empty`.
- * - `GXG/orders/gxg-order-cancel.service.ts` + `gxg-order-cancel-graph.ts`: the three-layer cancel.
- * - `GXG/orders/gxg-product-placement.ts`, `GXG/shipping/gxg-shipping-options.ts`: placement.
- * - `GXG/patients/gxg-kit-attributes.ts`: the demographics PATCH (skips `WBQA` kits).
- * - `GXG/results/gxg-results-payload-fetcher.ts`: presignedUrl, then a plain GET.
- * - `GXG/webhooks/gxg-webhook-event-source.ts` (+ signature and extractors): verification and
- *   the id reads that trigger a scoped sync.
- *
- * The acceptance tests drive the mock only through this, so "the mock works" means "our
- * consumer's own logic reaches the right outcome".
- */
 import { createHmac, timingSafeEqual } from "node:crypto"
 
 export type Fetch = (request: Request) => Promise<Response>
@@ -224,7 +205,7 @@ const page = <T>(data: unknown): Page<T> => {
 
 type Json = Record<string, unknown>
 
-/** `GXG/transport/gxg-client.ts` (plus the placement / attributes / subscription calls). */
+/** Order placement, attributes and subscription requests. */
 export class GxgClient {
   constructor(readonly http: GxgHttpClient) {}
 
@@ -378,7 +359,7 @@ export class GxgClient {
   }
 }
 
-// --- placement (gxg-product-placement.ts / gxg-shipping-options.ts) ----------------------------
+// --- placement ----------------------------
 
 export const GXG_SHIPPED_ORDER_ADDRESS_NOT_VALIDATED_FRAGMENT = "shipping address(es) not validated"
 export const GXG_ADDRESS_NOT_FOUND_FRAGMENT = "address not found"
@@ -522,7 +503,7 @@ export const placeOrder = async (
   return { ok: true, orderId: data.id, kitNumbers: extractKitNumbersFromGxgOrder(data), placement }
 }
 
-// --- kit demographics (gxg-kit-attributes.ts) ---------------------------------------------------
+// --- kit demographics ---------------------------------------------------
 
 export class GxgKitAttributesPatchError extends Error {
   constructor(
@@ -578,7 +559,7 @@ export const patchKitDemographics = async (
   return "patched"
 }
 
-// --- shipment address (gxg-shipment-address.ts) ------------------------------------------------
+// --- shipment address ------------------------------------------------
 
 export const patchOutboundShipmentAddress = async (
   client: GxgClient,
@@ -634,7 +615,7 @@ export const patchOutboundShipmentAddress = async (
   return line1 === patch.line1.trim() ? { ok: true } : { ok: false, reason: "address not applied" }
 }
 
-// --- three-layer cancel (gxg-order-cancel.service.ts) ------------------------------------------
+// --- three-layer cancel ------------------------------------------
 
 const isNotYetCancellable = (message: string) => /not in a cancellable status/i.test(message)
 const lineCancelled = (line: Json) =>
@@ -726,7 +707,7 @@ export const cancelOrder = async (client: GxgClient, orderId: string): Promise<C
   }
 }
 
-// --- results (gxg-results-payload-fetcher.ts) --------------------------------------------------
+// --- results --------------------------------------------------
 
 export type PresignedFetch =
   | { ok: true; contentType: string | undefined; bytes: Uint8Array }
@@ -758,7 +739,7 @@ export const fetchResultPayload = async (
   }
 }
 
-// --- webhook receiver (gxg-webhook-event-source.ts) --------------------------------------------
+// --- webhook receiver --------------------------------------------
 
 export const signGxgWebhookBody = (secret: string, rawBody: string | Buffer) =>
   `sha512=${createHmac("sha512", secret)

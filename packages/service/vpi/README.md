@@ -3,8 +3,7 @@
 > Local emulators. Real API contracts. Part of [Mockingbird](https://github.com/crvouga/mockingbird).
 
 > [!WARNING]
-> **Our app's `VPI_API_URL` defaults to PRODUCTION** (`https://api.vpicompounding.net`, see
-> `apps/backend/src/modules/erx/clients/vpi-api.client.ts`). An unset variable sends real
+> **Our app's `VPI_API_URL` defaults to PRODUCTION** (`https://api.vpicompounding.net`). An unset variable sends real
 > prescriptions to the real pharmacy. The stack **must** set `VPI_API_URL` to this emulator (e.g.
 > `http://127.0.0.1:8802`) whenever the VPI rail is reachable.
 

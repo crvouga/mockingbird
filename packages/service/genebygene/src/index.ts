@@ -152,7 +152,7 @@ export {
 
 export const GENEBYGENE_NAMESPACE = "genebygene"
 
-/** Kit statuses, in ladder order (`GXG/docs/llm/06-order-kit-status-lifecycle.md`). */
+/** Kit statuses, in ladder order. */
 export const KIT_STATUSES = [
   "Not Received",
   "Received",
@@ -1446,7 +1446,7 @@ export class GeneByGeneAPI implements FetchAPI {
     })
   }
 
-  // --- the three cancel layers (GXG/orders/gxg-order-cancel.service.ts) ------------------------
+  // --- the three cancel layers ------------------------
 
   private cancelConflict(context: OperationContext): Response | undefined {
     return faultEffect(context.request, "cancel_conflict") !== undefined

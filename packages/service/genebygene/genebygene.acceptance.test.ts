@@ -297,7 +297,7 @@ describe("S2.9 acceptance: our consumer's logic against the mock", () => {
     expect(kitDto[0]).toMatchObject({ status: "Error", errors: ["19"] })
   })
 
-  test("webhook bodies have the recorded samples' keys (GXG/docs/webhook-events.json)", async () => {
+  test("webhook bodies have the recorded samples' keys", async () => {
     const { admin, settle, place } = await harness()
     const { orderId, kitNumbers } = await place()
     const kit = kitNumbers[0] as string

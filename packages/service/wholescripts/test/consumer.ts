@@ -1,15 +1,3 @@
-/**
- * Ports of our three Wholescripts consumers, so "the mock works" means "our consumers' own
- * logic reaches the right outcome":
- *
- * - {@link BackendWholescriptsClient}: `apps/backend/.../wholescripts/wholescripts.service.ts`
- *   and its zod schemas (`wholescripts.types.ts`, verbatim below): Basic auth, schema-checked
- *   responses (a mismatch logs and yields `data: null`), the private-label restructure, and
- *   `supplements.service.ts`'s "place, then read the status back".
- * - {@link fetchEmrProductList}: the EMR's `getAllProducts` (`ProductList?instockonly=true&limit=1000`).
- * - {@link SchedulerWholescriptsAdapter}: the supplement scheduler's Python client, adapter and mappers
- *   (`supplement_management/app/adapters/wholescripts/{client,adapter,mappers}.py`).
- */
 import z from "zod"
 
 export type Fetch = (request: Request) => Promise<Response>

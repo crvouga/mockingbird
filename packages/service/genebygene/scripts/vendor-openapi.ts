@@ -346,7 +346,6 @@ const identity = (type: string) => ({
 })
 const volatile = (kind: string) => ({ "x-mockingbird-volatile": { kind } })
 
-// Observed in docs/gxg-list-products-*.json.
 props(".ProductDto").preassembly = { type: "boolean" }
 
 // Mockingbird's schema walker does not follow cycles: break the two recursive schemas one
@@ -372,8 +371,7 @@ props(".KitOrderLineDto").orderLines = {
 }
 annotate(".ProductDto", "id", { "x-mockingbird-resource": { type: "product", identity: true } })
 
-// Observed in docs/gxg-list-orders-prod.json (placerOrderNumber) and read by
-// GXG/orders/gxg-order-kit-numbers.ts (kitNumbers).
+// Order line responses also carry placement and kit identifiers.
 Object.assign(props(".OrderLineDto"), {
   placerOrderNumber: { type: "string", nullable: true },
   kitNumbers: {
@@ -449,7 +447,7 @@ annotate("EditAddressCommand", "id", {
 // full address (the edit replaces, never merges).
 schemaNamed("EditAddressCommand").required = ["id", "address"]
 
-// The live API answers `null` for these object refs (docs/gxg-list-orders-prod.json).
+// The live API answers `null` for these object refs.
 for (const name of [".ShipmentDto", "EditAddressCommand"]) {
   props(name).courier = { ...ref(".CourierDto"), nullable: true }
   props(name).courierService = { ...ref(".CourierServiceDto"), nullable: true }

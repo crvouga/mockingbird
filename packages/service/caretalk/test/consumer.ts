@@ -1,15 +1,3 @@
-/**
- * A port of our backend's CareTalk client (`apps/backend/src/modules/global-services/services/
- * caretalk/caretalk-client.service.ts` with its zod schemas from `caretalk.types.ts`, and the
- * form-submission transform in its forms adapter `form-adapters.ts`): the same paths,
- * headers, token cache (Redis, 3600 s), the one-shot re-login on 401, the `safeParse` →
- * `data: null` behaviour, "400 means no such patient", and `transformFormData`.
- *
- * Differences from the app, all at the seams: the base URL is injected (the app reads
- * `CARETALK_API_URL`, https-only, and `getFormData` hardcodes `https://api.caretalkbeta.com`),
- * Redis is an in-memory map on an injected clock, and Nest exceptions are plain `Error`s with
- * the same messages. The zod schemas are hand-ported as field/type checks.
- */
 export type Fetch = (input: string, init?: RequestInit) => Promise<Response>
 
 export class InternalServerErrorException extends Error {}

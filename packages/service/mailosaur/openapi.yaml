@@ -5,13 +5,10 @@ info:
     Stateful emulator subset of the Mailosaur email/SMS testing API: message search (the SDK's
     client-side long-poll behind `messages.get`), list, get by id, delete, delete-all, create,
     and the server-side `await` long-poll. Hand-authored from the `mailosaur@11.1.0` Node SDK
-    (the exact requests it sends and the fields its models read) and our consumer's
-    `mailosaur-client.ts`.
+    (the exact requests it sends and the fields its models read).
   version: "1"
   x-mockingbird-upstream:
-    note: >-
-      Hand-authored from mailosaur@11.1.0 (esm/operations/messages.js, esm/models/*.js) and
-      apps/backend/src/modules/dev-tools/lib/mailosaur-client.ts.
+    note: Based on the request and response models in the mailosaur 11.1.0 Node SDK.
 servers:
   - url: https://mailosaur.com
 security:
