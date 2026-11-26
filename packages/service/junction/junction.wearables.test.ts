@@ -428,7 +428,7 @@ describe("#758 webhook events past the three labtest ones", () => {
     const { runtime, userId } = await setup()
     const order = await admin(runtime, "POST", "/orders", {
       user_id: userId,
-      lab_test_id: "b439efda-1e07-4d2c-8afb-51771c7cc0cb",
+      lab_test_id: "10000000-0000-4000-8000-000000000003",
       status: "requisition_created",
     })
     expect(order.status).toBe(201)

@@ -14,7 +14,7 @@ import { verifyAgainstReal } from "./src/verify.js"
 const params = fcParameters(process.env)
 const AUTH = { "x-vital-api-key": "sk_us_test" }
 const HOST = "http://mock.local"
-const LAB_TEST = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
+const LAB_TEST = "10000000-0000-4000-8000-000000000001"
 
 type Json = Record<string, unknown>
 

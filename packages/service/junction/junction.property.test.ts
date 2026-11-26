@@ -139,7 +139,7 @@ describe("JunctionAPI", () => {
             zip: "92101",
             country: "US",
           },
-          order_set: { lab_test_ids: ["c533549c-1e62-4afe-9a0e-0567a9b2bcc2"] },
+          order_set: { lab_test_ids: ["10000000-0000-4000-8000-000000000001"] },
         }),
       }),
     )

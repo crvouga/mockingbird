@@ -76,7 +76,7 @@ await server.close()
 | `POST /api/v1/orders` | Validates the submit payload against the contract; a violation is 422 `{message, errors: {"patient.phone": ["…"]}}`. An inactive or unknown `preset_catalog_id` is 422 (under `unknownPresets: "accept"` an unknown UUID becomes an active catalog row named after the request's `medication_name`). A repeated `order.sender_order_id` is 409. Success: `{success: true, order_tracking_id: "RXV-…", sender_order_id, status: "Created"}` (the tracking id is always a string). |
 | `GET /api/v1/orders/{id}` | `id` is the tracking id **or** the sender order id (our payment id, the recovery lookup). Returns `rxstatus`, `orderstatus`, `shipping_status`, `delivered_date`, `trackingnumber`, `shippingservice`, `shippingcarrier`, `shipmenttrackingurl`, `cancellable`, and the id under `order_tracking_id`, `tracking_id` and `orderReferenceID`. |
 | `DELETE /api/v1/orders/{id}` | Cancels while `cancellable` (until shipped), emitting the webhook; otherwise 409. |
-| `GET /api/v1/preset-catalog-items` | `{data: [...]}` rows with `catalog_id`, `medication_name`, `medication_strength`, `package_size`, `quantity`, `quantity_units`, `medication_form`, `route`, `states`, `status`. Includes the custom-cream anchor preset `e404ad76-0f82-4b04-8f25-841650e2e819` and one inactive row. |
+| `GET /api/v1/preset-catalog-items` | `{data: [...]}` rows with `catalog_id`, `medication_name`, `medication_strength`, `package_size`, `quantity`, `quantity_units`, `medication_form`, `route`, `states`, `status`. Includes the custom-cream anchor preset `00000000-0000-4000-8000-000000000001` and one inactive row. |
 
 ### Webhooks
 
@@ -130,7 +130,7 @@ the client id they were issued to).
 | `RXVORTEX_PRESETS` | object | Every named fault preset. |
 | `RXVORTEX_NAMESPACE` | string | The service name, `"rxvortex"`. |
 | `tokenCredential` | function | The client id a bearer token was issued to (how credentials map to namespaces). |
-| `CUSTOM_CREAM_ANCHOR_PRESET_ID` | string | The sandbox custom-cream anchor preset id. |
+| `CUSTOM_CREAM_ANCHOR_PRESET_ID` | string | The synthetic custom-cream anchor preset id. |
 | `DEFAULT_CATALOG` | array | The default preset catalog rows. |
 | `parseCatalog`, `parseCatalogItem` | functions | Catalog rows from a JSON array or a recorded `{data: [...]}` body (missing optional fields default to `null`, `states` to `[]`, `status` to `"active"`); throw on a malformed row. |
 | `document`, `operationIds`, `supportedOperationIds` | values | The vendored OpenAPI contract and its operation ids. |

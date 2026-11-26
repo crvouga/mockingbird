@@ -13,8 +13,8 @@ import {
 const params = fcParameters(process.env)
 const AUTH = { "x-vital-api-key": "sk_us_test" }
 const HOST = "http://mock.local"
-const LAB_TEST = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2" // walk-in CMP, Labcorp
-const AT_HOME = "b439efda-1e07-4d2c-8afb-51771c7cc0cb" // at-home lipid panel, Labcorp
+const LAB_TEST = "10000000-0000-4000-8000-000000000001" // walk-in CMP, Labcorp
+const AT_HOME = "10000000-0000-4000-8000-000000000003" // at-home lipid panel, Labcorp
 
 type Json = Record<string, unknown>
 

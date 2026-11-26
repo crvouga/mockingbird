@@ -11,8 +11,7 @@ verification below is purely repo-local.
 ## Hermetic sealed corpus
 
 Provider-owned geo inventory (area serviceability, PSC site lists, lab catalog, team labs,
-lab accounts) is not synthesizable, so it is captured as an exact sandbox recording and
-committed at `corpus/sandbox-sealed.json`.
+lab accounts) is not synthesizable, so private replay uses a recording from the intended sandbox.
 
 Serialized reads the corpus covers only **parameter-stable GETs**:
 
@@ -25,17 +24,7 @@ Availability is **not** recorded: sealed availability bodies carry far-future sl
 single-use `booking_key`s that can never match a live `start_date` cache key. Availability
 stays with the deterministic generator.
 
-The recording is shipped in the package (`@crvouga/mockingbird-service-junction/corpus`) and is
-what `mockingbird-junction serve` loads by default. Re-record it (requires a sandbox key —
-`JUNCTION_API_KEY` in the environment):
-
-```bash
-cd packages/service/junction
-bun run corpus:record -- --force # rewrites corpus/sandbox-sealed.json via pullCorpus
-```
-
-A consumer records its own team instead, with `npx mockingbird-junction corpus pull --out <file>`,
-and compares recordings with `corpus diff`.
+The package exports a synthetic example from `@crvouga/mockingbird-service-junction/corpus`. Run `npx mockingbird-junction corpus pull --out <private-file>` to capture your team's data, then compare private recordings with `corpus diff`.
 
 Serve the emulator with the corpus installed:
 

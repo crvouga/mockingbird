@@ -8,7 +8,7 @@ import {
   SUPPORTED_SEALED_CORPUS_VERSIONS,
 } from "./src/index.js"
 
-const corpusPath = new URL("./corpus/sandbox-sealed.json", import.meta.url)
+const corpusPath = new URL("./corpus/example.json", import.meta.url)
 const corpus = parseSealedCorpus(JSON.parse(readFileSync(corpusPath, "utf8")))
 
 /** SDK-shaped area/PSC observation keys (`?zip_code=…&radius=100`). */

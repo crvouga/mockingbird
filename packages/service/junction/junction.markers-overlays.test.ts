@@ -35,10 +35,10 @@ const call = async (
   return { status: response.status, body: parsed }
 }
 
-const LIPID = "b439efda-1e07-4d2c-8afb-51771c7cc0cb"
+const LIPID = "10000000-0000-4000-8000-000000000003"
 const OVERLAY_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 const OVERLAY_ID_2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
-const FEMALE_WELLNESS = "0cb9f34f-c3df-4a13-8ca1-19429a82611b"
+const FEMALE_WELLNESS = "10000000-0000-4000-8000-000000000002"
 
 const catalog: NonNullable<JunctionRuntimeOptions["markerCatalog"]> = [
   {
@@ -98,7 +98,7 @@ test("#470: GET /v3/lab_tests/markers lists markers, filters a_la_carte_enabled 
   const all = await call(mock, "GET", "/v3/lab_tests/markers?size=100")
   expect(all.status).toBe(200)
   const ids = all.body.markers.map((marker: Json) => marker.id)
-  expect(ids).toEqual(expect.arrayContaining([1975, 2075, 9001, 9002, 9003, 9004]))
+  expect(ids).toEqual(expect.arrayContaining([7002, 7001, 9001, 9002, 9003, 9004]))
   expect(all.body).toMatchObject({ page: 1, size: 100, pages: 1 })
   expect(all.body.pricing).toBeUndefined()
 
@@ -178,7 +178,7 @@ test("#470: inactive lab tests and non-orderable markers are not offered", async
 test("#470: GET /v3/lab_tests lists inactive tests unless status=active is passed (best guess, default unverified)", async () => {
   const mock = createRuntime({
     catalogOverlays: [
-      { from: "lipid_panel_athome", id: OVERLAY_ID, name: "Retired", status: "inactive" },
+      { from: "example_at_home", id: OVERLAY_ID, name: "Retired", status: "inactive" },
     ],
   })
   const ids = async (query: string) =>
@@ -207,9 +207,9 @@ test("#470: estimate_order_set_pricing prices lab tests and add-on markers", asy
   expect(res.body.currency).toBe("USD")
   expect(res.body.data).toHaveLength(3)
   expect(res.body.data[0]).toEqual({
-    aggregate_pricing: { base_amount_minor: 4500 },
+    aggregate_pricing: { base_amount_minor: 1000 },
     components: [
-      { id: "lab_charge", pricing: { base_amount_minor: 4500 }, marker_breakdown: null },
+      { id: "lab_charge", pricing: { base_amount_minor: 1000 }, marker_breakdown: null },
     ],
   })
   expect(res.body.data[1].aggregate_pricing).toEqual({ base_amount_minor: 4350 })
@@ -273,7 +273,7 @@ const placeAddOnOrder = async (mock: ReturnType<typeof createRuntime>) => {
   const placed = await call(mock, "POST", "/v3/order", {
     user_id: USER,
     lab_account_id: ACCOUNT,
-    order_set: { add_on: { provider_ids: ["303756"] } },
+    order_set: { add_on: { provider_ids: ["DEMO-7002"] } },
     collection_method: "at_home_phlebotomy",
     billing_type: "client_bill",
     patient_details: {
@@ -321,9 +321,14 @@ test("#470: add-on result lines name their source markers only when asked to", a
   expect(plain.results[0].source_markers).toBeUndefined()
 
   const named = await placeAddOnOrder(createRuntime({ ...options, addOnSourceMarkers: true }))
-  const line = named.results.find((entry: Json) => entry.provider_id === "303756")
+  const line = named.results.find((entry: Json) => entry.provider_id === "DEMO-7002")
   expect(line.source_markers).toEqual([
-    { marker_id: 1975, name: "Lipid Panel", slug: "lipid-panel", provider_id: "303756" },
+    {
+      marker_id: 7002,
+      name: "Example lipid marker",
+      slug: "example-lipid",
+      provider_id: "DEMO-7002",
+    },
   ])
 })
 
@@ -331,7 +336,7 @@ test("#471: catalog overlays clone a lab test under a new id, name, slug and lab
   const mock = createRuntime({
     catalogOverlays: [
       {
-        from: "lipid_panel_athome",
+        from: "example_at_home",
         id: OVERLAY_ID,
         name: "Lipid Panel: Quest",
         lab: "sonora_quest",

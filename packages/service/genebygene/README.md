@@ -17,8 +17,7 @@ slot with 15 s sleeps and 300 s waits resolve in milliseconds.
 
 - Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/genebygene/SUPPORT.md)
   (30 of the 51 operations; every one our consumer calls).
-- Contract: `openapi.yaml` is the full Nucleus v2 Swagger document our consumer commits
-  (`GXG/transport/spec/gxg-openapi.json`, from `demo-api.genebygene.com`), vendored by
+- Contract: `openapi.yaml` is the public Nucleus v2 Swagger document from `demo-api.genebygene.com/swagger/v2/swagger.json`, vendored by
   `scripts/vendor-openapi.ts`. The script adds operationIds and Mockingbird annotations, the fields
   the live API returns but Swagger omits (`ProductDto.preassembly`,
   `OrderLineDto.placerOrderNumber`/`kitNumbers`, `CreateOrder_Item.placerOrderNumber`, `null`
@@ -260,9 +259,7 @@ secret, and to `--webhook-url` (all events) signed with `--webhook-secret`:
 | `POST /__admin/tokens/revoke` | Every token issued so far answers 401. |
 | `GET /__admin/orders`, `/__admin/kits` | The namespace's records. |
 
-Result fixtures: `normal` is our consumer's own comprehensive-report fixture (synthetic "Jane
-Doe", trimmed to one item per section); `pgx` and `ancestry` are synthetic reports in the same
-schema. Every fixture publishes the JSON report (`nutrigenomics_comprehensive_report_json`) and
+The `normal`, `pgx` and `ancestry` fixtures use synthetic reports. Every fixture publishes the JSON report (`nutrigenomics_comprehensive_report_json`) and
 the raw-data CSV (`nt_custom_agena_panel_data`, columns `RSID,CHROMOSOME,POSITION,RESULT`).
 
 Fault presets (`POST /__admin/faults {"preset": "<name>", "count"?, "latencyMs"?}`):

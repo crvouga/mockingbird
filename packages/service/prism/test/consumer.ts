@@ -1,7 +1,5 @@
 /**
- * A port of our backend's Prism adapter (`apps/backend/src/modules/body-scan/adapters/
- * outbound/prism-scan.adapter.ts`) and the capture page's upload
- * (`packages/body-scan-capture-page/src/main.ts`): the same paths, `Accept:
+ * Test client for the scan lifecycle and capture upload, including `Accept:
  * application/json;v=1`, bearer key, `unit-system=metric`, timeouts (30 s, 5 s for stage
  * states), result statuses (404 → `not_found`, any other failure, schema mismatch or thrown
  * fetch → `unavailable`, no credentials → `unavailable` without a request), and the mapping of

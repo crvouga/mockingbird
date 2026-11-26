@@ -359,7 +359,7 @@ export class PostHogHogqlClient {
         "MARKETING_METRICS_POSTHOG_READ_KEY is required for marketing engagement metrics",
       )
     }
-    const projectId = options.projectId ?? 339666
+    const projectId = options.projectId ?? 102
     const response = await this.fetcher(`${this.host}/api/projects/${projectId}/query/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${readKey}`, "Content-Type": "application/json" },
@@ -425,7 +425,7 @@ export class EmrFeatureFlagsService {
   }
 
   isMemberTaggingProgramEnabled(distinctId: string) {
-    return this.evaluateFlag("b2b-member-tagging", distinctId)
+    return this.evaluateFlag("example-tags", distinctId)
   }
 
   async shutdown() {
