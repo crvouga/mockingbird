@@ -1,0 +1,3472 @@
+{
+  "version": 2,
+  "recordedAt": "2025-01-01T00:00:00Z",
+  "source": "https://example.invalid",
+  "teamId": "11111111-1111-4111-8111-111111111111",
+  "observations": {
+    "GET /v3/lab_test": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "data": [
+          {
+            "id": "10000000-0000-4000-8000-000000000001",
+            "slug": "example_walk_in",
+            "name": "Example walk-in panel",
+            "method": "walk_in_test",
+            "sample_type": "serum",
+            "price": 10,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 6,
+              "slug": "labcorp",
+              "name": "Labcorp",
+              "first_line_address": "1 Example Street",
+              "city": "Example City",
+              "zipcode": "00000",
+              "collection_methods": [
+                "at_home_phlebotomy",
+                "walk_in_test",
+                "on_site_collection"
+              ],
+              "sample_types": [
+                "serum"
+              ],
+              "logo_url": null
+            },
+            "markers": [
+              {
+                "id": 7001,
+                "name": "Example serum marker",
+                "slug": "example-serum",
+                "description": "Example serum marker",
+                "lab_id": 6,
+                "provider_id": "DEMO-7001",
+                "type": "biomarker",
+                "unit": null,
+                "price": "N/A",
+                "aoe": {
+                  "questions": [
+                    {
+                      "id": 1,
+                      "required": false,
+                      "code": "FASTING",
+                      "value": "Fasting?",
+                      "type": "choice",
+                      "sequence": 1,
+                      "answers": [
+                        {
+                          "id": 1,
+                          "code": "N",
+                          "value": "No"
+                        },
+                        {
+                          "id": 2,
+                          "code": "Y",
+                          "value": "Yes"
+                        }
+                      ],
+                      "constraint": null,
+                      "default": null
+                    }
+                  ]
+                },
+                "a_la_carte_enabled": true,
+                "common_tat_days": 3,
+                "worst_case_tat_days": 5,
+                "is_orderable": true
+              }
+            ],
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          },
+          {
+            "id": "10000000-0000-4000-8000-000000000002",
+            "slug": "example_home_kit",
+            "name": "Example home kit",
+            "method": "testkit",
+            "sample_type": "dried_blood_spot",
+            "price": 10,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 3,
+              "slug": "ussl",
+              "name": "USSL",
+              "first_line_address": "1 Example Street",
+              "city": "Example City",
+              "zipcode": "00000",
+              "collection_methods": [
+                "testkit"
+              ],
+              "sample_types": [
+                "dried_blood_spot"
+              ],
+              "logo_url": null
+            },
+            "markers": null,
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          },
+          {
+            "id": "10000000-0000-4000-8000-000000000003",
+            "slug": "example_at_home",
+            "name": "Example at-home panel",
+            "method": "at_home_phlebotomy",
+            "sample_type": "serum",
+            "price": 10,
+            "is_active": true,
+            "status": "active",
+            "fasting": false,
+            "lab": {
+              "id": 6,
+              "slug": "labcorp",
+              "name": "Labcorp",
+              "first_line_address": "1 Example Street",
+              "city": "Example City",
+              "zipcode": "00000",
+              "collection_methods": [
+                "at_home_phlebotomy",
+                "walk_in_test",
+                "on_site_collection"
+              ],
+              "sample_types": [
+                "serum"
+              ],
+              "logo_url": null
+            },
+            "markers": [
+              {
+                "id": 7002,
+                "name": "Example lipid marker",
+                "slug": "example-lipid",
+                "description": "Example lipid marker",
+                "lab_id": 6,
+                "provider_id": "DEMO-7002",
+                "type": "biomarker",
+                "unit": null,
+                "price": "N/A",
+                "aoe": {
+                  "questions": [
+                    {
+                      "id": 1,
+                      "required": false,
+                      "code": "FASTING",
+                      "value": "Fasting?",
+                      "type": "choice",
+                      "sequence": 1,
+                      "answers": [
+                        {
+                          "id": 1,
+                          "code": "N",
+                          "value": "No"
+                        },
+                        {
+                          "id": 2,
+                          "code": "Y",
+                          "value": "Yes"
+                        }
+                      ],
+                      "constraint": null,
+                      "default": null
+                    }
+                  ]
+                },
+                "a_la_carte_enabled": true,
+                "common_tat_days": 3,
+                "worst_case_tat_days": 5,
+                "is_orderable": true
+              }
+            ],
+            "is_delegated": false,
+            "auto_generated": false,
+            "has_collection_instructions": false,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5
+          }
+        ],
+        "next_cursor": null
+      }
+    },
+    "GET /v3/lab_test/lab_account": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "data": [
+          {
+            "id": "11368265-91fe-48aa-86e2-ac5612669445",
+            "lab": "quest",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "active",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "VxhekwcyZsd98g8C",
+            "account_name": "Quest Diagnostics — primary",
+            "default_clinical_notes": null,
+            "business_units": [
+              "core",
+              "specialty"
+            ],
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ],
+              "commercial_insurance": [
+                "AZ",
+                "CA"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          },
+          {
+            "id": "db867996-bbe4-49d5-8344-1a1304066bbc",
+            "lab": "quest",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "pending",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "hXZS3LOzSGkwoCDr",
+            "account_name": "Quest Diagnostics — pending",
+            "default_clinical_notes": null,
+            "business_units": null,
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          },
+          {
+            "id": "99f435f7-8236-49c8-8f17-9a7b33179e9f",
+            "lab": "nexus",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "active",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "YknVfP20ZUHo3HkK",
+            "account_name": "Nexus — A",
+            "default_clinical_notes": null,
+            "business_units": null,
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          },
+          {
+            "id": "67a95477-3637-492e-81f2-53d3a4e50938",
+            "lab": "nexus",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "active",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "yL4k66Ip9mwB23DK",
+            "account_name": "Nexus — B",
+            "default_clinical_notes": null,
+            "business_units": null,
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          },
+          {
+            "id": "a9a37c9a-5846-4383-8c37-6e9334778c48",
+            "lab": "mtl",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "suspended",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "PsIzqQuGMv178k5B",
+            "account_name": "Molecular Testing Labs — suspended",
+            "default_clinical_notes": null,
+            "business_units": null,
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          },
+          {
+            "id": "c4d94762-474f-439a-8797-3b18360c18d6",
+            "lab": "mtl",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "pending",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "G7vf6KkNC5yZ4YxK",
+            "account_name": null,
+            "default_clinical_notes": null,
+            "business_units": null,
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          },
+          {
+            "id": "7155d209-1786-4b13-8694-5790a3988790",
+            "lab": "crl",
+            "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+            "status": "ready_to_launch",
+            "delegated_flow": "not_delegated",
+            "provider_account_id": "jUhkgIPN4RSm8YgR",
+            "account_name": null,
+            "default_clinical_notes": null,
+            "business_units": null,
+            "allowed_billing": {
+              "client_bill": [
+                "AL",
+                "AK",
+                "AZ",
+                "AR",
+                "CA",
+                "CO",
+                "CT",
+                "DE",
+                "FL",
+                "GA",
+                "HI",
+                "ID",
+                "IL",
+                "IN",
+                "IA",
+                "KS",
+                "KY",
+                "LA",
+                "ME",
+                "MD",
+                "MA",
+                "MI",
+                "MN",
+                "MS",
+                "MO",
+                "MT",
+                "NE",
+                "NV",
+                "NH",
+                "NJ",
+                "NM",
+                "NY",
+                "NC",
+                "ND",
+                "OH",
+                "OK",
+                "OR",
+                "PA",
+                "RI",
+                "SC",
+                "SD",
+                "TN",
+                "TX",
+                "UT",
+                "VT",
+                "VA",
+                "WA",
+                "WV",
+                "WI",
+                "WY"
+              ]
+            },
+            "team_id_allowlist": [
+              "11111111-1111-4111-8111-111111111111"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/lab_tests": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": [
+        {
+          "id": "10000000-0000-4000-8000-000000000001",
+          "slug": "example_walk_in",
+          "name": "Example walk-in panel",
+          "method": "walk_in_test",
+          "sample_type": "serum",
+          "price": 10,
+          "is_active": true,
+          "status": "active",
+          "fasting": false,
+          "lab": {
+            "id": 6,
+            "slug": "labcorp",
+            "name": "Labcorp",
+            "first_line_address": "1 Example Street",
+            "city": "Example City",
+            "zipcode": "00000",
+            "collection_methods": [
+              "at_home_phlebotomy",
+              "walk_in_test",
+              "on_site_collection"
+            ],
+            "sample_types": [
+              "serum"
+            ],
+            "logo_url": null
+          },
+          "markers": [
+            {
+              "id": 7001,
+              "name": "Example serum marker",
+              "slug": "example-serum",
+              "description": "Example serum marker",
+              "lab_id": 6,
+              "provider_id": "DEMO-7001",
+              "type": "biomarker",
+              "unit": null,
+              "price": "N/A",
+              "aoe": {
+                "questions": [
+                  {
+                    "id": 1,
+                    "required": false,
+                    "code": "FASTING",
+                    "value": "Fasting?",
+                    "type": "choice",
+                    "sequence": 1,
+                    "answers": [
+                      {
+                        "id": 1,
+                        "code": "N",
+                        "value": "No"
+                      },
+                      {
+                        "id": 2,
+                        "code": "Y",
+                        "value": "Yes"
+                      }
+                    ],
+                    "constraint": null,
+                    "default": null
+                  }
+                ]
+              },
+              "a_la_carte_enabled": true,
+              "common_tat_days": 3,
+              "worst_case_tat_days": 5,
+              "is_orderable": true
+            }
+          ],
+          "is_delegated": false,
+          "auto_generated": false,
+          "has_collection_instructions": false,
+          "common_tat_days": 3,
+          "worst_case_tat_days": 5
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000002",
+          "slug": "example_home_kit",
+          "name": "Example home kit",
+          "method": "testkit",
+          "sample_type": "dried_blood_spot",
+          "price": 10,
+          "is_active": true,
+          "status": "active",
+          "fasting": false,
+          "lab": {
+            "id": 3,
+            "slug": "ussl",
+            "name": "USSL",
+            "first_line_address": "1 Example Street",
+            "city": "Example City",
+            "zipcode": "00000",
+            "collection_methods": [
+              "testkit"
+            ],
+            "sample_types": [
+              "dried_blood_spot"
+            ],
+            "logo_url": null
+          },
+          "markers": null,
+          "is_delegated": false,
+          "auto_generated": false,
+          "has_collection_instructions": false,
+          "common_tat_days": 3,
+          "worst_case_tat_days": 5
+        },
+        {
+          "id": "10000000-0000-4000-8000-000000000003",
+          "slug": "example_at_home",
+          "name": "Example at-home panel",
+          "method": "at_home_phlebotomy",
+          "sample_type": "serum",
+          "price": 10,
+          "is_active": true,
+          "status": "active",
+          "fasting": false,
+          "lab": {
+            "id": 6,
+            "slug": "labcorp",
+            "name": "Labcorp",
+            "first_line_address": "1 Example Street",
+            "city": "Example City",
+            "zipcode": "00000",
+            "collection_methods": [
+              "at_home_phlebotomy",
+              "walk_in_test",
+              "on_site_collection"
+            ],
+            "sample_types": [
+              "serum"
+            ],
+            "logo_url": null
+          },
+          "markers": [
+            {
+              "id": 7002,
+              "name": "Example lipid marker",
+              "slug": "example-lipid",
+              "description": "Example lipid marker",
+              "lab_id": 6,
+              "provider_id": "DEMO-7002",
+              "type": "biomarker",
+              "unit": null,
+              "price": "N/A",
+              "aoe": {
+                "questions": [
+                  {
+                    "id": 1,
+                    "required": false,
+                    "code": "FASTING",
+                    "value": "Fasting?",
+                    "type": "choice",
+                    "sequence": 1,
+                    "answers": [
+                      {
+                        "id": 1,
+                        "code": "N",
+                        "value": "No"
+                      },
+                      {
+                        "id": 2,
+                        "code": "Y",
+                        "value": "Yes"
+                      }
+                    ],
+                    "constraint": null,
+                    "default": null
+                  }
+                ]
+              },
+              "a_la_carte_enabled": true,
+              "common_tat_days": 3,
+              "worst_case_tat_days": 5,
+              "is_orderable": true
+            }
+          ],
+          "is_delegated": false,
+          "auto_generated": false,
+          "has_collection_instructions": false,
+          "common_tat_days": 3,
+          "worst_case_tat_days": 5
+        }
+      ]
+    },
+    "GET /v3/lab_tests/10000000-0000-4000-8000-000000000001/markers": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "markers": [
+          {
+            "id": 7001,
+            "name": "Example serum marker",
+            "slug": "example-serum",
+            "description": "Example serum marker",
+            "lab_id": 6,
+            "provider_id": "DEMO-7001",
+            "type": "biomarker",
+            "unit": null,
+            "price": "N/A",
+            "aoe": {
+              "questions": [
+                {
+                  "id": 1,
+                  "required": false,
+                  "code": "FASTING",
+                  "value": "Fasting?",
+                  "type": "choice",
+                  "sequence": 1,
+                  "answers": [
+                    {
+                      "id": 1,
+                      "code": "N",
+                      "value": "No"
+                    },
+                    {
+                      "id": 2,
+                      "code": "Y",
+                      "value": "Yes"
+                    }
+                  ],
+                  "constraint": null,
+                  "default": null
+                }
+              ]
+            },
+            "a_la_carte_enabled": true,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5,
+            "is_orderable": true,
+            "expected_results": [
+              {
+                "id": 7011,
+                "name": "Example serum result",
+                "slug": "example-result-7011",
+                "lab_id": 6,
+                "provider_id": "DEMO-R7011",
+                "required": true,
+                "loinc": null
+              }
+            ]
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "size": 50,
+        "pages": 1
+      }
+    },
+    "GET /v3/lab_tests/10000000-0000-4000-8000-000000000002/markers": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "markers": [],
+        "total": 0,
+        "page": 1,
+        "size": 50,
+        "pages": 0
+      }
+    },
+    "GET /v3/lab_tests/10000000-0000-4000-8000-000000000003/markers": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "markers": [
+          {
+            "id": 7002,
+            "name": "Example lipid marker",
+            "slug": "example-lipid",
+            "description": "Example lipid marker",
+            "lab_id": 6,
+            "provider_id": "DEMO-7002",
+            "type": "biomarker",
+            "unit": null,
+            "price": "N/A",
+            "aoe": {
+              "questions": [
+                {
+                  "id": 1,
+                  "required": false,
+                  "code": "FASTING",
+                  "value": "Fasting?",
+                  "type": "choice",
+                  "sequence": 1,
+                  "answers": [
+                    {
+                      "id": 1,
+                      "code": "N",
+                      "value": "No"
+                    },
+                    {
+                      "id": 2,
+                      "code": "Y",
+                      "value": "Yes"
+                    }
+                  ],
+                  "constraint": null,
+                  "default": null
+                }
+              ]
+            },
+            "a_la_carte_enabled": true,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5,
+            "is_orderable": true,
+            "expected_results": [
+              {
+                "id": 7012,
+                "name": "Example lipid result",
+                "slug": "example-result-7012",
+                "lab_id": 6,
+                "provider_id": "DEMO-R7012",
+                "required": true,
+                "loinc": null
+              }
+            ]
+          }
+        ],
+        "total": 1,
+        "page": 1,
+        "size": 50,
+        "pages": 1
+      }
+    },
+    "GET /v3/lab_tests/labs": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": [
+        {
+          "id": 6,
+          "slug": "labcorp",
+          "name": "Labcorp",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 3,
+          "slug": "ussl",
+          "name": "USSL",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "testkit"
+          ],
+          "sample_types": [
+            "dried_blood_spot"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 4,
+          "slug": "quest",
+          "name": "Quest",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 13,
+          "slug": "bioreference",
+          "name": "BioReference",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 25,
+          "slug": "sonora_quest",
+          "name": "Sonora Quest",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 22,
+          "slug": "nexus",
+          "name": "Nexus",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 27,
+          "slug": "mtl",
+          "name": "MTL",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 26,
+          "slug": "crl",
+          "name": "CRL",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        {
+          "id": 21,
+          "slug": "ihd",
+          "name": "IHD",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        }
+      ]
+    },
+    "GET /v3/order/area/info?radius=100&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "zip_code": "02108",
+        "phlebotomy": {
+          "is_served": false,
+          "providers": []
+        },
+        "central_labs": {
+          "sonora_quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 42,
+              "radius": "100",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "lab_id": 25
+          },
+          "labcorp": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 99,
+              "radius": "100",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 6
+          },
+          "bioreference": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 9,
+              "radius": "100",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "patient_bill_passthrough"
+            ],
+            "lab_id": 13
+          },
+          "quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 32,
+              "radius": "100",
+              "capabilities": [
+                "appointment_scheduling_via_junction"
+              ]
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 4
+          }
+        }
+      }
+    },
+    "GET /v3/order/area/info?radius=100&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "zip_code": "85004",
+        "phlebotomy": {
+          "is_served": true,
+          "providers": [
+            {
+              "name": "getlabs",
+              "service_types": [
+                "appointment-ready"
+              ]
+            }
+          ]
+        },
+        "central_labs": {
+          "sonora_quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 54,
+              "radius": "100",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "lab_id": 25
+          },
+          "labcorp": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 55,
+              "radius": "100",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 6
+          },
+          "bioreference": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 83,
+              "radius": "100",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "patient_bill_passthrough"
+            ],
+            "lab_id": 13
+          },
+          "quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 8,
+              "radius": "100",
+              "capabilities": [
+                "appointment_scheduling_via_junction"
+              ]
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 4
+          }
+        }
+      }
+    },
+    "GET /v3/order/area/info?zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "zip_code": "02108",
+        "phlebotomy": {
+          "is_served": false,
+          "providers": []
+        },
+        "central_labs": {
+          "sonora_quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 11,
+              "radius": "25",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "lab_id": 25
+          },
+          "labcorp": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 25,
+              "radius": "25",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 6
+          },
+          "bioreference": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 2,
+              "radius": "25",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "patient_bill_passthrough"
+            ],
+            "lab_id": 13
+          },
+          "quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 8,
+              "radius": "25",
+              "capabilities": [
+                "appointment_scheduling_via_junction"
+              ]
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 4
+          }
+        }
+      }
+    },
+    "GET /v3/order/area/info?zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "zip_code": "85004",
+        "phlebotomy": {
+          "is_served": true,
+          "providers": [
+            {
+              "name": "getlabs",
+              "service_types": [
+                "appointment-ready"
+              ]
+            }
+          ]
+        },
+        "central_labs": {
+          "sonora_quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 13,
+              "radius": "25",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "lab_id": 25
+          },
+          "labcorp": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 14,
+              "radius": "25",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 6
+          },
+          "bioreference": {
+            "patient_service_centers": {
+              "appointment_with_vital": false,
+              "within_radius": 21,
+              "radius": "25",
+              "capabilities": []
+            },
+            "supported_bill_types": [
+              "patient_bill_passthrough"
+            ],
+            "lab_id": 13
+          },
+          "quest": {
+            "patient_service_centers": {
+              "appointment_with_vital": true,
+              "within_radius": 2,
+              "radius": "25",
+              "capabilities": [
+                "appointment_scheduling_via_junction"
+              ]
+            },
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "lab_id": 4
+          }
+        }
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=13&radius=100&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 13,
+        "slug": "bioreference",
+        "patient_service_centers": []
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=13&radius=100&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 13,
+        "slug": "bioreference",
+        "patient_service_centers": []
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=13&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 13,
+        "slug": "bioreference",
+        "patient_service_centers": []
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=13&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 13,
+        "slug": "bioreference",
+        "patient_service_centers": []
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=25&radius=100&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 25,
+        "slug": "sonora_quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "sonora quest - Downtown",
+              "state": "NY",
+              "city": "Downtown",
+              "zip_code": "02108",
+              "first_line": "866 Main St",
+              "second_line": null,
+              "phone_number": "+18955552104",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "LCQ",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.31794230910019,
+              "lat": 37.69515861601569
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "sonora quest - Midtown",
+              "state": "NY",
+              "city": "Midtown",
+              "zip_code": "02108",
+              "first_line": "701 Main St",
+              "second_line": null,
+              "phone_number": "+17455556428",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "RID",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.30777893518098,
+              "lat": 37.685131478849804
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "sonora quest - Harbor",
+              "state": "NY",
+              "city": "Harbor",
+              "zip_code": "02108",
+              "first_line": "398 Main St",
+              "second_line": null,
+              "phone_number": "+14945552454",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 53,
+            "site_code": "WNR",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.3382690569386,
+              "lat": 37.715212890347466
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=25&radius=100&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 25,
+        "slug": "sonora_quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "sonora quest - Downtown",
+              "state": "CO",
+              "city": "Downtown",
+              "zip_code": "85004",
+              "first_line": "660 Main St",
+              "second_line": null,
+              "phone_number": "+15645554769",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "LCQ",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.31060646073894,
+              "lat": 37.798152131894604
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "sonora quest - Midtown",
+              "state": "CO",
+              "city": "Midtown",
+              "zip_code": "85004",
+              "first_line": "495 Main St",
+              "second_line": null,
+              "phone_number": "+14145559094",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "RID",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.30044308681973,
+              "lat": 37.78812499472872
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "sonora quest - Harbor",
+              "state": "CO",
+              "city": "Harbor",
+              "zip_code": "85004",
+              "first_line": "192 Main St",
+              "second_line": null,
+              "phone_number": "+18635555120",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 53,
+            "site_code": "WNR",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.33093320857733,
+              "lat": 37.81820640622639
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=25&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 25,
+        "slug": "sonora_quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "sonora quest - Downtown",
+              "state": "NY",
+              "city": "Downtown",
+              "zip_code": "02108",
+              "first_line": "866 Main St",
+              "second_line": null,
+              "phone_number": "+18955552104",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "LCQ",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.31794230910019,
+              "lat": 37.69515861601569
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "sonora quest - Midtown",
+              "state": "NY",
+              "city": "Midtown",
+              "zip_code": "02108",
+              "first_line": "701 Main St",
+              "second_line": null,
+              "phone_number": "+17455556428",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "RID",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.30777893518098,
+              "lat": 37.685131478849804
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=25&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 25,
+        "slug": "sonora_quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "sonora quest - Downtown",
+              "state": "CO",
+              "city": "Downtown",
+              "zip_code": "85004",
+              "first_line": "660 Main St",
+              "second_line": null,
+              "phone_number": "+15645554769",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "LCQ",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.31060646073894,
+              "lat": 37.798152131894604
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "sonora quest - Midtown",
+              "state": "CO",
+              "city": "Midtown",
+              "zip_code": "85004",
+              "first_line": "495 Main St",
+              "second_line": null,
+              "phone_number": "+14145559094",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "RID",
+            "supported_bill_types": [
+              "client_bill"
+            ],
+            "location": {
+              "lng": -122.30044308681973,
+              "lat": 37.78812499472872
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=4&radius=100&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 4,
+        "slug": "quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "quest - Downtown",
+              "state": "NY",
+              "city": "Downtown",
+              "zip_code": "02108",
+              "first_line": "431 Main St",
+              "second_line": null,
+              "phone_number": "+13595556367",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "ISW",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.45126285287552,
+              "lat": 37.717030976600945
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "quest - Midtown",
+              "state": "NY",
+              "city": "Midtown",
+              "zip_code": "02108",
+              "first_line": "596 Main St",
+              "second_line": null,
+              "phone_number": "+15095552042",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "DMI",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.46142622679473,
+              "lat": 37.72705811376684
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "quest - Harbor",
+              "state": "NY",
+              "city": "Harbor",
+              "zip_code": "02108",
+              "first_line": "899 Main St",
+              "second_line": null,
+              "phone_number": "+17605556016",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 53,
+            "site_code": "TDX",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.43093610503712,
+              "lat": 37.69697670226917
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=4&radius=100&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 4,
+        "slug": "quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "quest - Downtown",
+              "state": "CO",
+              "city": "Downtown",
+              "zip_code": "85004",
+              "first_line": "409 Main St",
+              "second_line": null,
+              "phone_number": "+12435551004",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "ISW",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.42536755162291,
+              "lat": 37.69334846649319
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "quest - Midtown",
+              "state": "CO",
+              "city": "Midtown",
+              "zip_code": "85004",
+              "first_line": "575 Main St",
+              "second_line": null,
+              "phone_number": "+13925555679",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "DMI",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.43553092554212,
+              "lat": 37.70337560365908
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "quest - Harbor",
+              "state": "CO",
+              "city": "Harbor",
+              "zip_code": "85004",
+              "first_line": "878 Main St",
+              "second_line": null,
+              "phone_number": "+16435559653",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 53,
+            "site_code": "TDX",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.40504080378452,
+              "lat": 37.673294192161414
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=4&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 4,
+        "slug": "quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "quest - Downtown",
+              "state": "NY",
+              "city": "Downtown",
+              "zip_code": "02108",
+              "first_line": "431 Main St",
+              "second_line": null,
+              "phone_number": "+13595556367",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "ISW",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.45126285287552,
+              "lat": 37.717030976600945
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "quest - Midtown",
+              "state": "NY",
+              "city": "Midtown",
+              "zip_code": "02108",
+              "first_line": "596 Main St",
+              "second_line": null,
+              "phone_number": "+15095552042",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "DMI",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.46142622679473,
+              "lat": 37.72705811376684
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=4&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 4,
+        "slug": "quest",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "quest - Downtown",
+              "state": "CO",
+              "city": "Downtown",
+              "zip_code": "85004",
+              "first_line": "409 Main St",
+              "second_line": null,
+              "phone_number": "+12435551004",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "ISW",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.42536755162291,
+              "lat": 37.69334846649319
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          },
+          {
+            "metadata": {
+              "name": "quest - Midtown",
+              "state": "CO",
+              "city": "Midtown",
+              "zip_code": "85004",
+              "first_line": "575 Main St",
+              "second_line": null,
+              "phone_number": "+13925555679",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "DMI",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.43553092554212,
+              "lat": 37.70337560365908
+            },
+            "capabilities": [
+              "appointment_scheduling_via_junction"
+            ]
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=6&radius=100&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 6,
+        "slug": "labcorp",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "labcorp - Downtown",
+              "state": "NY",
+              "city": "Downtown",
+              "zip_code": "02108",
+              "first_line": "148 Main St",
+              "second_line": null,
+              "phone_number": "+12005557317",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "57429",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.37161197438837,
+              "lat": 37.79554480801337
+            },
+            "capabilities": []
+          },
+          {
+            "metadata": {
+              "name": "labcorp - Midtown",
+              "state": "NY",
+              "city": "Midtown",
+              "zip_code": "02108",
+              "first_line": "783 Main St",
+              "second_line": null,
+              "phone_number": "+17505552643",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "76055",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.36144860046916,
+              "lat": 37.785517670847476
+            },
+            "capabilities": []
+          },
+          {
+            "metadata": {
+              "name": "labcorp - Harbor",
+              "state": "NY",
+              "city": "Harbor",
+              "zip_code": "02108",
+              "first_line": "617 Main St",
+              "second_line": null,
+              "phone_number": "+16005556967",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 53,
+            "site_code": "94682",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.35128522654996,
+              "lat": 37.77549053368159
+            },
+            "capabilities": []
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=6&radius=100&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 6,
+        "slug": "labcorp",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "labcorp - Downtown",
+              "state": "CO",
+              "city": "Downtown",
+              "zip_code": "85004",
+              "first_line": "725 Main St",
+              "second_line": null,
+              "phone_number": "+17505551653",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "57429",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.42621738612652,
+              "lat": 37.72257135177963
+            },
+            "capabilities": []
+          },
+          {
+            "metadata": {
+              "name": "labcorp - Midtown",
+              "state": "CO",
+              "city": "Midtown",
+              "zip_code": "85004",
+              "first_line": "560 Main St",
+              "second_line": null,
+              "phone_number": "+16005555978",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "76055",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.41605401220733,
+              "lat": 37.712544214613736
+            },
+            "capabilities": []
+          },
+          {
+            "metadata": {
+              "name": "labcorp - Harbor",
+              "state": "CO",
+              "city": "Harbor",
+              "zip_code": "85004",
+              "first_line": "394 Main St",
+              "second_line": null,
+              "phone_number": "+14505551303",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 53,
+            "site_code": "94682",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.40589063828811,
+              "lat": 37.70251707744785
+            },
+            "capabilities": []
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=6&zip_code=02108": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 6,
+        "slug": "labcorp",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "labcorp - Downtown",
+              "state": "NY",
+              "city": "Downtown",
+              "zip_code": "02108",
+              "first_line": "148 Main St",
+              "second_line": null,
+              "phone_number": "+12005557317",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "57429",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.37161197438837,
+              "lat": 37.79554480801337
+            },
+            "capabilities": []
+          },
+          {
+            "metadata": {
+              "name": "labcorp - Midtown",
+              "state": "NY",
+              "city": "Midtown",
+              "zip_code": "02108",
+              "first_line": "783 Main St",
+              "second_line": null,
+              "phone_number": "+17505552643",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "76055",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.36144860046916,
+              "lat": 37.785517670847476
+            },
+            "capabilities": []
+          }
+        ]
+      }
+    },
+    "GET /v3/order/psc/info?lab_id=6&zip_code=85004": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "lab_id": 6,
+        "slug": "labcorp",
+        "patient_service_centers": [
+          {
+            "metadata": {
+              "name": "labcorp - Downtown",
+              "state": "CO",
+              "city": "Downtown",
+              "zip_code": "85004",
+              "first_line": "725 Main St",
+              "second_line": null,
+              "phone_number": "+17505551653",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 5,
+            "site_code": "57429",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.42621738612652,
+              "lat": 37.72257135177963
+            },
+            "capabilities": []
+          },
+          {
+            "metadata": {
+              "name": "labcorp - Midtown",
+              "state": "CO",
+              "city": "Midtown",
+              "zip_code": "85004",
+              "first_line": "560 Main St",
+              "second_line": null,
+              "phone_number": "+16005555978",
+              "fax_number": null,
+              "hours": {
+                "monday": "08:00-17:00",
+                "tuesday": "08:00-17:00",
+                "wednesday": "08:00-17:00",
+                "thursday": "08:00-17:00",
+                "friday": "08:00-14:00"
+              }
+            },
+            "distance": 21,
+            "site_code": "76055",
+            "supported_bill_types": [
+              "client_bill",
+              "commercial_insurance",
+              "patient_bill"
+            ],
+            "location": {
+              "lng": -122.41605401220733,
+              "lat": 37.712544214613736
+            },
+            "capabilities": []
+          }
+        ]
+      }
+    }
+  },
+  "catalog": {
+    "labTests": [
+      {
+        "id": "10000000-0000-4000-8000-000000000001",
+        "slug": "example_walk_in",
+        "name": "Example walk-in panel",
+        "method": "walk_in_test",
+        "sample_type": "serum",
+        "price": 10,
+        "is_active": true,
+        "status": "active",
+        "fasting": false,
+        "lab": {
+          "id": 6,
+          "slug": "labcorp",
+          "name": "Labcorp",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        "markers": [
+          {
+            "id": 7001,
+            "name": "Example serum marker",
+            "slug": "example-serum",
+            "description": "Example serum marker",
+            "lab_id": 6,
+            "provider_id": "DEMO-7001",
+            "type": "biomarker",
+            "unit": null,
+            "price": "N/A",
+            "aoe": {
+              "questions": [
+                {
+                  "id": 1,
+                  "required": false,
+                  "code": "FASTING",
+                  "value": "Fasting?",
+                  "type": "choice",
+                  "sequence": 1,
+                  "answers": [
+                    {
+                      "id": 1,
+                      "code": "N",
+                      "value": "No"
+                    },
+                    {
+                      "id": 2,
+                      "code": "Y",
+                      "value": "Yes"
+                    }
+                  ],
+                  "constraint": null,
+                  "default": null
+                }
+              ]
+            },
+            "a_la_carte_enabled": true,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5,
+            "is_orderable": true
+          }
+        ],
+        "is_delegated": false,
+        "auto_generated": false,
+        "has_collection_instructions": false,
+        "common_tat_days": 3,
+        "worst_case_tat_days": 5
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000002",
+        "slug": "example_home_kit",
+        "name": "Example home kit",
+        "method": "testkit",
+        "sample_type": "dried_blood_spot",
+        "price": 10,
+        "is_active": true,
+        "status": "active",
+        "fasting": false,
+        "lab": {
+          "id": 3,
+          "slug": "ussl",
+          "name": "USSL",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "testkit"
+          ],
+          "sample_types": [
+            "dried_blood_spot"
+          ],
+          "logo_url": null
+        },
+        "markers": null,
+        "is_delegated": false,
+        "auto_generated": false,
+        "has_collection_instructions": false,
+        "common_tat_days": 3,
+        "worst_case_tat_days": 5
+      },
+      {
+        "id": "10000000-0000-4000-8000-000000000003",
+        "slug": "example_at_home",
+        "name": "Example at-home panel",
+        "method": "at_home_phlebotomy",
+        "sample_type": "serum",
+        "price": 10,
+        "is_active": true,
+        "status": "active",
+        "fasting": false,
+        "lab": {
+          "id": 6,
+          "slug": "labcorp",
+          "name": "Labcorp",
+          "first_line_address": "1 Example Street",
+          "city": "Example City",
+          "zipcode": "00000",
+          "collection_methods": [
+            "at_home_phlebotomy",
+            "walk_in_test",
+            "on_site_collection"
+          ],
+          "sample_types": [
+            "serum"
+          ],
+          "logo_url": null
+        },
+        "markers": [
+          {
+            "id": 7002,
+            "name": "Example lipid marker",
+            "slug": "example-lipid",
+            "description": "Example lipid marker",
+            "lab_id": 6,
+            "provider_id": "DEMO-7002",
+            "type": "biomarker",
+            "unit": null,
+            "price": "N/A",
+            "aoe": {
+              "questions": [
+                {
+                  "id": 1,
+                  "required": false,
+                  "code": "FASTING",
+                  "value": "Fasting?",
+                  "type": "choice",
+                  "sequence": 1,
+                  "answers": [
+                    {
+                      "id": 1,
+                      "code": "N",
+                      "value": "No"
+                    },
+                    {
+                      "id": 2,
+                      "code": "Y",
+                      "value": "Yes"
+                    }
+                  ],
+                  "constraint": null,
+                  "default": null
+                }
+              ]
+            },
+            "a_la_carte_enabled": true,
+            "common_tat_days": 3,
+            "worst_case_tat_days": 5,
+            "is_orderable": true
+          }
+        ],
+        "is_delegated": false,
+        "auto_generated": false,
+        "has_collection_instructions": false,
+        "common_tat_days": 3,
+        "worst_case_tat_days": 5
+      }
+    ],
+    "labs": [
+      {
+        "id": 6,
+        "slug": "labcorp",
+        "name": "Labcorp",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 3,
+        "slug": "ussl",
+        "name": "USSL",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "testkit"
+        ],
+        "sample_types": [
+          "dried_blood_spot"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 4,
+        "slug": "quest",
+        "name": "Quest",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 13,
+        "slug": "bioreference",
+        "name": "BioReference",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 25,
+        "slug": "sonora_quest",
+        "name": "Sonora Quest",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 22,
+        "slug": "nexus",
+        "name": "Nexus",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 27,
+        "slug": "mtl",
+        "name": "MTL",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 26,
+        "slug": "crl",
+        "name": "CRL",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      },
+      {
+        "id": 21,
+        "slug": "ihd",
+        "name": "IHD",
+        "first_line_address": "1 Example Street",
+        "city": "Example City",
+        "zipcode": "00000",
+        "collection_methods": [
+          "at_home_phlebotomy",
+          "walk_in_test",
+          "on_site_collection"
+        ],
+        "sample_types": [
+          "serum"
+        ],
+        "logo_url": null
+      }
+    ],
+    "expectedResults": {
+      "10000000-0000-4000-8000-000000000001": [
+        {
+          "id": 7011,
+          "name": "Example serum result",
+          "slug": "example-result-7011",
+          "lab_id": 6,
+          "provider_id": "DEMO-R7011",
+          "required": true,
+          "loinc": null
+        }
+      ],
+      "10000000-0000-4000-8000-000000000002": [],
+      "10000000-0000-4000-8000-000000000003": [
+        {
+          "id": 7012,
+          "name": "Example lipid result",
+          "slug": "example-result-7012",
+          "lab_id": 6,
+          "provider_id": "DEMO-R7012",
+          "required": true,
+          "loinc": null
+        }
+      ]
+    }
+  },
+  "labAccounts": [
+    {
+      "id": "11368265-91fe-48aa-86e2-ac5612669445",
+      "lab": "quest",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "active",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "VxhekwcyZsd98g8C",
+      "account_name": "Quest Diagnostics — primary",
+      "default_clinical_notes": null,
+      "business_units": [
+        "core",
+        "specialty"
+      ],
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ],
+        "commercial_insurance": [
+          "AZ",
+          "CA"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    {
+      "id": "db867996-bbe4-49d5-8344-1a1304066bbc",
+      "lab": "quest",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "pending",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "hXZS3LOzSGkwoCDr",
+      "account_name": "Quest Diagnostics — pending",
+      "default_clinical_notes": null,
+      "business_units": null,
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    {
+      "id": "99f435f7-8236-49c8-8f17-9a7b33179e9f",
+      "lab": "nexus",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "active",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "YknVfP20ZUHo3HkK",
+      "account_name": "Nexus — A",
+      "default_clinical_notes": null,
+      "business_units": null,
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    {
+      "id": "67a95477-3637-492e-81f2-53d3a4e50938",
+      "lab": "nexus",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "active",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "yL4k66Ip9mwB23DK",
+      "account_name": "Nexus — B",
+      "default_clinical_notes": null,
+      "business_units": null,
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    {
+      "id": "a9a37c9a-5846-4383-8c37-6e9334778c48",
+      "lab": "mtl",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "suspended",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "PsIzqQuGMv178k5B",
+      "account_name": "Molecular Testing Labs — suspended",
+      "default_clinical_notes": null,
+      "business_units": null,
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    {
+      "id": "c4d94762-474f-439a-8797-3b18360c18d6",
+      "lab": "mtl",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "pending",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "G7vf6KkNC5yZ4YxK",
+      "account_name": null,
+      "default_clinical_notes": null,
+      "business_units": null,
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    },
+    {
+      "id": "7155d209-1786-4b13-8694-5790a3988790",
+      "lab": "crl",
+      "org_id": "71f32da6-4a36-4763-89f2-8267c1351502",
+      "status": "ready_to_launch",
+      "delegated_flow": "not_delegated",
+      "provider_account_id": "jUhkgIPN4RSm8YgR",
+      "account_name": null,
+      "default_clinical_notes": null,
+      "business_units": null,
+      "allowed_billing": {
+        "client_bill": [
+          "AL",
+          "AK",
+          "AZ",
+          "AR",
+          "CA",
+          "CO",
+          "CT",
+          "DE",
+          "FL",
+          "GA",
+          "HI",
+          "ID",
+          "IL",
+          "IN",
+          "IA",
+          "KS",
+          "KY",
+          "LA",
+          "ME",
+          "MD",
+          "MA",
+          "MI",
+          "MN",
+          "MS",
+          "MO",
+          "MT",
+          "NE",
+          "NV",
+          "NH",
+          "NJ",
+          "NM",
+          "NY",
+          "NC",
+          "ND",
+          "OH",
+          "OK",
+          "OR",
+          "PA",
+          "RI",
+          "SC",
+          "SD",
+          "TN",
+          "TX",
+          "UT",
+          "VT",
+          "VA",
+          "WA",
+          "WV",
+          "WI",
+          "WY"
+        ]
+      },
+      "team_id_allowlist": [
+        "11111111-1111-4111-8111-111111111111"
+      ]
+    }
+  ],
+  "fingerprint": "7e8057651c8d01a1feb7373dcecaf1d4733c271386b4d2c78f252a660863305c"
+}

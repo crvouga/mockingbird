@@ -23,7 +23,7 @@ import { verifyAgainstReal } from "./src/verify.js"
 
 const params = fcParameters(process.env)
 const KEY = { "x-vital-api-key": "sk_us_test" }
-const AT_HOME_LABCORP = "b439efda-1e07-4d2c-8afb-51771c7cc0cb"
+const AT_HOME_LABCORP = "10000000-0000-4000-8000-000000000003"
 
 type Json = Record<string, unknown>
 
@@ -283,7 +283,7 @@ describe("A6 geo realism", () => {
     const pscDefaults = Object.keys(defaultCorpus.observations).filter(
       (key) => key.startsWith("GET /v3/order/psc/info?") && !key.includes("radius="),
     )
-    expect(pscDefaults.length).toBeGreaterThan(100)
+    expect(pscDefaults.length).toBeGreaterThan(1)
     const observations = Object.fromEntries(
       Object.entries(defaultCorpus.observations).filter(([key]) => !pscDefaults.includes(key)),
     )

@@ -64,7 +64,7 @@ describe("Junction client-facing lifecycle", () => {
         zip: "92101",
         country: "US",
       },
-      order_set: { lab_test_ids: ["c533549c-1e62-4afe-9a0e-0567a9b2bcc2"] },
+      order_set: { lab_test_ids: ["10000000-0000-4000-8000-000000000001"] },
       idempotency_key: "order-key-1",
     })
     const first = await request(api, "/v3/order", {
@@ -117,7 +117,7 @@ describe("Junction client-facing lifecycle", () => {
           zip: "92101",
           country: "US",
         },
-        order_set: { lab_test_ids: ["c533549c-1e62-4afe-9a0e-0567a9b2bcc2"] },
+        order_set: { lab_test_ids: ["10000000-0000-4000-8000-000000000001"] },
       }),
       headers: { "content-type": "application/json" },
     })
@@ -179,7 +179,7 @@ describe("Junction client-facing lifecycle", () => {
         zip: "92101",
         country: "US",
       },
-      order_set: { lab_test_ids: ["c533549c-1e62-4afe-9a0e-0567a9b2bcc2"] },
+      order_set: { lab_test_ids: ["10000000-0000-4000-8000-000000000001"] },
       idempotency_key: "same-key",
     }
     const first = await request(api, "/v3/order", {

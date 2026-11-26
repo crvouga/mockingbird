@@ -7,7 +7,7 @@ import fc from "fast-check"
 import { parseSealedCorpus } from "./src/index.js"
 
 const packageDir = dirname(fileURLToPath(import.meta.url))
-const corpusPath = join(packageDir, "corpus/sandbox-sealed.json")
+const corpusPath = join(packageDir, "corpus/example.json")
 const corpus = parseSealedCorpus(JSON.parse(readFileSync(corpusPath, "utf8")))
 const apiKey = "sk_us_mockingbird"
 

@@ -318,7 +318,7 @@ describe("Junction order lab-account routing", () => {
         const userId = await createUser(api)
         const labTestId =
           testCase.lab === "labcorp"
-            ? "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
+            ? "10000000-0000-4000-8000-000000000001"
             : syntheticLabTestId(testCase.lab)
         const response = await postOrder(
           api,
@@ -370,7 +370,7 @@ describe("Junction order billing rules", () => {
   test("platform accounts accept every billing type in every state", async () => {
     const api = await seededApi()
     // `ussl` uses Junction's platform account and has no lab-level state restriction.
-    const labTestId = "0cb9f34f-c3df-4a13-8ca1-19429a82611b"
+    const labTestId = "10000000-0000-4000-8000-000000000002"
 
     await fc.assert(
       fc.asyncProperty(
@@ -542,8 +542,8 @@ describe("Junction order billing rules", () => {
   test("ordering shipped lab tests without a lab account is unchanged", async () => {
     const api = await seededApi()
     for (const labTestId of [
-      "c533549c-1e62-4afe-9a0e-0567a9b2bcc2",
-      "0cb9f34f-c3df-4a13-8ca1-19429a82611b",
+      "10000000-0000-4000-8000-000000000001",
+      "10000000-0000-4000-8000-000000000002",
     ]) {
       const response = await postOrder(api, orderBody(await createUser(api), labTestId))
       expect(response.status).toBe(200)

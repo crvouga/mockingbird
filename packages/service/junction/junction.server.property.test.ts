@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url"
 import { parseSealedCorpus } from "./src/index.js"
 
 const packageDir = dirname(fileURLToPath(import.meta.url))
-const corpusPath = join(packageDir, "corpus/sandbox-sealed.json")
+const corpusPath = join(packageDir, "corpus/example.json")
 const corpus = parseSealedCorpus(JSON.parse(readFileSync(corpusPath, "utf8")))
 const auth = { "x-vital-api-key": "sk_us_mockingbird" }
 

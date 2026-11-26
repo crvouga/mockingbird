@@ -5,8 +5,8 @@ const auth = { "x-vital-api-key": "sk_us_mockingbird" }
 const host = "https://junction.test"
 const baseTime = Date.parse("2026-11-05T12:00:00Z")
 const json = { "content-type": "application/json" }
-const LAB_AT_HOME = "b439efda-1e07-4d2c-8afb-51771c7cc0cb"
-const LAB_WALK_IN = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
+const LAB_AT_HOME = "10000000-0000-4000-8000-000000000003"
+const LAB_WALK_IN = "10000000-0000-4000-8000-000000000001"
 
 type Api = JunctionAPI
 type Json = Record<string, unknown>

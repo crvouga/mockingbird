@@ -23,8 +23,8 @@ type Json = Record<string, unknown>
 const request = (api: Api, path: string, init?: RequestInit) =>
   api.fetch(new Request(`${host}${path}`, { ...init, headers: { ...auth, ...init?.headers } }))
 
-const LAB_AT_HOME = "b439efda-1e07-4d2c-8afb-51771c7cc0cb"
-const LAB_WALK_IN = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
+const LAB_AT_HOME = "10000000-0000-4000-8000-000000000003"
+const LAB_WALK_IN = "10000000-0000-4000-8000-000000000001"
 
 const createUser = async (api: Api, clientUserId: string): Promise<string> => {
   const response = await request(api, "/v2/user", {
@@ -82,7 +82,7 @@ type Slot = { booking_key: string; start: string }
 test("appointment reads and phlebotomy rescheduling match sandbox missing-appointment guards", async () => {
   const api = new JunctionAPI({ now: () => baseTime })
   const userId = await createUser(api, "appointment-guards")
-  for (const labId of [LAB_WALK_IN, LAB_AT_HOME, "0cb9f34f-c3df-4a13-8ca1-19429a82611b"]) {
+  for (const labId of [LAB_WALK_IN, LAB_AT_HOME, "10000000-0000-4000-8000-000000000002"]) {
     const order = await createOrder(api, userId, labId)
     for (const [method, suffix, status, detail] of [
       [
@@ -127,7 +127,7 @@ test("PSC rescheduling checks modality and requisition before appointment lookup
   for (const [labId, status, detail] of [
     [LAB_WALK_IN, 400, "This order does not have a requisition, it's still in state ordered."],
     [LAB_AT_HOME, 404, "This order is not a walk-in phlebotomy order."],
-    ["0cb9f34f-c3df-4a13-8ca1-19429a82611b", 404, "This order is not a walk-in phlebotomy order."],
+    ["10000000-0000-4000-8000-000000000002", 404, "This order is not a walk-in phlebotomy order."],
   ] as const) {
     const order = await createOrder(api, userId, labId)
     const response = await request(api, `/v3/order/${order.id}/psc/appointment/reschedule`, {
@@ -146,7 +146,7 @@ test("PSC cancellation checks order modality and lab before appointment lookup",
   for (const [labId, status, detail] of [
     [LAB_WALK_IN, 400, "This lab is not supported."],
     [LAB_AT_HOME, 404, "This order is not a walk-in phlebotomy order."],
-    ["0cb9f34f-c3df-4a13-8ca1-19429a82611b", 404, "This order is not a walk-in phlebotomy order."],
+    ["10000000-0000-4000-8000-000000000002", 404, "This order is not a walk-in phlebotomy order."],
   ] as const) {
     const order = await createOrder(api, userId, labId)
     const response = await request(api, `/v3/order/${order.id}/psc/appointment/cancel`, {
