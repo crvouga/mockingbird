@@ -40,6 +40,10 @@ paths:
                   type: string
                   maxLength: 255
               type: object
+            example:
+              grant_type: client_credentials
+              client_id: lifefile-client
+              client_secret: lifefile-secret
       responses:
         "200":
           content:
