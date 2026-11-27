@@ -355,7 +355,7 @@ export const CATALOG: readonly CatalogEntry[] = [
     "package": "@crvouga/mockingbird-service-flex",
     "displayName": "Flex",
     "category": "payments",
-    "description": "Stateful emulator of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, subscription, off-session and setup modes, subscriptions, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
+    "description": "Stateful emulator of the Flex HSA/FSA payments API: products (synthetic example catalog), checkout sessions in payment, subscription, off-session and setup modes, subscriptions, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
     "website": "https://www.withflex.com",
     "docs": "https://docs.withflex.com"
   },
