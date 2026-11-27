@@ -18,7 +18,7 @@ harness from `@crvouga/mockingbird-runtime/ui`.
 npm install -D @crvouga/mockingbird-runtime
 ```
 
-Install it directly when using the system harness without an emulator, or to pin its version.
+Install the runtime as a regular dependency (`npm install @crvouga/mockingbird-runtime`) in a package that implements an emulator. Applications using emulators only in tests can use dev dependencies.
 
 ## Usage
 
@@ -29,8 +29,39 @@ const sqs = createRuntime()
 const response = await sqs.fetch(new Request("http://sqs.local/__admin/health"))
 ```
 
+## Author a custom HTTP service
+
+Use `@crvouga/mockingbird-runtime/authoring` in an application workspace or an independently
+published package. The example below runs directly against Fetch.
+
+```ts
+import { defineHttpService } from "@crvouga/mockingbird-runtime/authoring"
+
+const { createRuntime, serveTarget } = defineHttpService({
+  name: "rates",
+  version: "1.0.0",
+  document: {
+    openapi: "3.1.0",
+    info: { title: "Sample rates", version: "1" },
+    paths: { "/rate": { get: {
+      operationId: "getRate", responses: { "200": { description: "Current rate" } },
+    } } },
+  },
+  handlers: () => ({ getRate: () => Response.json({ cents: 125 }) }),
+})
+const response = await createRuntime().fetch(new Request("https://rates.example/rate"))
+console.log(await response.json()) // { cents: 125 }
+```
+
+Export `createRuntime` from your package entry and `serveTarget` from its `./server` entry.
+Both can be re-exports from the same module. The runtime adds the standard admin API, namespaces,
+clock, faults, request journal, reset and snapshots. The default port is ephemeral. For a stateful
+service, use the [working job queue](https://github.com/crvouga/mockingbird/blob/main/packages/runtime/examples/jobs.ts)
+and the [authoring and fleet guide](https://github.com/crvouga/mockingbird/blob/main/docs/AUTHORING_A_SERVICE.md#custom-http-services-in-your-own-project).
+
 ## API
 
+- The supported `/authoring` entry exports `defineHttpService`, `Collection`, `IdSequence`, `bodyIssues`, `defineOperations`, and `jsonResponse`. Its factory and target types can also be used in package declarations.
 - `RUNTIME_SUBPATHS`: the subpaths this package exports (`core`, `service`, `sqlite`, …), each
   re-exporting the Mockingbird helper of that name.
 

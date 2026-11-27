@@ -70,6 +70,5 @@ The `/server` entry exports `createServer`, `serveTarget`, and `DEFAULT_PORT`.
 ## Deliberately not modelled
 
 - Google's risk model, device fingerprinting, interactive v2 challenges, or Enterprise API.
-- The private Geviti client's implementation: acceptance uses the documented Google flow.
 - Live successful challenges. The cold parity command probes only missing-response rejection
   and exits 2 without `RECAPTCHA_SECRET_KEY`; never use production credentials in fixtures.

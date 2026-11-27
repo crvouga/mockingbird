@@ -7,34 +7,32 @@
  *   GENEBYGENE_API_URL    optional, default https://staging-api.genebygene.com
  *                                     (GENEBYGENE_BASE_URL is the older name)
  *   GENEBYGENE_TOKEN_URL  optional, default https://staging-auth.genebygene.com/connect/token
+ *   GENEBYGENE_RECORD_DIR  optional private output directory for captures
  *   GENEBYGENE_UNSAFE=1   also place (and cancel) real orders; demo/staging only
  *
  * Without credentials it prints the missing variable names and exits 2. It never prints a
  * secret value. What it checks:
  *
  * 1. Token, then `GET /api/v2/products`, `/attributes`, `/eventTypes`: status, and for products
- *    the id set. Live ids win when staging has drifted: a redacted diff (ids and names only) is
- *    written to `corpus/products-diff.json` for a human to commit.
+ *    the id set against the selected corpus. Tenant catalogs stay in memory.
  * 2. The synthetic address corpus quoted against the deluxe bundle (or the staging standard
  *    bundle when staging lacks it): status, whether `errorMessages` is empty, and the SET of
  *    courier codes — never prices or dates (volatile live, deterministic only in the mock). A
  *    live code set that contradicts the zone table fails the run and names the ZIP3.
- * 3. The structural cases (long line, PO Box, non-US, the not-found street) are recorded into
- *    `corpus/address-parity.json` (`recorded: true`); the acceptance suite replays that file.
+ * 3. The structural cases (long line, PO Box, non-US, the not-found street) can be recorded in the private output directory.
  * 4. A random walk over the other safe operations, mock vs live.
  * 5. With GENEBYGENE_UNSAFE=1 (never against production): one order to
  *    `1445 N Loop W`, canceled in the same run, and one to `501 N 5th St`, which must answer the
  *    Address Not Found 400. Responses are redacted to status, message and id shape.
  */
-import { readFile, writeFile } from "node:fs/promises"
+import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { CredentialError, createRedactor, loadCredentials } from "@crvouga/mockingbird-credentials"
 import { parity } from "@crvouga/mockingbird-parity"
-import { DELUXE_BUNDLE_ID } from "../src/corpus.js"
+import type { GeneByGeneCorpus } from "../src/corpus.js"
 import { document, GeneByGeneAPI, supportedOperationIds } from "../src/index.js"
 import { ADDRESS_CORPUS, menuFor, zoneFor } from "../src/shipping.js"
 
-const STAGING_STANDARD_ID = "0d52219e-30a5-4a0d-b96d-0fe9a46d95e5"
 const CORPUS_DIR = join(import.meta.dir, "..", "corpus")
 
 let credentials: Awaited<ReturnType<typeof loadCredentials>>
@@ -129,8 +127,26 @@ const tenantClient = {
   client_id: credentials.values.GENEBYGENE_CLIENT_ID ?? "",
   client_secret: credentials.values.GENEBYGENE_CLIENT_SECRET ?? "",
 }
+// Keep the tenant catalog in process memory. A private runner can supply an independent baseline.
+async function readCatalog<T>(resource: string): Promise<T> {
+  const response = await live(
+    new Request(`${baseUrl}/api/v2/${resource}`, {
+      headers: { authorization: `Bearer ${realToken}`, accept: "application/json" },
+    }),
+  )
+  if (!response.ok) throw new Error(`Could not read ${resource} (HTTP ${response.status})`)
+  return response.json() as Promise<T>
+}
+const corpus: GeneByGeneCorpus = process.env.GENEBYGENE_CORPUS_FILE
+  ? JSON.parse(await readFile(process.env.GENEBYGENE_CORPUS_FILE, "utf8"))
+  : {
+      productionProducts: [],
+      stagingProducts: await readCatalog("products"),
+      eventTypes: await readCatalog("eventTypes"),
+      attributes: await readCatalog("attributes"),
+    }
 const createMock = () =>
-  new GeneByGeneAPI({ settings: { catalog: "staging", clients: [tenantClient] } })
+  new GeneByGeneAPI({ corpus, settings: { catalog: "staging", clients: [tenantClient] } })
 const mockApi = createMock()
 const mockToken = (
   (await (
@@ -186,18 +202,15 @@ const [liveIds, mockIds] = [ids(liveProducts), ids(mockProducts)]
 const added = liveProducts.filter((p) => !mockIds.has(String(p.id)))
 const removed = mockProducts.filter((p) => !liveIds.has(String(p.id)))
 if (added.length > 0 || removed.length > 0) {
-  const diff = {
-    host: new URL(baseUrl).host,
-    added: added.map((p) => ({ id: p.id, name: p.name })),
-    removed: removed.map((p) => ({ id: p.id, name: p.name })),
-  }
-  await writeFile(join(CORPUS_DIR, "products-diff.json"), `${JSON.stringify(diff, null, 2)}\n`)
-  fail(`product ids drifted (+${added.length} / -${removed.length}); see corpus/products-diff.json`)
+  fail(`product ids drifted (+${added.length} / -${removed.length})`)
 }
 
 // 2 + 3. the address corpus ---------------------------------------------------------------------
 console.log("genebygene parity: address corpus")
-const productId = liveIds.has(DELUXE_BUNDLE_ID) ? DELUXE_BUNDLE_ID : STAGING_STANDARD_ID
+const productId =
+  corpus.defaultProductId ??
+  corpus.stagingProducts.find((p) => p.components.some((c) => c.product.shippingQualified))?.id
+if (!productId) throw new Error("The shipping parity walk requires a shippable bundle")
 const address = (over: Json): Json => ({
   isCommercial: false,
   recipientName: "Mockingbird Test",
@@ -262,6 +275,7 @@ type Case = {
 }
 const file = join(CORPUS_DIR, "address-parity.json")
 const recording = JSON.parse(await readFile(file, "utf8")) as { cases: Case[] } & Json
+const outputDir = process.env.GENEBYGENE_RECORD_DIR
 const recorded: Case[] = []
 for (const c of recording.cases) {
   if (c.operation === "place" && !unsafe) {
@@ -323,11 +337,14 @@ for (const c of recording.cases) {
     fail(`${c.name}: live placed an order (cancel ${String((live.json as Json).id)} by hand)`)
   }
 }
-await writeFile(
-  file,
-  `${JSON.stringify({ ...recording, source: new URL(baseUrl).host, recorded: true, cases: recorded }, null, 2)}\n`,
-)
-console.log("  wrote corpus/address-parity.json")
+if (outputDir) {
+  await mkdir(outputDir, { recursive: true, mode: 0o700 })
+  await writeFile(
+    join(outputDir, "address-parity.json"),
+    JSON.stringify({ ...recording, cases: recorded }, null, 2),
+    { mode: 0o600 },
+  )
+}
 
 // 5. unsafe: one real place + cancel -----------------------------------------------------------
 if (unsafe) {
@@ -486,14 +503,6 @@ const probeBody = async (path: string, body: string, contentType: string | undef
     ),
   }
 }
-const catalogs = {
-  source: new URL(baseUrl).host,
-  note: "Recorded by scripts/parity.ts from the live tenant: the event types, attribute definitions and product catalog it lists. Vendor catalog metadata only, no tenant data.",
-  eventTypes: (await probe("GET", "/api/v2/eventTypes")).body,
-  // The tenant's product catalog (vendor catalog data: ids, names, prices, components).
-  stagingProducts: (await probe("GET", "/api/v2/products")).body,
-  attributes: (await probe("GET", "/api/v2/attributes")).body,
-}
 const shapes = {
   source: new URL(baseUrl).host,
   note: "Recorded by scripts/parity.ts: the live answers for ids that cannot exist, and the query validation of the list endpoints (status and validation errors only; a 200 page on the shared tenant is never written). The acceptance suite replays it.",
@@ -566,9 +575,9 @@ const QUERY_PROBES: readonly [string, Record<string, string>][] = [
     names.map((name) => [path, { [name]: "a" }] as [string, Record<string, string>]),
   ),
   ...[
-    { productId: "a5190f53-01c8-4966-aead-adbf20f0dbf6" },
-    { productId: "b1949749-19b0-4f72-a5c5-8f2414656607" },
-    { productId: "49f9c987-ba0e-4801-a3b3-b446a2d4835a" },
+    { productId: "00000000-0000-4000-8000-000000000011" },
+    { productId: "00000000-0000-4000-8000-000000000008" },
+    { productId: "00000000-0000-4000-8000-000000000007" },
     { productId: ZERO },
     { productCode: "standard_swab_dhl_return_collection_bundle" },
     { productCode: "STANDARD_SWAB_DHL_RETURN_COLLECTION_BUNDLE" },
@@ -697,15 +706,23 @@ for (const [path, probed] of QUERY_PROBES) {
       : { errors: body?.errors, message: body && "message" in body ? body.message : undefined }),
   })
 }
-;(shapes as Json).queries = queries
-
-// The mock serves these catalogs (src/corpus/live-catalogs.json); the walk compares them.
-await writeFile(
-  join(import.meta.dir, "..", "src", "corpus", "live-catalogs.json"),
-  `${JSON.stringify(catalogs, null, 2)}\n`,
-)
-await writeFile(join(CORPUS_DIR, "live-errors.json"), `${JSON.stringify(shapes, null, 2)}\n`)
-console.log("  wrote src/corpus/live-catalogs.json and corpus/live-errors.json")
+if (outputDir) {
+  const capture: GeneByGeneCorpus = {
+    productionProducts: [],
+    stagingProducts: await readCatalog("products"),
+    attributes: await readCatalog("attributes"),
+    eventTypes: await readCatalog("eventTypes"),
+  }
+  await writeFile(join(outputDir, "catalog.json"), JSON.stringify(capture, null, 2), {
+    mode: 0o600,
+  })
+  await writeFile(
+    join(outputDir, "live-errors.json"),
+    JSON.stringify({ ...shapes, queries }, null, 2),
+    { mode: 0o600 },
+  )
+}
+console.log(`  checked ${shapes.errors.length} error probes and ${queries.length} query probes`)
 
 /**
  * The staging tenant is shared: its lists hold thousands of kits and orders no walk created, and

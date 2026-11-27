@@ -43,7 +43,7 @@ const harness = () => {
 }
 
 describe("Meta acceptance", () => {
-  test("CAPI preserves the Geviti event contract and deduplicates event_id", async () => {
+  test("CAPI preserves purchase event fields and deduplicates event_id", async () => {
     const { runtime, send } = harness()
     expect(await send([event()])).toMatchObject({ events_received: 1, messages: [] })
     expect(await send([event()])).toMatchObject({ events_received: 1, messages: [] })

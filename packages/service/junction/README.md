@@ -15,7 +15,7 @@ cap (the emulator enforces no sandbox limit unless a test [asks for one](#sandbo
 cross-suite interference. Serve it as a local origin with one command, or run it in-process.
 
 ```bash
-npx mockingbird-junction serve   # http://127.0.0.1:8787, recorded sandbox corpus loaded
+npx mockingbird-junction serve   # http://127.0.0.1:8787, synthetic example catalog loaded
 ```
 
 - Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/junction/SUPPORT.md)
@@ -38,7 +38,7 @@ native dependencies: state lives in an in-memory SQLite engine written in TypeSc
 | --- | --- | --- |
 | `@crvouga/mockingbird-service-junction` | any (Node, Bun, Workers, browsers) | `JunctionAPI`, `createRuntime`, corpus and verify tools |
 | `@crvouga/mockingbird-service-junction/server` | Node | `createServer()` — a listening HTTP server |
-| `@crvouga/mockingbird-service-junction/corpus` | any | `defaultCorpus` — the recording shipped in the package (a separate entry, so importing the emulator never parses it) |
+| `@crvouga/mockingbird-service-junction/corpus` | any | `defaultCorpus` — the synthetic example shipped in the package (a separate entry, so importing the emulator never parses it) |
 | `mockingbird-junction` (bin) | Node | `serve`, `corpus pull`, `corpus diff`, `verify` |
 
 ## Usage
@@ -283,11 +283,7 @@ Provider-owned inventory — area serviceability, PSC site lists, the lab catalo
 accounts — cannot be synthesized faithfully. A corpus is an exact recording of those
 parameter-stable reads, and the emulator answers them byte for byte.
 
-**The shipped corpus** (`defaultCorpus`, and what `serve` loads unless told otherwise) was recorded
-from the Junction sandbox. It covers area and PSC serviceability for 57 ZIPs across the US, the PSC
-labs those ZIPs reach, and the recording team's catalog. The catalog and lab accounts belong to the
-**recording team**: lab-test ids are per team, so your product's ids will not be in it. For your
-catalog and your lab accounts, record your own team and commit the file:
+The package ships a synthetic example catalog and coverage for ZIPs 85004 and 02108. With the bundled example, the server generates coverage for other ZIPs. A private corpus defaults to strict coverage. To reproduce your team's catalog, lab accounts, and coverage, keep its recording in private storage and pass the path using `--corpus`.
 
 ```bash
 npx mockingbird-junction corpus pull --real-key "$JUNCTION_SANDBOX_KEY" --out test/junction-corpus.json
@@ -311,9 +307,9 @@ availability) answer **only** for ZIPs the corpus covers. Any other well-formed 
 {
   "detail": {
     "error_type": "MOCKINGBIRD_UNKNOWN_ZIP",
-    "error_message": "ZIP 00501 is not in the loaded Junction corpus (57 ZIPs covered). Record it with `mockingbird-junction corpus pull --zip 00501`, or serve with --geo synthetic to invent coverage.",
+    "error_message": "ZIP 00501 is not in the loaded Junction corpus (2 ZIPs covered). Record it with `mockingbird-junction corpus pull --zip 00501`, or serve with --geo synthetic to invent coverage.",
     "zip_code": "00501",
-    "corpus": "v1-2026-09-18-HqFDuEAuhkwD"
+    "corpus": "example"
   }
 }
 ```
@@ -439,7 +435,7 @@ Set `{ labAccountOmissionPolicies: { bioreference: "platform" } }` at runtime cr
 `GET` reads the effective overrides. Overrides are namespace isolated and kept across reset.
 
 Explicit ids naming another lab's account remain accepted, matching the sandbox probe in
-`corpus/lab-account-probes.json` and [#138](https://github.com/crvouga/mockingbird/issues/138).
+[#138](https://github.com/crvouga/mockingbird/issues/138).
 Delegation alone does not change account selection.
 
 Requisition PDFs are synthetic and contain labelled `Account number:` evidence copied from
@@ -576,7 +572,7 @@ is also linked to the emulator team.
 **Empty allowlists.** Junction's own Quest, Labcorp and BioReference accounts carry
 `team_id_allowlist: []`, and a real team's listing returns them, so the emulator lists them and treats
 them as linked. Ordering through one by explicit id, and with the id omitted when it is the lab's
-only active account, places the order on the sandbox (`corpus/lab-account-probes.json`, recorded
+only active account, places the order on the sandbox (observed
 by the parity run), as the emulator does. `verify --orders` re-checks it whenever the corpus has such
 an account.
 
@@ -859,7 +855,7 @@ and reports every divergence.
 
 ```bash
 npx mockingbird-junction verify --real-key "$JUNCTION_SANDBOX_KEY" --corpus test/junction-corpus.json
-npx mockingbird-junction verify --real-key "$JUNCTION_SANDBOX_KEY" --orders --sample 50 --json
+npx mockingbird-junction verify --real-key "$JUNCTION_SANDBOX_KEY" --corpus test/junction-corpus.json --orders --sample 50 --json
 ```
 
 - **Drift**: re-fetches each recorded observation (or `--sample n` of them) and reports any that no
@@ -986,7 +982,7 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `observationCacheKey` | `(url, method = "GET", body?) => string` — the `"<METHOD> <path>?<sorted query> <json>"` key corpora use. |
 | `prefetchCoverageObservations` | Parity helper: records coverage-ZIP reads from the sandbox into an observation cache before `seedFrom`. |
 | `reshapeCoverageGeoCommand` | Parity-walk hook that pins geo/availability parameters onto the coverage corpus. |
-| `COVERAGE_ZIPS` | The ZIPs the shipped corpus covers. |
+| `COVERAGE_ZIPS` | The ZIPs requested by a full sandbox capture. |
 | `PSC_AVAILABILITY_ZIPS` | ZIPs that also get PSC availability observations. |
 | `PHLEBOTOMY_AVAILABILITY_ZIPS` | ZIPs the sandbox serves phlebotomy availability for (`["85004"]`). |
 | `PSC_LAB_IDS` | Lab ids used for PSC reads (`[4, 6, 13, 25]`). |
@@ -1096,7 +1092,7 @@ bun test junction.sdk.property.test.ts     # drives the served emulator through 
 
 bun run emulator:serve                         # env-configured `serve`: HOST, PORT, MOCKINGBIRD_JUNCTION_CORPUS,
                                            # MOCKINGBIRD_JUNCTION_WEBHOOK_URL / _SECRET / _SCOPE
-bun run corpus:record -- --force           # re-record the shipped corpus/sandbox-sealed.json (JUNCTION_API_KEY)
+bun run corpus:record -- --out /private/junction.json  # private sandbox capture (JUNCTION_API_KEY)
 bun run verify -- --real-key "$KEY"        # `mockingbird-junction verify` from source
 ```
 

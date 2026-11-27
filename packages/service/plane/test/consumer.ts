@@ -1,12 +1,3 @@
-/**
- * A port of our backend's Plane client (`apps/backend/src/modules/bug-reports/adapters/
- * plane-http-client.ts`, `native-fetch-plane.adapter.ts`, `plane-response.ts`): the same URLs,
- * `X-API-Key` header, query parameters, retry policy (GETs only, at 0 / 2 / 8 s on 429, 5xx and
- * network failures; writes never retried), error messages, and response parsing (the zod
- * schemas are hand-ported: uuids, a non-negative integer `sequence_id`, an offset datetime
- * `created_at`, cursor envelopes or bare arrays). The only change is the base URL: the app
- * hardcodes `https://api.plane.so` (seam G-Y1).
- */
 export type PlaneState = { id: string; name: string; group: string }
 export type PlaneLabel = { id: string; name: string }
 export type PlaneWorkItem = {

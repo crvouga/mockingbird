@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { createRuntime } from "./src/index.js"
 
 const AUTH = { "x-vital-api-key": "sk_us_test", "content-type": "application/json" }
-const LAB_TEST = "c533549c-1e62-4afe-9a0e-0567a9b2bcc2"
+const LAB_TEST = "10000000-0000-4000-8000-000000000001"
 
 const call = async (
   runtime: ReturnType<typeof createRuntime>,

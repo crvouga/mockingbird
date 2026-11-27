@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { createServer } from "./src/server.js"
 
-// Behaviour captured from Kill Bill 0.24.16 (Geviti's production version) by scripts/parity.ts on
+// Behaviour captured from Kill Bill 0.24.16 by scripts/parity.ts on
 // 2026-11-06. These pin it without a live Kill Bill; the parity scenarios re-check it against one.
 
 const headers = {

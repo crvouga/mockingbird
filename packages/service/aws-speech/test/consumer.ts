@@ -1,18 +1,3 @@
-/**
- * Ports of the consumer app's Polly / Transcribe code, kept as close to the
- * originals as a test harness allows.
- *
- * Sources (B/ = apps/backend/src/modules/):
- * - B/chatbot/voice/resample-pcm-s16le.ts                            → resamplePcmS16Le (verbatim)
- * - B/chatbot/voice/adapters/voice-synthesis-config-resolver.ts       → resolveVoiceSynthesisConfig
- * - B/chatbot/voice/adapters/aws-voice-speech-synthesis.adapter.ts     → AwsVoiceSpeechSynthesisAdapter
- * - B/chatbot/voice/adapters/aws-voice-streaming-speech-synthesis.adapter.ts
- *                                                                    → AwsVoiceStreamingSpeechSynthesisAdapter
- * - B/chatbot/voice/adapters/create-voice-speech-synthesis-adapter.ts  → createVoiceSpeechSynthesisAdapter
- * - B/chatbot/voice/adapters/aws-voice-transcription.adapter.ts       → AwsVoiceTranscriptionAdapter
- * - B/messaging/call-recording/aws-transcribe-batch.adapter.ts         → AwsTranscribeBatchAdapter
- * - B/chatbot/voice/chat-voice.gateway.ts (transcribe → reply → speak) → voiceRoundTrip
- */
 import {
   Engine,
   OutputFormat,

@@ -1,19 +1,3 @@
-/**
- * Ports of the consumer app's PostHog consumers (read-only), used as the acceptance oracle.
- * Each keeps the original's requests, timeouts, caches and value mapping; only logging and DI
- * are dropped, and every client takes an optional `fetch` so tests can run in-process.
- *
- * - {@link PostHogServerAdapter}: apps/backend/src/modules/feature-flags/adapters/posthog-server.adapter.ts
- * - {@link PostHogTrackingService}: apps/backend/src/modules/posthog-tracking/posthog-tracking.service.ts
- * - {@link WebsitePostHogPurchaseSink}: B/global-services/services/conversion-tracking/website-posthog-purchase.sink.ts
- * - {@link PostHogHogqlClient}: B/marketing-metrics/intake-engagement/posthog-hogql.client.ts
- * - {@link EmrFeatureFlagsService}: apps/emr-backend/src/services/feature-flags/feature-flags.service.ts
- * - {@link evaluatePostHogFlag}: apps/emr-frontend/src/lib/feature-flags/posthog-server.ts
- * - {@link PythonPostHogClient}: the Python services' shared posthog/client.py
- * - {@link fetchProjectFlags}: tooling/feature-flags-cli/lib/posthog.ts (+ posthog-schema.ts)
- * - {@link MemberAppFlagsAdapter} over {@link ReactNativeLikeClient}: M/lib/feature-flags/adapters/posthog.ts
- *   on the same `@posthog/core` `PostHogCore` posthog-react-native 4.72.1 extends.
- */
 import { createHash } from "node:crypto"
 import {
   PostHogCore,
@@ -359,7 +343,7 @@ export class PostHogHogqlClient {
         "MARKETING_METRICS_POSTHOG_READ_KEY is required for marketing engagement metrics",
       )
     }
-    const projectId = options.projectId ?? 339666
+    const projectId = options.projectId ?? 102
     const response = await this.fetcher(`${this.host}/api/projects/${projectId}/query/`, {
       method: "POST",
       headers: { Authorization: `Bearer ${readKey}`, "Content-Type": "application/json" },
@@ -425,7 +409,7 @@ export class EmrFeatureFlagsService {
   }
 
   isMemberTaggingProgramEnabled(distinctId: string) {
-    return this.evaluateFlag("b2b-member-tagging", distinctId)
+    return this.evaluateFlag("example-tags", distinctId)
   }
 
   async shutdown() {

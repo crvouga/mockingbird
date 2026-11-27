@@ -4,13 +4,10 @@ info:
   description: |
     Stateful emulator subset of Payload CMS's auto-generated collection REST API: find documents
     (with a `where` query subset, `limit`, `page`, `sort`) and find one by id. Hand-authored
-    from Payload's REST API docs and the consumer's response type (payload-cms-response.type.ts).
+    from Payload's REST API docs.
   version: "2"
   x-mockingbird-upstream:
-    note: >-
-      Shapes from https://payloadcms.com/docs/rest-api/overview and
-      https://payloadcms.com/docs/queries/overview; the consumer is
-      apps/backend/src/modules/cms/payload-cms/payload-cms.service.ts.
+    note: https://payloadcms.com/docs/rest-api/overview
 servers:
   - url: https://payload.acme.example
 paths:

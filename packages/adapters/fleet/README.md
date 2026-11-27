@@ -75,7 +75,10 @@ try {
 
 The resolver only loads allowlisted installed service suffixes from their `/server` export,
 relative to the explicit consumer project root (including pnpm symlinks). It never installs
-packages. Distinct instance names use `target`. A custom `load` callback remains supported.
+packages. Distinct instance names use `target`. A custom `load` callback remains supported. To mix a local or private package into the CLI
+fleet, register `"#mockingbird/jobs/server": "@example/jobs/server"` (or `"./dist/jobs.js"`) in
+the consumer's `package.json` `imports`. Use `"target": "jobs"` in the fleet configuration.
+The module exports the matching named `serveTarget`. [Custom service guide](https://github.com/crvouga/mockingbird/blob/main/docs/AUTHORING_A_SERVICE.md#custom-http-services-in-your-own-project)
 
 ## CLI
 

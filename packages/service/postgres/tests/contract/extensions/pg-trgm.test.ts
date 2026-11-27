@@ -4,29 +4,29 @@ sequenceParity(
   "CREATE EXTENSION pg_trgm installs gin_trgm_ops and IF NOT EXISTS is a no-op",
   [],
   [
-    { sql: "CREATE SCHEMA geviti" },
-    { sql: 'CREATE TABLE geviti."careThreadMessages" (body text)' },
-    { sql: 'CREATE TABLE geviti."careThreads" (title text)' },
+    { sql: "CREATE SCHEMA demo" },
+    { sql: 'CREATE TABLE demo."forumMessages" (body text)' },
+    { sql: 'CREATE TABLE demo."forumThreads" (title text)' },
     { sql: "CREATE EXTENSION IF NOT EXISTS pg_trgm" },
     {
-      sql: 'CREATE INDEX care_body_trgm ON geviti."careThreadMessages" USING gin (body public.gin_trgm_ops)',
+      sql: 'CREATE INDEX forum_body_trgm ON demo."forumMessages" USING gin (body public.gin_trgm_ops)',
     },
     {
-      sql: 'CREATE INDEX care_title_trgm ON geviti."careThreads" USING gin (title public.gin_trgm_ops)',
+      sql: 'CREATE INDEX forum_title_trgm ON demo."forumThreads" USING gin (title public.gin_trgm_ops)',
     },
     { sql: "CREATE EXTENSION IF NOT EXISTS pg_trgm" },
     {
-      sql: `INSERT INTO geviti."careThreadMessages" (body) VALUES ('hello world'), (NULL)`,
+      sql: `INSERT INTO demo."forumMessages" (body) VALUES ('hello world'), (NULL)`,
     },
     {
-      sql: `SELECT relname, relkind FROM pg_class WHERE relname IN ('care_body_trgm', 'care_title_trgm') ORDER BY relname`,
+      sql: `SELECT relname, relkind FROM pg_class WHERE relname IN ('forum_body_trgm', 'forum_title_trgm') ORDER BY relname`,
       query: true,
     },
     {
       sql: `SELECT i.indnatts, i.indisunique, i.indisprimary
             FROM pg_index i
             JOIN pg_class c ON c.oid = i.indrelid
-            WHERE c.relname = 'careThreadMessages' AND c.relkind = 'r'`,
+            WHERE c.relname = 'forumMessages' AND c.relkind = 'r'`,
       query: true,
     },
   ],
@@ -83,8 +83,8 @@ errorParity(
 
 errorParity(
   "gin_trgm_ops without pg_trgm is an undefined operator class",
-  ["CREATE TABLE geviti_msg (body text)"],
-  "CREATE INDEX msg_body ON geviti_msg USING gin (body public.gin_trgm_ops)",
+  ["CREATE TABLE demo_msg (body text)"],
+  "CREATE INDEX msg_body ON demo_msg USING gin (body public.gin_trgm_ops)",
   "undefined_object",
 );
 

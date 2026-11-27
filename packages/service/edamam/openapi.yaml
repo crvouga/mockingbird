@@ -3,14 +3,12 @@ info:
   title: Edamam APIs (Mockingbird subset)
   description: 'Stateful emulator subset of Edamam''s Food Database v2 (parser, nutrients, image), Nutrition
     Analysis (nutrition-data, nutrition-details), Recipe Search v2 (search, by-uri, by id), Meal Planner
-    v1 (select) and Shopping List v2, over a built-in corpus. Hand-authored from Edamam''s docs and the
-    consumers (edamam-nutrition.adapter.ts, edamam-meal-planning.adapter.ts, the Python chat client''s tools/nutrition/client.py).
+    v1 (select) and Shopping List v2, over a built-in corpus. Based on Edamam''s public API documentation.
 
     '
   version: '2'
   x-mockingbird-upstream:
-    note: Edamam publishes per-API docs, no single OpenAPI; shapes trimmed to the fields our consumers
-      read (zod schemas in edamam-nutrition.adapter.ts and edamam-meal-planning.schemas.ts).
+    note: Edamam publishes documentation for each API at https://developer.edamam.com/.
 servers:
 - url: https://api.edamam.com
 paths:

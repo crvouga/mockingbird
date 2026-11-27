@@ -3,14 +3,10 @@ info:
   title: Daily.co REST API (Mockingbird subset)
   description: |
     Stateful emulator subset of the Daily.co REST API: rooms (create, get, update, delete, presence,
-    eject), meeting tokens (create, validate) and meetings (list, get). Trimmed from Daily's documented API to the
-    calls our backend and EMR make; request schemas follow the fields our consumers send
-    (daily-video.schemas.ts strict zod schemas, EMR RoomConfig / TokenConfig).
+    eject), meeting tokens (create, validate) and meetings (list, get).
   version: "1"
   x-mockingbird-upstream:
-    note: >-
-      Hand-authored from docs.daily.co/reference/rest-api and our consumers
-      (apps/backend daily-video.service.ts + schemas, the consumer app's daily-service.ts).
+    note: https://docs.daily.co/reference/rest-api
 servers:
   - url: https://api.daily.co
 security:

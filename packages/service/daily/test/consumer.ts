@@ -1,13 +1,3 @@
-/**
- * A port of our Daily.co consumers:
- * - backend `DailyVideoService` (apps/backend …/appointments/daily-video.service.ts) with its
- *   strict zod schemas (daily-video.schemas.ts) and its self-signed HS256 meeting tokens;
- * - EMR `DailyService` (the consumer app's daily-service.ts) and the
- *   appointment flows that call it (book, reschedule, timing update, cancel, join);
- * - the EMR's `POST /v1/webhooks/daily` receiver and the scribe's S3 transcript read.
- * The acceptance tests drive the mock through it, so "the mock works" means "our consumer's
- * own logic reaches the right outcome".
- */
 import { createHash, createHmac, randomUUID, timingSafeEqual } from "node:crypto"
 
 export type Fetch = (request: Request) => Promise<Response>

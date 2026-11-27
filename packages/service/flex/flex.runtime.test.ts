@@ -16,7 +16,7 @@ import mappingsFixture from "./test/corpus/flex-catalog-mappings.json" with { ty
 
 const API = "http://flex.mock"
 const SECRET = `whsec_${Buffer.from("runtime-test-signing-key-flex!!").toString("base64")}`
-const PRODUCT = "fprod_01m0tgysj4ahvf8fas60c2ef2d" // marketplace, auto_substantiation
+const PRODUCT = "fprod_00000000000000000000000002" // marketplace, auto_substantiation
 
 const session = (key: string) => ({
   checkout_session: {
@@ -53,7 +53,7 @@ describe("service contract", () => {
     expect(await health.json()).toMatchObject({
       status: "ok",
       service: "flex",
-      corpus: "flexCatalogMappings",
+      corpus: "synthetic",
     })
     expect(health.headers.get("x-mockingbird")).toMatch(/^flex@.+; ns=default$/)
     const routes = JSON.stringify(await (await call(runtime, "/__admin")).json())
@@ -193,6 +193,12 @@ describe("service contract", () => {
     expect(JSON.stringify(journal)).not.toMatch(/Lovelace|ada@example/)
   })
 
+  test("an empty private catalog replaces the default products", async () => {
+    const runtime = createRuntime({ products: [] })
+    const response = await call(runtime, "/v1/products", { key: "fsk_test_empty" })
+    expect(await response.json()).toMatchObject({ products: [], has_more: false })
+  })
+
   test("the corpus holds one active test-mode product per consumer mapping", () => {
     expect(CORPUS_ROWS).toHaveLength(mappingsFixture.rows.length)
     expect(DEFAULT_PORT).toBe(8792)
@@ -246,7 +252,7 @@ describe("served over HTTP", () => {
         amountCents: 4_500,
         lineItems: [
           {
-            merchantProductId: "prod_RPVGXPdPvh7eLt",
+            merchantProductId: "prod_demo_shop",
             name: "Omega",
             unitAmountCents: 4_500,
             quantity: 1,
@@ -318,7 +324,7 @@ describe("served over HTTP", () => {
         amountCents: 4_500,
         lineItems: [
           {
-            merchantProductId: "prod_RPVGXPdPvh7eLt",
+            merchantProductId: "prod_demo_shop",
             name: "Omega",
             unitAmountCents: 4_500,
             quantity: 1,

@@ -1,19 +1,3 @@
-/**
- * Ports of our Intercom consumers, driven by the acceptance tests so "the mock works" means
- * "our consumers' own logic reaches the right outcome":
- *
- * 1. `IntercomMessagingAdapter` — `apps/backend/src/modules/messaging/intercom-messaging.adapter.ts`
- *    (member inbox and Care Hub): `intercomFetch`'s error mapping (404 → NotFound, 429 → 429,
- *    other 4xx → BadRequest, 5xx → throw), the contact-id cache and the 404
- *    re-resolve-and-retry-once, ownership checks, JSON and multipart replies, the admin inbox's
- *    cursor loop (non-array → 503, repeated cursor → 503) and admin lookups.
- * 2. `IntercomApiAdapter` — `apps/backend/src/modules/intercom/sync/adapters/outbound/
- *    intercom-api.adapter.ts`: external_id-then-email lookup, create with 409 → search → PUT,
- *    conversation create with `Idempotency-Key` and the escalation PUT, the JSON transcript
- *    attachment, and the `/me` connection check.
- * 3. The backend webhook receiver (`messaging.controller.ts` `handleWebhook`) and the EMR's
- *    `IntercomWebhookService.processWebhook`: signature verification, dedupe, field reads.
- */
 import { createHmac, timingSafeEqual } from "node:crypto"
 
 export type Fetch = (request: Request) => Promise<Response>

@@ -230,7 +230,7 @@ const corpusMap = (): Map<string, ProductRecord> => {
 }
 
 /**
- * Products: the recorded corpus as an immutable base layer, with created and edited
+ * Products: the configured catalog as an immutable base layer, with created and edited
  * products in a Collection on top (so reset and snapshots cover every change and a fresh
  * namespace costs nothing to seed).
  */
@@ -306,7 +306,7 @@ export class FlexState {
     return next
   }
 
-  /** ULID-looking lowercase ids (`fprod_01z…`) that sort after every recorded corpus id. */
+  /** ULID-looking lowercase ids (`fprod_01z…`) that sort after every default corpus id. */
   nextId(prefix: string): string {
     return `${prefix}01z${this.ids
       .next(`${prefix}01z`, 23)

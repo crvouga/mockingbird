@@ -1,5 +1,5 @@
 # Differential verification of the Junction emulator against the real Junction sandbox:
-# `mockingbird-junction verify` replays the shipped corpus (drift) and a stateful scenario
+# `mockingbird-junction verify` replays a runner-local corpus and a stateful scenario
 # (users, catalog, serviceability, orders) against both and fails on any divergence.
 #
 # Manual dispatch only: the team's Junction sandbox trial has lapsed (it answers HTTP 402
@@ -14,11 +14,6 @@ name: Verify
 
 on:
   workflow_dispatch:
-    inputs:
-      refresh_corpus:
-        description: "Re-record the sandbox corpus and upload it for review and commit"
-        type: boolean
-        default: false
 
 concurrency:
   group: verify-junction
@@ -46,44 +41,36 @@ jobs:
         timeout-minutes: 10
         run: bunx turbo run build --filter='@crvouga/mockingbird-service-junction^...' --output-logs=errors-only
 
-      # Manual maintenance only: scheduled verification always checks the committed corpus.
-      - name: Refresh sandbox corpus
-        id: refresh
-        if: inputs.refresh_corpus == true
-        env:
-          JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
-        run: bun run --cwd packages/service/junction corpus:record -- --force
-
-      - name: mockingbird-junction verify (shipped corpus, with orders)
-        timeout-minutes: 15
+      - name: Verify against the current sandbox using an ephemeral corpus
+        timeout-minutes: 20
         env:
           JUNCTION_API_KEY: ${{ secrets.JUNCTION_API_KEY }}
         run: |
-          set +e
-          bun run --cwd packages/service/junction verify -- --sample 60 --orders --json > "$RUNNER_TEMP/junction-verify.json"
-          result=$?
-          set -e
-          # JavaScript template literals are evaluated by Bun.
-          # shellcheck disable=SC2016
-          bun -e '
-            const report = await Bun.file(process.argv[1]).json();
-            if (report.blocked) console.error(`::error::${report.blocked.message}`);
-            else if (!report.ok) console.error(`::error::Junction verification failed: ${report.drift.stale} stale observations; ${report.scenario.divergent} divergent scenario steps. See junction-verify-report.`);
-          ' "$RUNNER_TEMP/junction-verify.json"
+          corpus="$RUNNER_TEMP/junction-corpus.json"
+          report="$RUNNER_TEMP/junction-response.json"
+          trap 'rm -f "$corpus" "$report"' EXIT
+          status=$(curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+            --header "x-vital-api-key: $JUNCTION_API_KEY" https://api.sandbox.tryvital.io/v3/lab_test)
+          case "$status" in
+            401|402|403)
+              jq -n --argjson status "$status" '{ok: false, blocked: {status: $status}}' > "$RUNNER_TEMP/junction-verify.json"
+              echo "::error::Junction denied verification (HTTP $status)"
+              exit 1 ;;
+            200) ;;
+            *) echo "::error::Junction catalog returned HTTP $status"; exit 1 ;;
+          esac
+          bun run --cwd packages/service/junction corpus:record -- --out "$corpus"
+          result=0
+          bun run --cwd packages/service/junction verify -- --corpus "$corpus" --sample 60 --orders --json > "$report" || result=$?
+          jq '{ok, drift: (.drift | {checked, stale}), scenario: (.scenario | {steps, divergent})} +
+            (if .blocked then {blocked: {status: .blocked.status}} else {} end)' \
+            "$report" > "$RUNNER_TEMP/junction-verify.json"
           exit "$result"
 
-      - name: Upload verification report
+      - name: Upload verification counts and access status
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: junction-verify-report
           path: ${{ runner.temp }}/junction-verify.json
           if-no-files-found: ignore
-
-      - name: Upload refreshed corpus
-        if: always() && steps.refresh.outcome == 'success'
-        uses: actions/upload-artifact@v4
-        with:
-          name: junction-corpus
-          path: packages/service/junction/corpus/sandbox-sealed.json
-          if-no-files-found: error

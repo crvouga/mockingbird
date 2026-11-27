@@ -134,7 +134,7 @@ export type FlexEvent = {
 }
 
 export type FlexAPIOptions = APIOptions & {
-  /** Products every namespace starts with. Default: the recorded corpus. */
+  /** Products every namespace starts with. Default: the synthetic corpus. */
   products?: readonly ProductRecord[]
   /** Initial per-namespace settings. */
   settings?: Partial<Settings>
@@ -235,7 +235,7 @@ export const periodEnd = (startMs: number, recurring: Recurring): number => {
  *
  * Payment sessions open unpaid and settle only through the hosted page (`/pay/:id`), admin
  * transitions, or synchronously for off-session charges; every settlement emits the webhook
- * events Flex would. Products come from the recorded catalog corpus.
+ * events Flex would. Products come from the synthetic example catalog.
  */
 export class FlexAPI implements FetchAPI {
   readonly app: Hono

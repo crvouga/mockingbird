@@ -6,9 +6,10 @@ import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { parseSealedCorpus } from "./src/index.js"
+import { createServer as serveJunction } from "./src/server.js"
 
 const packageDir = dirname(fileURLToPath(import.meta.url))
-const corpusPath = join(packageDir, "corpus/sandbox-sealed.json")
+const corpusPath = join(packageDir, "corpus/example.json")
 const corpus = parseSealedCorpus(JSON.parse(readFileSync(corpusPath, "utf8")))
 const auth = { "x-vital-api-key": "sk_us_mockingbird" }
 
@@ -71,6 +72,17 @@ afterAll(() => {
 })
 
 describe("junction mock server contract", () => {
+  test("the public example serves additional ZIPs while a supplied corpus is strict", async () => {
+    const server = await serveJunction()
+    const path = "/v3/order/area/info?zip_code=00501"
+    try {
+      expect((await fetch(server.url + path, { headers: auth })).status).toBe(200)
+      expect((await fetch(base + path, { headers: auth })).status).toBe(424)
+    } finally {
+      await server.close()
+    }
+  })
+
   test("/__admin/health is reachable without auth", async () => {
     const response = await fetch(`${base}/__admin/health`)
     expect(response.status).toBe(200)

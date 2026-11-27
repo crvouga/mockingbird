@@ -79,8 +79,7 @@ clock (one, two stacked, and on an annual plan), plan changes on annual and semi
 (immediate, on a requested day, at the period end, to the same plan, and with a cancellation
 after it), and a renewal-day move (a billing hold, its release and a BCD change). Plan-change
 scenarios use a second catalog whose rules leave changes and cancellations at END_OF_TERM and
-every alignment at Kill Bill's defaults. All of them matched Kill Bill 0.24.16 (the version
-Geviti runs in production) on 2026-11-06. Scenario `bundle-keys-tags-fields` (the catalog read back, a
+every alignment at Kill Bill's defaults. All of them matched Kill Bill 0.24.16 on 2026-11-06. Scenario `bundle-keys-tags-fields` (the catalog read back, a
 `bundleExternalKey` and the bundle lookups by key, a second base subscription on the bundle,
 subscription custom fields, a `WRITTEN_OFF` invoice tag and invoices by number) matched it on
 2026-11-13. So did the changes between a semiannual and an annual plan both ways (`change-immediate-*`;

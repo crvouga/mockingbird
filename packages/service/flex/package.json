@@ -1,7 +1,7 @@
 {
   "name": "@crvouga/mockingbird-service-flex",
   "version": "0.0.0-development",
-  "description": "Stateful emulator of the Flex HSA/FSA payments API: products (recorded catalog corpus), checkout sessions in payment, subscription, off-session and setup modes, subscriptions, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
+  "description": "Stateful emulator of the Flex HSA/FSA payments API: products (synthetic example catalog), checkout sessions in payment, subscription, off-session and setup modes, subscriptions, customers, setup intents, refunds, the hosted checkout page, and Svix-signed webhooks.",
   "license": "MIT",
   "type": "module",
   "sideEffects": false,

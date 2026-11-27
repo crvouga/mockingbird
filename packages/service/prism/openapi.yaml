@@ -3,14 +3,10 @@ info:
   title: Prism Labs body-scan API (Mockingbird subset)
   description: 'Stateful emulator subset of the Prism Labs API (`Accept: application/json;v=1`): subject upsert,
     scans, the presigned capture upload, per-stage processing states, and the READY-scan results (body
-    composition, measurements, health report, asset URLs). Hand-authored from the consumer''s zod schemas
-    (prism-scan.adapter.ts).
-
-    '
+    composition, measurements, health report, asset URLs).'
   version: '1'
   x-mockingbird-upstream:
-    note: Wire shapes from apps/backend/src/modules/body-scan/adapters/outbound/prism-scan.adapter.ts
-      and packages/body-scan-capture-page/src/main.ts (the PUT upload).
+    docs: https://www.prismlabs.tech/developers
 servers:
 - url: https://sandbox-api.hosted.prismlabs.tech
 security:

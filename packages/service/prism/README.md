@@ -10,8 +10,7 @@ lifecycle (`CREATED` → `PROCESSING` → `READY` / `FAILED`) on command or on t
 results are computed deterministically from the subject's height, weight, sex and age.
 
 - Operation coverage: [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/prism/SUPPORT.md)
-- The contract (`openapi.yaml`) is hand-authored from the consumer's zod schemas
-  (`prism-scan.adapter.ts`) and the capture page's upload (`body-scan-capture-page`).
+- The hand-authored contract covers the body-scan and capture-upload operations. [Prism Labs developer documentation](https://www.prismlabs.tech/developers)
 
 ## Install
 

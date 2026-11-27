@@ -38,8 +38,7 @@ export const serveTarget: ServeTarget = {
     "import-flags": {
       type: "string",
       value: "<dev|prod>",
-      description:
-        "Seed every namespace from the bundled consumer-app docs/feature-flags/state.json (member-app project)",
+      description: "Seed every namespace from the synthetic member-app example",
     },
     "session-recording": {
       type: "boolean",
