@@ -16,6 +16,10 @@ differential property tests against Stripe test mode.
   [SUPPORT.md](https://github.com/crvouga/mockingbird/blob/main/packages/service/stripe/SUPPORT.md)
 - Stripe API reference: https://docs.stripe.com/api · Upstream OpenAPI: https://github.com/stripe/openapi
 
+## Upgrade notes
+
+Accounts that need product or price IDs from an earlier catalog must supply that catalog explicitly when upgrading. The legacy `ACME_CORPUS` export now points to the synthetic default.
+
 ## Install
 
 ```bash

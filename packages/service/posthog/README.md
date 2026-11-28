@@ -12,6 +12,10 @@ management API for scheduled jobs and other clients (feature-flag list/create/pa
   `@posthog/core` 1.54.0 (posthog-react-native 4.72.1's base) and posthog-js 1.433.2, and from
   direct HTTP requests. All three SDKs are proven against it (`posthog.sdk.test.ts`).
 
+## Upgrade notes
+
+The documentation uses generic SDK and HTTP client examples. Existing callers can keep their flag import options when upgrading.
+
 ## Install
 
 ```bash
