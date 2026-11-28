@@ -98,7 +98,7 @@ State is partitioned by **account**, and the account is chosen by API key:
 - `apiVersion` is the account's default version (requests without `Stripe-Version`) and the version
   its webhook payloads render at (default `2024-06-20`, what every backend receiver of ours pins).
 - `webhookSecrets: {"<receiver url>": "whsec_…"}` delivers every event of the account there.
-- `corpus: true` seeds the recorded catalog (below).
+- `corpus: true` seeds the configured catalog (below).
 - `billing: {retries: {scheduleDays?, afterAllFail?}}` sets the account's failed-renewal retries
   (see Lifecycles and the clock); unset fields use `createRuntime({lifecycle: {paymentRetries}})`.
 
@@ -506,13 +506,7 @@ only — never bodies, card numbers or emails.
 
 ### Corpus
 
-`ACME_CORPUS` is the recorded test-mode catalog our seeded fixtures point at (reference-data
-products and prices, catalog plans, shop fixtures, QA snapshots such as `prod_SNj3rQYHrHNS0H` /
-`price_1StxtjGBBGmxLhdL8PzNSEgX`, and runbook coupons and promotion codes; 144 products, 172
-prices). Accounts with `corpus: true` answer those ids byte for byte; customers, intents and
-subscriptions are never recorded. The membership lookup keys our env expects
-(`membership_<tier>_<interval>`, e.g. `membership_plus_annually`) are attached to the matching
-recorded prices (listed in `synthesizedLookupKeys`). Pass your own with `createRuntime({corpus})`.
+Accounts with `corpus: true` use the synthetic stationery catalog in `DEFAULT_CORPUS`. Pass a custom catalog with `createRuntime({ corpus })`, `serve --corpus <file>`, or the fleet target’s `corpus` file option.
 
 ### Promotion-code lookup
 
@@ -556,7 +550,8 @@ and the dev proxy attaches the real test-mode credentials server side, refusing 
 | `STRIPE_API_VERSION` | The vendored latest version (`2026-08-26.dahlia`). |
 | `LEGACY_API_VERSION` | `"2024-06-20"`. |
 | `ACACIA_API_VERSION` | `"2025-02-24.acacia"`. |
-| `ACME_CORPUS` | The bundled recorded catalog. |
+| `DEFAULT_CORPUS` | The synthetic stationery catalog used by default. |
+| `ACME_CORPUS` | Compatibility alias for the synthetic default catalog. |
 | `TEST_TOKENS` | Every modelled `tok_…`. |
 | `TEST_PAYMENT_METHOD_IDS` | Every modelled magic `pm_card_…`. |
 | `TEST_CARD_NUMBERS` | Every modelled test card number. |

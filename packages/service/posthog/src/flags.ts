@@ -212,7 +212,7 @@ export const parseFlagSpec = (body: unknown): FlagSpec | string => {
   }
 }
 
-// ---- The management API's `filters` shape (tooling/feature-flags-cli reads it) ----
+// ---- The management API's `filters` shape (read by management clients) ----
 
 type RestGroup = {
   properties: { key: string; type: string; operator: string; value: string[] }[]

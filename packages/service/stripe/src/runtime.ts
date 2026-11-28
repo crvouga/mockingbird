@@ -19,7 +19,7 @@ import { type AccountConfig, AccountDirectory, validateAccounts } from "./accoun
 import { completeSession } from "./checkout.js"
 import { STRIPE_NAMESPACE } from "./constants.js"
 import type { Corpus } from "./corpus.js"
-import { ACME_CORPUS } from "./corpus-data.js"
+import { DEFAULT_CORPUS } from "./corpus-data.js"
 import { moveDispute } from "./disputes.js"
 import { StripeError } from "./errors.js"
 import { document } from "./generated/openapi.js"
@@ -371,7 +371,7 @@ export const createRuntime = (options: StripeRuntimeOptions = {}): StripeRuntime
     },
   }
 
-  const corpus = options.corpus ?? ACME_CORPUS
+  const corpus = options.corpus ?? DEFAULT_CORPUS
 
   const admin = (runtime: ServiceRuntime<StripeAPI>): AdminRoutes => ({
     "GET /accounts": () =>

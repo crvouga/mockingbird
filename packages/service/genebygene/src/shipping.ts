@@ -35,7 +35,7 @@ export type CourierService = {
   courierName: string
   courierServiceCode: string
   courierServiceDisplayName: string
-  /** Zone-6 residential price recorded for rural Oklahoma ZIP 73938, deluxe bundle, quantity 1. */
+  /** Synthetic zone-6 residential price. */
   anchorPrice: number
   isOneRate: boolean
   /** Business days in transit for `zone`, before the weekend skip. */
@@ -58,7 +58,7 @@ export const COURIER_SERVICES: readonly CourierService[] = [
     courierName: "FedEx",
     courierServiceCode: "FEDEX_PRIORITY_OVERNIGHT",
     courierServiceDisplayName: "FedEx Priority Overnight",
-    anchorPrice: 62.23,
+    anchorPrice: 60.0,
     isOneRate: false,
     transitDays: () => 1,
   },
@@ -66,7 +66,7 @@ export const COURIER_SERVICES: readonly CourierService[] = [
     courierName: "FedEx",
     courierServiceCode: "FEDEX_2_DAY_ONE_RATE",
     courierServiceDisplayName: "FedEx Standard 2Day One Rate",
-    anchorPrice: 14.91,
+    anchorPrice: 15.0,
     isOneRate: true,
     transitDays: () => 2,
   },
@@ -74,7 +74,7 @@ export const COURIER_SERVICES: readonly CourierService[] = [
     courierName: "FedEx",
     courierServiceCode: "FEDEX_EXPRESS_SAVER_ONE_RATE",
     courierServiceDisplayName: "FedEx Express Saver One Rate",
-    anchorPrice: 14.91,
+    anchorPrice: 15.0,
     isOneRate: true,
     transitDays: () => 3,
   },
@@ -89,7 +89,7 @@ export const INTERNATIONAL_SERVICES: readonly CourierService[] = [
     courierName: "FedEx",
     courierServiceCode: "FEDEX_INTERNATIONAL_PRIORITY",
     courierServiceDisplayName: "FedEx International Priority",
-    anchorPrice: 96.4,
+    anchorPrice: 90,
     isOneRate: false,
     transitDays: () => 3,
   },
@@ -97,7 +97,7 @@ export const INTERNATIONAL_SERVICES: readonly CourierService[] = [
     courierName: "FedEx",
     courierServiceCode: "FEDEX_INTERNATIONAL_CONNECT_PLUS",
     courierServiceDisplayName: "FedEx International Connect Plus",
-    anchorPrice: 58.75,
+    anchorPrice: 55,
     isOneRate: false,
     transitDays: () => 5,
   },
@@ -105,7 +105,7 @@ export const INTERNATIONAL_SERVICES: readonly CourierService[] = [
     courierName: "FedEx",
     courierServiceCode: "FEDEX_INTERNATIONAL_ECONOMY",
     courierServiceDisplayName: "FedEx International Economy",
-    anchorPrice: 71.2,
+    anchorPrice: 70,
     isOneRate: false,
     transitDays: () => 6,
   },
@@ -206,7 +206,7 @@ export const roundCents = (value: number): number =>
   (Math.sign(value) * Math.round(Math.abs(value) * 100 + 1e-7)) / 100
 
 /** The ZIP whose recorded quote is the anchor: its DHL price carries no residential surcharge. */
-export const ANCHOR_ZIP = "73938"
+export const ANCHOR_ZIP = "73001"
 export const RESIDENTIAL_DHL_SURCHARGE = 0.5
 
 export const priceFor = (
@@ -334,7 +334,7 @@ export const QUOTE_OK_PLACE_NOT_FOUND: readonly CorpusAddress[] = [
   },
   {
     kind: "quote-ok-place-not-found",
-    addressLine1: "501 N 5th St",
+    addressLine1: "501 Example Lane",
     city: "Phoenix",
     stateOrRegion: "AZ",
     postalCode: "85004",
@@ -342,7 +342,7 @@ export const QUOTE_OK_PLACE_NOT_FOUND: readonly CorpusAddress[] = [
   },
   {
     kind: "quote-ok-place-not-found",
-    addressLine1: "4440 County Road 000",
+    addressLine1: "444 Example Rural Road",
     city: "Valles Mines",
     stateOrRegion: "MO",
     postalCode: "63087",

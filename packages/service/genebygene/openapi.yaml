@@ -3067,7 +3067,7 @@ components:
                   phone: "+15555550100"
                 - isCommercial: false
                   recipientName: Mockingbird Test
-                  addressLine1: 501 N 5th St
+                  addressLine1: 501 Example Lane
                   addressLine2: null
                   city: Phoenix
                   stateOrRegion: AZ
@@ -3087,7 +3087,7 @@ components:
                   phone: "+15555550100"
                 - isCommercial: true
                   recipientName: Mockingbird Test
-                  addressLine1: 4440 County Road 000
+                  addressLine1: 444 Example Rural Road
                   addressLine2: null
                   city: Valles Mines
                   stateOrRegion: MO

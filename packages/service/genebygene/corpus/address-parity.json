@@ -1,7 +1,7 @@
 {
-  "source": "staging-api.genebygene.com",
-  "recorded": true,
-  "note": "Recorded by `bun run parity` (scripts/parity.ts) against the host in `source`: each synthetic address quoted live, with its status, errorMessages, courier menu (codes and names, never prices or dates) and, for a refusal, the body. The acceptance suite replays it. Synthetic streets only: no personal data.",
+  "source": "synthetic",
+  "recorded": false,
+  "note": "Synthetic examples for address validation, courier menus and order placement.",
   "productId": "00000000-0000-4000-8000-000000000010",
   "cases": [
     {
@@ -46,7 +46,7 @@
       "name": "non-US country",
       "operation": "quote",
       "address": {
-        "addressLine1": "100 Queen St W",
+        "addressLine1": "50 Example Road",
         "city": "Toronto",
         "stateOrRegion": "ON",
         "postalCode": "M5H 2N2",
@@ -81,7 +81,7 @@
       "name": "quote-ok, place-not-found street: the quote",
       "operation": "quote",
       "address": {
-        "addressLine1": "501 N 5th St",
+        "addressLine1": "501 Example Lane",
         "city": "Phoenix",
         "stateOrRegion": "AZ",
         "postalCode": "85004"
@@ -121,7 +121,7 @@
       "name": "line2 longer than 35 characters",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008",
@@ -200,7 +200,7 @@
       "name": "countryCode USA",
       "operation": "quote",
       "address": {
-        "addressLine1": "501 N 5th St",
+        "addressLine1": "501 Example Lane",
         "city": "Phoenix",
         "stateOrRegion": "AZ",
         "postalCode": "85004",
@@ -241,7 +241,7 @@
       "name": "Puerto Rico ZIP3 009",
       "operation": "quote",
       "address": {
-        "addressLine1": "100 Calle Fortaleza",
+        "addressLine1": "60 Example Plaza",
         "city": "San Juan",
         "stateOrRegion": "PR",
         "postalCode": "00901"
@@ -263,7 +263,7 @@
       "name": "full state name",
       "operation": "quote",
       "address": {
-        "addressLine1": "501 N 5th St",
+        "addressLine1": "501 Example Lane",
         "city": "Phoenix",
         "stateOrRegion": "Arizona",
         "postalCode": "85004"
@@ -287,7 +287,7 @@
       "name": "4-digit ZIP",
       "operation": "quote",
       "address": {
-        "addressLine1": "501 N 5th St",
+        "addressLine1": "501 Example Lane",
         "city": "Phoenix",
         "stateOrRegion": "AZ",
         "postalCode": "8500"
@@ -311,7 +311,7 @@
       "name": "ZIP+4",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008-1351"
@@ -351,7 +351,7 @@
       "name": "missing recipientName",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008",
@@ -376,7 +376,7 @@
       "name": "missing phone",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008",
@@ -417,7 +417,7 @@
       "name": "missing city",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": null,
         "stateOrRegion": "TX",
         "postalCode": "77008"
@@ -441,7 +441,7 @@
       "name": "blank countryCode",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008",
@@ -466,7 +466,7 @@
       "name": "state does not match ZIP3 (90210 TX)",
       "operation": "quote",
       "address": {
-        "addressLine1": "9336 Civic Center Dr",
+        "addressLine1": "10 Example Circle",
         "city": "Beverly Hills",
         "stateOrRegion": "TX",
         "postalCode": "90210"
@@ -525,7 +525,7 @@
       "name": "rural place-not-found street (MO)",
       "operation": "quote",
       "address": {
-        "addressLine1": "4440 County Road 000",
+        "addressLine1": "444 Example Rural Road",
         "city": "Valles Mines",
         "stateOrRegion": "MO",
         "postalCode": "63087"
@@ -565,7 +565,7 @@
       "name": "zone 8 (Honolulu)",
       "operation": "quote",
       "address": {
-        "addressLine1": "2335 Kalakaua Ave",
+        "addressLine1": "20 Example Way",
         "city": "Honolulu",
         "stateOrRegion": "HI",
         "postalCode": "96815"
@@ -599,7 +599,7 @@
       "name": "zone 7 (Mountain View)",
       "operation": "quote",
       "address": {
-        "addressLine1": "1600 Amphitheatre Pkwy",
+        "addressLine1": "30 Example Park",
         "city": "Mountain View",
         "stateOrRegion": "CA",
         "postalCode": "94043"
@@ -663,7 +663,7 @@
       "name": "blank postalCode",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": ""
@@ -682,7 +682,7 @@
       "name": "blank stateOrRegion",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "",
         "postalCode": "77008"
@@ -707,7 +707,7 @@
       "name": "non-digit ZIP",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "ABCDE"
@@ -743,7 +743,7 @@
       "name": "missing recipientName and city",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": null,
         "stateOrRegion": "TX",
         "postalCode": "77008",
@@ -771,7 +771,7 @@
       "name": "unknown US state ZZ",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "ZZ",
         "postalCode": "77008"
@@ -787,7 +787,7 @@
       "name": "line1 exactly 35 characters",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W Building Twelve Rm 10",
+        "addressLine1": "1234 Example Street Suite Twelve 10",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008"
@@ -827,7 +827,7 @@
       "name": "zone 8 (Anchorage)",
       "operation": "quote",
       "address": {
-        "addressLine1": "632 W 6th Ave",
+        "addressLine1": "40 Example Court",
         "city": "Anchorage",
         "stateOrRegion": "AK",
         "postalCode": "99501"
@@ -861,7 +861,7 @@
       "name": "Beverly Hills with its own state",
       "operation": "quote",
       "address": {
-        "addressLine1": "9336 Civic Center Dr",
+        "addressLine1": "10 Example Circle",
         "city": "Beverly Hills",
         "stateOrRegion": "CA",
         "postalCode": "90210"
@@ -923,7 +923,7 @@
       "name": "blank phone",
       "operation": "quote",
       "address": {
-        "addressLine1": "1445 N Loop W",
+        "addressLine1": "70 Example Drive",
         "city": "Houston",
         "stateOrRegion": "TX",
         "postalCode": "77008",
@@ -964,14 +964,14 @@
       "name": "quote-ok, place-not-found street: the place",
       "operation": "place",
       "address": {
-        "addressLine1": "501 N 5th St",
+        "addressLine1": "501 Example Lane",
         "city": "Phoenix",
         "stateOrRegion": "AZ",
         "postalCode": "85004"
       },
       "courierServiceCode": "DHL_PARCEL_EXPEDITED",
       "status": 400,
-      "message": "Shipping address(es) not validated: 501 N 5th St : Address Not Found"
+      "message": "Shipping address(es) not validated: 501 Example Lane : Address Not Found"
     }
   ]
 }

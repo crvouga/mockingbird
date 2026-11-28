@@ -1,6 +1,6 @@
 import type { FlagSpec, FlagValue } from "./flags.js"
 
-/** The shape of the consumer app's `docs/feature-flags/state.json` that the importer reads. */
+/** Flag state snapshot accepted by the importer. */
 export type FlagStateFile = {
   generatedAt?: string
   flags: {
