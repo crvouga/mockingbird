@@ -22,7 +22,7 @@
  * 3. The structural cases (long line, PO Box, non-US, the not-found street) can be recorded in the private output directory.
  * 4. A random walk over the other safe operations, mock vs live.
  * 5. With GENEBYGENE_UNSAFE=1 (never against production): one order to
- *    `1445 N Loop W`, canceled in the same run, and one to `501 N 5th St`, which must answer the
+ *    `1445 N Loop W`, canceled in the same run, and one to `501 Example Lane`, which must answer the
  *    Address Not Found 400. Responses are redacted to status, message and id shape.
  */
 import { mkdir, readFile, writeFile } from "node:fs/promises"

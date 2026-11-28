@@ -522,40 +522,13 @@ declare it at boot with no admin call:
 
 ### Lab-account presets
 
-Named after what they model; ids are `deterministicUuid("junction:lab-account:<name>")` unless
-given. `*_platform` presets are Junction's own accounts (`org_id: null`, `team_id_allowlist: []`);
-the other active presets are customer-owned (an Org's account linked to the team). Where a preset copies an account recorded from a real BioReference-linked sandbox team
-(2026-09-21), its billing states are the recording's. `PLATFORM_ACCOUNT_STATES` is every state
-but NJ, NY and RI (47).
+The bundled presets use synthetic billing regions and account names. Platform presets have
+`org_id: null` and an empty team allowlist. Delegated accounts are linked to the configured team.
+Use `GET /__admin/lab-accounts/presets` for names, billing types, states and deprecated aliases.
+Supply your own records with the `labAccounts` option or `--lab-accounts`.
 
-| Preset | `lab` | `delegated_flow` | `allowed_billing` | `team_id_allowlist` | Source |
-| --- | --- | --- | --- | --- | --- |
-| `bioreference_ny_nj_delegated` | `bioreference` | `order_delegated` | `client_bill`: NY, NJ | the team | requested shape, **not** a recorded account |
-| `bioreference_delegated_multi_state` | `bioreference` | `order_delegated` | `client_bill`: every state but NY, NJ (48) | the team | recorded |
-| `bioreference_platform` | `bioreference` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | recorded ("Junction BioReference Account") |
-| `bioreference_patient_bill_passthrough` | `bioreference` | `not_delegated` | `patient_bill_passthrough`: NJ, NY | the team | recorded |
-| `quest_platform` / `labcorp_platform` | `quest` / `labcorp` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | recorded ("Junction Quest/Labcorp Account") |
-| `bioreference_current_platform` | `bioreference` | `not_delegated` | `patient_bill_passthrough`: NJ, NY | `[]` | team listing reported 2026-10-18 (#475) |
-| `quest_sandbox_platform` | `quest` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES`; `commercial_insurance`: all 50 | `[]` | sandbox listing reported 2026-10-18 (#475) |
-| `sonora_quest_production_platform` | `sonora_quest` | `not_delegated` | `client_bill`: `PLATFORM_ACCOUNT_STATES` | `[]` | production listing reported 2026-10-18 (#475) |
-| `suspended_bioreference` / `suspended_quest` / `suspended_labcorp` | as above | `not_delegated` | as the platform accounts | `[]` | the platform shapes with `status: "suspended"` |
-
-The September recording's `bioreference_platform` is **illustrative, not a current listing**: the
-house BioReference account now lists only `patient_bill_passthrough` for NJ and NY (use
-`bioreference_current_platform`, and see
-[omitted house-account billing](#omitted-house-account-billing-467) for how production still
-accepts `client_bill` when no account is named). No account at any lab lists DC, so no preset does
-either. `bioreference_current_platform`, `quest_sandbox_platform` and `sonora_quest_production_platform`
-follow listings an agent
-reported from `GET /v3/lab_test/lab_account` (a consumer-audit report with synthetic ids, not a
-repository probe, so **best guess, not oracle-verified**); the older presets keep their shapes so
-pinned suites do not change.
-
-Every preset is `status: "active"` unless named `suspended_*`. `GET /__admin/lab-accounts/presets`
-returns the full records, the deprecated `aliases`, and the `synthetic` presets (not a recorded
-account). `bioreference_customer_multi_state` is a deprecated alias of `bioreference_platform`: it
-was misnamed, since the record is Junction's platform account, not a customer-owned one. It still
-works and keeps its own default id (`presetAccountId("bioreference_customer_multi_state")`).
+Each preset has a stable default ID from `presetAccountId(name)`. The deprecated
+`bioreference_customer_multi_state` alias retains its own ID.
 
 ### Team identity
 
@@ -954,7 +927,7 @@ Main entry (`@crvouga/mockingbird-service-junction`, runtime-neutral):
 | `SYNTHETIC_LAB_ACCOUNT_PRESETS` | Presets that model a requested shape, not a recorded account. |
 | `BILLING_TYPES` | The `billing_type` values `create_order` accepts. |
 | `presetAccountId` | `(name) => string` — a preset's default id. |
-| `PLATFORM_ACCOUNT_STATES` / `DELEGATED_ACCOUNT_STATES` | The recorded 47- and 48-state client-bill lists. |
+| `PLATFORM_ACCOUNT_STATES` / `DELEGATED_ACCOUNT_STATES` | Synthetic client-bill state lists for platform and delegated presets. |
 | `LabAccountConflict` | Thrown by `addLabAccount` for an id that exists. |
 | `DEFAULT_LIMITS` | Every [sandbox limit](#sandbox-limits), off. |
 | `sandboxUserQuotaBody` | `(max) => body` — the sandbox's user-cap 400 body. |

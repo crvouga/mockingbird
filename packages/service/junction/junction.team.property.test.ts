@@ -583,7 +583,7 @@ describe("M9: the order a sandbox team places, as the sandbox reports it", () =>
       lab: "bioreference",
       org_id: null,
       team_id_allowlist: [],
-      account_name: "Junction BioReference Account",
+      account_name: "Example BioReference Account",
     })
     const alias = await admin(
       runtime,
@@ -603,7 +603,7 @@ describe("M9: the order a sandbox team places, as the sandbox reports it", () =>
     }
     const listing = (await admin(runtime, "GET", "/lab-accounts/presets")).body
     expect(listing.aliases).toEqual({ bioreference_customer_multi_state: "bioreference_platform" })
-    expect(listing.synthetic).toEqual(["bioreference_ny_nj_delegated"])
+    expect(listing.synthetic).toEqual(Object.keys(LAB_ACCOUNT_PRESETS))
     expect(Object.keys(listing.presets as Json)).not.toContain("bioreference_customer_multi_state")
   })
 })

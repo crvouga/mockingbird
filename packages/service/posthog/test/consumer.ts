@@ -579,7 +579,7 @@ export class PythonPostHogClient {
 }
 
 // ---------------------------------------------------------------------------------------------
-// tooling/feature-flags-cli: fetchProjectFlags (pagination + posthogPageSchema)
+// Management API pagination and response validation
 // ---------------------------------------------------------------------------------------------
 
 export type CliFlag = {
@@ -659,7 +659,7 @@ function hasFilters(value: unknown): boolean {
   return true
 }
 
-/** tooling/feature-flags-cli/lib/classifier.ts `deriveState` (the `state` field only). */
+/** Classify a flag from its management API representation. */
 export function deriveState(flag: CliFlag | undefined): string {
   if (!flag) return "missing"
   if (!flag.active) return "inactive"

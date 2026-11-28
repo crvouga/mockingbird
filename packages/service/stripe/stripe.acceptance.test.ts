@@ -1120,15 +1120,15 @@ describe("S1.4 search, promotion codes and presets", () => {
 })
 
 describe("S1.10 corpus", () => {
-  test("recorded fixture ids resolve on a corpus account", async () => {
+  test("synthetic catalog ids resolve on a corpus account", async () => {
     const { mso } = await harness()
-    const product = await mso.products.retrieve("prod_SNj3rQYHrHNS0H")
-    expect(product.id).toBe("prod_SNj3rQYHrHNS0H")
-    const price = await mso.prices.retrieve("price_1StxtjGBBGmxLhdL8PzNSEgX", {
+    const product = await mso.products.retrieve("prod_demo_notebook")
+    expect(product.id).toBe("prod_demo_notebook")
+    const price = await mso.prices.retrieve("price_demo_notebook", {
       expand: ["product"],
     })
-    expect(price.unit_amount).toBe(17_999)
-    const byLookup = await mso.prices.list({ lookup_keys: ["membership_plus_annually"] })
+    expect(price.unit_amount).toBe(900)
+    const byLookup = await mso.prices.list({ lookup_keys: ["notebook_monthly"] })
     expect(byLookup.data.length).toBe(1)
   })
 })

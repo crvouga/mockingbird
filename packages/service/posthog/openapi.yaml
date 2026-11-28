@@ -5,12 +5,12 @@ info:
     Stateful emulator subset of PostHog: remote flag evaluation (`/flags` v2 and the legacy
     `/decide` shape), remote config, event capture (`/batch/`, `/e/`, `/i/v0/e/`), session
     recording intake, the posthog-js asset and survey endpoints, and the slice of the
-    management API our tooling and crons call (feature-flag list/create/read/patch, experiment management, HogQL query).
+    management API for scheduled jobs and other clients (feature-flag list/create/read/patch, experiment management, HogQL query).
     Hand-authored from the wire shapes of posthog-node 5.52.2 / @posthog/core 1.54.0,
     posthog-js 1.433.2 and our own raw fetches.
 
     Paths are written without the trailing slash PostHog uses; the mock answers both
-    (`/flags/?v=2` from the SDKs and `/flags?v=2` from the EMR frontend's raw fetch).
+    (`/flags/?v=2` from the SDKs and `/flags?v=2` from a direct HTTP request).
     Capture and flag bodies may arrive gzip-compressed (`Content-Encoding: gzip`, or raw gzip
     bytes from posthog-js), base64 (`data=` form bodies), or as plain JSON; the contract
     declares the decoded JSON.
@@ -19,8 +19,7 @@ info:
     note: >-
       Hand-authored from @posthog/core posthog-core-stateless (getFlags, sendBatch,
       getRemoteConfig, getSurveysStateless), posthog-js request.ts / posthog-featureflags.ts,
-      and the consumer's posthog-server.adapter.ts, posthog-server.ts (EMR frontend),
-      website-posthog-purchase.sink.ts, posthog-hogql.client.ts and feature-flags-cli.
+      and HTTP clients for event capture, HogQL queries and flag management.
 servers:
   - url: https://us.i.posthog.com
 paths:
@@ -31,7 +30,7 @@ paths:
         Remote flag evaluation. `v=2` (what every current SDK sends) answers the `flags` detail
         map; no `v` or `v=1` answers the legacy `featureFlags`/`featureFlagPayloads` maps.
         `config=true` adds the remote-config fields. The project key is `token` (SDKs) or
-        `api_key` (the EMR frontend's raw fetch).
+        `api_key` (a direct HTTP request).
       security: []
       x-mockingbird:
         supported: true
@@ -439,7 +438,7 @@ paths:
             maximum: 1000
       responses:
         "200":
-          description: One page of flags (feature-flags-cli follows `next`)
+          description: One page of flags (a management client follows `next`)
           content:
             application/json:
               schema:

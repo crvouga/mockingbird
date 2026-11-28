@@ -1,44 +1,15 @@
-/**
- * Named lab accounts a suite can add in one call, modelled on a real team's recorded
- * listing (a BioReference-linked team, recorded 2026-09-21 from the Junction sandbox).
- *
- * Where a preset copies a recorded account, its states and billing types are the
- * recording's. `bioreference_ny_nj_delegated` is not a recorded account: it is the
- * NY/NJ client-bill shape a consumer asked for, kept because suites depend on it, and
- * listed in `SYNTHETIC_LAB_ACCOUNT_PRESETS`.
- *
- * The 2026-09-21 `bioreference_platform` preset lists `client_bill` in 47 states, but the
- * current house BioReference account lists only `patient_bill_passthrough` in NJ and NY, so
- * treat it as illustrative (#475). The `bioreference_current_platform`,
- * `quest_sandbox_platform` and `sonora_quest_production_platform` presets follow the listings
- * an agent reported from `GET /v3/lab_test/lab_account` on 2026-10-18 (a consumer-audit
- * report, not a repository probe); they are additions, so no existing preset changes.
- *
- * `*_platform` presets are Junction's own accounts (`org_id: null`, allowlist `[]`); every
- * other active preset is customer-owned (it belongs to an Org and is linked to the team).
- */
-import {
-  type LabAccountInput,
-  type LabAccountRecord,
-  labAccountFromInput,
-  US_STATES,
-} from "./lab-accounts.js"
+/** Synthetic lab account layouts for exercising order routing and billing. */
+import { type LabAccountInput, type LabAccountRecord, labAccountFromInput } from "./lab-accounts.js"
 import { deterministicUuid } from "./state.js"
 
-const except = (...excluded: string[]): readonly string[] =>
-  US_STATES.filter((state) => !excluded.includes(state))
-
-/** Junction's own Quest, Labcorp and BioReference accounts client-bill in these 47 states. */
-export const PLATFORM_ACCOUNT_STATES: readonly string[] = except("NJ", "NY", "RI")
-
-/** The recorded order-delegated BioReference account: every state but New York and New Jersey. */
-export const DELEGATED_ACCOUNT_STATES: readonly string[] = except("NJ", "NY")
+export const PLATFORM_ACCOUNT_STATES: readonly string[] = ["AZ", "CA", "PA", "TX"]
+export const DELEGATED_ACCOUNT_STATES: readonly string[] = ["AZ", "CO", "TX"]
 
 type Preset = Omit<LabAccountInput, "id">
 
 const bioreferencePlatform: Preset = {
   lab: "bioreference",
-  account_name: "Junction BioReference Account",
+  account_name: "Example BioReference Account",
   delegated_flow: "not_delegated",
   org_id: null,
   allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES },
@@ -46,7 +17,7 @@ const bioreferencePlatform: Preset = {
 }
 const questPlatform: Preset = {
   lab: "quest",
-  account_name: "Junction Quest Account",
+  account_name: "Example Quest Account",
   delegated_flow: "not_delegated",
   org_id: null,
   allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES },
@@ -54,31 +25,31 @@ const questPlatform: Preset = {
 }
 const labcorpPlatform: Preset = {
   lab: "labcorp",
-  account_name: "Junction Labcorp Account",
+  account_name: "Example Labcorp Account",
   delegated_flow: "not_delegated",
   org_id: null,
   allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES },
   team_id_allowlist: [],
 }
 
-/** The house BioReference account's current listing: passthrough billing in NJ and NY only. */
 const bioreferenceCurrentPlatform: Preset = {
   lab: "bioreference",
-  account_name: "Junction BioReference Account",
+  account_name: "Example BioReference Account",
   delegated_flow: "not_delegated",
   org_id: null,
   allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] },
   team_id_allowlist: [],
 }
-/** The sandbox Quest house account also lists commercial insurance in all 50 states. */
 const questSandboxPlatform: Preset = {
   ...questPlatform,
-  allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES, commercial_insurance: US_STATES },
+  allowed_billing: {
+    client_bill: PLATFORM_ACCOUNT_STATES,
+    commercial_insurance: ["AZ", "CA", "NY"],
+  },
 }
-/** The production Sonora Quest house account client-bills like Quest and Labcorp's. */
 const sonoraQuestProductionPlatform: Preset = {
   lab: "sonora_quest",
-  account_name: "Junction Sonora Quest Account",
+  account_name: "Example Sonora Quest Account",
   delegated_flow: "not_delegated",
   org_id: null,
   allowed_billing: { client_bill: PLATFORM_ACCOUNT_STATES },
@@ -126,7 +97,7 @@ export const LAB_ACCOUNT_PRESET_ALIASES: Readonly<Record<string, string>> = {
 }
 
 /** Presets that model a shape consumers asked for, not an account recorded from a real team. */
-export const SYNTHETIC_LAB_ACCOUNT_PRESETS: readonly string[] = ["bioreference_ny_nj_delegated"]
+export const SYNTHETIC_LAB_ACCOUNT_PRESETS: readonly string[] = Object.keys(LAB_ACCOUNT_PRESETS)
 
 const presetNamed = (name: string): Preset | undefined => {
   const target = Object.hasOwn(LAB_ACCOUNT_PRESET_ALIASES, name)

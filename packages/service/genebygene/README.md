@@ -94,7 +94,7 @@ const order = (await placed.json()) as { id: string; orderLines: { kitNumbers: s
 const [kitNumber] = order.orderLines[0].kitNumbers
 
 // Test control: classify an address, then move the order and its kit as the lab would.
-await admin("/addresses/classify", { addressLine1: "501 N 5th St", city: "Phoenix", stateOrRegion: "AZ", postalCode: "85004", countryCode: "US", recipientName: "T", phone: "+15555550100" })
+await admin("/addresses/classify", { addressLine1: "501 Example Lane", city: "Phoenix", stateOrRegion: "AZ", postalCode: "85004", countryCode: "US", recipientName: "T", phone: "+15555550100" })
 // → {quote: "options", place: "address-not-found", zone: 5, codes: [...], prices: {...}}
 await admin("/scenario/happy-path", { orderId: order.id }) // associate → ship → … → Results Completed
 await admin(`/kits/${kitNumber}/transition`, { to: "Error", errorCode: 19 }) // Kit.Error (new collection)
@@ -147,9 +147,7 @@ empty."]}}`.
 
 ### Shipping and addresses
 
-Two checks exist, and they do not agree — on purpose, because production does not. The quote is
-what live parity recorded against staging (`corpus/address-parity.json`, 35 synthetic addresses,
-replayed by the acceptance suite); where issue #122 listed different rules, the recording won.
+The quote and order-placement endpoints perform different address checks. The acceptance suite exercises both with synthetic examples from `corpus/address-parity.json`.
 
 1. **Quote** (`getShippingOptions`, `quoteVerdict`), in the order staging decides:
    - **Request validation**, HTTP 400 problem details keyed `shippingAddress.<Field>`: recipient,
@@ -177,7 +175,7 @@ replayed by the acceptance suite); where issue #122 listed different rules, the 
    the quote's first message or `Address Not Found`. Address Not Found when the quote's carrier
    refused the address, the ZIP3 is in `UNDELIVERABLE_ZIP3` (`000`, `590`), or line1 is a
    `quote-ok-place-not-found` corpus row. Live parity recorded the Address Not Found answer for
-   `501 N 5th St`; the other place answers follow from the quote (placing is unsafe live). A
+   `501 Example Lane`; the other place answers follow from the quote (placing is unsafe live). A
    courier code outside the address's menu (other than `DHL_DOMESTIC_RETURN`, the bundle's return
    leg, always accepted) is 400 "… not valid for shipping options".
 
@@ -187,7 +185,7 @@ Zones (from Houston, ZIP3 770) and deterministic prices:
 | --- | --- | --- |
 | 770–778 | 2 | all four |
 | 750–769, 779–799 | 3 | all four |
-| 730–749 | 6 | all four (73938 is the recorded anchor: 6, 62.23, 14.91, 14.91) |
+| 730–749 | 6 | all four (73001 is the synthetic anchor: 6, 60.00, 15.00, 15.00) |
 | 800–847, 850–865 | 5 | all four |
 | 900–961, 100–149, 980–994 | 7 | all four |
 | 967–968 (HI), 995–999 (AK) | 8 | all but Express Saver (as staging quotes Honolulu and Anchorage) |
@@ -196,8 +194,8 @@ Zones (from Houston, ZIP3 770) and deterministic prices:
 | any other | 4 | all four |
 
 The four domestic codes, in staging's order, are `DHL_PARCEL_EXPEDITED` (6),
-`FEDEX_PRIORITY_OVERNIGHT` (62.23), `FEDEX_2_DAY_ONE_RATE` (14.91) and
-`FEDEX_EXPRESS_SAVER_ONE_RATE` (14.91), each
+`FEDEX_PRIORITY_OVERNIGHT` (60.00), `FEDEX_2_DAY_ONE_RATE` (15.00) and
+`FEDEX_EXPRESS_SAVER_ONE_RATE` (15.00), each
 `round(anchor × factor(zone), 2)` with factors 0.72, 0.80, 0.88, 0.94, 1.00, 1.12, 1.35 for zones
 2–8, plus 0.50 on DHL for residential addresses (except the anchor ZIP). `estimatedShipDate` is
 the next business morning, 08:00 America/Chicago; `estimatedDeliveryDate` adds the service's
@@ -205,8 +203,8 @@ business days (DHL `2 + ceil(zone / 2)`, Express Saver 3, 2Day 2, Overnight 1; z
 17:00. `dutiesAndTaxesIncluded` is true on every US success; `attributes` values are strings.
 
 The committed corpus (synthetic streets, no real person): `quote-ok-place-not-found` —
-`1 Unlisted County Road 9`, Nowhere, MT 59001; `501 N 5th St`, Phoenix, AZ 85004;
-`4440 County Road 000`, Valles Mines, MO 63087. `quote-ok-place-ok` — `1600 Amphitheatre Pkwy`,
+`1 Unlisted County Road 9`, Nowhere, MT 59001; `501 Example Lane`, Phoenix, AZ 85004;
+`444 Example Rural Road`, Valles Mines, MO 63087. `quote-ok-place-ok` — `1600 Amphitheatre Pkwy`,
 Mountain View, CA 94043; `1445 N Loop W`, Houston, TX 77008; `350 Fifth Avenue`, New York, NY
 10118; `1 Infinite Loop`, Cupertino, CA 95014. `PUT /__admin/addresses/corpus` adds rows for one
 namespace.

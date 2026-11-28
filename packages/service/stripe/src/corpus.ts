@@ -1,11 +1,6 @@
 import type { AccountState } from "./state.js"
 
-/**
- * A recorded Stripe catalog (products, prices with lookup keys, coupons, promotion codes) that
- * cannot be synthesised: seeded DB fixtures carry these ids, so an account configured with
- * `corpus: true` answers them byte for byte. Customers, intents and subscriptions are never
- * recorded; tests create them.
- */
+/** Catalog records for accounts configured with `corpus: true`. */
 export type CorpusProduct = {
   id: string
   name: string

@@ -584,7 +584,7 @@ describe("admin: import, bulk, bump; tooling and crons", () => {
     expect(await prodAdapter.getEvaluation("example-links", "1")).toBe(false)
   })
 
-  test("feature-flags-cli pages through the management API and classifies the imported state", async () => {
+  test("the management client pages through the management API and classifies the imported state", async () => {
     const { admin, fetcher } = harness()
     await admin("/credentials", { credentials: { phx_personal: "cli" } })
     const flagsToImport = Array.from({ length: 101 }, (_, index) => ({

@@ -625,7 +625,7 @@ const addr = (over: Record<string, unknown>): Record<string, unknown> => ({
 })
 const MOUNTAIN_VIEW = addr({})
 const PHOENIX_NOT_FOUND = addr({
-  addressLine1: "501 N 5th St",
+  addressLine1: "501 Example Lane",
   city: "Phoenix",
   stateOrRegion: "AZ",
   postalCode: "85004",
@@ -818,9 +818,9 @@ describe("issue #122: quotes", () => {
     expect(codesOf(data)).toEqual(CODES)
     expect(pricesOf(data)).toEqual({
       DHL_PARCEL_EXPEDITED: cents(cents(6 * 1.12) + 0.5),
-      FEDEX_PRIORITY_OVERNIGHT: cents(62.23 * 1.12),
-      FEDEX_2_DAY_ONE_RATE: cents(14.91 * 1.12),
-      FEDEX_EXPRESS_SAVER_ONE_RATE: cents(14.91 * 1.12),
+      FEDEX_PRIORITY_OVERNIGHT: cents(60.0 * 1.12),
+      FEDEX_2_DAY_ONE_RATE: cents(15.0 * 1.12),
+      FEDEX_EXPRESS_SAVER_ONE_RATE: cents(15.0 * 1.12),
     })
     const [dhl] = (data as { shippingOptions: Json[] }).shippingOptions
     expect(dhl).toMatchObject({
@@ -837,18 +837,18 @@ describe("issue #122: quotes", () => {
     expect(new Date(String(dhl?.estimatedDeliveryDate)).getTime()).toBeGreaterThan(ship.getTime())
   })
 
-  test("B10: rural Oklahoma 73938 reproduces the recorded anchor exactly", async () => {
+  test("B10: rural Oklahoma 73001 uses the synthetic anchor", async () => {
     const { quote } = await dropIn({ subscribe: false })
     const { data } = await quote(
       addr({
         addressLine1: "100 Main St",
         city: "Forgan",
         stateOrRegion: "OK",
-        postalCode: "73938",
+        postalCode: "73001",
       }),
     )
     expect(codesOf(data)).toEqual(CODES)
-    expect(Object.values(pricesOf(data))).toEqual([6, 62.23, 14.91, 14.91])
+    expect(Object.values(pricesOf(data))).toEqual([6, 60.0, 15.0, 15.0])
   })
 
   test("B11: commercial addresses carry no DHL surcharge", async () => {
@@ -868,8 +868,8 @@ describe("issue #122: quotes", () => {
     ])
     expect(pricesOf(data)).toEqual({
       DHL_PARCEL_EXPEDITED: cents(cents(6 * 1.35) + 0.5),
-      FEDEX_PRIORITY_OVERNIGHT: cents(62.23 * 1.35),
-      FEDEX_2_DAY_ONE_RATE: cents(14.91 * 1.35),
+      FEDEX_PRIORITY_OVERNIGHT: cents(60.0 * 1.35),
+      FEDEX_2_DAY_ONE_RATE: cents(15.0 * 1.35),
     })
   })
 
@@ -976,7 +976,7 @@ describe("issue #122: quotes", () => {
     const { status, data } = await quote(PHOENIX_NOT_FOUND)
     expect(status).toBe(200)
     expect(codesOf(data)).toEqual(CODES)
-    expect(pricesOf(data).FEDEX_PRIORITY_OVERNIGHT).toBe(cents(62.23 * 0.94))
+    expect(pricesOf(data).FEDEX_PRIORITY_OVERNIGHT).toBe(cents(60.0 * 0.94))
   })
 })
 
@@ -1057,7 +1057,7 @@ describe("issue #122: place", () => {
       postalCode: "59001",
     })
     const valles = addr({
-      addressLine1: "4440 County Road 000",
+      addressLine1: "444 Example Rural Road",
       city: "Valles Mines",
       stateOrRegion: "MO",
       postalCode: "63087",
@@ -1271,7 +1271,7 @@ describe("issue #122: read, demographics, edit, cancel", () => {
       address: PHOENIX_NOT_FOUND,
     })
     expect(refused.error.message).toBe(
-      "Shipping address(es) not validated: 501 N 5th St : Address Not Found",
+      "Shipping address(es) not validated: 501 Example Lane : Address Not Found",
     )
 
     await admin(`/orders/${orderId}/ship`, {})

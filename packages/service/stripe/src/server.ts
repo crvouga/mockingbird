@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs"
 import { type Listening, listen, type ServeTarget } from "@crvouga/mockingbird-adapter-node"
 import { validateAccounts } from "./accounts.js"
+import type { Corpus } from "./corpus.js"
 import { createRuntime, type StripeRuntime, type StripeRuntimeOptions } from "./runtime.js"
 
 /** Port `mockingbird-stripe serve` listens on when none is given. */
@@ -48,11 +49,29 @@ const readAccounts = (value: string) => {
   return parsed
 }
 
+function readCorpus(path: string): Corpus {
+  const data = JSON.parse(readFileSync(path, "utf8"))
+  if (
+    !data ||
+    typeof data.version !== "string" ||
+    typeof data.source !== "string" ||
+    ![data.products, data.prices, data.coupons, data.promotionCodes].every(Array.isArray)
+  ) {
+    throw new Error("Invalid --corpus file: expected a Stripe catalog")
+  }
+  return data
+}
+
 /** How `serve` (and `serve --config`) builds the Stripe mock from flags. */
 export const serveTarget: ServeTarget = {
   name: "stripe",
   defaultPort: DEFAULT_PORT,
   options: {
+    corpus: {
+      type: "string",
+      value: "<file>",
+      description: "Seed configured accounts from a Stripe catalog JSON file",
+    },
     accounts: {
       type: "string",
       value: "<json|file>",
@@ -78,6 +97,7 @@ export const serveTarget: ServeTarget = {
   create: (values, common) => {
     const url = text(values["webhook-url"])
     const secret = text(values["webhook-secret"])
+    const corpusPath = text(values.corpus)
     const accounts = text(values.accounts)
     const publicUrl = common.baseUrl ?? text(values["public-url"])
     return createRuntime({
@@ -86,6 +106,7 @@ export const serveTarget: ServeTarget = {
       ...(common.adminControls !== undefined ? { adminControls: common.adminControls } : {}),
       ...(common.seed !== undefined ? { seed: common.seed } : {}),
       ...(common.onLog ? { onLog: common.onLog } : {}),
+      ...(corpusPath ? { corpus: readCorpus(corpusPath) } : {}),
       ...(accounts ? { accounts: readAccounts(accounts) } : {}),
       ...(url ? { webhooks: { endpoints: [{ url, ...(secret ? { secret } : {}) }] } } : {}),
       ...(publicUrl ? { publicUrl } : {}),

@@ -313,11 +313,11 @@ describe("shipping model", () => {
     )
   })
 
-  test("zone 6 is the recorded anchor: 6, 62.23, 14.91, 14.91 for 73938 (staging's menu order)", () => {
+  test("zone 6 is the synthetic anchor: 6, 60.00, 15.00, 15.00 for 73001 (staging's menu order)", () => {
     expect(zoneFor("739")).toBe(6)
     expect(
-      COURIER_SERVICES.map((s) => priceFor(s, 6, { residential: true, zip5: "73938" })),
-    ).toEqual([6, 62.23, 14.91, 14.91])
+      COURIER_SERVICES.map((s) => priceFor(s, 6, { residential: true, zip5: "73001" })),
+    ).toEqual([6, 60.0, 15.0, 15.0])
   })
 
   test("a structurally valid address always quotes; place never reports a structural problem for it", () => {

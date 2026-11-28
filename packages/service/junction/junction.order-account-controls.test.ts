@@ -433,10 +433,10 @@ test("opt-in same-second cancel quirk records the event but leaves status receiv
   ).toEqual({ sameSecondCancelStatus: true })
 })
 
-test("current presets follow the reported team listings and the old ones are unchanged (#475)", () => {
-  const states47 = LAB_ACCOUNT_PRESETS.quest_platform?.allowed_billing?.client_bill ?? []
-  expect(states47).toHaveLength(47)
-  for (const state of ["NY", "NJ", "RI", "DC"]) expect(states47).not.toContain(state)
+test("synthetic lab account presets expose distinct billing configurations", () => {
+  const platformStates = LAB_ACCOUNT_PRESETS.quest_platform?.allowed_billing?.client_bill ?? []
+  expect(platformStates).toEqual(["AZ", "CA", "PA", "TX"])
+  for (const state of ["NY", "NJ", "RI", "DC"]) expect(platformStates).not.toContain(state)
   expect(LAB_ACCOUNT_PRESETS.bioreference_current_platform).toMatchObject({
     lab: "bioreference",
     org_id: null,
@@ -444,20 +444,19 @@ test("current presets follow the reported team listings and the old ones are unc
     allowed_billing: { patient_bill_passthrough: ["NJ", "NY"] },
   })
   expect(LAB_ACCOUNT_PRESETS.quest_sandbox_platform?.allowed_billing).toEqual({
-    client_bill: states47,
+    client_bill: platformStates,
     commercial_insurance: expect.arrayContaining(["NY", "AZ"]),
   })
   expect(
     LAB_ACCOUNT_PRESETS.quest_sandbox_platform?.allowed_billing?.commercial_insurance,
-  ).toHaveLength(50)
+  ).toHaveLength(3)
   expect(LAB_ACCOUNT_PRESETS.sonora_quest_production_platform).toMatchObject({
     lab: "sonora_quest",
     org_id: null,
-    allowed_billing: { client_bill: states47 },
+    allowed_billing: { client_bill: platformStates },
   })
-  // The September recording is untouched: suites that pinned it keep working.
   expect(LAB_ACCOUNT_PRESETS.bioreference_platform?.allowed_billing).toEqual({
-    client_bill: states47,
+    client_bill: platformStates,
   })
   expect(presetAccountId("bioreference_current_platform")).not.toBe(
     presetAccountId("bioreference_platform"),
