@@ -25,6 +25,10 @@ npx mockingbird-junction serve   # http://127.0.0.1:8787, synthetic example cata
 - **What the emulator does not model:** [below](#what-is-and-is-not-modelled). Read it before trusting a
   green suite.
 
+## Upgrade notes
+
+When upgrading, supply explicit lab accounts if your tests depend on a particular set of billing states. The named presets now use synthetic regions.
+
 ## Install
 
 ```bash

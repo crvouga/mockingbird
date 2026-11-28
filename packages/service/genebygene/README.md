@@ -30,6 +30,10 @@ slot with 15 s sleeps and 300 s waits resolve in milliseconds.
   random walks over the safe operations. The acceptance suite replays those recordings, so CI
   holds the emulator to them without credentials.
 
+## Upgrade notes
+
+When upgrading, update assertions that pin example shipping prices or addresses to the synthetic fixtures in this version.
+
 ## Install
 
 ```bash
