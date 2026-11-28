@@ -5,7 +5,7 @@
 Stateful emulator of **PostHog** for test suites: remote feature-flag evaluation (`/flags` v2 and
 the legacy `/decide` shape), remote config, event capture (`/batch/`, `/e/`, `/i/v0/e/`),
 session-recording intake, the posthog-js asset and survey endpoints, and the slice of the
-management API our tooling and crons call (feature-flag list/create/patch, HogQL). Every flag
+management API for scheduled jobs and other clients (feature-flag list/create/patch, HogQL). Every flag
 is set per test through admin routes, so paths our in-app overrides cannot reach (strict
 booleans, `getConfig` payloads, EMR server gates, member-app variants) become controllable, and
 a stack run never reaches `us.i.posthog.com`.
@@ -78,7 +78,7 @@ await posthog.shutdown()
 | Route | Behaviour |
 | --- | --- |
 | `POST /flags/?v=2` (`&config=true`) | posthog-node, posthog-react-native, posthog-js. Body `{token, distinct_id, person_properties?, groups?, flag_keys_to_evaluate?, …}`. Answers `{flags: {<key>: {key, enabled, variant, reason, metadata: {id, version, description, payload?}}}, errorsWhileComputingFlags, requestId, evaluatedAt}`; `payload` is the JSON **string** and only accompanies an enabled flag. `config=true` adds the remote-config fields. |
-| `POST /flags?v=2` | Same route without the trailing slash: the EMR frontend's raw fetch, body `{api_key, distinct_id, person_properties?}`. |
+| `POST /flags?v=2` | Same route without the trailing slash: a direct HTTP request, body `{api_key, distinct_id, person_properties?}`. |
 | `POST /flags/` (no `v`, or `v=1`), `POST /decide/?v=3` | The legacy shape `{featureFlags: {k: bool \| variant}, featureFlagPayloads: {k: "<json>"}, errorsWhileComputingFlags, config, …}` (the Python client). `/decide/?v=4` answers the v2 shape. |
 | `GET /array/{token}/config`, `…/config.js` | Remote config: `{supportedCompression: ["gzip","gzip-js"], hasFeatureFlags: true, analytics: {endpoint: "/i/v0/e/"}, sessionRecording: false \| {endpoint: "/s/"}, surveys: false, …}`; the `.js` form sets `window._POSTHOG_REMOTE_CONFIG[token]`. `hasFeatureFlags` is always true (false makes posthog-react-native skip flag loading). |
 | `POST /batch/` | `{api_key, batch: [{event, distinct_id, properties, timestamp, uuid}], sent_at}`, usually `Content-Encoding: gzip`. |
@@ -86,7 +86,7 @@ await posthog.shutdown()
 | `POST /s/` | Session recordings: counted (`GET /__admin/recordings`), never stored. |
 | `GET /static/recorder.js`, `/static/{ver}/recorder.js` | An inert script. |
 | `GET /api/surveys/?token=`, `/api/web_experiments/?token=` | `{surveys: []}`, `{experiments: []}`. |
-| `GET/POST /api/projects/{id}/feature_flags/`, `GET/PATCH …/{flagId}/` | Bearer personal key required. List pages `{count, next, previous, results}` (`limit`/`offset`, what feature-flags-cli follows); flags carry `filters.groups` / `multivariate` / `payloads` derived from the flag model; experiment flags retain their full variant configuration, and create/patch parse `filters` back (see below). `flagId` is the numeric id or the key. |
+| `GET/POST /api/projects/{id}/feature_flags/`, `GET/PATCH …/{flagId}/` | Bearer personal key required. List pages `{count, next, previous, results}` (`limit`/`offset`, what a management client follows); flags carry `filters.groups` / `multivariate` / `payloads` derived from the flag model; experiment flags retain their full variant configuration, and create/patch parse `filters` back (see below). `flagId` is the numeric id or the key. |
 | `GET/POST /api/projects/{id}/experiments/`, `GET/PATCH …/{experimentId}/` | Personal-key management of project experiments: name, parameters, metrics, dates, archive state, and a live linked flag. New draft flags have control/test variants and are inactive; setting `start_date` activates them. Setting `end_date` or `archived` preserves flag activity. Lists are newest-first with terminating limit/offset links (including namespace prefixes). Draft legacy variant/rollout/payload parameters update the shared flag; running flag changes use the feature-flag API. |
 | `POST /api/projects/{id}/query/` | HogQL `{query: {kind: "HogQLQuery", query}}` → `{results, columns}` from canned answers (`PUT /__admin/settings {"queryResults": […]}`), `{results: []}` otherwise. |
 
